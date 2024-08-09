@@ -11,7 +11,7 @@
 
 ## Requirements
 
-- The latest generally available JDK. This project will continue to move to the latest JDK and will not maintain
+- The latest generally available JDK. This project will continue to move to the latest and will not maintain
   versions released against previous JDK's.
 
 ## Dependencies
@@ -23,5 +23,4 @@
 
 ## Contribution
 
-Unit tests are needed and welcomed, as well as general usage/testing-out of the library. Otherwise, please open an issue
-or send an email before working on a pull request.
+Unit tests are needed and welcomed. Otherwise, please open an issue or send an email before working on a pull request.
