@@ -42,7 +42,7 @@ subprojects {
     }
   }
 
-  project.group = 'none'
+  project.group = 'software'
   project.version = "$VERSION"
 
   repositories {
