@@ -12,7 +12,7 @@ public enum Channel {
   private final String subscribe;
   private final String unSubscribe;
 
-  private Channel() {
+  Channel() {
     this.subscribe = name() + "Subscribe";
     this.unSubscribe = name() + "Unsubscribe";
   }

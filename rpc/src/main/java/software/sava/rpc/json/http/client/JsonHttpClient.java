@@ -104,7 +104,6 @@ public abstract class JsonHttpClient {
                                                            final Duration requestTimeout,
                                                            final String body) {
 //    System.out.println(body);
-//    System.out.println();
     return httpClient.sendAsync(newPostRequest(endpoint, requestTimeout, body), ofByteArray()).thenApply(parser);
   }
 

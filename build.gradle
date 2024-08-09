@@ -42,7 +42,7 @@ subprojects {
     }
   }
 
-  project.group = 'software'
+  project.group = 'software.sava'
   project.version = "$VERSION"
 
   repositories {
@@ -89,10 +89,10 @@ subprojects {
         from components.java
         artifact sourcesJar
         groupId project.group
-        artifactId project.parent.name + '.' + project.name
+        artifactId project.parent.name + '-' + project.name
         version = project.version
         pom {
-          name = project.parent.name + '.' + project.name
+          name = project.parent.name + '-' + project.name
           url = "$VCS_URL"
           scm {
             connection = 'scm:git:git@github.com:Sava-Software/sava.git'

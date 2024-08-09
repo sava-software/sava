@@ -144,7 +144,7 @@ public record AccountInfo<T>(PublicKey pubKey,
     }
 
     private <T> AccountInfo<T> create(final BiFunction<PublicKey, byte[], T> factory) {
-      return new AccountInfo<T>(pubKey, context, executable, lamports, owner, rentEpoch, space, factory.apply(pubKey, data));
+      return new AccountInfo<>(pubKey, context, executable, lamports, owner, rentEpoch, space, factory.apply(pubKey, data));
     }
   }
 }

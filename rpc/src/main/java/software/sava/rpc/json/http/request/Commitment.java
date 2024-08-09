@@ -5,12 +5,6 @@ public enum Commitment {
   FINALIZED("finalized"),
   CONFIRMED("confirmed"),
   PROCESSED("processed");
-//  ,
-//  SINGLE_GOSSIP("singleGossip"),
-//  SINGLE("single"),
-//  ROOT("root"),
-//  RECENT("recent"),
-//  MAX("max");
 
   private final String value;
 
