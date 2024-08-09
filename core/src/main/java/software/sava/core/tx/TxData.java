@@ -9,37 +9,16 @@ import software.sava.core.encoding.Base58;
 import java.util.Arrays;
 import java.util.List;
 
-final class TxData implements Transaction {
+record TxData(AccountMeta feePayer,
+              List<Instruction> instructions,
+              AddressLookupTable lookupTable,
+              LookupTableAccountMeta[] tableAccountMetas,
+              byte[] data,
+              int numSigners,
+              int messageOffset,
+              int recentBlockHashIndex) implements Transaction {
 
   static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
-
-  private final AccountMeta feePayer;
-  private final List<Instruction> instructions;
-  private final AddressLookupTable lookupTable;
-  private final LookupTableAccountMeta[] tableAccountMetas;
-
-  private final byte[] data;
-  private final int numSigners;
-  private final int recentBlockHashIndex;
-  private final int messageOffset;
-
-  TxData(final AccountMeta feePayer,
-         final List<Instruction> instructions,
-         final AddressLookupTable lookupTable,
-         final LookupTableAccountMeta[] tableAccountMetas,
-         final byte[] data,
-         final int numSigners,
-         final int messageOffset,
-         final int recentBlockHashOffset) {
-    this.feePayer = feePayer;
-    this.instructions = instructions;
-    this.lookupTable = lookupTable;
-    this.tableAccountMetas = tableAccountMetas;
-    this.data = data;
-    this.numSigners = numSigners;
-    this.messageOffset = messageOffset;
-    this.recentBlockHashIndex = recentBlockHashOffset;
-  }
 
   @Override
   public List<Instruction> instructions() {
