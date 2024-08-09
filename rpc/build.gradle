@@ -1,0 +1,5 @@
+dependencies {
+  implementation "systems.comodal:json-iterator:$jsoniter"
+
+  implementation project(':core')
+}

@@ -1,0 +1,4 @@
+rootProject.name = 'sava'
+
+include 'core'
+include 'rpc'

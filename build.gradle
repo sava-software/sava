@@ -1,0 +1,115 @@
+def getAppVersion = { ->
+  try (final var gitTagOut = new ByteArrayOutputStream()) {
+    exec {
+      commandLine 'git', 'tag', '--points-at', 'HEAD'
+      standardOutput = gitTagOut
+    }
+    final var tagName = gitTagOut.toString().strip()
+    if (tagName.isBlank()) {
+      try (final var gitHashOut = new ByteArrayOutputStream()) {
+        exec {
+          commandLine 'git', 'rev-parse', '--short', 'HEAD'
+          standardOutput = gitHashOut
+        }
+        return 'git-' + gitHashOut.toString().strip();
+      }
+    } else {
+      return tagName;
+    }
+  }
+}
+
+ext {
+  VERSION = getAppVersion()
+  VCS_URL = 'https://github.com/sava-software/sava'
+  jsoniter = '2.11.0'
+  bouncycastleMinor = 'jdk18on'
+  bouncycastlePatch = '1.78.1' // https://www.bouncycastle.org/latest_releases.html#LATEST
+}
+
+final JLV = JavaLanguageVersion.of(project.findProperty('jv') as Integer ?: 22)
+
+subprojects {
+  apply plugin: 'java-library'
+  apply plugin: 'maven-publish'
+
+  plugins.withType(JavaPlugin).configureEach {
+    java {
+      modularity.inferModulePath = true
+      toolchain {
+        languageVersion = JLV
+      }
+    }
+  }
+
+  project.group = 'none'
+  project.version = "$VERSION"
+
+  repositories {
+    maven {
+      url = "https://maven.pkg.github.com/comodal/json-iterator"
+      credentials {
+        username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_ACTOR")
+        password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
+      }
+    }
+    mavenCentral()
+  }
+
+  configurations.configureEach {
+    resolutionStrategy {
+      cacheDynamicVersionsFor 15, 'minutes'
+      cacheChangingModulesFor 15, 'minutes'
+    }
+  }
+
+  dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:+'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:+'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:+'
+  }
+
+  test {
+    useJUnitPlatform()
+    testLogging {
+      events "passed", "skipped", "failed", "standardOut", "standardError"
+      exceptionFormat "full"
+      showStandardStreams true
+    }
+  }
+
+  tasks.register('sourcesJar', Jar) {
+    from sourceSets.main.allJava
+    archiveClassifier.set('sources')
+  }
+
+  publishing {
+    publications {
+      mavenJava(MavenPublication) {
+        from components.java
+        artifact sourcesJar
+        groupId project.group
+        artifactId project.parent.name + '.' + project.name
+        version = project.version
+        pom {
+          name = project.parent.name + '.' + project.name
+          url = "$VCS_URL"
+          scm {
+            connection = 'scm:git:git@github.com:Sava-Software/sava.git'
+            url = "$VCS_URL"
+          }
+        }
+      }
+    }
+    repositories {
+      maven {
+        name = "GitHubPackages"
+        url = "https://maven.pkg.github.com/Sava-Software/sava"
+        credentials {
+          username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user.write")
+          password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token.write")
+        }
+      }
+    }
+  }
+}
