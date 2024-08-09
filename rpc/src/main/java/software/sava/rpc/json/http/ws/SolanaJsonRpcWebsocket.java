@@ -55,7 +55,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Map<Long, Subscription<?>> subscriptionsBySubId;
 
   private final AtomicLong lastOutGoing;
-  private volatile long lastIncoming; // TODO: if more than N seconds send close.
+  // private volatile long lastIncoming; // TODO: if more than N seconds send close.
   private volatile WebSocket webSocket;
 
   private char[] buffer;
@@ -134,7 +134,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.pendingUnsubscriptions.clear();
     this.subscriptionsBySubId.clear();
     handlePendingSubscriptions(webSocket);
-    this.lastIncoming = System.currentTimeMillis();
+    // this.lastIncoming = System.currentTimeMillis();
     webSocket.request(Long.MAX_VALUE);
     this.webSocket = webSocket;
     log.log(INFO, "WebSocket connected to {0}.", wsUri);
@@ -156,7 +156,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final long msgId = this.msgId.incrementAndGet();
     final var msg = createSubscriptionMsg(msgId, channel, params);
     final var sub = Subscription.createSubscription(commitment, channel, key, msgId, msg, consumer);
-    final var duplicate = subs.computeIfAbsent(sub.key(), k -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
+    final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
       // System.out.println(msg);
@@ -175,7 +175,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final long msgId = this.msgId.incrementAndGet();
     final var msg = createSubscriptionMsg(msgId, channel, params);
     final var sub = Subscription.createAccountSubscription(commitment, channel, publicKey, msgId, msg, consumer);
-    final var duplicate = subs.computeIfAbsent(sub.key(), k -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
+    final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
       // System.out.println(msg);
@@ -222,7 +222,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       if (sub == null) {
         return removeDanglingSub(key, channel, commitment);
       } else {
-        subs.compute(key, (k, v) -> v == null || v.isEmpty() ? null : v);
+        subs.compute(key, (_, v) -> v == null || v.isEmpty() ? null : v);
         this.queueUnsubscribe(sub);
         return true;
       }
@@ -528,7 +528,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       ji.reset(paramsMark).skipUntil("subscription");
     }
     final long subId = ji.readLong();
-    final var sub = ((Subscription<T>) this.subscriptionsBySubId.get(subId));
+    @SuppressWarnings("unchecked") final var sub = ((Subscription<T>) this.subscriptionsBySubId.get(subId));
     if (sub == null) {
       sendUnSubscription(webSocket, channel, subId);
     } else {
@@ -547,7 +547,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       ji.reset(paramsMark).skipUntil("subscription");
     }
     final long subId = ji.readLong();
-    final var sub = ((Subscription<T>) this.subscriptionsBySubId.get(subId));
+    @SuppressWarnings("unchecked") final var sub = ((Subscription<T>) this.subscriptionsBySubId.get(subId));
     if (sub == null) {
       sendUnSubscription(webSocket, channel, subId);
     } else {
@@ -626,7 +626,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                     ji.reset(paramsMark).skipUntil("subscription");
                   }
                   final long subId = ji.readLong();
-                  final var sub = (Subscription<TxResult>) this.subscriptionsBySubId.get(subId);
+                  @SuppressWarnings("unchecked") final var sub = (Subscription<TxResult>) this.subscriptionsBySubId.get(subId);
                   if (sub == null) {
                     sendUnSubscription(webSocket, channel, subId);
                   } else {
@@ -666,7 +666,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var buf = (CharBuffer) message;
     final int len = message.length();
     if (last) {
-      this.lastIncoming = System.currentTimeMillis();
+      // this.lastIncoming = System.currentTimeMillis();
       if (this.offset > 0) {
         final int to = this.offset + len;
         ensureCapacity(to);
@@ -754,7 +754,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   @Override
   public CompletionStage<?> onPing(final WebSocket webSocket, final ByteBuffer message) {
     final long now = System.currentTimeMillis();
-    this.lastIncoming = now;
+    // this.lastIncoming = now;
     this.lastOutGoing.set(now);
     log.log(INFO, new String(message.array()));
     handlePendingSubscriptions(webSocket);
@@ -763,7 +763,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public CompletionStage<?> onPong(final WebSocket webSocket, final ByteBuffer message) {
-    this.lastIncoming = System.currentTimeMillis();
+    // this.lastIncoming = System.currentTimeMillis();
     handlePendingSubscriptions(webSocket);
     log.log(DEBUG, () -> new String(message.array()));
     return null;
@@ -775,7 +775,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     if (millisSinceLastWrite > timings.writeOrPingDelay()) {
       this.lastOutGoing.set(now);
       final var pingMsg = String.valueOf(now);
-      webSocket.sendPing(ByteBuffer.wrap(pingMsg.getBytes(ISO_8859_1))).whenComplete(((ws, throwable) -> {
+      webSocket.sendPing(ByteBuffer.wrap(pingMsg.getBytes(ISO_8859_1))).whenComplete(((_, throwable) -> {
         if (throwable != null) {
           this.lastOutGoing.compareAndSet(now, System.currentTimeMillis() - (this.timings.writeOrPingDelay() - this.timings.reConnect()));
           log.log(WARNING, String.format("Failed to ping %d to %s.", now, this.wsUri), throwable);
