@@ -20,3 +20,8 @@
 - java.net.http
 - [Bouncy Castle](https://www.bouncycastle.org/download/bouncy-castle-java/#latest)
 - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)
+
+## Contribution
+
+Unit tests are needed and welcomed, as well as general usage/testing-out of the library. Otherwise, please open an issue
+or send an email before working on a pull request.
