@@ -2,7 +2,7 @@
 
 ## Features
 
-- REST and WebSocket JSON RPC Clients.
+- HTTP and WebSocket JSON RPC Clients.
 - Transaction (de)serialization.
     - Legacy
     - V0
