@@ -31,7 +31,7 @@ public final class SolanaHdKeyGenerator {
   private static final X9ECParameters SECP = CustomNamedCurves.getByName("secp256k1");
   private static final String MASTER_PATH = "m";
 
-  public static software.sava.core.crypto.bip32.wallet.HdAddress getPrivateKeyFromBip44SeedWithChange(final byte[] seed) {
+  public static HdAddress getPrivateKeyFromBip44SeedWithChange(final byte[] seed) {
     final var masterAddress = getAddressFromSeed(seed);
     final var purposeAddress = getHardenedPurposeAddress(masterAddress); // 55H
     final var coinTypeAddress = getHardenedCoinAddress(purposeAddress); // 501H
@@ -39,26 +39,26 @@ public final class SolanaHdKeyGenerator {
     return getHardenedAddress(accountAddress);
   }
 
-  public static software.sava.core.crypto.bip32.wallet.HdAddress getPrivateKeyFromBip44Seed(final byte[] seed) {
+  public static HdAddress getPrivateKeyFromBip44Seed(final byte[] seed) {
     final var masterAddress = getAddressFromSeed(seed);
     final var purposeAddress = getHardenedPurposeAddress(masterAddress); // 55H
     final var coinTypeAddress = getHardenedCoinAddress(purposeAddress); // 501H
     return getHardenedAddress(coinTypeAddress);
   }
 
-  public static software.sava.core.crypto.bip32.wallet.HdAddress getHardenedCoinAddress(final software.sava.core.crypto.bip32.wallet.HdAddress parent) {
+  public static HdAddress getHardenedCoinAddress(final HdAddress parent) {
     return getAddress(parent, HARDENED_COIN_TYPE);
   }
 
-  public static software.sava.core.crypto.bip32.wallet.HdAddress getHardenedPurposeAddress(final software.sava.core.crypto.bip32.wallet.HdAddress parent) {
+  public static HdAddress getHardenedPurposeAddress(final HdAddress parent) {
     return getAddress(parent, HARDENED_PURPOSE);
   }
 
-  public static software.sava.core.crypto.bip32.wallet.HdAddress getHardenedAddress(final software.sava.core.crypto.bip32.wallet.HdAddress parent) {
+  public static HdAddress getHardenedAddress(final HdAddress parent) {
     return getAddress(parent, HARDENED);
   }
 
-  private static software.sava.core.crypto.bip32.wallet.HdAddress getAddress(final software.sava.core.crypto.bip32.wallet.HdAddress parent, final long child) {
+  private static HdAddress getAddress(final HdAddress parent, final long child) {
     final var privateKey = software.sava.core.crypto.bip32.wallet.HdKey.build();
     final var publicKey = software.sava.core.crypto.bip32.wallet.HdKey.build();
     final boolean isHardened = (child & HARDENED) == HARDENED;
@@ -108,14 +108,14 @@ public final class SolanaHdKeyGenerator {
     publicKey.setFingerprint(childFingerprint);
     privateKey.setFingerprint(childFingerprint);
 
-    return new software.sava.core.crypto.bip32.wallet.HdAddress(privateKey.createKey(), publicKey.createKey(), getPath(parent.path(), child, isHardened));
+    return new HdAddress(privateKey.createKey(), publicKey.createKey(), getPath(parent.path(), child, isHardened));
   }
 
   private static String getPath(final String parentPath, final long child, final boolean isHardened) {
     return (parentPath == null ? MASTER_PATH : parentPath) + "/" + child + (isHardened ? "H" : "");
   }
 
-  private static software.sava.core.crypto.bip32.wallet.HdAddress getAddressFromSeed(final byte[] seed) {
+  private static HdAddress getAddressFromSeed(final byte[] seed) {
     final var publicKey = software.sava.core.crypto.bip32.wallet.HdKey.build();
     final var privateKey = software.sava.core.crypto.bip32.wallet.HdKey.build();
 
@@ -146,7 +146,7 @@ public final class SolanaHdKeyGenerator {
     publicKey.setKeyData(serP(point));
     publicKey.setKey(generatePublicKey(IL));
 
-    return new software.sava.core.crypto.bip32.wallet.HdAddress(privateKey.createKey(), publicKey.createKey(), MASTER_PATH);
+    return new HdAddress(privateKey.createKey(), publicKey.createKey(), MASTER_PATH);
   }
 
   private static byte[] generatePublicKey(final byte[] secretKey) {
