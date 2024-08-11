@@ -1,6 +1,4 @@
 module software.sava.core {
-  requires java.net.http;
-
   requires org.bouncycastle.provider;
 
   exports software.sava.core.accounts;

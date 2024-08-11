@@ -20,11 +20,11 @@
 
 #### Core
 - java.base
-- java.net.http
 - [Bouncy Castle](https://www.bouncycastle.org/download/bouncy-castle-java/#latest)
 
 #### RPC
 - software.sava.core
+- java.net.http
 - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)
 
 ### Contribution
