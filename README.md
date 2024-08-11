@@ -11,6 +11,10 @@
 - Crypto utilities for elliptic curve Ed25519 and Solana accounts.
 - Borsh (de)serialization.
 
+### Disclaimer
+
+In addition to the MIT License, this project is under active development and breaking changes are to be expected.
+
 ### Requirements
 
 - The latest generally available JDK. This project will continue to move to the latest and will not maintain
@@ -19,13 +23,13 @@
 ### Dependencies
 
 - Core
-  - java.base
-  - [Bouncy Castle](https://www.bouncycastle.org/download/bouncy-castle-java/#latest)
+    - java.base
+    - [Bouncy Castle](https://www.bouncycastle.org/download/bouncy-castle-java/#latest)
 
 - RPC
-  - software.sava.core
-  - java.net.http
-  - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)
+    - software.sava.core
+    - java.net.http
+    - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)
 
 ### Contribution
 
