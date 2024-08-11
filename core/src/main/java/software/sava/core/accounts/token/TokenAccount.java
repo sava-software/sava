@@ -114,16 +114,13 @@ public record TokenAccount(PublicKey address,
   @Override
   public int write(final byte[] data, final int offset) {
     int i = offset;
-    mint.write(data, i);
-    i += PUBLIC_KEY_LENGTH;
-    owner.write(data, i);
-    i += PUBLIC_KEY_LENGTH;
+    i += mint.write(data, i);
+    i += owner.write(data, i);
     ByteUtil.putInt64LE(data, i, amount);
     i += Long.BYTES;
     ByteUtil.putInt32LE(data, i, delegateOption);
     i += Integer.BYTES;
-    delegate.write(data, i);
-    i += PUBLIC_KEY_LENGTH;
+    i += delegate.write(data, i);
     data[i] = (byte) state.ordinal();
     ++i;
     ByteUtil.putInt32LE(data, i, isNativeOption);
@@ -134,8 +131,7 @@ public record TokenAccount(PublicKey address,
     i += Long.BYTES;
     ByteUtil.putInt32LE(data, i, closeAuthorityOption);
     i += Integer.BYTES;
-    closeAuthority.write(data, i);
-    i += PUBLIC_KEY_LENGTH;
+    i += closeAuthority.write(data, i);
     return i - offset;
   }
 

@@ -1,8 +1,10 @@
 package software.sava.core.accounts.lookup;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
+import java.util.Base64;
 
 public record AccountIndexLookupTableView(byte[] lookupTable,
                                           int offset,
@@ -23,20 +25,19 @@ public record AccountIndexLookupTableView(byte[] lookupTable,
   }
 
   @Override
-  public String toBase58() {
-    throw new IllegalStateException("Only to be used for account index lookups.");
+  public int write(final byte[] out, final int off) {
+    System.arraycopy(lookupTable, offset, out, off, PUBLIC_KEY_LENGTH);
+    return PUBLIC_KEY_LENGTH;
   }
 
   @Override
-  public int write(final byte[] out, final int off) {
-    toBase58();
-    return Integer.MIN_VALUE;
+  public String toBase58() {
+    return Base58.encode(lookupTable, offset, offset + PUBLIC_KEY_LENGTH);
   }
 
   @Override
   public String toBase64() {
-    toBase58();
-    return null;
+    return Base64.getEncoder().encodeToString(toByteArray());
   }
 
   @Override

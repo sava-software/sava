@@ -23,12 +23,12 @@ final class PublicKeyBytes implements PublicKey {
                              final PublicKey programId) {
     final int bufLength = seeds.stream().mapToInt(seed -> {
       final int len = seed.length;
-      if (len > PublicKey.PUBLIC_KEY_LENGTH) {
+      if (len > PUBLIC_KEY_LENGTH) {
         throw new IllegalArgumentException("Max seed length exceeded: " + len + " > " + PUBLIC_KEY_LENGTH);
       }
       return len;
     }).sum() + (nonce ? 1 : 0);
-    final byte[] buffer = new byte[bufLength + PublicKey.PUBLIC_KEY_LENGTH + PDA_BYTES.length];
+    final byte[] buffer = new byte[bufLength + PUBLIC_KEY_LENGTH + PDA_BYTES.length];
 
     int from = 0;
     for (final byte[] seed : seeds) {
@@ -36,8 +36,8 @@ final class PublicKeyBytes implements PublicKey {
       from += seed.length;
     }
     from = bufLength;
-    programId.write(buffer, from);
-    from += PublicKey.PUBLIC_KEY_LENGTH;
+    from += programId.write(buffer, from);
+
     System.arraycopy(PDA_BYTES, 0, buffer, from, PDA_BYTES.length);
 
     return buffer;
@@ -50,8 +50,8 @@ final class PublicKeyBytes implements PublicKey {
 
   @Override
   public int write(final byte[] out, final int off) {
-    System.arraycopy(publicKey, 0, out, off, PublicKey.PUBLIC_KEY_LENGTH);
-    return off + PublicKey.PUBLIC_KEY_LENGTH;
+    System.arraycopy(publicKey, 0, out, off, PUBLIC_KEY_LENGTH);
+    return PUBLIC_KEY_LENGTH;
   }
 
   @Override

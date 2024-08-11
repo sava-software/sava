@@ -70,7 +70,7 @@ final class TableAccountMeta implements LookupTableAccountMeta {
 
   @Override
   public int serialize(final byte[] out, int i) {
-    i = lookupTable.address().write(out, i);
+    i += lookupTable.address().write(out, i);
     i += CompactU16Encoding.encodeLength(out, i, writes);
     int a = 0;
     for (; a < writes; ++a, ++i) {

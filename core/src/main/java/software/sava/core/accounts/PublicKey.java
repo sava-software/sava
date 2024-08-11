@@ -119,4 +119,8 @@ public interface PublicKey extends Comparable<PublicKey> {
   String toBase58();
 
   String toBase64();
+
+  default int l() {
+    return PUBLIC_KEY_LENGTH;
+  }
 }

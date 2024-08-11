@@ -246,7 +246,7 @@ public interface Transaction {
 
     i += CompactU16Encoding.encodeLength(out, i, numAccounts);
     for (final var accountMeta : sortedAccounts) {
-      i = accountMeta.publicKey().write(out, i);
+      i += accountMeta.publicKey().write(out, i);
     }
 
     final int recentBlockHashIndex = i;
@@ -358,7 +358,7 @@ public interface Transaction {
 
     i += CompactU16Encoding.encodeLength(out, i, numIncludedAccounts);
     for (int a = 0; a < numIncludedAccounts; ++a) {
-      i = sortedAccounts[a].publicKey().write(out, i);
+      i += sortedAccounts[a].publicKey().write(out, i);
     }
 
     final int recentBlockHashIndex = i;
@@ -371,7 +371,7 @@ public interface Transaction {
 
     // Address Lookup Table
     i += CompactU16Encoding.encodeLength(out, i, 1);
-    i = lookupTable.address().write(out, i);
+    i += lookupTable.address().write(out, i);
     i += CompactU16Encoding.encodeLength(out, i, numLookupWrites);
     int a = numIncludedAccounts;
     for (final int to = numIncludedAccounts + numLookupWrites; a < to; ++a, ++i) {
@@ -501,7 +501,7 @@ public interface Transaction {
     // Accounts
     i += CompactU16Encoding.encodeLength(out, i, numIncludedAccounts);
     for (int a = 0; a < numIncludedAccounts; ++a) {
-      i = sortedAccounts[a].publicKey().write(out, i);
+      i += sortedAccounts[a].publicKey().write(out, i);
     }
 
     final int recentBlockHashIndex = i;
