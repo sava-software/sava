@@ -11,10 +11,10 @@ def getAppVersion = { ->
           commandLine 'git', 'rev-parse', '--short', 'HEAD'
           standardOutput = gitHashOut
         }
-        return 'git-' + gitHashOut.toString().strip();
+        return 'git-' + gitHashOut.toString().strip()
       }
     } else {
-      return tagName;
+      return tagName
     }
   }
 }
@@ -33,6 +33,9 @@ subprojects {
   apply plugin: 'java-library'
   apply plugin: 'maven-publish'
 
+  project.group = 'software.sava'
+  project.version = "$VERSION"
+
   plugins.withType(JavaPlugin).configureEach {
     java {
       modularity.inferModulePath = true
@@ -41,9 +44,6 @@ subprojects {
       }
     }
   }
-
-  project.group = 'software.sava'
-  project.version = "$VERSION"
 
   repositories {
     maven {

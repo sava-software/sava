@@ -1,7 +1,4 @@
-<picture>
-    <img alt="Sava" src="sava.svg">
-</picture>
-
+![Sava](core/assets/images/sava.svg)
 # Sava [![Build](https://github.com/Sava-Software/sava/actions/workflows/gradle.yml/badge.svg)](https://github.com/Sava-Software/sava/actions/workflows/gradle.yml) [![Release](https://github.com/Sava-Software/sava/actions/workflows/release.yml/badge.svg)](https://github.com/Sava-Software/sava/actions/workflows/release.yml)
 
 ## Features
