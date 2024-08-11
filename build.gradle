@@ -95,7 +95,7 @@ subprojects {
           name = project.parent.name + '-' + project.name
           url = "$VCS_URL"
           scm {
-            connection = 'scm:git:git@github.com:Sava-Software/sava.git'
+            connection = 'scm:git:git@github.com:sava-software/sava.git'
             url = "$VCS_URL"
           }
         }
@@ -104,7 +104,7 @@ subprojects {
     repositories {
       maven {
         name = "GitHubPackages"
-        url = "https://maven.pkg.github.com/Sava-Software/sava"
+        url = "https://maven.pkg.github.com/sava-software/sava"
         credentials {
           username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user.write")
           password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token.write")
