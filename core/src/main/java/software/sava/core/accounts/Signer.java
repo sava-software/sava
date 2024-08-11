@@ -65,7 +65,6 @@ public interface Signer {
 
   static Signer createFromPrivateKey(final byte[] privateKey) {
     final byte[] copiedPrivateKey = Arrays.copyOfRange(privateKey, 0, Signer.KEY_LENGTH);
-    Arrays.fill(privateKey, (byte) 0);
     final byte[] publicKey = new byte[Signer.KEY_LENGTH];
     Ed25519Util.generatePublicKey(copiedPrivateKey, 0, publicKey, 0);
     validateKeyPair(copiedPrivateKey, publicKey);
@@ -82,7 +81,6 @@ public interface Signer {
   static Signer createFromKeyPair(final byte[] publicKey, final byte[] privateKey) {
     validateKeyPair(privateKey, publicKey);
     final var copiedPrivateKey = Arrays.copyOfRange(privateKey, 0, Signer.KEY_LENGTH);
-    Arrays.fill(privateKey, (byte) 0);
     return new KeyPairSigner(
         Arrays.copyOfRange(publicKey, 0, Signer.KEY_LENGTH),
         copiedPrivateKey

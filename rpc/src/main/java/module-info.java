@@ -4,6 +4,7 @@ module software.sava.rpc {
   requires systems.comodal.json_iterator;
   requires java.net.http;
 
+  exports software.sava.rpc.json;
   exports software.sava.rpc.json.http;
   exports software.sava.rpc.json.http.client;
   exports software.sava.rpc.json.http.request;

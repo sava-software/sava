@@ -1,4 +1,3 @@
 dependencies {
-  implementation "systems.comodal:json-iterator:$jsoniter"
   implementation "org.bouncycastle:bcprov-$bouncycastleMinor:$bouncycastlePatch"
 }

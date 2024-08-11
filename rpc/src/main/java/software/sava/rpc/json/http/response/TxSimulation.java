@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
@@ -27,7 +28,7 @@ public record TxSimulation(Context context,
 
   private static final ContextFieldBufferPredicate<Builder> RETURN_DATA_PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("programId", buf, offset, len)) {
-      builder.programId(PublicKey.parseBase58Encoded(ji));
+      builder.programId(PublicKeyEncoding.parseBase58Encoded(ji));
     } else if (fieldEquals("data", buf, offset, len)) {
       builder.data(parseEncodedData(ji));
     } else {

@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
@@ -31,13 +32,13 @@ public record ParsedAccountData(PublicKey program,
     if (fieldEquals("isNative", buf, offset, len)) {
       builder.isNative = ji.readBoolean();
     } else if (fieldEquals("mint", buf, offset, len)) {
-      builder.mint = PublicKey.parseBase58Encoded(ji);
+      builder.mint = PublicKeyEncoding.parseBase58Encoded(ji);
     } else if (fieldEquals("owner", buf, offset, len)) {
-      builder.owner = PublicKey.parseBase58Encoded(ji);
+      builder.owner = PublicKeyEncoding.parseBase58Encoded(ji);
     } else if (fieldEquals("freezeAuthority", buf, offset, len)) {
-      builder.freezeAuthority = PublicKey.parseBase58Encoded(ji);
+      builder.freezeAuthority = PublicKeyEncoding.parseBase58Encoded(ji);
     } else if (fieldEquals("mintAuthority", buf, offset, len)) {
-      builder.mintAuthority = PublicKey.parseBase58Encoded(ji);
+      builder.mintAuthority = PublicKeyEncoding.parseBase58Encoded(ji);
     } else if (fieldEquals("isInitialized", buf, offset, len)) {
       builder.isInitialized = ji.readBoolean();
     } else if (fieldEquals("state", buf, offset, len)) {
@@ -51,7 +52,7 @@ public record ParsedAccountData(PublicKey program,
     } else if (fieldEquals("addresses", buf, offset, len)) {
       final var addresses = new ArrayList<PublicKey>();
       while (ji.readArray()) {
-        addresses.add(PublicKey.parseBase58Encoded(ji));
+        addresses.add(PublicKeyEncoding.parseBase58Encoded(ji));
       }
       builder.addresses = addresses;
     } else {
@@ -73,7 +74,7 @@ public record ParsedAccountData(PublicKey program,
 
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("program", buf, offset, len)) {
-      builder.program = PublicKey.parseBase58Encoded(ji);
+      builder.program = PublicKeyEncoding.parseBase58Encoded(ji);
     } else if (fieldEquals("space", buf, offset, len)) {
       builder.space = ji.readInt();
     } else if (fieldEquals("parsed", buf, offset, len)) {

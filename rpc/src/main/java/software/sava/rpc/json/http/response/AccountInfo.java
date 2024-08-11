@@ -4,6 +4,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.util.DecimalIntegerAmount;
 import software.sava.core.util.LamportDecimal;
+import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
@@ -102,7 +103,7 @@ public record AccountInfo<T>(PublicKey pubKey,
     } else if (fieldEquals("lamports", buf, offset, len)) {
       builder.lamports = ji.readLong();
     } else if (fieldEquals("owner", buf, offset, len)) {
-      builder.owner = PublicKey.parseBase58Encoded(ji);
+      builder.owner = PublicKeyEncoding.parseBase58Encoded(ji);
     } else if (fieldEquals("rentEpoch", buf, offset, len)) {
       builder.rentEpoch = ji.readBigInteger();
     } else if (fieldEquals("space", buf, offset, len)) {
@@ -117,7 +118,7 @@ public record AccountInfo<T>(PublicKey pubKey,
     if (fieldEquals("account", buf, offset, len)) {
       ji.testObject(builder, ACCOUNT_PARSER);
     } else if (fieldEquals("pubkey", buf, offset, len)) {
-      builder.pubKey = PublicKey.parseBase58Encoded(ji);
+      builder.pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
     } else {
       ji.skip();
     }

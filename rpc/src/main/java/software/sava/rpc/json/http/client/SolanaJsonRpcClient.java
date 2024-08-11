@@ -6,6 +6,7 @@ import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
+import software.sava.rpc.json.PublicKeyEncoding;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
 import software.sava.rpc.json.http.response.*;
@@ -24,6 +25,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 
 final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
 
@@ -54,7 +56,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   };
   private static final Function<HttpResponse<byte[]>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyResponseResult(ji -> {
     final var schedule = new HashMap<PublicKey, long[]>();
-    for (PublicKey validator; (validator = ji.applyObjField(PublicKey.PARSE_BASE58_PUBLIC_KEY)) != null; ) {
+    for (PublicKey validator; (validator = PublicKeyEncoding.parseBase58Encoded(ji)) != null; ) {
       schedule.put(validator, PARSE_LONG_ARRAY.apply(ji));
     }
     return schedule;
@@ -68,11 +70,11 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<byte[]>, Instant> INSTANT = applyResponseResult(ji -> Instant.ofEpochSecond(ji.readLong()));
   private static final Function<HttpResponse<byte[]>, ContextBoolVal> CONTEXT_BOOL_VAL = applyResponseValue(ContextBoolVal::parse);
   private static final Function<HttpResponse<byte[]>, String> STRING = applyResponseResult(JsonIterator::readString);
-  private static final Function<HttpResponse<byte[]>, PublicKey> PUBLIC_KEY = applyResponseResult(PublicKey::parseBase58Encoded);
+  private static final Function<HttpResponse<byte[]>, PublicKey> PUBLIC_KEY = applyResponseResult(PublicKeyEncoding::parseBase58Encoded);
   private static final Function<HttpResponse<byte[]>, List<PublicKey>> PUBLIC_KEY_LIST = applyResponseResult(ji -> {
     final var strings = new ArrayList<PublicKey>();
     while (ji.readArray()) {
-      strings.add(PublicKey.parseBase58Encoded(ji));
+      strings.add(parseBase58Encoded(ji));
     }
     return strings;
   });

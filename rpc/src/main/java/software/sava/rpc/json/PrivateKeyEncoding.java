@@ -1,5 +1,6 @@
-package software.sava.core.accounts;
+package software.sava.rpc.json;
 
+import software.sava.core.accounts.Signer;
 import software.sava.core.encoding.Base58;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonIterator;
@@ -40,8 +41,7 @@ public enum PrivateKeyEncoding {
     for (int i = 0; ji.readArray(); ) {
       publicKey[i++] = (byte) ji.readInt();
     }
-    Signer.validateKeyPair(privateKey, publicKey);
-    return new KeyPairSigner(publicKey, privateKey);
+    return Signer.createFromKeyPair(publicKey, privateKey);
   }
 
   public static Signer fromJsonArray(final byte[] jsonArrayKeyPair) {
@@ -49,8 +49,7 @@ public enum PrivateKeyEncoding {
     return fromJsonArray(ji);
   }
 
-  public static Signer fromJsonPrivateKey(final JsonIterator ji,
-                                          final PrivateKeyEncoding encoding) {
+  public static Signer fromJsonPrivateKey(final JsonIterator ji, final PrivateKeyEncoding encoding) {
     return switch (encoding) {
       case jsonKeyPairArray -> fromJsonArray(ji);
       case base64PrivateKey -> Signer.createFromPrivateKey(ji.decodeBase64String());

@@ -1,6 +1,6 @@
 module software.sava.core {
   requires java.net.http;
-  requires systems.comodal.json_iterator;
+
   requires org.bouncycastle.provider;
 
   exports software.sava.core.accounts;

@@ -3,8 +3,6 @@ package software.sava.core.accounts;
 import software.sava.core.crypto.Hash;
 import software.sava.core.crypto.ed25519.Ed25519Util;
 import software.sava.core.encoding.Base58;
-import systems.comodal.jsoniter.CharBufferFunction;
-import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.Arrays;
 import java.util.Base64;
@@ -17,13 +15,7 @@ import static software.sava.core.crypto.Hash.sha256Digest;
 public interface PublicKey extends Comparable<PublicKey> {
 
   int PUBLIC_KEY_LENGTH = 32;
-  CharBufferFunction<PublicKey> PARSE_BASE58_PUBLIC_KEY = PublicKey::fromBase58Encoded;
-  // 11111111111111111111111111111111
-  PublicKey NONE = new PublicKeyBytes(new byte[PUBLIC_KEY_LENGTH]);
-
-  static PublicKey parseBase58Encoded(final JsonIterator ji) {
-    return ji.applyChars(PublicKey.PARSE_BASE58_PUBLIC_KEY);
-  }
+  PublicKey NONE = new PublicKeyBytes(new byte[PUBLIC_KEY_LENGTH]); // 11111111111111111111111111111111
 
   static PublicKey readPubKey(final byte[] bytes, final int offset) {
     return new PublicKeyBytes(Arrays.copyOfRange(bytes, offset, offset + PublicKey.PUBLIC_KEY_LENGTH));
