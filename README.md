@@ -1,4 +1,5 @@
-![Sava](core/assets/images/sava.svg)
+![Sava](assets/images/solana_java_cup.svg)
+
 # Sava [![Build](https://github.com/Sava-Software/sava/actions/workflows/gradle.yml/badge.svg)](https://github.com/Sava-Software/sava/actions/workflows/gradle.yml) [![Release](https://github.com/Sava-Software/sava/actions/workflows/release.yml/badge.svg)](https://github.com/Sava-Software/sava/actions/workflows/release.yml)
 
 ## Features
