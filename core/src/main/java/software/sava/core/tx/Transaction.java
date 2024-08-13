@@ -13,8 +13,9 @@ import java.util.*;
 import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
-import static software.sava.core.tx.TxData.NO_TABLES;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
+import static software.sava.core.encoding.CompactU16Encoding.signedByte;
+import static software.sava.core.tx.TxData.NO_TABLES;
 
 public interface Transaction {
 
@@ -523,11 +524,9 @@ public interface Transaction {
   }
 
   static void setBlockHash(final byte[] data, final byte[] recentBlockHash) {
-    // https://explorer.solana.com/address/SysvarRecentB1ockHashes11111111111111111111/blockhashes
     final int numSigners = Byte.toUnsignedInt(data[0]);
     final int versionOffset = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
-    // 3 to 4 bytes to record: version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts
-    final int accountMetaOffset = (data[versionOffset] & 0b1000_0000) == 0b1000_0000 ? versionOffset + 4 : versionOffset + 3;
+    final int accountMetaOffset = versionOffset + (signedByte(data[versionOffset]) ? 4 : 3);
     final int accountMetaByteLen = CompactU16Encoding.getByteLen(data, accountMetaOffset);
     final int accountMetaLen = CompactU16Encoding.decode(data, accountMetaOffset) * PublicKey.PUBLIC_KEY_LENGTH;
     final int recentBlockHashOffset = accountMetaOffset + accountMetaByteLen + accountMetaLen;

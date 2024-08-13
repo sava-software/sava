@@ -1,11 +1,12 @@
 package software.sava.core.tx;
 
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
-import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.CompactU16Encoding;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
+import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.Transaction.MESSAGE_VERSION_0_PREFIX;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
 import static software.sava.core.tx.TransactionSkeletonRecord.LEGACY_INVOKED_INDEXES;
@@ -21,7 +22,7 @@ public interface TransactionSkeleton {
 
     int version = data[o++] & 0xFF;
     final int numRequiredSignatures;
-    if ((version & 0b1000_0000) == 0b1000_0000) {
+    if (signedByte(version)) {
       version &= 0x7F;
       numRequiredSignatures = data[o++];
     } else {
