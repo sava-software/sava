@@ -11,10 +11,6 @@
 - Crypto utilities for elliptic curve Ed25519 and Solana accounts.
 - Borsh (de)serialization.
 
-### Disclaimer
-
-In addition to the MIT License, this project is under active development and breaking changes are to be expected.
-
 ### Requirements
 
 - The latest generally available JDK. This project will continue to move to the latest and will not maintain
@@ -34,3 +30,7 @@ In addition to the MIT License, this project is under active development and bre
 ### Contribution
 
 Unit tests are needed and welcomed. Otherwise, please open an issue or send an email before working on a pull request.
+
+### Disclaimer
+
+In addition to the MIT License, this project is under active development and breaking changes are to be expected.

@@ -4,6 +4,7 @@ module software.sava.core {
   exports software.sava.core.accounts;
   exports software.sava.core.accounts.lookup;
   exports software.sava.core.accounts.meta;
+  exports software.sava.core.accounts.sysvar;
   exports software.sava.core.accounts.token;
   exports software.sava.core.borsh;
   exports software.sava.core.crypto;
