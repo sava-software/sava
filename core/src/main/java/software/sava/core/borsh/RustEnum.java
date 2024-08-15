@@ -4,7 +4,6 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
 
 import java.math.BigInteger;
-import java.util.Arrays;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -158,7 +157,7 @@ public interface RustEnum extends Borsh {
 
     default int write(final byte[] data, final int offset) {
       data[offset] = (byte) ordinal();
-      return 1 +  Borsh.write(val(), data, 1 + offset);
+      return 1 + Borsh.write(val(), data, 1 + offset);
     }
   }
 
@@ -199,7 +198,7 @@ public interface RustEnum extends Borsh {
     Borsh[] val();
 
     default int l() {
-      return 1 + Integer.BYTES + Arrays.stream(val()).mapToInt(Borsh::l).sum();
+      return 1 + Borsh.len(val());
     }
 
     default int write(final byte[] data, final int offset) {
@@ -213,12 +212,40 @@ public interface RustEnum extends Borsh {
     Borsh[] val();
 
     default int l() {
-      return 1 + Arrays.stream(val()).mapToInt(Borsh::l).sum();
+      return 1 + Borsh.fixedLen(val());
+    }
+
+    default int write(final byte[] data, final int offset) {
+      data[offset] = (byte) ordinal();
+      return 1 + Borsh.fixedWrite(val(), data, 1 + offset);
+    }
+  }
+
+  interface PublicKeyVectorEnum extends RustEnum {
+
+    PublicKey[] val();
+
+    default int l() {
+      return 1 + Borsh.len(val());
     }
 
     default int write(final byte[] data, final int offset) {
       data[offset] = (byte) ordinal();
       return 1 + Borsh.write(val(), data, 1 + offset);
+    }
+  }
+
+  interface PublicKeyArrayEnum extends RustEnum {
+
+    PublicKey[] val();
+
+    default int l() {
+      return 1 + Borsh.fixedLen(val());
+    }
+
+    default int write(final byte[] data, final int offset) {
+      data[offset] = (byte) ordinal();
+      return 1 + Borsh.fixedWrite(val(), data, 1 + offset);
     }
   }
 
