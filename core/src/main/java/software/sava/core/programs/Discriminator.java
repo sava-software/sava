@@ -6,6 +6,10 @@ public interface Discriminator {
 
   int NATIVE_DISCRIMINATOR_LENGTH = Integer.BYTES;
 
+  static Discriminator createDiscriminator(final byte[] discriminator) {
+    return new DiscriminatorRecord(discriminator);
+  }
+
   static Discriminator toDiscriminator(final int... val) {
     final int len = val.length;
     final byte[] d = new byte[len];
