@@ -3,6 +3,7 @@ package software.sava.core.tx;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AccountIndexLookupTableEntry;
 import software.sava.core.accounts.meta.AccountMeta;
+import software.sava.core.programs.Discriminator;
 
 import java.util.Collection;
 import java.util.List;
@@ -21,6 +22,12 @@ public interface Instruction {
                                        final List<AccountMeta> keys,
                                        final byte[] data) {
     return createInstruction(programId, keys, data, 0, data.length);
+  }
+
+  static Instruction createInstruction(final AccountMeta programId,
+                                       final List<AccountMeta> keys,
+                                       final Discriminator discriminator) {
+    return createInstruction(programId, keys, discriminator.data());
   }
 
   static Instruction createInstruction(final PublicKey programId,
