@@ -4,7 +4,7 @@ import software.sava.core.encoding.ByteUtil;
 
 public interface Discriminator {
 
-  int SOLANA_PROGRAMS_LENGTH = Integer.BYTES;
+  int NATIVE_DISCRIMINATOR_LENGTH = Integer.BYTES;
 
   static Discriminator toDiscriminator(final int... val) {
     final int len = val.length;
@@ -16,7 +16,7 @@ public interface Discriminator {
   }
 
   static byte[] serializeDiscriminator(final Enum<?> ixEnum) {
-    final byte[] data = new byte[SOLANA_PROGRAMS_LENGTH];
+    final byte[] data = new byte[NATIVE_DISCRIMINATOR_LENGTH];
     ByteUtil.putInt32LE(data, 0, ixEnum.ordinal());
     return data;
   }
