@@ -12,6 +12,7 @@ import java.util.OptionalLong;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+@SuppressWarnings("unchecked")
 public interface Borsh {
 
   int l();

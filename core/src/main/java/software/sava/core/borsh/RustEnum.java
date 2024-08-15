@@ -16,6 +16,11 @@ public interface RustEnum extends Borsh {
     return getClass().getSimpleName();
   }
 
+  default int writeOrdinal(final byte[] data, final int offset) {
+    data[offset] = (byte) ordinal();
+    return 1 + offset;
+  }
+
   interface EnumNone extends RustEnum {
 
     default int l() {
@@ -23,7 +28,6 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
       return 1;
     }
   }
@@ -37,7 +41,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
+      writeOrdinal(data, offset);
       data[offset + 1] = (byte) (val() ? 1 : 0);
       return 2;
     }
@@ -52,8 +56,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      ByteUtil.putFloat32LE(data, 1 + offset, val());
+      ByteUtil.putFloat32LE(data, writeOrdinal(data, offset), val());
       return l();
     }
   }
@@ -67,8 +70,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      ByteUtil.putFloat64LE(data, 1 + offset, val());
+      ByteUtil.putFloat64LE(data, writeOrdinal(data, offset), val());
       return l();
     }
   }
@@ -78,13 +80,12 @@ public interface RustEnum extends Borsh {
     int val();
 
     default int l() {
-      return 1 + Byte.BYTES;
+      return 2;
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      data[1 + offset] = (byte) val();
-      return l();
+      data[writeOrdinal(data, offset)] = (byte) val();
+      return 2;
     }
   }
 
@@ -97,8 +98,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      ByteUtil.putInt16LE(data, 1 + offset, (short) val());
+      ByteUtil.putInt16LE(data, writeOrdinal(data, offset), (short) val());
       return l();
     }
   }
@@ -112,8 +112,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      ByteUtil.putInt32LE(data, 1 + offset, val());
+      ByteUtil.putInt32LE(data, writeOrdinal(data, offset), val());
       return l();
     }
   }
@@ -127,8 +126,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      ByteUtil.putInt64LE(data, 1 + offset, val());
+      ByteUtil.putInt64LE(data, writeOrdinal(data, offset), val());
       return l();
     }
   }
@@ -142,8 +140,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.write(val(), data, 1 + offset);
+      return 1 + Borsh.write(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -156,8 +153,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.write(val(), data, 1 + offset);
+      return 1 + Borsh.write(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -175,8 +171,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + val().write(data, 1 + offset);
+      return 1 + val().write(data, writeOrdinal(data, offset));
     }
   }
 
@@ -189,7 +184,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      return 1 + val().write(data, offset);
+      return 1 + val().write(data, writeOrdinal(data, offset));
     }
   }
 
@@ -202,8 +197,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.write(val(), data, 1 + offset);
+      return 1 + Borsh.write(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -216,8 +210,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.fixedWrite(val(), data, 1 + offset);
+      return 1 + Borsh.fixedWrite(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -230,8 +223,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.write(val(), data, 1 + offset);
+      return 1 + Borsh.write(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -244,8 +236,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.fixedWrite(val(), data, 1 + offset);
+      return 1 + Borsh.fixedWrite(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -258,8 +249,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -272,8 +262,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptionalFloat(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptionalFloat(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -286,8 +275,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -300,8 +288,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptionalByte(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptionalByte(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -314,8 +301,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptionalShort(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptionalShort(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -328,8 +314,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -342,8 +327,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -356,8 +340,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -370,8 +353,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -389,8 +371,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 
@@ -403,8 +384,7 @@ public interface RustEnum extends Borsh {
     }
 
     default int write(final byte[] data, final int offset) {
-      data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, writeOrdinal(data, offset));
     }
   }
 }
