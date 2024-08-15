@@ -6,7 +6,7 @@ public final class Base58 {
 
   private static final char[] ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
   private static final char ENCODED_ZERO = ALPHABET[0];
-  private static final int[] INDEXES = new int[123];
+  private static final int[] INDEXES = new int[123]; // z == 122
 
   static {
     Arrays.fill(INDEXES, -1);

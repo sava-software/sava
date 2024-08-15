@@ -83,6 +83,9 @@ public final class ByteUtil {
     for (int i = be.length - 1, le = offset; i < be.length; --i, ++le) {
       data[le] = be[i];
     }
+    if (val.signum() < 0) {
+      data[offset + 15] |= (byte) 0b1000_0000;
+    }
     return 16;
   }
 

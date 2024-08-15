@@ -673,66 +673,66 @@ public interface Borsh {
     return result;
   }
 
-  static double[] readdoubleVector(final byte[] data, final int offset) {
+  static double[] readDoubleVector(final byte[] data, final int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     return readArray(new double[len], data, offset + Integer.BYTES);
   }
 
-  static double[][] readMultiDimensiondoubleVector(final byte[] data, int offset) {
+  static double[][] readMultiDimensionDoubleVector(final byte[] data, int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     offset += Integer.BYTES;
     final var result = new double[len][];
     for (int i = 0; i < result.length; ++i) {
-      final var instance = readdoubleVector(data, offset);
+      final var instance = readDoubleVector(data, offset);
       result[i] = instance;
       offset += len(instance);
     }
     return result;
   }
 
-  static int write(final BigInteger val, final byte[] data, final int offset) {
+  static int writeInt128(final BigInteger val, final byte[] data, final int offset) {
     return ByteUtil.putInt128LE(data, offset, val);
   }
 
-  static int fixedLen(final BigInteger[] array) {
+  static int fixedLenInt128(final BigInteger[] array) {
     return array.length * 128;
   }
 
-  static int fixedWrite(final BigInteger[] array, final byte[] data, final int offset) {
+  static int fixedWriteInt128(final BigInteger[] array, final byte[] data, final int offset) {
     int i = offset;
     for (final var a : array) {
-      i += write(a, data, offset);
+      i += writeInt128(a, data, offset);
     }
     return i - offset;
   }
 
-  static int writeOptional(final BigInteger[] array, final byte[] data, final int offset) {
+  static int writeOptionalInt128(final BigInteger[] array, final byte[] data, final int offset) {
     if (array == null || array.length == 0) {
       data[offset] = (byte) 0;
       return 1;
     } else {
       data[offset] = (byte) 1;
-      return 1 + write(array, data, offset + 1);
+      return 1 + writeInt128(array, data, offset + 1);
     }
   }
 
-  static int len(final BigInteger[] array) {
-    return Integer.BYTES + fixedLen(array);
+  static int lenInt128(final BigInteger[] array) {
+    return Integer.BYTES + fixedLenInt128(array);
   }
 
-  static int fixedLen(final BigInteger[][] array) {
+  static int fixedLenInt128(final BigInteger[][] array) {
     int len = 0;
     for (final var a : array) {
-      len += len(a);
+      len += lenInt128(a);
     }
     return len;
   }
 
-  static int len(final BigInteger[][] array) {
-    return Integer.BYTES + fixedLen(array);
+  static int lenInt128(final BigInteger[][] array) {
+    return Integer.BYTES + fixedLenInt128(array);
   }
 
-  static BigInteger[] readArray(final BigInteger[] result, final byte[] data, int offset) {
+  static BigInteger[] readInt128Array(final BigInteger[] result, final byte[] data, int offset) {
     for (int i = 0; i < result.length; ++i) {
       result[i] = ByteUtil.getInt128LE(data, offset);
       offset += 16;
@@ -740,52 +740,52 @@ public interface Borsh {
     return result;
   }
 
-  static BigInteger[] readBigIntegerVector(final byte[] data, final int offset) {
+  static BigInteger[] readInt128Vector(final byte[] data, final int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
-    return readArray(new BigInteger[len], data, offset + Integer.BYTES);
+    return readInt128Array(new BigInteger[len], data, offset + Integer.BYTES);
   }
 
-  static BigInteger[][] readMultiDimensionBigIntegerVector(final byte[] data, int offset) {
+  static BigInteger[][] readMultiDimensionInt128Vector(final byte[] data, int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     offset += Integer.BYTES;
     final var result = new BigInteger[len][];
     for (int i = 0; i < result.length; ++i) {
-      final var instance = readBigIntegerVector(data, offset);
+      final var instance = readInt128Vector(data, offset);
       result[i] = instance;
-      offset += len(instance);
+      offset += lenInt128(instance);
     }
     return result;
   }
 
-  static int write(final BigInteger[] array, final byte[] data, final int offset) {
+  static int writeInt128(final BigInteger[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
-    return Integer.BYTES + fixedWrite(array, data, offset + Integer.BYTES);
+    return Integer.BYTES + fixedWriteInt128(array, data, offset + Integer.BYTES);
   }
 
-  static int fixedWrite(final BigInteger[][] array, final byte[] data, final int offset) {
+  static int fixedWriteInt128(final BigInteger[][] array, final byte[] data, final int offset) {
     int i = offset;
     for (final var a : array) {
-      i += fixedWrite(a, data, offset);
+      i += fixedWriteInt128(a, data, offset);
     }
     return i - offset;
   }
 
-  static int write(final BigInteger[][] array, final byte[] data, final int offset) {
+  static int writeInt128(final BigInteger[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
-    return Integer.BYTES + fixedWrite(array, data, offset + Integer.BYTES);
+    return Integer.BYTES + fixedWriteInt128(array, data, offset + Integer.BYTES);
   }
 
-  static int lenOptional(final BigInteger val) {
+  static int lenOptionalInt128(final BigInteger val) {
     return val == null ? 1 : 1 + 16;
   }
 
-  static int writeOptional(final BigInteger val, final byte[] data, final int offset) {
+  static int writeOptionalInt128(final BigInteger val, final byte[] data, final int offset) {
     if (val == null) {
       data[offset] = (byte) 0;
       return 1;
     } else {
       data[offset] = (byte) 1;
-      return 1 + write(val, data, offset + 1);
+      return 1 + writeInt128(val, data, offset + 1);
     }
   }
 
