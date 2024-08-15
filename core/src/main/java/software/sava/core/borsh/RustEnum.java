@@ -144,7 +144,7 @@ public interface RustEnum extends Borsh {
 
     default int write(final byte[] data, final int offset) {
       data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeInt128(val(), data, 1 + offset);
+      return 1 + Borsh.write(val(), data, 1 + offset);
     }
   }
 
@@ -325,12 +325,12 @@ public interface RustEnum extends Borsh {
     BigInteger val();
 
     default int l() {
-      return 1 + Borsh.lenOptionalInt128(val());
+      return 1 + Borsh.lenOptional(val());
     }
 
     default int write(final byte[] data, final int offset) {
       data[offset] = (byte) ordinal();
-      return 1 + Borsh.writeOptionalInt128(val(), data, 1 + offset);
+      return 1 + Borsh.writeOptional(val(), data, 1 + offset);
     }
   }
 
