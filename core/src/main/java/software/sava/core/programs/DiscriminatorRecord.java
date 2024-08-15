@@ -23,4 +23,15 @@ record DiscriminatorRecord(byte[] data) implements Discriminator {
   public int hashCode() {
     return Arrays.hashCode(data);
   }
+
+  @Override
+  public int write(final byte[] data, final int offset) {
+    System.arraycopy(this.data, 0, data, offset, data.length);
+    return data.length;
+  }
+
+  @Override
+  public int length() {
+    return data.length;
+  }
 }

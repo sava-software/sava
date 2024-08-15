@@ -30,4 +30,8 @@ public interface Discriminator {
   }
 
   byte[] data();
+
+  int write(final byte[] data, final int offset);
+
+  int length();
 }
