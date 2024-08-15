@@ -1,15 +1,42 @@
 package software.sava.core.accounts.sysvar;
 
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.borsh.Borsh;
 import software.sava.core.encoding.ByteUtil;
 
-public record Clock(long slot,
+import java.util.function.BiFunction;
+
+public record Clock(PublicKey address,
+                    long slot,
                     long epochStartTimestamp,
                     long epoch,
                     long leaderScheduleEpoch,
                     long unixTimestamp) implements Borsh {
 
   public static final int BYTES = 40;
+
+  public static final BiFunction<PublicKey, byte[], Clock> FACTORY = Clock::read;
+
+  public static Clock read(final byte[] data) {
+    return read(null, data, 0);
+  }
+
+  public static Clock read(final PublicKey address, final byte[] data) {
+    return read(null, data, 0);
+  }
+
+  public static Clock read(final PublicKey address, final byte[] data, int offset) {
+    final long slot = ByteUtil.getInt64LE(data, offset);
+    offset += Long.BYTES;
+    final long epochStartTimestamp = ByteUtil.getInt64LE(data, offset);
+    offset += Long.BYTES;
+    final long epoch = ByteUtil.getInt64LE(data, offset);
+    offset += Long.BYTES;
+    final long leaderScheduleEpoch = ByteUtil.getInt64LE(data, offset);
+    offset += Long.BYTES;
+    final long unixTimestamp = ByteUtil.getInt64LE(data, offset);
+    return new Clock(address, slot, epochStartTimestamp, epoch, leaderScheduleEpoch, unixTimestamp);
+  }
 
   @Override
   public int write(final byte[] data, final int offset) {
@@ -25,19 +52,6 @@ public record Clock(long slot,
     ByteUtil.putInt64LE(data, i, unixTimestamp);
     i += Long.BYTES;
     return i - offset;
-  }
-
-  public static Clock read(final byte[] data, int offset) {
-    final long slot = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final long epochStartTimestamp = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final long epoch = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final long leaderScheduleEpoch = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final long unixTimestamp = ByteUtil.getInt64LE(data, offset);
-    return new Clock(slot, epochStartTimestamp, epoch, leaderScheduleEpoch, unixTimestamp);
   }
 
   @Override
