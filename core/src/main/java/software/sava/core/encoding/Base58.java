@@ -4,8 +4,8 @@ import java.util.Arrays;
 
 public final class Base58 {
 
-  static final char[] ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
-  static final char ENCODED_ZERO = ALPHABET[0];
+  private static final char[] ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
+  private static final char ENCODED_ZERO = ALPHABET[0];
   private static final int[] INDEXES = new int[123];
 
   static {
@@ -90,7 +90,7 @@ public final class Base58 {
 
     final byte[] input58 = new byte[len];
     for (int i = from, i58 = 0; i58 < len; ++i, ++i58) {
-      final int c = Character.codePointAt(input, i); // input[i]; //
+      final int c = Character.codePointAt(input, i);
       try {
         final int digit = INDEXES[c];
         if (digit >= 0) {
@@ -243,6 +243,7 @@ public final class Base58 {
       output[outputStart] = ENCODED_ZERO;
       --leadingZeroes;
     }
+
     return outputStart;
   }
 
