@@ -24,6 +24,6 @@ public interface LamportDecimal extends DecimalInteger {
   }
 
   static BigDecimal fromBigDecimal(final BigDecimal val) {
-    return DecimalInteger.toDecimal(val, LAMPORT_DIGITS);
+    return DecimalInteger.fromDecimal(val, LAMPORT_DIGITS);
   }
 }

@@ -123,7 +123,7 @@ public interface Signer {
            final int msgLen,
            final int outPos);
 
-  byte[] sign(byte[] message, int msgOffset, int msgLen);
+  byte[] sign(final byte[] message, final int msgOffset, final int msgLen);
 
-  byte[] sign(byte[] message);
+  byte[] sign(final byte[] message);
 }
