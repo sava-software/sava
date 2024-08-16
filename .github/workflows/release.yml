@@ -19,26 +19,26 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: 21
+          distribution: ${{ vars.JAVA_VENDOR }}
+          java-version: ${{ vars.GRADLE_JAVA_VERSION }}
           java-package: jre
           cache: 'gradle'
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
 
       - uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: 22
+          distribution: ${{ vars.JAVA_VENDOR }}
+          java-version: ${{ vars.JAVA_VERSION }}
           check-latest: true
       - run: printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
       - run: java --version
 
       - name: Gradle Check
-        run: ./gradlew check -PtargetJava=22 --stacktrace
+        run: ./gradlew check -PtargetJava=${{ vars.JAVA_VERSION }} --stacktrace
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Github Packages
-        run: ./gradlew -PtargetJava=22 :core:publish :rpc:publish
+        run: ./gradlew -PtargetJava=${{ vars.JAVA_VERSION }} :core:publish :rpc:publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
