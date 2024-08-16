@@ -18,6 +18,7 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v3
 
       - uses: actions/setup-java@v4
+        if: ${{ vars.GRADLE_JAVA_VERSION < vars.JAVA_VERSION }}
         with:
           distribution: ${{ vars.JAVA_VENDOR }}
           java-version: ${{ vars.GRADLE_JAVA_VERSION }}
