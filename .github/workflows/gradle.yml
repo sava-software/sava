@@ -21,7 +21,7 @@ jobs:
         if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
         with:
           distribution: ${{ vars.JAVA_VENDOR }}
-          java-version: ${{ vars.GRADLE_JAVA_VERSION }}
+          java-version: '23-ea'
           java-package: jre
           cache: 'gradle'
 
