@@ -34,10 +34,10 @@ jobs:
           java-version: ${{ vars.JAVA_VERSION }}
           check-latest: true
 
-      - run: printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
-
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
         if: ${{ vars.GRADLE_JAVA_VERSION == vars.JAVA_VERSION }}
+
+      - run: printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
 
       - run: java --version
 
