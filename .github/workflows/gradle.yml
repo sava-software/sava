@@ -29,9 +29,7 @@ jobs:
         if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION && endsWith(vars.GRADLE_JAVA_VERSION, 'ea') }}
         with:
           distribution: ${{ vars.JAVA_VENDOR }}
-          java-version: ${{ vars.GRADLE_JAVA_VERSION }}
-          java-package: jdk
-          cache: 'gradle'
+          java-version: '23-ea'
 
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
         if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
