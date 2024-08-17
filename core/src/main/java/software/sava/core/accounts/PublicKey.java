@@ -90,7 +90,7 @@ public interface PublicKey extends Comparable<PublicKey> {
             PUBLIC_KEY_LENGTH,
             PUBLIC_KEY_LENGTH + baseSeedBytes.length + 1
         );
-        return new AccountWithSeed(PublicKey.createPubKey(hash), bumpSeedBytes);
+        return new AccountWithSeed(base, PublicKey.createPubKey(hash), bumpSeedBytes);
       }
     }
     throw new RuntimeException("Unable to find a viable program derived address nonce");

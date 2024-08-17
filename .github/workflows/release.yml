@@ -23,7 +23,9 @@ jobs:
           website: jdk.java.net
           release: ${{ vars.GRADLE_JAVA_VERSION }}
 
-      - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
+      - run: |
+          printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
+          java --version
         if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
 
       - uses: oracle-actions/setup-java@v1
@@ -34,16 +36,10 @@ jobs:
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
         if: ${{ vars.GRADLE_JAVA_VERSION == vars.JAVA_VERSION }}
 
-      - run: printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
-
-      - run: java --version
-
-      - name: Gradle Check
-        run: ./gradlew check -PtargetJava=${{ vars.JAVA_VERSION }} --stacktrace
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Github Packages
-        run: ./gradlew -PtargetJava=${{ vars.JAVA_VERSION }} :core:publish :rpc:publish
+        run: |
+          printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
+          java --version
+          ./gradlew --stacktrace -PtargetJava=${{ vars.JAVA_VERSION }} check :core:publish :rpc:publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
