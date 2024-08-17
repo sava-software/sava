@@ -18,29 +18,21 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v3
 
       - uses: oracle-actions/setup-java@v1
+        if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
         with:
           website: jdk.java.net
-          release: 23
-
-      #      - uses: actions/setup-java@v4
-      #        if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
-      #        with:
-      #          distribution: ${{ vars.JAVA_VENDOR }}
-      #          java-version: ${{ vars.GRADLE_JAVA_VERSION }}
-      #          java-package: jre
-      #          cache: 'gradle'
+          release: ${{ vars.GRADLE_JAVA_VERSION }}
 
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
-      #        if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
+        if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
 
-      - uses: actions/setup-java@v4
+      - uses: oracle-actions/setup-java@v1
         with:
-          distribution: ${{ vars.JAVA_VENDOR }}
+          website: jdk.java.net
           java-version: ${{ vars.JAVA_VERSION }}
-          check-latest: true
 
-      #      - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
-      #        if: ${{ vars.GRADLE_JAVA_VERSION == vars.JAVA_VERSION }}
+      - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
+        if: ${{ vars.GRADLE_JAVA_VERSION == vars.JAVA_VERSION }}
 
       - run: printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
 
