@@ -29,7 +29,7 @@ jobs:
       - uses: oracle-actions/setup-java@v1
         with:
           website: jdk.java.net
-          java-version: ${{ vars.JAVA_VERSION }}
+          release: ${{ vars.JAVA_VERSION }}
 
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
         if: ${{ vars.GRADLE_JAVA_VERSION == vars.JAVA_VERSION }}
