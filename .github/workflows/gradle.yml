@@ -36,13 +36,10 @@ jobs:
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
         if: ${{ vars.GRADLE_JAVA_VERSION == vars.JAVA_VERSION }}
 
-      - run: |
+      - name: Gradle Check
+        run: |
           printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
           java --version
-
-      - run: java --version
-
-      - name: Gradle Check
-        run: ./gradlew -PtargetJava=${{ vars.JAVA_VERSION }} check --stacktrace --no-daemon
+          ./gradlew -PtargetJava=${{ vars.JAVA_VERSION }} check --stacktrace --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
