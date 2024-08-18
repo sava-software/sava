@@ -9,14 +9,14 @@ import software.sava.core.encoding.Base58;
 import java.util.Arrays;
 import java.util.List;
 
-record TxData(AccountMeta feePayer,
-              List<Instruction> instructions,
-              AddressLookupTable lookupTable,
-              LookupTableAccountMeta[] tableAccountMetas,
-              byte[] data,
-              int numSigners,
-              int messageOffset,
-              int recentBlockHashIndex) implements Transaction {
+record TransactionRecord(AccountMeta feePayer,
+                         List<Instruction> instructions,
+                         AddressLookupTable lookupTable,
+                         LookupTableAccountMeta[] tableAccountMetas,
+                         byte[] data,
+                         int numSigners,
+                         int messageOffset,
+                         int recentBlockHashIndex) implements Transaction {
 
   static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
 

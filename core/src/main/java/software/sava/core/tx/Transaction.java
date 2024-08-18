@@ -15,11 +15,11 @@ import java.util.function.BiFunction;
 import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
-import static software.sava.core.tx.TxData.NO_TABLES;
+import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 
 public interface Transaction {
 
-  int MAX_SERIALIZED_LENGTH = 1_232;
+  int MAX_SERIALIZED_LENGTH = 1232;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
 
@@ -258,7 +258,7 @@ public interface Transaction {
       i = instruction.serialize(out, i, accountIndexLookupTable);
     }
 
-    return new TxData(feePayer, instructions, null, NO_TABLES, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
+    return new TransactionRecord(feePayer, instructions, null, NO_TABLES, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
   }
 
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
@@ -383,7 +383,7 @@ public interface Transaction {
       out[i] = (byte) lookupTable.indexOf(sortedAccounts[a].publicKey());
     }
 
-    return new TxData(feePayer, instructions, lookupTable, NO_TABLES, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
+    return new TransactionRecord(feePayer, instructions, lookupTable, NO_TABLES, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
   }
 
   static Transaction createTx(final AccountMeta feePayer,
@@ -520,7 +520,7 @@ public interface Transaction {
       i = tableAccountMeta.serialize(out, i);
     }
 
-    return new TxData(feePayer, instructions, null, tableAccountMetas, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
+    return new TransactionRecord(feePayer, instructions, null, tableAccountMetas, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
   }
 
   static void setBlockHash(final byte[] data, final byte[] recentBlockHash) {
@@ -655,4 +655,6 @@ public interface Transaction {
   Transaction prependInstructions(final Instruction ix1, final Instruction ix2);
 
   Transaction prependInstructions(final List<Instruction> instructions);
+
+  AccountMeta feePayer();
 }
