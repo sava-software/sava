@@ -1,7 +1,6 @@
-package software.sava.core;
+package software.sava.core.accounts;
 
 import org.junit.jupiter.api.Test;
-import software.sava.core.accounts.PublicKey;
 
 import java.util.Arrays;
 import java.util.List;

@@ -1,8 +1,7 @@
-package software.sava.core;
+package software.sava.core.accounts;
 
 import org.bouncycastle.math.ec.rfc8032.Ed25519;
 import org.junit.jupiter.api.Test;
-import software.sava.core.accounts.Signer;
 import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
