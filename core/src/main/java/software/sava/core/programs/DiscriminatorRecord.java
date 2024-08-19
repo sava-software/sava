@@ -10,21 +10,6 @@ record DiscriminatorRecord(byte[] data) implements Discriminator {
   }
 
   @Override
-  public boolean equals(final Object o) {
-    if (this == o) return true;
-    if (o instanceof Discriminator discriminator) {
-      return Arrays.equals(this.data, discriminator.data());
-    } else {
-      return false;
-    }
-  }
-
-  @Override
-  public int hashCode() {
-    return Arrays.hashCode(data);
-  }
-
-  @Override
   public int write(final byte[] data, final int offset) {
     System.arraycopy(this.data, 0, data, offset, data.length);
     return data.length;
