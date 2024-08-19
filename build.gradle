@@ -22,7 +22,7 @@ def getAppVersion = { ->
 ext {
   VERSION = getAppVersion()
   VCS_URL = 'https://github.com/sava-software/sava'
-  jsoniter = '[2,)'
+  jsoniter = '2.11.0'
   bouncycastleMinor = 'jdk18on'
   bouncycastlePatch = '1.78.1' // https://www.bouncycastle.org/latest_releases.html#LATEST
 }
@@ -58,8 +58,8 @@ subprojects {
 
   configurations.configureEach {
     resolutionStrategy {
-      cacheDynamicVersionsFor 15, 'minutes'
-      cacheChangingModulesFor 15, 'minutes'
+      cacheDynamicVersionsFor 5, 'minutes'
+      cacheChangingModulesFor 5, 'minutes'
     }
   }
 
