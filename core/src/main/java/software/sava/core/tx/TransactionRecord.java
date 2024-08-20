@@ -38,7 +38,7 @@ record TransactionRecord(AccountMeta feePayer,
   @Override
   public void setRecentBlockHash(final byte[] recentBlockHash) {
     if (recentBlockHash == null || recentBlockHash.length != Transaction.BLOCK_HASH_LENGTH) {
-      throw new IllegalArgumentException("32 byte decoded recent blockHash is required");
+      throw new IllegalArgumentException("32 byte recent blockHash is required");
     }
     System.arraycopy(recentBlockHash, 0, this.data, this.recentBlockHashIndex, Transaction.BLOCK_HASH_LENGTH);
   }
@@ -56,7 +56,7 @@ record TransactionRecord(AccountMeta feePayer,
   @Override
   public void sign(final Signer signer) {
     if (this.numSigners != 1) {
-      throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners, numSigners));
+      throw new IllegalArgumentException(String.format("Expected %d signers.", this.numSigners));
     }
     this.data[0] = 1;
     Transaction.sign(signer, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);

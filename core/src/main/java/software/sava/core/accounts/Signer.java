@@ -1,13 +1,11 @@
 package software.sava.core.accounts;
 
 import org.bouncycastle.math.ec.rfc8032.Ed25519;
-import software.sava.core.crypto.bip32.wallet.SolanaHdKeyGenerator;
 import software.sava.core.crypto.ed25519.Ed25519Util;
 import software.sava.core.encoding.Base58;
 
 import java.security.PrivateKey;
 import java.util.Arrays;
-import java.util.List;
 
 import static software.sava.core.crypto.SunCrypto.SECURE_RANDOM;
 
@@ -89,27 +87,6 @@ public interface Signer {
 
   static Signer createFromKeyPair(final PublicKey publicKey, final PrivateKey privateKey) {
     return new KeyPairSigner(publicKey, privateKey);
-  }
-
-  static Signer fromBip44Mnemonic(final List<String> words, final String passphrase) {
-    final byte[] seed = KeyPairSigner.toSeed(words, passphrase);
-    final var hdAddress = SolanaHdKeyGenerator.getPrivateKeyFromBip44Seed(seed);
-    return Signer.createFromKeyPair(hdAddress.publicKey().getRawKey(), hdAddress.privateKey().getRawKey());
-  }
-
-  static Signer fromBip44MnemonicWithChange(final List<String> words, final String passphrase) {
-    final byte[] seed = KeyPairSigner.toSeed(words, passphrase);
-    final var hdAddress = SolanaHdKeyGenerator.getPrivateKeyFromBip44SeedWithChange(seed);
-    return Signer.createFromKeyPair(hdAddress.publicKey().getRawKey(), hdAddress.privateKey().getRawKey());
-  }
-
-  static Signer fromBip39Mnemonic(final List<String> words, final String passphrase) {
-    return fromBip39Mnemonic(String.join(" ", words), passphrase);
-  }
-
-  static Signer fromBip39Mnemonic(final String words, final String passphrase) {
-    final byte[] seed = KeyPairSigner.toSeed(words, passphrase);
-    return Signer.createFromPrivateKey(seed);
   }
 
   PublicKey publicKey();

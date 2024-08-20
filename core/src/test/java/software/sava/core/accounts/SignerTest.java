@@ -34,24 +34,6 @@ final class SignerTest {
   }
 
   @Test
-  void fromBip44Mnemonic() {
-    final var acc = Signer.fromBip44Mnemonic(Arrays.asList("hint", "begin", "crowd", "dolphin", "drive", "render", "finger", "above", "sponsor", "prize", "runway", "invest", "dizzy", "pony", "bitter", "trial", "ignore", "crop", "please", "industry", "hockey", "wire", "use", "side"), "");
-    assertEquals("G75kGJiizyFNdnvvHxkrBrcwLomGJT2CigdXnsYzrFHv", acc.publicKey().toString());
-  }
-
-  @Test
-  void fromBip44MnemonicChange() {
-    final var acc = Signer.fromBip44MnemonicWithChange(Arrays.asList("hint", "begin", "crowd", "dolphin", "drive", "render", "finger", "above", "sponsor", "prize", "runway", "invest", "dizzy", "pony", "bitter", "trial", "ignore", "crop", "please", "industry", "hockey", "wire", "use", "side"), "");
-    assertEquals("AaXs7cLGcSVAsEt8QxstVrqhLhYN2iGhFNRemwYnHitV", acc.publicKey().toString());
-  }
-
-  @Test
-  void fromBip39MnemonicTest() {
-    final var account = Signer.fromBip39Mnemonic(Arrays.asList("iron", "make", "indoor", "where", "explain", "model", "maximum", "wonder", "toward", "salad", "fan", "try"), "");
-    assertEquals("BeepMww3KwiDeEhEeZmqk4TegvJYNuDERPWm142X6Mx3", account.publicKey().toBase58());
-  }
-
-  @Test
   void recoverPublicKey() {
     final byte[] keyPairBytes = Signer.generatePrivateKeyPairBytes();
     final byte[] privatePublicCopy = Arrays.copyOf(keyPairBytes, keyPairBytes.length);

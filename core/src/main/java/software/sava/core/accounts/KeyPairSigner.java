@@ -1,21 +1,16 @@
 package software.sava.core.accounts;
 
-import software.sava.core.crypto.bip32.PBKDF2SHA512;
 import software.sava.core.tx.Transaction;
 
 import java.security.*;
 import java.security.spec.EdECPrivateKeySpec;
 import java.security.spec.InvalidKeySpecException;
-import java.util.List;
-import java.util.Objects;
 
 import static java.security.spec.NamedParameterSpec.ED25519;
 import static software.sava.core.crypto.SunCrypto.EdDSA_KEY_FACTORY;
 import static software.sava.core.crypto.SunCrypto.SUN_EC_PROVIDER;
 
 final class KeyPairSigner implements Signer {
-
-  private static final int PBKDF2_ROUNDS = 2048;
 
   private final PublicKey publicKey;
   private final PrivateKey privateKey;
@@ -56,17 +51,6 @@ final class KeyPairSigner implements Signer {
     } catch (final NoSuchAlgorithmException | InvalidKeyException e) {
       throw new RuntimeException(e);
     }
-  }
-
-  static byte[] toSeed(final List<String> words, final String passphrase) {
-    final var pass = String.join(" ", words);
-    return toSeed(pass, passphrase);
-  }
-
-  static byte[] toSeed(final String pass, final String passphrase) {
-    Objects.requireNonNull(passphrase, "A null passphrase is not allowed.");
-    final var salt = "mnemonic" + passphrase;
-    return PBKDF2SHA512.derive(pass, salt, PBKDF2_ROUNDS, 64);
   }
 
   @Override
