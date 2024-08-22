@@ -31,7 +31,13 @@ public interface Discriminator {
 
   byte[] data();
 
-  int write(final byte[] data, final int offset);
+  default int write(final byte[] bytes, final int i) {
+    final byte[] data = data();
+    System.arraycopy(data, 0, bytes, i, data.length);
+    return data.length;
+  }
 
-  int length();
+  default int length() {
+    return data().length;
+  }
 }

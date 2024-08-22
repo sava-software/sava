@@ -1,6 +1,7 @@
 package software.sava.core.crypto.ed25519;
 
 import org.bouncycastle.math.raw.Nat;
+
 /**
  * LICENSE
  * Copyright (c) 2000 - 2023 The Legion of the Bouncy Castle Inc. (<a href="https://www.bouncycastle.org">...</a>)
