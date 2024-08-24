@@ -125,7 +125,7 @@ public record TokenAccount(PublicKey address,
     ++i;
     ByteUtil.putInt32LE(data, i, isNativeOption);
     i += Integer.BYTES;
-    ByteUtil.putInt64LE(data, i, isNativeOption);
+    ByteUtil.putInt64LE(data, i, isNative);
     i += Long.BYTES;
     ByteUtil.putInt64LE(data, i, delegatedAmount);
     i += Long.BYTES;

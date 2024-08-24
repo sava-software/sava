@@ -93,6 +93,12 @@ record TransactionRecord(AccountMeta feePayer,
     return Transaction.getId(this.data);
   }
 
+  private void resetTableMetas() {
+    for (final var tableMeta : tableAccountMetas) {
+      tableMeta.reset();
+    }
+  }
+
   @Override
   public Transaction prependIx(final Instruction ix) {
     final var ixArray = new Instruction[1 + instructions.size()];
@@ -101,6 +107,7 @@ record TransactionRecord(AccountMeta feePayer,
     for (final var _ix : instructions) {
       ixArray[i++] = _ix;
     }
+    resetTableMetas();
     return Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas);
   }
 
@@ -113,6 +120,7 @@ record TransactionRecord(AccountMeta feePayer,
     for (final var _ix : instructions) {
       ixArray[i++] = _ix;
     }
+    resetTableMetas();
     return Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas);
   }
 
@@ -126,6 +134,7 @@ record TransactionRecord(AccountMeta feePayer,
     for (final var ix : this.instructions) {
       ixArray[i++] = ix;
     }
+    resetTableMetas();
     return Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas);
   }
 }
