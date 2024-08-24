@@ -376,11 +376,11 @@ public interface Transaction {
     i += CompactU16Encoding.encodeLength(out, i, numLookupWrites);
     int a = numIncludedAccounts;
     for (final int to = numIncludedAccounts + numLookupWrites; a < to; ++a, ++i) {
-      out[i] = (byte) lookupTable.indexOf(sortedAccounts[a].publicKey());
+      out[i] = lookupTable.indexOfOrThrow(sortedAccounts[a].publicKey());
     }
     i += CompactU16Encoding.encodeLength(out, i, numLookupReads);
     for (; a < numAccounts; ++a, ++i) {
-      out[i] = (byte) lookupTable.indexOf(sortedAccounts[a].publicKey());
+      out[i] = lookupTable.indexOfOrThrow(sortedAccounts[a].publicKey());
     }
 
     return new TransactionRecord(feePayer, instructions, lookupTable, NO_TABLES, out, numRequiredSignatures, sigLen, recentBlockHashIndex);

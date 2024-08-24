@@ -10,15 +10,15 @@ import java.util.Arrays;
 final class TableAccountMeta implements LookupTableAccountMeta {
 
   final AddressLookupTable lookupTable;
-  final AccountMeta[] accounts;
-  int len;
+  final AccountMeta[] writeAccounts;
+  final AccountMeta[] readAccounts;
   int writes;
   int reads;
 
-  TableAccountMeta(final AddressLookupTable lookupTable,
-                   final AccountMeta[] accounts) {
+  TableAccountMeta(final AddressLookupTable lookupTable, final int maxAccounts) {
     this.lookupTable = lookupTable;
-    this.accounts = accounts;
+    this.writeAccounts = new AccountMeta[maxAccounts];
+    this.readAccounts = new AccountMeta[maxAccounts];
   }
 
   @Override
@@ -38,47 +38,49 @@ final class TableAccountMeta implements LookupTableAccountMeta {
 
   @Override
   public int addReverseLookupEntries(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int out) {
-    for (int a = 0; a < len; ++a, ++out) {
-      accountIndexLookupTable[out] = new AccountIndexLookupTableEntry(accounts[a].publicKey().toByteArray(), out);
+    for (final var writeAccount : writeAccounts) {
+      accountIndexLookupTable[out] = new AccountIndexLookupTableEntry(writeAccount.publicKey().toByteArray(), out);
+      ++out;
+    }
+    for (final var readAccount : readAccounts) {
+      accountIndexLookupTable[out] = new AccountIndexLookupTableEntry(readAccount.publicKey().toByteArray(), out);
+      ++out;
     }
     return out;
   }
 
   @Override
   public void addAccount(final AccountMeta account) {
-    accounts[len] = account;
-    ++len;
     if (account.write()) {
-      ++writes;
+      writeAccounts[writes++] = account;
     } else {
-      ++reads;
+      readAccounts[reads++] = account;
     }
   }
 
   @Override
   public void reset() {
-    Arrays.fill(accounts, null);
-    len = 0;
+    Arrays.fill(writeAccounts, null);
+    Arrays.fill(readAccounts, null);
     writes = 0;
     reads = 0;
   }
 
   @Override
   public int serializationLength() {
-    return PublicKey.PUBLIC_KEY_LENGTH + 2 + len;
+    return PublicKey.PUBLIC_KEY_LENGTH + 2 + writes + reads;
   }
 
   @Override
   public int serialize(final byte[] out, int i) {
     i += lookupTable.address().write(out, i);
     i += CompactU16Encoding.encodeLength(out, i, writes);
-    int a = 0;
-    for (; a < writes; ++a, ++i) {
-      out[i] = lookupTable.indexOfOrThrow(accounts[a].publicKey());
+    for (int w = 0; w < writes; ++w, ++i) {
+      out[i] = lookupTable.indexOfOrThrow(writeAccounts[w].publicKey());
     }
     i += CompactU16Encoding.encodeLength(out, i, reads);
-    for (; a < len; ++a, ++i) {
-      out[i] = lookupTable.indexOfOrThrow(accounts[a].publicKey());
+    for (int r = 0; r < reads; ++r, ++i) {
+      out[i] = lookupTable.indexOfOrThrow(readAccounts[r].publicKey());
     }
     return i;
   }

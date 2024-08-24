@@ -11,7 +11,7 @@ import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE
 public interface LookupTableAccountMeta {
 
   static LookupTableAccountMeta createMeta(final AddressLookupTable lookupTable, final int maxNumAccounts) {
-    return new TableAccountMeta(lookupTable, new AccountMeta[maxNumAccounts]);
+    return new TableAccountMeta(lookupTable, maxNumAccounts);
   }
 
   static LookupTableAccountMeta[] createMetas(final AddressLookupTable[] lookupTables, final int maxNumAccounts) {
@@ -33,7 +33,7 @@ public interface LookupTableAccountMeta {
   }
 
   static LookupTableAccountMeta createMeta(final AddressLookupTable lookupTable) {
-    return new TableAccountMeta(lookupTable, new AccountMeta[LOOKUP_TABLE_MAX_ADDRESSES]);
+    return new TableAccountMeta(lookupTable, LOOKUP_TABLE_MAX_ADDRESSES);
   }
 
   static LookupTableAccountMeta[] createMetas(final AddressLookupTable[] lookupTables) {
