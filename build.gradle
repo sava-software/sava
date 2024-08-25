@@ -22,9 +22,6 @@ def getAppVersion = { ->
 ext {
   VERSION = getAppVersion()
   VCS_URL = 'https://github.com/sava-software/sava'
-  jsoniter = '2.11.0'
-  bouncycastleMinor = 'jdk18on'
-  bouncycastlePatch = '1.78.1' // https://www.bouncycastle.org/latest_releases.html#LATEST
 }
 
 final JLV = JavaLanguageVersion.of(project.findProperty('jv') as Integer ?: 22)

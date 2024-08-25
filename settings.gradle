@@ -2,3 +2,13 @@ rootProject.name = 'sava'
 
 include 'core'
 include 'rpc'
+
+dependencyResolutionManagement {
+  versionCatalogs {
+    libs {
+      library('bouncycastle', 'org.bouncycastle:bcprov-jdk18on:1.78.1')
+      library('json-iterator', 'systems.comodal:json-iterator:2.11.0')
+    }
+  }
+}
+

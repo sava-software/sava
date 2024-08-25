@@ -50,12 +50,12 @@ final class TransactionSerializationTests {
     final var instructions = skeleton.parseInstructions(accountMetas);
     validateInstructions(instructions);
 
-    final var lookupTables = Arrays.stream(skeleton.lookupTableAccounts())
+    final var lookupTableMetas = Arrays.stream(skeleton.lookupTableAccounts())
         .map(lookupTableMap::get)
         .map(LookupTableAccountMeta::createMeta)
         .toArray(LookupTableAccountMeta[]::new);
 
-    final var transaction = Transaction.createTx(feePayer, Arrays.asList(instructions), lookupTables);
+    final var transaction = Transaction.createTx(feePayer, Arrays.asList(instructions), lookupTableMetas);
     assertEquals(skeleton.version(), transaction.version());
     assertEquals(skeleton.numSigners(), transaction.numSigners());
 
