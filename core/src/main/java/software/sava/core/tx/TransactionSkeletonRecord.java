@@ -17,7 +17,7 @@ import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
 
 record TransactionSkeletonRecord(byte[] data,
                                  int version,
-                                 int numRequiredSignatures,
+                                 int numSigners,
                                  int numReadonlySignedAccounts,
                                  int numReadonlyUnsignedAccounts,
                                  int numIncludedAccounts, int accountsOffset,
@@ -48,10 +48,10 @@ record TransactionSkeletonRecord(byte[] data,
     accounts[0] = createFeePayer(readPubKey(data, accountsOffset));
     int o = accountsOffset + PUBLIC_KEY_LENGTH;
     int a = 1;
-    for (final int numWriteSigners = numRequiredSignatures - numReadonlySignedAccounts; a < numWriteSigners; ++a, o += PUBLIC_KEY_LENGTH) {
+    for (final int numWriteSigners = numSigners - numReadonlySignedAccounts; a < numWriteSigners; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = createWritableSigner(readPubKey(data, o));
     }
-    for (; a < numRequiredSignatures; ++a, o += PUBLIC_KEY_LENGTH) {
+    for (; a < numSigners; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = createReadOnlySigner(readPubKey(data, o));
     }
     return o;
@@ -61,7 +61,7 @@ record TransactionSkeletonRecord(byte[] data,
   public AccountMeta[] parseAccounts() {
     final var accounts = new AccountMeta[numIncludedAccounts];
     int o = parseSignatureAccounts(accounts);
-    int a = numRequiredSignatures;
+    int a = numSigners;
     for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = createWrite(readPubKey(data, o));
     }
@@ -77,7 +77,7 @@ record TransactionSkeletonRecord(byte[] data,
 
   private int parseVersionedIncludedAccounts(final AccountMeta[] accounts) {
     int o = parseSignatureAccounts(accounts);
-    int a = numRequiredSignatures;
+    int a = numSigners;
     for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = createWrite(readPubKey(data, o));
     }

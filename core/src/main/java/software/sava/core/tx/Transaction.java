@@ -577,18 +577,6 @@ public interface Transaction {
     return Base64.getEncoder().encodeToString(out);
   }
 
-  List<Instruction> instructions();
-
-  AddressLookupTable lookupTable();
-
-  LookupTableAccountMeta[] tableAccountMetas();
-
-  void setRecentBlockHash(final byte[] recentBlockHash);
-
-  void setRecentBlockHash(final String recentBlockHash);
-
-  byte[] serialized();
-
   default String base64EncodeToString() {
     return Base64.getEncoder().encodeToString(serialized());
   }
@@ -650,6 +638,24 @@ public interface Transaction {
   String getBase58Id();
 
   byte[] getId();
+
+  List<Instruction> instructions();
+
+  AddressLookupTable lookupTable();
+
+  LookupTableAccountMeta[] tableAccountMetas();
+
+  void setRecentBlockHash(final byte[] recentBlockHash);
+
+  void setRecentBlockHash(final String recentBlockHash);
+
+  byte[] recentBlockHash();
+
+  int version();
+
+  int numSigners();
+
+  byte[] serialized();
 
   Transaction prependIx(final Instruction ix);
 

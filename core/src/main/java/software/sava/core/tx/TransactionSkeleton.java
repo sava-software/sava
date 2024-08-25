@@ -110,7 +110,7 @@ public interface TransactionSkeleton {
 
   int numSignatures();
 
-  int numRequiredSignatures();
+  int numSigners();
 
   int recentBlockHashIndex();
 

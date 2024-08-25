@@ -9,6 +9,8 @@ import software.sava.core.encoding.Base58;
 import java.util.Arrays;
 import java.util.List;
 
+import static software.sava.core.encoding.CompactU16Encoding.signedByte;
+
 record TransactionRecord(AccountMeta feePayer,
                          List<Instruction> instructions,
                          AddressLookupTable lookupTable,
@@ -46,6 +48,17 @@ record TransactionRecord(AccountMeta feePayer,
   @Override
   public void setRecentBlockHash(final String recentBlockHash) {
     setRecentBlockHash(Base58.decode(recentBlockHash));
+  }
+
+  @Override
+  public byte[] recentBlockHash() {
+    return Arrays.copyOfRange(data, recentBlockHashIndex, Transaction.BLOCK_HASH_LENGTH);
+  }
+
+  @Override
+  public int version() {
+    int version = data[messageOffset] & 0xFF;
+    return signedByte(version) ? version & 0x7F : MESSAGE_VERSION_0_PREFIX;
   }
 
   @Override
