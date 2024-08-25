@@ -325,7 +325,7 @@ public interface Transaction {
         } else {
           ++numLookupReads;
         }
-        continue;
+        continue; // skip lookup accounts.
       }
       accountIndexLookupTable[numIncludedAccounts] = new AccountIndexLookupTableEntry(account.publicKey().toByteArray(), numIncludedAccounts);
       ++numIncludedAccounts;
@@ -341,7 +341,7 @@ public interface Transaction {
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + (1 + PublicKey.PUBLIC_KEY_LENGTH + 2 + numLookupWrites + numLookupReads);
+        + (1 + BASE_LOOKUP_TABLE_LEN + numLookupWrites + numLookupReads);
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
@@ -411,6 +411,120 @@ public interface Transaction {
     }
   }
 
+//  static Transaction createTx(final List<Instruction> instructions,
+//                              final int serializedInstructionLength,
+//                              final AccountMeta[] sortedAccounts,
+//                              final LookupTableAccountMeta[] tableAccountMetas) {
+//    final int numLookupTables = tableAccountMetas.length;
+//    if (numLookupTables == 0) {
+//      return createTx(instructions);
+//    } else if (numLookupTables == 1) {
+//      return createTx(instructions, serializedInstructionLength, sortedAccounts, tableAccountMetas[0].lookupTable());
+//    }
+//
+//    final int numAccounts = sortedAccounts.length;
+//    final AccountIndexLookupTableEntry[] accountIndexLookupTable = new AccountIndexLookupTableEntry[numAccounts];
+//
+//    int numRequiredSignatures = 0;
+//    int numReadonlySignedAccounts = 0;
+//    int numReadonlyUnsignedAccounts = 0;
+//
+//    int numIncludedAccounts = 0;
+//
+//    AccountMeta feePayer = null;
+//    NEXT_ACCOUNT:
+//    for (int i = 0, len; i < numAccounts; ++i) {
+//      final var account = sortedAccounts[i];
+//      if (account.signer()) {
+//        if (account.feePayer()) {
+//          feePayer = account;
+//        }
+//        if (!account.write()) {
+//          ++numReadonlySignedAccounts;
+//        }
+//        ++numRequiredSignatures;
+//      } else {
+//        if (!account.invoked()) {
+//          for (final var tableAccountMeta : tableAccountMetas) {
+//            if (tableAccountMeta.indexOf(account.publicKey()) >= 0) {
+//              tableAccountMeta.addAccount(account);
+//              continue NEXT_ACCOUNT;
+//            }
+//          }
+//        }
+//        if (!account.write()) {
+//          ++numReadonlyUnsignedAccounts;
+//        }
+//        if (i > numIncludedAccounts) {
+//          len = i - numIncludedAccounts;
+//          if (len == 1) {
+//            sortedAccounts[i] = sortedAccounts[numIncludedAccounts];
+//          } else {
+//            System.arraycopy(sortedAccounts, numIncludedAccounts, sortedAccounts, numIncludedAccounts + 1, len);
+//          }
+//          sortedAccounts[numIncludedAccounts] = account;
+//        }
+//      }
+//      accountIndexLookupTable[numIncludedAccounts] = new AccountIndexLookupTableEntry(account.publicKey().toByteArray(), numIncludedAccounts);
+//      ++numIncludedAccounts;
+//    }
+//
+//    int lookupTablesSerializationSize = 1;
+//    for (int t = 0, a = numIncludedAccounts; t < numLookupTables; ++t) {
+//      final var tableAccountMeta = tableAccountMetas[t];
+//      a = tableAccountMeta.addReverseLookupEntries(accountIndexLookupTable, a);
+//      lookupTablesSerializationSize += tableAccountMeta.serializationLength();
+//    }
+//    Arrays.sort(accountIndexLookupTable);
+//
+//    final int sigLen = 1 + (numRequiredSignatures << 6);
+//    final int bufferSize = sigLen
+//        + VERSIONED_MSG_HEADER_LENGTH
+//        + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
+//        + Transaction.BLOCK_HASH_LENGTH
+//        + getByteLen(instructions.size()) + serializedInstructionLength
+//        + lookupTablesSerializationSize;
+//
+//    final byte[] out = new byte[bufferSize];
+//    out[0] = (byte) numRequiredSignatures;
+//
+//    int i = sigLen;
+//
+//    // Version
+//    out[i] = MESSAGE_VERSION_0_PREFIX;
+//
+//    // Message Header
+//    out[++i] = (byte) numRequiredSignatures;
+//    out[++i] = (byte) numReadonlySignedAccounts;
+//    out[++i] = (byte) numReadonlyUnsignedAccounts;
+//    ++i;
+//
+//    // Accounts
+//    i += CompactU16Encoding.encodeLength(out, i, numIncludedAccounts);
+//    for (int a = 0; a < numIncludedAccounts; ++a) {
+//      i += sortedAccounts[a].publicKey().write(out, i);
+//    }
+//
+//    final int recentBlockHashIndex = i;
+//    i += Transaction.BLOCK_HASH_LENGTH;
+//
+//    // Instructions
+//    i += CompactU16Encoding.encodeLength(out, i, instructions.size());
+//    for (final var instruction : instructions) {
+//      i = instruction.serialize(out, i, accountIndexLookupTable);
+//    }
+//
+//    // Address Lookup Tables
+//    i += CompactU16Encoding.encodeLength(out, i, numLookupTables);
+//    for (final var tableAccountMeta : tableAccountMetas) {
+//      i = tableAccountMeta.serialize(out, i);
+//    }
+//
+//    return new TransactionRecord(feePayer, instructions, null, tableAccountMetas, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
+//  }
+
+  int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
+
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,
@@ -432,7 +546,7 @@ public interface Transaction {
     int numIncludedAccounts = 0;
 
     AccountMeta feePayer = null;
-    NEXT_ACCOUNT:
+    SKIP_LOOKUP_ACCOUNTS:
     for (int i = 0, len; i < numAccounts; ++i) {
       final var account = sortedAccounts[i];
       if (account.signer()) {
@@ -445,10 +559,9 @@ public interface Transaction {
         ++numRequiredSignatures;
       } else {
         if (!account.invoked()) {
-          for (final var tableAccountMeta : tableAccountMetas) {
-            if (tableAccountMeta.indexOf(account.publicKey()) >= 0) {
-              tableAccountMeta.addAccount(account);
-              continue NEXT_ACCOUNT;
+          for (final var lookupTable : tableAccountMetas) {
+            if (lookupTable.addAccountIfExists(account)) {
+              continue SKIP_LOOKUP_ACCOUNTS;
             }
           }
         }
@@ -468,12 +581,8 @@ public interface Transaction {
       accountIndexLookupTable[numIncludedAccounts] = new AccountIndexLookupTableEntry(account.publicKey().toByteArray(), numIncludedAccounts);
       ++numIncludedAccounts;
     }
-
-    int lookupTablesSerializationSize = 1;
-    for (int t = 0, a = numIncludedAccounts; t < numLookupTables; ++t) {
-      final var tableAccountMeta = tableAccountMetas[t];
-      a = tableAccountMeta.addReverseLookupEntries(accountIndexLookupTable, a);
-      lookupTablesSerializationSize += tableAccountMeta.serializationLength();
+    for (int a = numIncludedAccounts; a < numAccounts; ++a) {
+      accountIndexLookupTable[a] = new AccountIndexLookupTableEntry(sortedAccounts[a].publicKey().toByteArray(), a);
     }
     Arrays.sort(accountIndexLookupTable);
 
@@ -483,7 +592,7 @@ public interface Transaction {
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + lookupTablesSerializationSize;
+        + (1 + (numLookupTables * BASE_LOOKUP_TABLE_LEN) + (numAccounts - numIncludedAccounts));
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
