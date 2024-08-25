@@ -1,6 +1,7 @@
 package software.sava.core.accounts.meta;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.lookup.AccountIndexLookupTableEntry;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.encoding.CompactU16Encoding;
 
@@ -40,6 +41,26 @@ final class TableAccountMeta implements LookupTableAccountMeta {
       readAccounts[numReads++] = (byte) index;
     }
     return true;
+  }
+
+  private AccountIndexLookupTableEntry createAccountIndexLookupTableEntry(final int index, final int i) {
+    return new AccountIndexLookupTableEntry(lookupTable.account(index).toByteArray(), i);
+  }
+
+  @Override
+  public int indexWrites(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int i) {
+    for (int w = 0; w < numWrites; ++w, ++i) {
+      accountIndexLookupTable[i] = createAccountIndexLookupTableEntry(writeAccounts[w] & 0xFF, i);
+    }
+    return i;
+  }
+
+  @Override
+  public int indexReads(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int i) {
+    for (int r = 0; r < numReads; ++r, ++i) {
+      accountIndexLookupTable[i] = createAccountIndexLookupTableEntry(readAccounts[r] & 0xFF, i);
+    }
+    return i;
   }
 
   @Override

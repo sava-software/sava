@@ -1,17 +1,18 @@
 package software.sava.core.tx;
 
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
-import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.Base58;
 import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.Arrays;
+import java.util.Map;
 
-import static software.sava.core.accounts.meta.AccountMeta.*;
-import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
+import static software.sava.core.accounts.meta.AccountMeta.*;
+import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
 
 record TransactionSkeletonRecord(byte[] data,
@@ -74,24 +75,6 @@ record TransactionSkeletonRecord(byte[] data,
     return Arrays.binarySearch(invokedIndexes, a) < 0 ? createRead(pubKey) : createInvoked(pubKey);
   }
 
-  private int parseLookupTableAccounts(int o,
-                                       final AddressLookupTable lookupTable,
-                                       final AccountMeta[] accounts,
-                                       int a) {
-    o += PUBLIC_KEY_LENGTH;
-    final int numWriteIndexes = data[o] & 0xFF;
-    ++o;
-    for (int w = 0; w < numWriteIndexes; ++w, ++a, ++o) {
-      accounts[a] = createWrite(lookupTable.account(data[o] & 0xFF));
-    }
-    final int numReadIndexes = data[o] & 0xFF;
-    ++o;
-    for (int r = 0; r < numReadIndexes; ++r, ++a, ++o) {
-      accounts[a] = parseVersionedReadAccount(lookupTable.account(data[o] & 0xFF), a);
-    }
-    return o;
-  }
-
   private int parseVersionedIncludedAccounts(final AccountMeta[] accounts) {
     int o = parseSignatureAccounts(accounts);
     int a = numRequiredSignatures;
@@ -106,25 +89,42 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public AccountMeta[] parseAccounts(final AddressLookupTable lookupTable) {
-    if (lookupTable == null) {
-      return parseAccounts();
-    }
-    final var accounts = new AccountMeta[numAccounts];
-    final int a = parseVersionedIncludedAccounts(accounts);
-    parseLookupTableAccounts(lookupTablesOffset, lookupTable, accounts, a);
-    return accounts;
+    return lookupTable == null
+        ? parseAccounts()
+        : parseAccounts(Map.of(lookupTable.address(), lookupTable));
   }
 
   @Override
-  public AccountMeta[] parseAccounts(final AddressLookupTable[] lookupTables) {
-    if (lookupTables.length == 0) {
-      return parseAccounts();
-    }
+  public AccountMeta[] parseAccounts(final Map<PublicKey, AddressLookupTable> lookupTables) {
     final var accounts = new AccountMeta[numAccounts];
-    final int a = parseVersionedIncludedAccounts(accounts);
+    int a = parseVersionedIncludedAccounts(accounts);
+
     int o = lookupTablesOffset;
-    for (final var lookupTable : lookupTables) {
-      o = parseLookupTableAccounts(o, lookupTable, accounts, a);
+    for (final var lookupTableKey : lookupTableAccounts) {
+      final var lookupTable = lookupTables.get(lookupTableKey);
+      o += PUBLIC_KEY_LENGTH;
+      final int numWriteIndexes = data[o] & 0xFF;
+      ++o;
+      for (int w = 0; w < numWriteIndexes; ++w, ++a, ++o) {
+        accounts[a] = createWrite(lookupTable.account(data[o] & 0xFF));
+      }
+      final int numReadIndexes = data[o] & 0xFF;
+      ++o;
+      o += numReadIndexes;
+    }
+
+    o = lookupTablesOffset;
+    for (final var lookupTableKey : lookupTableAccounts) {
+      final var lookupTable = lookupTables.get(lookupTableKey);
+      o += PUBLIC_KEY_LENGTH;
+      final int numWriteIndexes = data[o] & 0xFF;
+      ++o;
+      o += numWriteIndexes;
+      final int numReadIndexes = data[o] & 0xFF;
+      ++o;
+      for (int r = 0; r < numReadIndexes; ++r, ++a, ++o) {
+        accounts[a] = createRead(lookupTable.account(data[o] & 0xFF));
+      }
     }
     return accounts;
   }

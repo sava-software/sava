@@ -120,4 +120,16 @@ record InstructionRecord(AccountMeta programId,
     }
     return discriminator;
   }
+
+  @Override
+  public boolean equals(final Object o) {
+    if (o instanceof InstructionRecord ix) {
+      return ix.len == len
+          && programId.equals(ix.programId)
+          && accounts.equals(ix.accounts)
+          && Arrays.equals(ix.data, ix.offset, ix.offset + ix.len, data, offset, offset + len);
+    } else {
+      return false;
+    }
+  }
 }

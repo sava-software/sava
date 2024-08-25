@@ -1,5 +1,6 @@
 package software.sava.core.accounts.meta;
 
+import software.sava.core.accounts.lookup.AccountIndexLookupTableEntry;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 
 import java.util.Collection;
@@ -45,6 +46,10 @@ public interface LookupTableAccountMeta {
   AddressLookupTable lookupTable();
 
   boolean addAccountIfExists(final AccountMeta account);
+
+  int indexWrites(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int i);
+
+  int indexReads(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int i);
 
   void reset();
 

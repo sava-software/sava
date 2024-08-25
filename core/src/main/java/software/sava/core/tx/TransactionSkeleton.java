@@ -5,6 +5,9 @@ import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.CompactU16Encoding;
 
+import java.util.Arrays;
+import java.util.Map;
+
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.Transaction.MESSAGE_VERSION_0_PREFIX;
@@ -69,6 +72,7 @@ public interface TransactionSkeleton {
             o += 1 + numReadIndexes;
             numAccounts += numReadIndexes;
           }
+          Arrays.sort(invokedIndexes);
           return new TransactionSkeletonRecord(
               data,
               version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
@@ -118,9 +122,9 @@ public interface TransactionSkeleton {
 
   AccountMeta[] parseAccounts();
 
-  AccountMeta[] parseAccounts(final AddressLookupTable lookupTable);
+  AccountMeta[] parseAccounts(final Map<PublicKey, AddressLookupTable> lookupTables);
 
-  AccountMeta[] parseAccounts(final AddressLookupTable[] lookupTables);
+  AccountMeta[] parseAccounts(final AddressLookupTable lookupTable);
 
   Instruction[] parseInstructions(final AccountMeta[] accounts);
 }
