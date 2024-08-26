@@ -481,4 +481,5 @@ public interface SolanaRpcClient {
   CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
                                                       final String base64EncodedTx,
                                                       final boolean replaceRecentBlockhash);
+
 }
