@@ -86,7 +86,7 @@ subprojects {
         artifact sourcesJar
         groupId project.group
         artifactId project.parent.name + '-' + project.name
-        version = "$VERSION"
+        version = project.version
         pom {
           name = project.parent.name + '-' + project.name
           url = "$VCS_URL"
@@ -94,6 +94,16 @@ subprojects {
             connection = 'scm:git:git@github.com:sava-software/sava.git'
             url = "$VCS_URL"
           }
+        }
+      }
+    }
+    repositories {
+      maven {
+        name = "GithubPackages"
+        url = "https://maven.pkg.github.com/sava-software/sava"
+        credentials {
+          username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user.write")
+          password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token.write")
         }
       }
     }
