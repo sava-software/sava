@@ -86,7 +86,7 @@ subprojects {
         artifact sourcesJar
         groupId project.group
         artifactId project.parent.name + '-' + project.name
-        version = project.version
+        version = "$VERSION"
         pom {
           name = project.parent.name + '-' + project.name
           url = "$VCS_URL"
