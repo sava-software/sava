@@ -51,6 +51,9 @@ public record AddressLookupTable(PublicKey address,
   public static final BiFunction<PublicKey, byte[], AddressLookupTable> FACTORY = AddressLookupTable::read;
 
   public static AddressLookupTable read(final PublicKey address, final byte[] data) {
+    if (data == null || data.length == 0) {
+      return null;
+    }
     final byte[] discriminator = new byte[4];
     System.arraycopy(data, 0, discriminator, 0, 4);
     int offset = 4;

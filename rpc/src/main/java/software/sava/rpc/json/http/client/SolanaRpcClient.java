@@ -27,6 +27,8 @@ import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
 public interface SolanaRpcClient {
 
+  int MAX_MULTIPLE_ACCOUNTS = 100;
+
   static SolanaRpcClient createHttpClient(final URI endpoint,
                                           final HttpClient httpClient,
                                           final Duration requestTimeout) {

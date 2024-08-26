@@ -4,11 +4,19 @@ include 'core'
 include 'rpc'
 
 dependencyResolutionManagement {
+  repositories {
+    maven {
+      name = "GithubPackages"
+      url = "https://maven.pkg.github.com/sava-software/sava"
+      credentials {
+        username = System.getProperty("gpr.user.write", System.getenv("GITHUB_ACTOR"))
+        password = System.getProperty("gpr.token.write", System.getenv("GITHUB_TOKEN"))
+      }
+    }
+  }
   versionCatalogs {
     libs {
-      library('bouncycastle', 'org.bouncycastle:bcprov-jdk18on:1.78.1')
-      library('json-iterator', 'systems.comodal:json-iterator:2.11.0')
+      from("software.sava:solana-version-catalog:0.0.2")
     }
   }
 }
-

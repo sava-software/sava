@@ -35,7 +35,7 @@ final class TransactionSerializationTests {
     final var accountMetas = skeleton.parseAccounts(lookupTableMap);
 
     assertEquals(44, accountMetas.length);
-    var feePayer = accountMetas[0];
+    final var feePayer = accountMetas[0];
     assertEquals(createFeePayer(fromBase58Encoded("Ee7oGQLorSg8tapxb4ym7Y7vAZUuYHMZEgC6boQQJrcP")), feePayer);
     assertEquals(createWrite(fromBase58Encoded("7u7cD7NxcZEuzRCBaYo8uVpotRdqZwez47vvuwzCov43")), accountMetas[1]);
     assertEquals(createInvoked(fromBase58Encoded("11111111111111111111111111111111")), accountMetas[13]);
@@ -71,6 +71,7 @@ final class TransactionSerializationTests {
     assertEquals(skeleton.numSigners(), skeleton2.numSigners());
 
     final var accountMetas2 = skeleton2.parseAccounts(lookupTableMap);
+    assertEquals(feePayer, accountMetas2[0]);
     assertEquals(
         Arrays.stream(accountMetas)
             .sorted(Comparator.comparing(AccountMeta::publicKey))
@@ -89,8 +90,6 @@ final class TransactionSerializationTests {
         .flatMap(List::stream)
         .toList();
     assertEquals(accounts, accounts2);
-
-    assertEquals(feePayer, accountMetas[0]);
 
     final var instructions3 = skeleton2.parseInstructions(accountMetas2);
     validateInstructions(instructions3);
