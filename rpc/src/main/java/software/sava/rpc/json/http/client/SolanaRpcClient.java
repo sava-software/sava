@@ -274,16 +274,6 @@ public interface SolanaRpcClient {
 
   CompletableFuture<List<PublicKey>> getSlotLeaders(final long from, final int limit);
 
-  CompletableFuture<StakeActivation> getStakeActivation(final PublicKey key);
-
-  CompletableFuture<StakeActivation> getStakeActivation(final Commitment commitment, final PublicKey key);
-
-  CompletableFuture<StakeActivation> getStakeActivation(final PublicKey key, final long epoch);
-
-  CompletableFuture<StakeActivation> getStakeActivation(final Commitment commitment,
-                                                        final PublicKey key,
-                                                        final long epoch);
-
   CompletableFuture<Lamports> getStakeMinimumDelegation();
 
   CompletableFuture<Lamports> getStakeMinimumDelegation(final Commitment commitment);

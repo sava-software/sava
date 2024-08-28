@@ -82,7 +82,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<byte[]>, List<PerfSample>> PERF_SAMPLE = applyResponseResult(PerfSample::parse);
   private static final Function<HttpResponse<byte[]>, List<PrioritizationFee>> PRIORITIZATION_FEE = applyResponseResult(PrioritizationFee::parse);
   private static final Function<HttpResponse<byte[]>, List<TxSig>> TX_SIG = applyResponseResult(TxSig::parse);
-  private static final Function<HttpResponse<byte[]>, StakeActivation> STAKE_ACTIVATION = applyResponseResult(StakeActivation::parse);
   private static final Function<HttpResponse<byte[]>, Supply> SUPPLY = applyResponseValue(Supply::parse);
   private static final Function<HttpResponse<byte[]>, TokenAmount> TOKEN_AMOUNT = applyResponseValue(TokenAmount::parse);
   private static final Function<HttpResponse<byte[]>, String> SEND_TX_RESPONSE_PARSER = applyResponseResult(JsonIterator::readString);
@@ -596,30 +595,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     return sendPostRequest(PUBLIC_KEY_LIST, format("""
             {"jsonrpc":"2.0","id":%d,"method":"getSlotLeaders","params":[%d,%d]}""",
         id.incrementAndGet(), from, Math.min(limit, 5_000)));
-  }
-
-  @Override
-  public CompletableFuture<StakeActivation> getStakeActivation(final PublicKey key) {
-    return getStakeActivation(defaultCommitment, key);
-  }
-
-  @Override
-  public CompletableFuture<StakeActivation> getStakeActivation(final Commitment commitment, final PublicKey key) {
-    return sendPostRequest(STAKE_ACTIVATION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getStakeActivation","params":["%s",{"commitment":"%s"}]}""",
-        id.incrementAndGet(), key.toBase58(), commitment.getValue()));
-  }
-
-  @Override
-  public CompletableFuture<StakeActivation> getStakeActivation(final PublicKey key, final long epoch) {
-    return getStakeActivation(defaultCommitment, key, epoch);
-  }
-
-  @Override
-  public CompletableFuture<StakeActivation> getStakeActivation(final Commitment commitment, final PublicKey key, final long epoch) {
-    return sendPostRequest(STAKE_ACTIVATION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getStakeActivation","params":["%s",{"commitment":"%s","epoch":%d}]}""",
-        id.incrementAndGet(), key.toBase58(), commitment.getValue(), epoch));
   }
 
   @Override
