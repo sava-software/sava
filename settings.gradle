@@ -9,14 +9,14 @@ dependencyResolutionManagement {
       name = "GithubPackages"
       url = "https://maven.pkg.github.com/sava-software/solana-version-catalog"
       credentials {
-        username = System.getenv("GITHUB_ACTOR")
-        password = System.getenv("GITHUB_TOKEN")
+        username = System.getProperty("gpr.user", System.getenv("GITHUB_ACTOR"))
+        password = System.getProperty("gpr.token", System.getenv("GITHUB_TOKEN"))
       }
     }
   }
   versionCatalogs {
     libs {
-      from("software.sava:solana-version-catalog:0.0.4")
+      from("software.sava:solana-version-catalog:0.0.6")
     }
   }
 }

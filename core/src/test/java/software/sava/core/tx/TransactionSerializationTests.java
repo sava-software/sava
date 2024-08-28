@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static software.sava.core.accounts.PublicKey.fromBase58Encoded;
 import static software.sava.core.accounts.meta.AccountMeta.*;
 
@@ -31,6 +32,7 @@ final class TransactionSerializationTests {
 
     final var lookupTableMap = tableData.entrySet().stream().collect(Collectors
         .toUnmodifiableMap(Map.Entry::getKey, e -> AddressLookupTable.read(e.getKey(), decoder.decode(e.getValue()))));
+    lookupTableMap.values().forEach(table -> assertTrue(table.isActive()));
 
     final var accountMetas = skeleton.parseAccounts(lookupTableMap);
 

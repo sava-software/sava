@@ -13,6 +13,8 @@ public record Clock(PublicKey address,
                     long leaderScheduleEpoch,
                     long unixTimestamp) implements Borsh {
 
+  public static final long MAX_SLOT = Long.MIN_VALUE | Long.MAX_VALUE;
+
   public static final int BYTES = 40;
 
   public static final BiFunction<PublicKey, byte[], Clock> FACTORY = Clock::read;

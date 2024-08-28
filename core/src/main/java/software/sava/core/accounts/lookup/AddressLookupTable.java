@@ -1,6 +1,7 @@
 package software.sava.core.accounts.lookup;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.sysvar.Clock;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.Arrays;
@@ -13,7 +14,7 @@ public record AddressLookupTable(PublicKey address,
                                  byte[] discriminator,
                                  long deactivationSlot,
                                  long lastExtendedSlot,
-                                 int lastExtendedSlotStartIndex, // new address start index
+                                 int lastExtendedSlotStartIndex,
                                  PublicKey authority,
                                  PublicKey[] accounts,
                                  AccountIndexLookupTableEntry[] reverseLookupTable,
@@ -28,17 +29,6 @@ public record AddressLookupTable(PublicKey address,
   public static final int LAST_EXTENDED_SLOT_START_INDEX_OFFSET = LAST_EXTENDED_OFFSET + Long.BYTES;
   public static final int AUTHORITY_OPTION_OFFSET = LAST_EXTENDED_SLOT_START_INDEX_OFFSET + 1;
   public static final int AUTHORITY_OFFSET = AUTHORITY_OPTION_OFFSET + 1;
-
-  public static AccountIndexLookupTableView[] createReverseLookupTable(final byte[] data) {
-    final int to = data.length;
-    final int numAccounts = (to - LOOKUP_TABLE_META_SIZE) >> 5;
-    final var reverseLookupTable = new AccountIndexLookupTableView[numAccounts];
-    for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
-      reverseLookupTable[i] = new AccountIndexLookupTableView(data, offset, i);
-    }
-    Arrays.sort(reverseLookupTable);
-    return reverseLookupTable;
-  }
 
   public static int getAccountOffset(int index) {
     return LOOKUP_TABLE_META_SIZE + (PUBLIC_KEY_LENGTH * index);
@@ -91,6 +81,10 @@ public record AddressLookupTable(PublicKey address,
         reverseLookupTable,
         data
     );
+  }
+
+  public boolean isActive() {
+    return deactivationSlot == Clock.MAX_SLOT;
   }
 
   public PublicKey account(final int index) {
