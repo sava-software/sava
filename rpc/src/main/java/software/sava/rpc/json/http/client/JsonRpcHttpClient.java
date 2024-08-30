@@ -24,6 +24,12 @@ public abstract class JsonRpcHttpClient extends JsonHttpClient {
     super(endpoint, httpClient, requestTimeout, applyResponse);
   }
 
+  public JsonRpcHttpClient(final URI endpoint,
+                           final HttpClient httpClient,
+                           final Duration requestTimeout) {
+    super(endpoint, httpClient, requestTimeout, null);
+  }
+
   static JsonIterator createJsonIterator(final HttpResponse<byte[]> httpResponse) {
     // System.out.println(new String(httpResponse.body()));
     final var ji = JsonIterator.parse(httpResponse.body());

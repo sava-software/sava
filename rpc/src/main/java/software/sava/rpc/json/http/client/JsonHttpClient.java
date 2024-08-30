@@ -31,6 +31,12 @@ public abstract class JsonHttpClient {
     this.applyResponse = applyResponse;
   }
 
+  protected JsonHttpClient(final URI endpoint,
+                           final HttpClient httpClient,
+                           final Duration requestTimeout) {
+    this(endpoint, httpClient, requestTimeout, null);
+  }
+
   public final URI endpoint() {
     return this.endpoint;
   }
