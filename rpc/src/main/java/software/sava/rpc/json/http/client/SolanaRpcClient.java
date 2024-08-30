@@ -5,13 +5,13 @@ import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
-import software.sava.rpc.json.http.SolanaNetwork;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
 import software.sava.rpc.json.http.response.*;
 
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
@@ -19,8 +19,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.DEFAULT_REQUEST_TIMEOUT;
+import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.PROGRAM_ACCOUNTS_TIMEOUT;
 import static software.sava.rpc.json.http.request.Commitment.CONFIRMED;
 import static software.sava.rpc.json.http.request.Commitment.PROCESSED;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
@@ -29,31 +31,29 @@ public interface SolanaRpcClient {
 
   int MAX_MULTIPLE_ACCOUNTS = 100;
 
-  static SolanaRpcClient createHttpClient(final URI endpoint,
-                                          final HttpClient httpClient,
-                                          final Duration requestTimeout) {
-    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, CONFIRMED);
+  static SolanaRpcClient createClient(final URI endpoint,
+                                      final HttpClient httpClient,
+                                      final Duration requestTimeout,
+                                      final Predicate<HttpResponse<byte[]>> applyResponse,
+                                      final Commitment defaultCommitment) {
+    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, applyResponse, defaultCommitment);
   }
 
-  static SolanaRpcClient createHttpClient(final URI endpoint,
-                                          final HttpClient httpClient) {
-    return createHttpClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT);
+  static SolanaRpcClient createClient(final URI endpoint,
+                                      final HttpClient httpClient,
+                                      final Predicate<HttpResponse<byte[]>> applyResponse) {
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, applyResponse, CONFIRMED);
   }
 
-  static SolanaRpcClient createHttpClient(final URI endpoint) {
-    return createHttpClient(endpoint, HttpClient.newHttpClient());
+  static SolanaRpcClient createClient(final URI endpoint,
+                                      final HttpClient httpClient,
+                                      final Duration requestTimeout,
+                                      final Commitment defaultCommitment) {
+    return createClient(endpoint, httpClient, requestTimeout, null, defaultCommitment);
   }
 
-  static SolanaRpcClient createHttpClient(final SolanaNetwork network) {
-    return createHttpClient(network.getEndpoint(), HttpClient.newHttpClient());
-  }
-
-  static SolanaRpcClient createHttpClient(final SolanaNetwork network, final HttpClient httpClient) {
-    return createHttpClient(network.getEndpoint(), httpClient);
-  }
-
-  static SolanaRpcClient createHttpClient(final String endpoint, final HttpClient httpClient) {
-    return createHttpClient(URI.create(endpoint), httpClient);
+  static SolanaRpcClient createClient(final URI endpoint, final HttpClient httpClient) {
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, CONFIRMED);
   }
 
   URI endpoint();
@@ -226,14 +226,35 @@ public interface SolanaRpcClient {
     return getProgramAccounts(programId, commitment, filters, BYTES_IDENTITY);
   }
 
-  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, factory);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final List<Filter> filters,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, filters, factory);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final List<Filter> filters,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, filters, factory);
+  }
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                 final PublicKey programId,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
-  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                 final PublicKey programId,
                                                                  final List<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
-  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                 final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final List<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);

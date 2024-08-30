@@ -11,13 +11,17 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static software.sava.rpc.json.http.client.JsonResponseController.throwUncheckedIOException;
 
 public abstract class JsonRpcHttpClient extends JsonHttpClient {
 
-  public JsonRpcHttpClient(final URI endpoint, final HttpClient httpClient, final Duration requestTimeout) {
-    super(endpoint, httpClient, requestTimeout);
+  public JsonRpcHttpClient(final URI endpoint,
+                           final HttpClient httpClient,
+                           final Duration requestTimeout,
+                           final Predicate<HttpResponse<byte[]>> applyResponse) {
+    super(endpoint, httpClient, requestTimeout, applyResponse);
   }
 
   static JsonIterator createJsonIterator(final HttpResponse<byte[]> httpResponse) {

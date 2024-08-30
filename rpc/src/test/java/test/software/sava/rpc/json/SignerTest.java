@@ -1,4 +1,4 @@
-package test.soljava.rpc.json;
+package test.software.sava.rpc.json;
 
 import org.junit.jupiter.api.Test;
 import software.sava.rpc.json.PrivateKeyEncoding;

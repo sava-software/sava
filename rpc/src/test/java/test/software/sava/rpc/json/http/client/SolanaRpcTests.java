@@ -5,9 +5,11 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import software.sava.rpc.json.http.client.SolanaRpcClient;
+import software.sava.rpc.json.http.response.NodeHealth;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static test.software.sava.rpc.json.http.client.HttpClientTests.createServer;
 import static test.software.sava.rpc.json.http.client.HttpClientTests.writeResponse;
 
@@ -34,19 +36,40 @@ final class SolanaRpcTests {
     });
 
     HTTP_SERVER = httpServerRecord.httpServer();
-    RPC_CLIENT = SolanaRpcClient.createHttpClient(httpServerRecord.endpoint());
+    final var httpClient = HttpClientTests.createClient();
+    RPC_CLIENT = SolanaRpcClient.createClient(httpServerRecord.endpoint(), httpClient);
   }
 
   @AfterAll
-  static void shutdownServer() {
+  static void shutdown() {
+    RPC_CLIENT.httpClient().close();
     HTTP_SERVER.stop(0);
+  }
+
+  private void validateNodeHealth(final NodeHealth nodeHealth) {
+    assertEquals(-32005, nodeHealth.code());
+    assertEquals(0, nodeHealth.numSlotsBehind());
+    assertEquals("Node is unhealthy", nodeHealth.message());
   }
 
   @Test
   void testNodeHealth() {
     final var nodeHealth = RPC_CLIENT.getHealth().join();
-    assertEquals(-32005, nodeHealth.code());
-    assertEquals(0, nodeHealth.numSlotsBehind());
-    assertEquals("Node is unhealthy", nodeHealth.message());
+    validateNodeHealth(nodeHealth);
+  }
+
+  @Test
+  void testPeekResponse() {
+    var rpcClient = SolanaRpcClient.createClient(RPC_CLIENT.endpoint(), RPC_CLIENT.httpClient(),
+        response -> {
+          assertEquals(200, response.statusCode());
+          return false;
+        });
+    var nodeHealth = rpcClient.getHealth().join();
+    assertNull(nodeHealth);
+
+    rpcClient = SolanaRpcClient.createClient(RPC_CLIENT.endpoint(), RPC_CLIENT.httpClient(), _ -> true);
+    nodeHealth = rpcClient.getHealth().join();
+    validateNodeHealth(nodeHealth);
   }
 }

@@ -22,6 +22,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -30,7 +31,7 @@ import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
 
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
-  private static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
+  static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
 
   private static final Function<HttpResponse<byte[]>, LatestBlockHash> LATEST_BLOCK_HASH = applyResponseValue(LatestBlockHash::parse);
   private static final Function<HttpResponse<byte[]>, Lamports> CONTEXT_LONG_VAL = applyResponseValue(Lamports::parse);
@@ -91,14 +92,19 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   private final AtomicLong id;
   private final Commitment defaultCommitment;
+  private final Function<HttpResponse<byte[]>, String> sendTxResponseParser;
+  private final Function<HttpResponse<byte[]>, LatestBlockHash> latestBlockhashResponseParser;
 
   SolanaJsonRpcClient(final URI endpoint,
                       final HttpClient httpClient,
                       final Duration requestTimeout,
+                      final Predicate<HttpResponse<byte[]>> applyResponse,
                       final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout);
+    super(endpoint, httpClient, requestTimeout, applyResponse);
     this.id = new AtomicLong(System.currentTimeMillis());
     this.defaultCommitment = defaultCommitment;
+    this.latestBlockhashResponseParser = wrapParser(LATEST_BLOCK_HASH);
+    this.sendTxResponseParser = wrapParser(SEND_TX_RESPONSE_PARSER);
   }
 
   @Override
@@ -388,7 +394,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   @Override
   public CompletableFuture<LatestBlockHash> getLatestBlockHash(final Commitment commitment) {
-    return sendPostRequest(LATEST_BLOCK_HASH, format("""
+    return sendPostRequestNoWrap(latestBlockhashResponseParser, format("""
             {"jsonrpc":"2.0","id":%d,"method":"getLatestBlockhash","params":[{"commitment":"%s"}]}""",
         id.incrementAndGet(), commitment.getValue()));
   }
@@ -478,20 +484,23 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getProgramAccounts(programId, null, factory);
+    return getProgramAccounts(requestTimeout, programId, null, factory);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
                                                                         final List<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getProgramAccounts(programId, defaultCommitment, filters, factory);
+    return getProgramAccounts(requestTimeout, programId, defaultCommitment, filters, factory);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
                                                                         final Commitment commitment,
                                                                         final List<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
@@ -499,7 +508,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         .map(Filter::toJson)
         .collect(Collectors.joining(",", ",\"filters\":[", "]"));
     return sendPostRequest(applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory)),
-        PROGRAM_ACCOUNTS_TIMEOUT,
+        requestTimeout,
         format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getProgramAccounts","params":["%s",{"commitment":"%s","withContext":true,"encoding":"base64"%s}]}""",
             id.incrementAndGet(), programId.toBase58(), commitment.getValue(), filtersJson));
@@ -848,14 +857,14 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   @Override
   public CompletableFuture<String> sendTransaction(final Commitment preflightCommitment, final String base64SignedTx, final int maxRetries) {
-    return sendPostRequest(SEND_TX_RESPONSE_PARSER, format("""
+    return sendPostRequestNoWrap(sendTxResponseParser, format("""
             {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","preflightCommitment":"%s","maxRetries":%d}]}""",
         id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries));
   }
 
   @Override
   public CompletableFuture<String> sendTransactionSkipPreflight(final Commitment preflightCommitment, final String base64SignedTx, final int maxRetries) {
-    return sendPostRequest(SEND_TX_RESPONSE_PARSER, format("""
+    return sendPostRequestNoWrap(sendTxResponseParser, format("""
             {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","skipPreflight":true,"preflightCommitment":"%s","maxRetries":%d}]}""",
         id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries));
   }

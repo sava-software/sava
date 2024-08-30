@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
+import java.net.http.HttpClient;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,6 +19,10 @@ final class HttpClientTests {
   }
 
   private static final ExecutorService HTTP_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
+
+  static HttpClient createClient() {
+    return HttpClient.newBuilder().executor(HTTP_EXECUTOR).build();
+  }
 
   static HttpServerRecord createServer() {
     try {
