@@ -10,7 +10,7 @@ import static java.lang.System.Logger.Level.DEBUG;
 import static software.sava.rpc.json.http.client.JsonResponseController.checkResponseCode;
 import static software.sava.rpc.json.http.client.JsonResponseController.logBody;
 
-record KeepJsonResponseController<R>(
+public record KeepJsonResponseController<R>(
     BiFunction<byte[], JsonIterator, R> parser) implements Function<HttpResponse<byte[]>, R> {
 
   private static final System.Logger log = System.getLogger(KeepJsonResponseController.class.getName());
