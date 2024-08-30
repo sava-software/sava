@@ -17,10 +17,6 @@ public record JsonResponseController<R>(Function<JsonIterator, R> parser) implem
     logBody(httpResponse, new String(httpResponse.body()), ex);
   }
 
-  static void logStringBody(final HttpResponse<String> httpResponse, final RuntimeException ex) {
-    logBody(httpResponse, httpResponse.body(), ex);
-  }
-
   static void logBody(final HttpResponse<?> httpResponse, final String body, final RuntimeException ex) {
     log.log(ERROR,
         String.format("Failed to parse [httpCode:%d], [body=%s]", httpResponse.statusCode(), body),
@@ -30,13 +26,6 @@ public record JsonResponseController<R>(Function<JsonIterator, R> parser) implem
   static RuntimeException throwUncheckedIOException(final HttpResponse<?> httpResponse, final String body) {
     throw new UncheckedIOException(new UnknownServiceException(String.format(
         "HTTP request failed with [httpCode:%d], [body=%s]", httpResponse.statusCode(), body)));
-  }
-
-  public static void checkStringResponseCode(final HttpResponse<String> httpResponse) {
-    final int responseCode = httpResponse.statusCode();
-    if (responseCode < 200 || responseCode >= 300) {
-      throw throwUncheckedIOException(httpResponse, httpResponse.body());
-    }
   }
 
   public static void checkResponseCode(final HttpResponse<byte[]> httpResponse) {
