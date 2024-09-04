@@ -10,6 +10,15 @@ record DiscriminatorRecord(byte[] data) implements Discriminator {
   }
 
   @Override
+  public int[] toIntArray() {
+    final int[] d = new int[data.length];
+    for (int i = 0; i < d.length; ++i) {
+      d[i] = data[i] & 0xff;
+    }
+    return d;
+  }
+
+  @Override
   public int write(final byte[] data, final int offset) {
     System.arraycopy(this.data, 0, data, offset, data.length);
     return data.length;
