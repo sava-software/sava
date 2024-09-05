@@ -35,7 +35,14 @@ public interface Discriminator {
     return write(bytes, 0);
   }
 
-  int[] toIntArray();
+  default int[] toIntArray() {
+    final byte[] data = data();
+    final int[] d = new int[data.length];
+    for (int i = 0; i < d.length; ++i) {
+      d[i] = data[i] & 0xff;
+    }
+    return d;
+  }
 
   default int write(final byte[] bytes, final int i) {
     final byte[] data = data();
