@@ -2,13 +2,32 @@ package software.sava.core.accounts;
 
 import java.nio.charset.StandardCharsets;
 
-public record AccountWithSeed(PublicKey baseKey,
-                              PublicKey publicKey,
-                              byte[] asciiSeed) {
+public interface AccountWithSeed {
 
   static AccountWithSeed createAccount(final PublicKey baseKey,
                                        final PublicKey publicKey,
-                                       final String seed) {
-    return new AccountWithSeed(baseKey, publicKey, seed.getBytes(StandardCharsets.US_ASCII));
+                                       final byte[] asciiSeed,
+                                       final PublicKey program) {
+    return new AccountWithSeedRecord(baseKey, publicKey, asciiSeed, program);
   }
+
+  static AccountWithSeed createAccount(final PublicKey baseKey,
+                                       final PublicKey publicKey,
+                                       final String seed,
+                                       final PublicKey program) {
+    return createAccount(
+        baseKey,
+        publicKey,
+        seed.getBytes(StandardCharsets.US_ASCII),
+        program
+    );
+  }
+
+  PublicKey baseKey();
+
+  PublicKey publicKey();
+
+  byte[] asciiSeed();
+
+  PublicKey program();
 }

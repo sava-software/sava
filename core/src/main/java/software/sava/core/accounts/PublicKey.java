@@ -64,7 +64,7 @@ public interface PublicKey extends Comparable<PublicKey> {
       buffer[nonceOffset] = (byte) nonce;
       final byte[] hash = sha256.digest(buffer);
       if (Ed25519Util.isNotOnCurve(hash)) {
-        return new ProgramDerivedAddress(PublicKey.createPubKey(hash), nonce);
+        return ProgramDerivedAddress.createPDA(seeds, PublicKey.createPubKey(hash), nonce);
       }
     }
     throw new RuntimeException("Unable to find a viable program derived address nonce");
@@ -90,7 +90,7 @@ public interface PublicKey extends Comparable<PublicKey> {
             PUBLIC_KEY_LENGTH,
             PUBLIC_KEY_LENGTH + baseSeedBytes.length + 1
         );
-        return new AccountWithSeed(base, PublicKey.createPubKey(hash), bumpSeedBytes);
+        return new AccountWithSeedRecord(base, PublicKey.createPubKey(hash), bumpSeedBytes, programId);
       }
     }
     throw new RuntimeException("Unable to find a viable program derived address nonce");
