@@ -18,11 +18,11 @@
 
 ### Dependencies
 
-- Core
+- [Core](core/src/main/java/module-info.java)
     - java.base
     - [Bouncy Castle](https://www.bouncycastle.org/download/bouncy-castle-java/#latest)
 
-- RPC
+- [RPC](rpc/src/main/java/module-info.java)
     - software.sava.core
     - java.net.http
     - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)

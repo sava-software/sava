@@ -67,7 +67,7 @@ public final class ByteUtil {
   }
 
   public static short getInt16LE(final byte[] b, final int off) {
-    return (short) FLOAT_LE.get(b, off);
+    return (short) SHORT_LE.get(b, off);
   }
 
   public static int getInt32LE(final byte[] b, final int off) {
