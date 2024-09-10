@@ -71,22 +71,35 @@ public interface Borsh {
     return bytes == null || bytes.length == 0 ? 1 : (1 + Integer.BYTES + bytes.length);
   }
 
-  static int fixedLen(final byte[][] array) {
-    int len = 0;
+  static int len(final byte[][] array) {
+    int len = Integer.BYTES;
     for (final var a : array) {
       len += len(a);
     }
     return len;
   }
 
-  static int len(final byte[][] array) {
-    return Integer.BYTES + fixedLen(array);
+  static int fixedLen(final byte[] array) {
+    return array.length;
+  }
+
+  static int fixedLen(final byte[][] array) {
+    int len = 0;
+    for (final var a : array) {
+      len += fixedLen(a);
+    }
+    return len;
   }
 
   static byte[] read(final byte[] data, final int offset) {
     final int length = ByteUtil.getInt32LE(data, offset);
     final byte[] bytes = new byte[length];
     System.arraycopy(data, offset + Integer.BYTES, data, 0, length);
+    return bytes;
+  }
+
+  static byte[] read(final byte[] bytes, final byte[] data, final int offset) {
+    System.arraycopy(data, offset, data, 0, bytes.length);
     return bytes;
   }
 
