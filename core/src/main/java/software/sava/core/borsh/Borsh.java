@@ -98,7 +98,7 @@ public interface Borsh {
     return bytes;
   }
 
-  static byte[] read(final byte[] bytes, final byte[] data, final int offset) {
+  static byte[] readArray(final byte[] bytes, final byte[] data, final int offset) {
     System.arraycopy(data, offset, data, 0, bytes.length);
     return bytes;
   }
