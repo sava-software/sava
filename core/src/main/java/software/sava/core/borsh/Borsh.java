@@ -1013,7 +1013,7 @@ public interface Borsh {
   }
 
   static int write(final Borsh val, final byte[] data, final int offset) {
-    return 1 + val.write(data, offset + 1);
+    return val.write(data, offset);
   }
 
   static int len(final Borsh val) {
@@ -1030,7 +1030,7 @@ public interface Borsh {
       return 1;
     } else {
       data[offset] = (byte) 1;
-      return write(val, data, offset);
+      return 1 + write(val, data, offset + 1);
     }
   }
 }
