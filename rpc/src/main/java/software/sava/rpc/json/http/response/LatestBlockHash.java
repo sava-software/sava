@@ -13,9 +13,9 @@ public record LatestBlockHash(Context context, String blockHash, long lastValidB
 
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("blockhash", buf, offset, len)) {
-      builder.blockHash(ji.readString());
+      builder.blockHash = ji.readString();
     } else if (fieldEquals("lastValidBlockHeight", buf, offset, len)) {
-      builder.lastValidBlockHeight(ji.readLong());
+      builder.lastValidBlockHeight = ji.readLong();
     } else {
       ji.skip();
     }
@@ -33,14 +33,6 @@ public record LatestBlockHash(Context context, String blockHash, long lastValidB
 
     private LatestBlockHash create() {
       return new LatestBlockHash(context, blockHash, lastValidBlockHeight);
-    }
-
-    private void blockHash(final String blockHash) {
-      this.blockHash = blockHash;
-    }
-
-    private void lastValidBlockHeight(final long lastValidBlockHeight) {
-      this.lastValidBlockHeight = lastValidBlockHeight;
     }
   }
 }

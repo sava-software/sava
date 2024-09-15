@@ -203,6 +203,14 @@ public interface Borsh {
     return Integer.BYTES + fixedWrite(array, data, offset + Integer.BYTES);
   }
 
+  static boolean[][] readArray(final boolean[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
+  }
+
   static boolean[] readArray(final boolean[] result, final byte[] data, int offset) {
     for (int i = 0; i < result.length; ++i) {
       result[i] = data[offset] == 1;
@@ -288,6 +296,14 @@ public interface Borsh {
   static int write(final short[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + fixedWrite(array, data, offset + Integer.BYTES);
+  }
+
+  static short[][] readArray(final short[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
   }
 
   static short[] readArray(final short[] result, final byte[] data, int offset) {
@@ -407,6 +423,14 @@ public interface Borsh {
     return Integer.BYTES + fixedWrite(array, data, offset + Integer.BYTES);
   }
 
+  static int[][] readArray(final int[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
+  }
+
   static int[] readArray(final int[] result, final byte[] data, int offset) {
     for (int i = 0; i < result.length; ++i) {
       result[i] = ByteUtil.getInt32LE(data, offset);
@@ -505,6 +529,14 @@ public interface Borsh {
     return Integer.BYTES + fixedWrite(array, data, offset + Integer.BYTES);
   }
 
+  static long[][] readArray(final long[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
+  }
+
   static long[] readArray(final long[] result, final byte[] data, int offset) {
     for (int i = 0; i < result.length; ++i) {
       result[i] = ByteUtil.getInt64LE(data, offset);
@@ -575,6 +607,14 @@ public interface Borsh {
   static int write(final float[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + fixedWrite(array, data, offset + Integer.BYTES);
+  }
+
+  static float[][] readArray(final float[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
   }
 
   static float[] readArray(final float[] result, final byte[] data, int offset) {
@@ -679,6 +719,14 @@ public interface Borsh {
     return Integer.BYTES + fixedLen(array);
   }
 
+  static double[][] readArray(final double[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
+  }
+
   static double[] readArray(final double[] result, final byte[] data, int offset) {
     for (int i = 0; i < result.length; ++i) {
       result[i] = ByteUtil.getFloat64LE(data, offset);
@@ -744,6 +792,14 @@ public interface Borsh {
 
   static int len(final BigInteger[][] array) {
     return Integer.BYTES + fixedLen(array);
+  }
+
+  static BigInteger[][] readArray(final BigInteger[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
   }
 
   static BigInteger[] readArray(final BigInteger[] result, final byte[] data, int offset) {
@@ -833,6 +889,14 @@ public interface Borsh {
 
   static int len(final PublicKey[][] array) {
     return Integer.BYTES + fixedLen(array);
+  }
+
+  static PublicKey[][] readArray(final PublicKey[][] result, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
   }
 
   static PublicKey[] readArray(final PublicKey[] result, final byte[] data, int offset) {
@@ -948,6 +1012,14 @@ public interface Borsh {
   interface Factory<T> {
 
     T read(final byte[] data, final int offset);
+  }
+
+  static <B extends Borsh> B[][] readArray(final B[][] result, final Factory<B> factory, final byte[] data, int offset) {
+    for (final var out : result) {
+      readArray(out, factory, data, offset);
+      offset += fixedLen(out);
+    }
+    return result;
   }
 
   static <B extends Borsh> B[] readArray(final B[] result, final Factory<B> factory, final byte[] data, int offset) {
