@@ -80,7 +80,7 @@ public final class ByteUtil {
 
   public static int putInt128LE(final byte[] data, final int offset, final BigInteger val) {
     final byte[] be = val.toByteArray();
-    for (int i = be.length - 1, le = offset; i < be.length; --i, ++le) {
+    for (int i = be.length - 1, le = offset; i >= 0; --i, ++le) {
       data[le] = be[i];
     }
     if (val.signum() < 0) {
@@ -91,7 +91,7 @@ public final class ByteUtil {
 
   public static BigInteger getInt128LE(final byte[] data, final int offset) {
     final byte[] be = new byte[16];
-    for (int i = be.length - 1, le = offset; i < be.length; --i, ++le) {
+    for (int i = be.length - 1, le = offset; i >= 0; --i, ++le) {
       be[i] = data[le];
     }
     return new BigInteger(be);

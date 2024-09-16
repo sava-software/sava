@@ -236,6 +236,14 @@ public interface Borsh {
     return result;
   }
 
+  static boolean[][] readMultiDimensionbooleanVector(final int fixedLength,
+                                                     final byte[] data,
+                                                     final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final boolean[][] result = new boolean[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
+  }
+
   static int lenOptional(final Short val) {
     return val == null ? 1 : 1 + Short.BYTES;
   }
@@ -329,6 +337,14 @@ public interface Borsh {
       offset += len(instance);
     }
     return result;
+  }
+
+  static short[][] readMultiDimensionshortVector(final int fixedLength,
+                                                 final byte[] data,
+                                                 final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final short[][] result = new short[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
   }
 
   static int lenOptionalByte(final OptionalInt val) {
@@ -456,6 +472,14 @@ public interface Borsh {
     return result;
   }
 
+  static int[][] readMultiDimensionintVector(final int fixedLength,
+                                             final byte[] data,
+                                             final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final int[][] result = new int[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
+  }
+
   static int lenOptional(final OptionalLong val) {
     return val == null || val.isEmpty() ? 1 : 1 + Long.BYTES;
   }
@@ -562,6 +586,14 @@ public interface Borsh {
     return result;
   }
 
+  static long[][] readMultiDimensionlongVector(final int fixedLength,
+                                               final byte[] data,
+                                               final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final long[][] result = new long[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
+  }
+
   static int fixedLen(final float[] array) {
     return array.length * Float.BYTES;
   }
@@ -640,6 +672,14 @@ public interface Borsh {
       offset += len(instance);
     }
     return result;
+  }
+
+  static float[][] readMultiDimensionfloatVector(final int fixedLength,
+                                                 final byte[] data,
+                                                 final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final float[][] result = new float[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
   }
 
   static int fixedLen(final double[] array) {
@@ -752,12 +792,20 @@ public interface Borsh {
     return result;
   }
 
+  static double[][] readMultiDimensionDoubleVector(final int fixedLength,
+                                                   final byte[] data,
+                                                   final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final double[][] result = new double[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
+  }
+
   static int write(final BigInteger val, final byte[] data, final int offset) {
     return ByteUtil.putInt128LE(data, offset, val);
   }
 
   static int fixedLen(final BigInteger[] array) {
-    return array.length * 128;
+    return array.length * 16;
   }
 
   static int fixedWrite(final BigInteger[] array, final byte[] data, final int offset) {
@@ -810,21 +858,29 @@ public interface Borsh {
     return result;
   }
 
-  static BigInteger[] readVector(final byte[] data, final int offset) {
+  static BigInteger[] readBigIntegerVector(final byte[] data, final int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     return readArray(new BigInteger[len], data, offset + Integer.BYTES);
   }
 
-  static BigInteger[][] readMultiDimensionVector(final byte[] data, int offset) {
+  static BigInteger[][] readMultiDimensionBigIntegerVector(final byte[] data, int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     offset += Integer.BYTES;
     final var result = new BigInteger[len][];
     for (int i = 0; i < result.length; ++i) {
-      final var instance = readVector(data, offset);
+      final var instance = readBigIntegerVector(data, offset);
       result[i] = instance;
       offset += len(instance);
     }
     return result;
+  }
+
+  static BigInteger[][] readMultiDimensionBigIntegerVector(final int fixedLength,
+                                                           final byte[] data,
+                                                           final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final BigInteger[][] result = new BigInteger[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
   }
 
   static int write(final BigInteger[] array, final byte[] data, final int offset) {
@@ -922,6 +978,14 @@ public interface Borsh {
       offset += len(instance);
     }
     return result;
+  }
+
+  static PublicKey[][] readMultiDimensionPublicKeyVector(final int fixedLength,
+                                                         final byte[] data,
+                                                         final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final PublicKey[][] result = new PublicKey[len][fixedLength];
+    return readArray(result, data, offset + Integer.BYTES);
   }
 
   static int write(final PublicKey[] array, final byte[] data, final int offset) {
@@ -1031,21 +1095,37 @@ public interface Borsh {
     return result;
   }
 
-  static <B extends Borsh> B[] readVector(final Class<B> borshClass, final Factory<B> factory, final byte[] data, final int offset) {
+  static <B extends Borsh> B[] readVector(final Class<B> borshClass,
+                                          final Factory<B> factory,
+                                          final byte[] data,
+                                          final int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     return readArray((B[]) Array.newInstance(borshClass, len), factory, data, offset + Integer.BYTES);
   }
 
-  static <B extends Borsh> B[][] readMultiDimensionVector(final Class<B> borshClass, final Factory<B> factory, final byte[] data, int offset) {
+  static <B extends Borsh> B[][] readMultiDimensionVector(final Class<B> borshClass,
+                                                          final Factory<B> factory,
+                                                          final byte[] data,
+                                                          int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     offset += Integer.BYTES;
-    final B[][] result = (B[][]) Array.newInstance(borshClass, len, 2);
+    final B[][] result = (B[][]) Array.newInstance(borshClass, len, 0);
     for (int i = 0; i < result.length; ++i) {
       final var instance = readVector(borshClass, factory, data, offset);
       result[i] = instance;
       offset += len(instance);
     }
     return result;
+  }
+
+  static <B extends Borsh> B[][] readMultiDimensionVector(final Class<B> borshClass,
+                                                          final Factory<B> factory,
+                                                          final int fixedLength,
+                                                          final byte[] data,
+                                                          final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final B[][] result = (B[][]) Array.newInstance(borshClass, len, fixedLength);
+    return readArray(result, factory, data, offset + Integer.BYTES);
   }
 
   static int fixedWrite(final Borsh[] array, final byte[] data, final int offset) {
