@@ -17,6 +17,9 @@ import static software.sava.core.borsh.Borsh.*;
 
 final class BorshTests {
 
+  private static final int VECTOR_SIZE = 8;
+  private static final int ELEMENTS_PER_ARRAY = 4;
+
   @Test
   void initMultiDimensionalVector() {
     final BigInteger[][] result = (BigInteger[][]) Array.newInstance(BigInteger.class, 8, 0);
@@ -176,9 +179,6 @@ final class BorshTests {
       assertArrayEquals(expectedMatrix[i], result[i]);
     }
   }
-
-  private static final int VECTOR_SIZE = 8;
-  private static final int ELEMENTS_PER_ARRAY = 4;
 
   @Test
   void multiDimensionalBooleans() {
