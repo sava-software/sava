@@ -42,6 +42,8 @@ public interface Borsh {
 
   // Serialization Utility Methods
 
+  // String
+
   static String string(final byte[] data, final int offset) {
     return new String(data, offset + Integer.BYTES, ByteUtil.getInt32LE(data, offset), UTF_8);
   }
@@ -61,10 +63,6 @@ public interface Borsh {
 
   static int write(final String str, final byte[] data, final int offset) {
     return writeVector(str.getBytes(UTF_8), data, offset);
-  }
-
-  static int lenOptional(final Object val, final int len) {
-    return val == null ? 1 : (1 + len);
   }
 
   // byte
@@ -198,14 +196,6 @@ public interface Borsh {
 
   static int lenVector(final byte[] array) {
     return Integer.BYTES + array.length;
-  }
-
-  static int lenOptionalArray(final byte[] array) {
-    if (array == null || array.length == 0) {
-      return 1;
-    } else {
-      return 1 + lenArray(array);
-    }
   }
 
   static int lenOptionalVector(final byte[] array) {
@@ -1090,26 +1080,6 @@ public interface Borsh {
     return i - offset;
   }
 
-  static int writeOptionalArray(final BigInteger[] array, final byte[] data, final int offset) {
-    if (array == null || array.length == 0) {
-      data[offset] = (byte) 0;
-      return 1;
-    } else {
-      data[offset] = (byte) 1;
-      return 1 + writeArray(array, data, offset + 1);
-    }
-  }
-
-  static int writeOptionalVector(final BigInteger[] array, final byte[] data, final int offset) {
-    if (array == null || array.length == 0) {
-      data[offset] = (byte) 0;
-      return 1;
-    } else {
-      data[offset] = (byte) 1;
-      return 1 + writeVector(array, data, offset + 1);
-    }
-  }
-
   static int writeVector(final BigInteger[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -1238,26 +1208,6 @@ public interface Borsh {
   static int writeVector(final PublicKey[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
-  }
-
-  static int writeOptionalVector(final PublicKey[] array, final byte[] data, final int offset) {
-    if (array == null || array.length == 0) {
-      data[offset] = (byte) 0;
-      return 1;
-    } else {
-      data[offset] = (byte) 1;
-      return 1 + writeVector(array, data, offset + 1);
-    }
-  }
-
-  static int writeOptionalArray(final PublicKey[] array, final byte[] data, final int offset) {
-    if (array == null || array.length == 0) {
-      data[offset] = (byte) 0;
-      return 1;
-    } else {
-      data[offset] = (byte) 1;
-      return 1 + writeArray(array, data, offset + 1);
-    }
   }
 
   static int writeArray(final PublicKey[][] array, final byte[] data, final int offset) {
@@ -1418,26 +1368,6 @@ public interface Borsh {
   static int writeVector(final Borsh[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
-  }
-
-  static int writeOptionalVector(final Borsh[] array, final byte[] data, final int offset) {
-    if (array == null || array.length == 0) {
-      data[offset] = (byte) 0;
-      return 1;
-    } else {
-      data[offset] = (byte) 1;
-      return 1 + writeVector(array, data, offset + 1);
-    }
-  }
-
-  static int writeOptionalArray(final Borsh[] array, final byte[] data, final int offset) {
-    if (array == null || array.length == 0) {
-      data[offset] = (byte) 0;
-      return 1;
-    } else {
-      data[offset] = (byte) 1;
-      return 1 + writeArray(array, data, offset + 1);
-    }
   }
 
   static int writeArray(final Borsh[][] array, final byte[] data, final int offset) {
