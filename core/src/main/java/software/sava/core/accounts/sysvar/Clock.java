@@ -20,7 +20,11 @@ public record Clock(PublicKey address,
   public static final BiFunction<PublicKey, byte[], Clock> FACTORY = Clock::read;
 
   public static Clock read(final byte[] data) {
-    return read(null, data, 0);
+    return read(data, 0);
+  }
+
+  public static Clock read(final byte[] data, final int offset) {
+    return read(null, data, offset);
   }
 
   public static Clock read(final PublicKey address, final byte[] data) {
