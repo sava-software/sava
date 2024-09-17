@@ -514,7 +514,7 @@ public interface Borsh {
       result[i] = ByteUtil.getInt32LE(data, o);
       o += Integer.BYTES;
     }
-    return o;
+    return o - offset;
   }
 
   static int readArray(final int[][] result, final byte[] data, final int offset) {
@@ -522,7 +522,7 @@ public interface Borsh {
     for (final var out : result) {
       i += readArray(out, data, i);
     }
-    return i;
+    return i - offset;
   }
 
   static int[] readintVector(final byte[] data, final int offset) {
@@ -921,7 +921,7 @@ public interface Borsh {
     return result;
   }
 
-  static double[][] readMultiDimensionDoubleVector(final byte[] data, int offset) {
+  static double[][] readMultiDimensiondoubleVector(final byte[] data, int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     offset += Integer.BYTES;
     final var result = new double[len][];
@@ -933,7 +933,7 @@ public interface Borsh {
     return result;
   }
 
-  static double[][] readMultiDimensionDoubleVectorArray(final int fixedLength,
+  static double[][] readMultiDimensiondoubleVectorArray(final int fixedLength,
                                                         final byte[] data,
                                                         final int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
