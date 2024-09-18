@@ -58,7 +58,7 @@ record TransactionRecord(AccountMeta feePayer,
   @Override
   public int version() {
     int version = data[messageOffset] & 0xFF;
-    return signedByte(version) ? version & 0x7F : MESSAGE_VERSION_0_PREFIX;
+    return signedByte(version) ? version & 0x7F : VERSIONED_BIT_MASK;
   }
 
   @Override

@@ -14,6 +14,7 @@ import static software.sava.core.accounts.PublicKey.readPubKey;
 import static software.sava.core.accounts.meta.AccountMeta.*;
 import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
+import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 
 record TransactionSkeletonRecord(byte[] data,
                                  int version,
@@ -28,6 +29,16 @@ record TransactionSkeletonRecord(byte[] data,
 
   static final int[] LEGACY_INVOKED_INDEXES = new int[0];
   static final PublicKey[] NO_TABLES = new PublicKey[0];
+
+  @Override
+  public boolean isVersioned() {
+    return version != VERSIONED_BIT_MASK;
+  }
+
+  @Override
+  public boolean isLegacy() {
+    return version == VERSIONED_BIT_MASK;
+  }
 
   @Override
   public int numSignatures() {

@@ -59,7 +59,7 @@ public interface Transaction {
 
   int MSG_HEADER_LENGTH = 3;
   int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
-  byte MESSAGE_VERSION_0_PREFIX = (byte) (1 << 7);
+  byte VERSIONED_BIT_MASK = (byte) (1 << 7);
 
   static String getBase58Id(final byte[] signedTransaction) {
     if (signedTransaction[0] == 0) {
@@ -349,7 +349,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = MESSAGE_VERSION_0_PREFIX;
+    out[i] = VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;
@@ -492,7 +492,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = MESSAGE_VERSION_0_PREFIX;
+    out[i] = VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;

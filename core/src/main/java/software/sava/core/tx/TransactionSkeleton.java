@@ -10,7 +10,7 @@ import java.util.Map;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
-import static software.sava.core.tx.Transaction.MESSAGE_VERSION_0_PREFIX;
+import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
 import static software.sava.core.tx.TransactionSkeletonRecord.LEGACY_INVOKED_INDEXES;
 import static software.sava.core.tx.TransactionSkeletonRecord.NO_TABLES;
@@ -26,11 +26,11 @@ public interface TransactionSkeleton {
     int version = data[o++] & 0xFF;
     final int numRequiredSignatures;
     if (signedByte(version)) {
-      version &= 0x7F;
       numRequiredSignatures = data[o++];
+      version &= 0x7F;
     } else {
       numRequiredSignatures = version;
-      version = MESSAGE_VERSION_0_PREFIX;
+      version = VERSIONED_BIT_MASK;
     }
     final int numReadonlySignedAccounts = data[o++];
     final int numReadonlyUnsignedAccounts = data[o++];
@@ -107,6 +107,10 @@ public interface TransactionSkeleton {
   byte[] data();
 
   int version();
+
+  boolean isVersioned();
+
+  boolean isLegacy();
 
   int numSignatures();
 
