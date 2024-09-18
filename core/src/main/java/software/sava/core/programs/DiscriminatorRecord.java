@@ -1,5 +1,7 @@
 package software.sava.core.programs;
 
+import software.sava.core.tx.Instruction;
+
 import java.util.Arrays;
 
 record DiscriminatorRecord(byte[] data) implements Discriminator {
@@ -42,5 +44,22 @@ record DiscriminatorRecord(byte[] data) implements Discriminator {
   @Override
   public int hashCode() {
     return Arrays.hashCode(data);
+  }
+
+  @Override
+  public boolean equals(final byte[] data, final int offset) {
+    final int len = data.length - offset;
+    return len >= data.length && Arrays.equals(
+        data, 0, data.length,
+        data, offset, offset + data.length
+    );
+  }
+
+  @Override
+  public boolean test(final Instruction ix) {
+    return ix.len() >= data.length && Arrays.equals(
+        data, 0, data.length,
+        ix.data(), ix.offset(), ix.offset() + data.length
+    );
   }
 }

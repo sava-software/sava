@@ -1,8 +1,11 @@
 package software.sava.core.programs;
 
 import software.sava.core.encoding.ByteUtil;
+import software.sava.core.tx.Instruction;
 
-public interface Discriminator {
+import java.util.function.Predicate;
+
+public interface Discriminator extends Predicate<Instruction> {
 
   int NATIVE_DISCRIMINATOR_LENGTH = Integer.BYTES;
 
@@ -53,4 +56,6 @@ public interface Discriminator {
   default int length() {
     return data().length;
   }
+
+  boolean equals(final byte[] data, final int offset);
 }
