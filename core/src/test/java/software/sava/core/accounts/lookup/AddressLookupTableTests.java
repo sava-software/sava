@@ -23,9 +23,9 @@ final class AddressLookupTableTests {
     assertEquals(282549996, alt.lastExtendedSlot());
     assertEquals(60, alt.lastExtendedSlotStartIndex());
     assertNull(alt.authority());
-    assertEquals(75, alt.accounts().length);
-    assertEquals(0, alt.indexOf(PublicKey.fromBase58Encoded("11111111111111111111111111111111")));
-    assertEquals(42, alt.indexOf(PublicKey.fromBase58Encoded("4QYCpT8EwU3gM35VPZHzaEhtH7E8waxHJMYSxPBxWSWQ")));
-    assertEquals(74, alt.indexOf(PublicKey.fromBase58Encoded("CWUjm2fFPLsRtmPRDQgeFB9uwg5N4A2KFStAYj1oMkk7")));
+    assertEquals(74, alt.accounts().length);
+    assertEquals(0, alt.indexOf(PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")));
+    assertEquals(42, alt.indexOf(PublicKey.fromBase58Encoded("GTq8bjCKaPXYgcSV2mj5iqEdAHgvaZbTz8HYcUatYQTg")));
+    assertEquals(73, alt.indexOf(PublicKey.fromBase58Encoded("CWUjm2fFPLsRtmPRDQgeFB9uwg5N4A2KFStAYj1oMkk7")));
   }
 }
