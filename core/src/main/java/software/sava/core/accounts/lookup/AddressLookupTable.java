@@ -54,14 +54,15 @@ public record AddressLookupTable(PublicKey address,
     final int lastExtendedSlotStartIndex = data[offset] & 0xFF;
     ++offset;
     final PublicKey authority;
-    if (data[offset] == 0) {
+    if (data[offset++] == 0) {
       authority = null;
+      offset += Short.BYTES;
     } else {
-      authority = readPubKey(data, ++offset);
+      authority = readPubKey(data, offset);
+      offset = LOOKUP_TABLE_META_SIZE;
     }
-    offset = LOOKUP_TABLE_META_SIZE;
     final int to = data.length;
-    final int numAccounts = (to - LOOKUP_TABLE_META_SIZE) >> 5;
+    final int numAccounts = (to - offset) >> 5;
     final PublicKey[] accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
     for (int i = 0; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {

@@ -7,11 +7,14 @@ import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
-import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
+import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 import static software.sava.core.tx.TransactionSkeletonRecord.LEGACY_INVOKED_INDEXES;
 import static software.sava.core.tx.TransactionSkeletonRecord.NO_TABLES;
 
@@ -127,6 +130,12 @@ public interface TransactionSkeleton {
   AccountMeta[] parseAccounts();
 
   AccountMeta[] parseAccounts(final Map<PublicKey, AddressLookupTable> lookupTables);
+
+  default AccountMeta[] parseAccounts(final Stream<AddressLookupTable> lookupTables) {
+    final var lookupTableMap = lookupTables.collect(Collectors
+        .toUnmodifiableMap(AddressLookupTable::address, Function.identity()));
+    return parseAccounts(lookupTableMap);
+  }
 
   AccountMeta[] parseAccounts(final AddressLookupTable lookupTable);
 
