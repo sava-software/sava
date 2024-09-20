@@ -25,12 +25,16 @@ public interface AddressLookupTable {
   BiFunction<PublicKey, byte[], AddressLookupTable> FACTORY = AddressLookupTable::read;
 
   static AddressLookupTable read(final PublicKey address, final byte[] data) {
+    return read(address, data, 0);
+  }
+
+  static AddressLookupTable read(final PublicKey address, final byte[] data, int offset) {
     if (data == null || data.length == 0) {
       return null;
     }
     final byte[] discriminator = new byte[4];
     System.arraycopy(data, 0, discriminator, 0, 4);
-    int offset = 4;
+    offset += 4;
     final long deactivationSlot = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;
     final long lastExtendedSlot = ByteUtil.getInt64LE(data, offset);
