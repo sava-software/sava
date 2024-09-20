@@ -3,6 +3,7 @@ package software.sava.core.programs;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.tx.Instruction;
 
+import java.util.Arrays;
 import java.util.function.Predicate;
 
 public interface Discriminator extends Predicate<Instruction> {
@@ -57,5 +58,17 @@ public interface Discriminator extends Predicate<Instruction> {
     return data().length;
   }
 
-  boolean equals(final byte[] data, final int offset);
+  default boolean equals(final byte[] data, final int offset) {
+    final byte[] thisData = data();
+    final int len = data.length - offset;
+    return len >= thisData.length && Arrays.equals(
+        thisData, 0, thisData.length,
+        data, offset, offset + data.length
+    );
+  }
+
+  @Override
+  default boolean test(final Instruction ix) {
+    return equals(ix.data(), ix.offset());
+  }
 }

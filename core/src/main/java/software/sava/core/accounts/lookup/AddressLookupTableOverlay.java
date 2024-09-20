@@ -120,16 +120,14 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
   }
 
   @Override
-  public boolean equals(Object obj) {
-    if (obj == this) return true;
-    if (obj == null || obj.getClass() != this.getClass()) return false;
-    final var that = (AddressLookupTableOverlay) obj;
-    return Objects.equals(this.address, that.address) && Arrays.equals(this.data, that.data);
+  public boolean equals(final Object obj) {
+    return obj instanceof AddressLookupTableOverlay overlay
+        && address.equals(overlay.address)
+        && Arrays.equals(data, overlay.data);
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(address, Arrays.hashCode(data));
   }
-
 }
