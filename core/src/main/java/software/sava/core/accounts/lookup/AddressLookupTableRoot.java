@@ -5,9 +5,22 @@ import software.sava.core.accounts.PublicKey;
 abstract class AddressLookupTableRoot implements AddressLookupTable {
 
   protected final PublicKey address;
+  protected final byte[] data;
 
-  AddressLookupTableRoot(final PublicKey address) {
+  AddressLookupTableRoot(final PublicKey address, final byte[] data) {
     this.address = address;
+    this.data = data;
+  }
+
+  @Override
+  public final int write(final byte[] out, final int offset) {
+    System.arraycopy(out, offset, data, 0, data.length);
+    return data.length;
+  }
+
+  @Override
+  public byte[] data() {
+    return data;
   }
 
   @Override

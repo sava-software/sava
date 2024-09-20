@@ -5,8 +5,7 @@ import software.sava.core.accounts.PublicKey;
 
 import java.util.Base64;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class AddressLookupTableTests {
 
@@ -31,9 +30,14 @@ final class AddressLookupTableTests {
     final var address = PublicKey.fromBase58Encoded("7BuoqMBFuAk9xkd5KguaXP8w1brsyBNdDP7EuHDra8s7");
     var alt = AddressLookupTable.FACTORY.apply(address, data);
     validate7BouqALT(address, alt);
+    assertArrayEquals(data, alt.data());
+
     alt = AddressLookupTable.readWithoutReverseLookup(address, data);
     validate7BouqALT(address, alt);
+    assertArrayEquals(data, alt.data());
+
     alt = alt.withReverseLookup();
     validate7BouqALT(address, alt);
+    assertArrayEquals(data, alt.data());
   }
 }

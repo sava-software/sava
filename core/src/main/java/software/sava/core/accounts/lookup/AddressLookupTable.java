@@ -59,7 +59,8 @@ public interface AddressLookupTable {
         lastExtendedSlotStartIndex,
         authority,
         accounts,
-        reverseLookupTable
+        reverseLookupTable,
+        data
     );
   }
 
@@ -99,4 +100,12 @@ public interface AddressLookupTable {
   PublicKey authority();
 
   int numAccounts();
+
+  int write(final byte[] out, final int offset);
+
+  byte[] data();
+
+  default int dataLength() {
+    return data().length;
+  }
 }

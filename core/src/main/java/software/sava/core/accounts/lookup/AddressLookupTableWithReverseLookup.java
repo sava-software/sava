@@ -22,8 +22,9 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
                                       final int lastExtendedSlotStartIndex,
                                       final PublicKey authority,
                                       final PublicKey[] accounts,
-                                      final AccountIndexLookupTableEntry[] reverseLookupTable) {
-    super(address);
+                                      final AccountIndexLookupTableEntry[] reverseLookupTable,
+                                      final byte[] data) {
+    super(address, data);
     this.discriminator = discriminator;
     this.deactivationSlot = deactivationSlot;
     this.lastExtendedSlot = lastExtendedSlot;

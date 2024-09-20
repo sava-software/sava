@@ -13,11 +13,8 @@ import static software.sava.core.accounts.PublicKey.readPubKey;
 
 final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
-  private final byte[] data;
-
   AddressLookupTableOverlay(final PublicKey address, final byte[] data) {
-    super(address);
-    this.data = data;
+    super(address, data);
   }
 
   @Override
@@ -68,7 +65,8 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
         lastExtendedSlotStartIndex(),
         authority(),
         accounts,
-        reverseLookupTable
+        reverseLookupTable,
+        data
     );
   }
 

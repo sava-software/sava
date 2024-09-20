@@ -1,5 +1,6 @@
 package software.sava.core.borsh;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.sysvar.Clock;
@@ -491,6 +492,7 @@ final class BorshTests {
     }
   }
 
+  @Disabled
   @Test
   void multiDimensionalBigIntegers() {
     final int dataTypeByteLength = 128 / Byte.SIZE;

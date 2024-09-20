@@ -79,22 +79,11 @@ public final class ByteUtil {
   }
 
   public static int putInt128LE(final byte[] data, final int offset, final BigInteger val) {
-    final byte[] be = val.toByteArray();
-    for (int i = be.length - 1, le = offset; i >= 0; --i, ++le) {
-      data[le] = be[i];
-    }
-    if (val.signum() < 0) {
-      data[offset + 15] |= (byte) 0b1000_0000;
-    }
-    return 16;
+    throw new UnsupportedOperationException("TODO: convert 2's compliment encoding to regular LE byte encoding.");
   }
 
   public static BigInteger getInt128LE(final byte[] data, final int offset) {
-    final byte[] be = new byte[16];
-    for (int i = be.length - 1, le = offset; i >= 0; --i, ++le) {
-      be[i] = data[le];
-    }
-    return new BigInteger(be);
+    throw new UnsupportedOperationException("TODO: convert 2's compliment encoding to regular LE byte encoding.");
   }
 
   public static int indexOf(final byte[] data, final int start, final int end,
