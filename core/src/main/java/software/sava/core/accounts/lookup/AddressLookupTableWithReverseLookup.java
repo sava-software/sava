@@ -7,6 +7,11 @@ import java.util.Objects;
 
 final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
 
+  private final byte[] discriminator;
+  private final long deactivationSlot;
+  private final long lastExtendedSlot;
+  private final int lastExtendedSlotStartIndex;
+  private final PublicKey authority;
   private final PublicKey[] accounts;
   private final AccountIndexLookupTableEntry[] reverseLookupTable;
 
@@ -18,7 +23,12 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
                                       final PublicKey authority,
                                       final PublicKey[] accounts,
                                       final AccountIndexLookupTableEntry[] reverseLookupTable) {
-    super(address, discriminator, deactivationSlot, lastExtendedSlot, lastExtendedSlotStartIndex, authority);
+    super(address);
+    this.discriminator = discriminator;
+    this.deactivationSlot = deactivationSlot;
+    this.lastExtendedSlot = lastExtendedSlot;
+    this.lastExtendedSlotStartIndex = lastExtendedSlotStartIndex;
+    this.authority = authority;
     this.accounts = accounts;
     this.reverseLookupTable = reverseLookupTable;
   }
@@ -46,6 +56,31 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   @Override
   public int numAccounts() {
     return accounts.length;
+  }
+
+  @Override
+  public byte[] discriminator() {
+    return discriminator;
+  }
+
+  @Override
+  public long deactivationSlot() {
+    return deactivationSlot;
+  }
+
+  @Override
+  public long lastExtendedSlot() {
+    return lastExtendedSlot;
+  }
+
+  @Override
+  public int lastExtendedSlotStartIndex() {
+    return lastExtendedSlotStartIndex;
+  }
+
+  @Override
+  public PublicKey authority() {
+    return authority;
   }
 
   @Override

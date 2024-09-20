@@ -37,12 +37,9 @@ public interface AddressLookupTable {
     offset += Long.BYTES;
     final int lastExtendedSlotStartIndex = data[offset] & 0xFF;
     ++offset;
-    final PublicKey authority;
-    if (data[offset++] == 0) {
-      authority = null;
-    } else {
-      authority = readPubKey(data, offset);
-    }
+    final var authority = data[offset] == 0
+        ? null
+        : readPubKey(data, offset + 1);
     offset = LOOKUP_TABLE_META_SIZE;
     final int to = data.length;
     final int numAccounts = (to - offset) >> 5;
@@ -70,34 +67,7 @@ public interface AddressLookupTable {
     if (data == null || data.length == 0) {
       return null;
     }
-    final byte[] discriminator = new byte[4];
-    System.arraycopy(data, 0, discriminator, 0, 4);
-    int offset = 4;
-    final long deactivationSlot = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final long lastExtendedSlot = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final int lastExtendedSlotStartIndex = data[offset] & 0xFF;
-    ++offset;
-    final PublicKey authority;
-    if (data[offset++] == 0) {
-      authority = null;
-    } else {
-      authority = readPubKey(data, offset);
-    }
-    offset = LOOKUP_TABLE_META_SIZE;
-    final int to = data.length;
-    final int numAccounts = (to - offset) >> 5;
-    return new AddressLookupTableOverlay(
-        address,
-        discriminator,
-        deactivationSlot,
-        lastExtendedSlot,
-        lastExtendedSlotStartIndex,
-        authority,
-        numAccounts,
-        data
-    );
+    return new AddressLookupTableOverlay(address, data);
   }
 
   AddressLookupTable withReverseLookup();

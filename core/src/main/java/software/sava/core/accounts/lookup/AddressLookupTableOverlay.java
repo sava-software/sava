@@ -1,6 +1,7 @@
 package software.sava.core.accounts.lookup;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.encoding.ByteUtil;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -12,24 +13,45 @@ import static software.sava.core.accounts.PublicKey.readPubKey;
 
 final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
-  private final int numAccounts;
   private final byte[] data;
 
-  AddressLookupTableOverlay(final PublicKey address,
-                            final byte[] discriminator,
-                            final long deactivationSlot,
-                            final long lastExtendedSlot,
-                            final int lastExtendedSlotStartIndex,
-                            final PublicKey authority,
-                            final int numAccounts,
-                            final byte[] data) {
-    super(address, discriminator, deactivationSlot, lastExtendedSlot, lastExtendedSlotStartIndex, authority);
-    this.numAccounts = numAccounts;
+  AddressLookupTableOverlay(final PublicKey address, final byte[] data) {
+    super(address);
     this.data = data;
   }
 
   @Override
+  public byte[] discriminator() {
+    final byte[] discriminator = new byte[4];
+    System.arraycopy(data, 0, discriminator, 0, 4);
+    return discriminator;
+  }
+
+  @Override
+  public long deactivationSlot() {
+    return ByteUtil.getInt64LE(data, DEACTIVATION_SLOT_OFFSET);
+  }
+
+  @Override
+  public long lastExtendedSlot() {
+    return ByteUtil.getInt64LE(data, LAST_EXTENDED_OFFSET);
+  }
+
+  @Override
+  public int lastExtendedSlotStartIndex() {
+    return data[LAST_EXTENDED_SLOT_START_INDEX_OFFSET] & 0xFF;
+  }
+
+  @Override
+  public PublicKey authority() {
+    return data[AUTHORITY_OPTION_OFFSET] == 0
+        ? null
+        : readPubKey(data, AUTHORITY_OFFSET);
+  }
+
+  @Override
   public AddressLookupTable withReverseLookup() {
+    final int numAccounts = numAccounts();
     final var accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
     for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
@@ -40,11 +62,11 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
     Arrays.sort(reverseLookupTable);
     return new AddressLookupTableWithReverseLookup(
         address,
-        discriminator,
-        deactivationSlot,
-        lastExtendedSlot,
-        lastExtendedSlotStartIndex,
-        authority,
+        discriminator(),
+        deactivationSlot(),
+        lastExtendedSlot(),
+        lastExtendedSlotStartIndex(),
+        authority(),
         accounts,
         reverseLookupTable
     );
@@ -82,7 +104,7 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
   @Override
   public int numAccounts() {
-    return numAccounts;
+    return (data.length - LOOKUP_TABLE_META_SIZE) >> 5;
   }
 
   public byte[] data() {
@@ -102,19 +124,12 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
     if (obj == this) return true;
     if (obj == null || obj.getClass() != this.getClass()) return false;
     final var that = (AddressLookupTableOverlay) obj;
-    return Objects.equals(this.address, that.address) &&
-        Arrays.equals(this.discriminator, that.discriminator) &&
-        this.deactivationSlot == that.deactivationSlot &&
-        this.lastExtendedSlot == that.lastExtendedSlot &&
-        this.lastExtendedSlotStartIndex == that.lastExtendedSlotStartIndex &&
-        Objects.equals(this.authority, that.authority) &&
-        this.numAccounts == that.numAccounts &&
-        Arrays.equals(this.data, that.data);
+    return Objects.equals(this.address, that.address) && Arrays.equals(this.data, that.data);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(address, Arrays.hashCode(discriminator), deactivationSlot, lastExtendedSlot, lastExtendedSlotStartIndex, authority, numAccounts, Arrays.hashCode(data));
+    return Objects.hash(address, Arrays.hashCode(data));
   }
 
 }
