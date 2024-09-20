@@ -28,29 +28,29 @@ public interface AddressLookupTable {
     return read(address, data, 0);
   }
 
-  static AddressLookupTable read(final PublicKey address, final byte[] data, int offset) {
+  static AddressLookupTable read(final PublicKey address, final byte[] data, final int offset) {
     if (data == null || data.length == 0) {
       return null;
     }
     final byte[] discriminator = new byte[4];
     System.arraycopy(data, 0, discriminator, 0, 4);
-    offset += 4;
-    final long deactivationSlot = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final long lastExtendedSlot = ByteUtil.getInt64LE(data, offset);
-    offset += Long.BYTES;
-    final int lastExtendedSlotStartIndex = data[offset] & 0xFF;
-    ++offset;
-    final var authority = data[offset] == 0
+    int o = offset + 4;
+    final long deactivationSlot = ByteUtil.getInt64LE(data, o);
+    o += Long.BYTES;
+    final long lastExtendedSlot = ByteUtil.getInt64LE(data, o);
+    o += Long.BYTES;
+    final int lastExtendedSlotStartIndex = data[o] & 0xFF;
+    ++o;
+    final var authority = data[o] == 0
         ? null
-        : readPubKey(data, offset + 1);
-    offset = LOOKUP_TABLE_META_SIZE;
+        : readPubKey(data, o + 1);
+    o = LOOKUP_TABLE_META_SIZE;
     final int to = data.length;
-    final int numAccounts = (to - offset) >> 5;
+    final int numAccounts = (to - o) >> 5;
     final var accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
-    for (int i = 0; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
-      final var pubKey = readPubKey(data, offset);
+    for (int i = 0; o < data.length; ++i, o += PUBLIC_KEY_LENGTH) {
+      final var pubKey = readPubKey(data, o);
       accounts[i] = pubKey;
       reverseLookupTable[i] = new AccountIndexLookupTableEntry(pubKey.toByteArray(), i);
     }
@@ -64,7 +64,7 @@ public interface AddressLookupTable {
         authority,
         accounts,
         reverseLookupTable,
-        data
+        offset == 0 && o == data.length ? data : Arrays.copyOfRange(data, offset, o)
     );
   }
 

@@ -14,7 +14,7 @@ abstract class AddressLookupTableRoot implements AddressLookupTable {
 
   @Override
   public final int write(final byte[] out, final int offset) {
-    System.arraycopy(out, offset, data, 0, data.length);
+    System.arraycopy(data, 0, out, offset, data.length);
     return data.length;
   }
 
