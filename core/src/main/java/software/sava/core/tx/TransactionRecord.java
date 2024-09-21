@@ -112,6 +112,19 @@ record TransactionRecord(AccountMeta feePayer,
     }
   }
 
+  private Transaction setBlockHash(final Transaction transaction) {
+    if (transaction instanceof TransactionRecord transactionRecord) {
+      System.arraycopy(
+          this.data, this.recentBlockHashIndex,
+          transactionRecord.data, transactionRecord.recentBlockHashIndex,
+          Transaction.BLOCK_HASH_LENGTH
+      );
+    } else {
+      transaction.setRecentBlockHash(recentBlockHash());
+    }
+    return transaction;
+  }
+
   @Override
   public Transaction prependIx(final Instruction ix) {
     final var ixArray = new Instruction[1 + instructions.size()];
@@ -121,7 +134,7 @@ record TransactionRecord(AccountMeta feePayer,
       ixArray[i++] = _ix;
     }
     resetTableMetas();
-    return Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas);
+    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
   }
 
   @Override
@@ -134,7 +147,7 @@ record TransactionRecord(AccountMeta feePayer,
       ixArray[i++] = _ix;
     }
     resetTableMetas();
-    return Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas);
+    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
   }
 
   @Override
@@ -148,6 +161,6 @@ record TransactionRecord(AccountMeta feePayer,
       ixArray[i++] = ix;
     }
     resetTableMetas();
-    return Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas);
+    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
   }
 }
