@@ -5,6 +5,7 @@ import software.sava.core.accounts.sysvar.Clock;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
@@ -43,12 +44,19 @@ public interface AddressLookupTable {
     offset = LOOKUP_TABLE_META_SIZE;
     final int to = data.length;
     final int numAccounts = (to - offset) >> 5;
+    final var distinctAccounts = HashMap.<PublicKey, PublicKey>newHashMap(numAccounts);
     final var accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
     for (int i = 0; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
       final var pubKey = readPubKey(data, offset);
-      accounts[i] = pubKey;
-      reverseLookupTable[i] = new AccountIndexLookupTableEntry(pubKey.toByteArray(), i);
+      final var previous = distinctAccounts.putIfAbsent(pubKey, pubKey);
+      if (previous == null) {
+        accounts[i] = pubKey;
+        reverseLookupTable[i] = new AccountIndexLookupTableEntry(pubKey.toByteArray(), i);
+      } else {
+        accounts[i] = previous;
+        reverseLookupTable[i] = new AccountIndexLookupTableEntry(previous.toByteArray(), i);
+      }
     }
     Arrays.sort(reverseLookupTable);
     return new AddressLookupTableWithReverseLookup(
@@ -58,6 +66,7 @@ public interface AddressLookupTable {
         lastExtendedSlot,
         lastExtendedSlotStartIndex,
         authority,
+        distinctAccounts,
         accounts,
         reverseLookupTable,
         data
@@ -100,6 +109,8 @@ public interface AddressLookupTable {
   PublicKey authority();
 
   int numAccounts();
+
+  int numUniqueAccounts();
 
   int write(final byte[] out, final int offset);
 

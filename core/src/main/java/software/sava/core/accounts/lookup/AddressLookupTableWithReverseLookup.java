@@ -3,6 +3,7 @@ package software.sava.core.accounts.lookup;
 import software.sava.core.accounts.PublicKey;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 
 final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
@@ -12,6 +13,7 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   private final long lastExtendedSlot;
   private final int lastExtendedSlotStartIndex;
   private final PublicKey authority;
+  private final Map<PublicKey, PublicKey> distinctAccounts;
   private final PublicKey[] accounts;
   private final AccountIndexLookupTableEntry[] reverseLookupTable;
 
@@ -21,6 +23,7 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
                                       final long lastExtendedSlot,
                                       final int lastExtendedSlotStartIndex,
                                       final PublicKey authority,
+                                      final Map<PublicKey, PublicKey> distinctAccounts,
                                       final PublicKey[] accounts,
                                       final AccountIndexLookupTableEntry[] reverseLookupTable,
                                       final byte[] data) {
@@ -32,6 +35,7 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
     this.authority = authority;
     this.accounts = accounts;
     this.reverseLookupTable = reverseLookupTable;
+    this.distinctAccounts = distinctAccounts;
   }
 
   @Override
@@ -50,6 +54,11 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   }
 
   @Override
+  public boolean containKey(final PublicKey publicKey) {
+    return distinctAccounts.containsKey(publicKey);
+  }
+
+  @Override
   public byte indexOfOrThrow(final PublicKey publicKey) {
     return AccountIndexLookupTableEntry.lookupAccountIndexOrThrow(this.reverseLookupTable, publicKey);
   }
@@ -57,6 +66,11 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   @Override
   public int numAccounts() {
     return accounts.length;
+  }
+
+  @Override
+  public int numUniqueAccounts() {
+    return distinctAccounts.size();
   }
 
   @Override

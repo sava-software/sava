@@ -4,6 +4,8 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -49,12 +51,19 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
   @Override
   public AddressLookupTable withReverseLookup() {
     final int numAccounts = numAccounts();
+    final var distinctAccounts = HashMap.<PublicKey, PublicKey>newHashMap(numAccounts);
     final var accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
     for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
       final var pubKey = readPubKey(data, offset);
-      accounts[i] = pubKey;
-      reverseLookupTable[i] = new AccountIndexLookupTableEntry(pubKey.toByteArray(), i);
+      final var previous = distinctAccounts.putIfAbsent(pubKey, pubKey);
+      if (previous == null) {
+        accounts[i] = pubKey;
+        reverseLookupTable[i] = new AccountIndexLookupTableEntry(pubKey.toByteArray(), i);
+      } else {
+        accounts[i] = previous;
+        reverseLookupTable[i] = new AccountIndexLookupTableEntry(previous.toByteArray(), i);
+      }
     }
     Arrays.sort(reverseLookupTable);
     return new AddressLookupTableWithReverseLookup(
@@ -64,10 +73,25 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
         lastExtendedSlot(),
         lastExtendedSlotStartIndex(),
         authority(),
+        distinctAccounts,
         accounts,
         reverseLookupTable,
         data
     );
+  }
+
+  @Override
+  public int numUniqueAccounts() {
+    final int numAccounts = numAccounts();
+    final var distinctAccounts = HashSet.<PublicKey>newHashSet(numAccounts);
+    int numUnique = 0;
+    for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
+      final var pubKey = readPubKey(data, offset);
+      if (distinctAccounts.add(pubKey)) {
+        ++numUnique;
+      }
+    }
+    return numUnique;
   }
 
   @Override
@@ -103,10 +127,6 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
   @Override
   public int numAccounts() {
     return (data.length - LOOKUP_TABLE_META_SIZE) >> 5;
-  }
-
-  public byte[] data() {
-    return data;
   }
 
   @Override
