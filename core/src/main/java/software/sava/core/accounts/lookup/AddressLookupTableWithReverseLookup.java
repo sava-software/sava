@@ -2,9 +2,7 @@ package software.sava.core.accounts.lookup;
 
 import software.sava.core.accounts.PublicKey;
 
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
 
@@ -71,6 +69,11 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   @Override
   public int numUniqueAccounts() {
     return distinctAccounts.size();
+  }
+
+  @Override
+  public Set<PublicKey> uniqueAccounts() {
+    return Collections.unmodifiableSet(distinctAccounts.keySet());
   }
 
   @Override

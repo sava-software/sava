@@ -3,10 +3,7 @@ package software.sava.core.accounts.lookup;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -92,6 +89,17 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
       }
     }
     return numUnique;
+  }
+
+  @Override
+  public Set<PublicKey> uniqueAccounts() {
+    final int numAccounts = numAccounts();
+    final var distinctAccounts = HashSet.<PublicKey>newHashSet(numAccounts);
+    for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
+      final var pubKey = readPubKey(data, offset);
+      distinctAccounts.add(pubKey);
+    }
+    return distinctAccounts;
   }
 
   @Override

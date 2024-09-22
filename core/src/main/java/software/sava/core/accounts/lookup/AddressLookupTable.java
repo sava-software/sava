@@ -6,6 +6,7 @@ import software.sava.core.encoding.ByteUtil;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
@@ -119,4 +120,6 @@ public interface AddressLookupTable {
   default int dataLength() {
     return data().length;
   }
+
+  Set<PublicKey> uniqueAccounts();
 }
