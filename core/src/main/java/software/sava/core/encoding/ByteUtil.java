@@ -78,13 +78,68 @@ public final class ByteUtil {
     return (long) LONG_LE.get(b, off);
   }
 
+  private static int putIntLE(final byte[] data, final int offset,
+                              final BigInteger val,
+                              final int byteSize) {
+    final byte[] be = val.abs().toByteArray();
+    for (int i = 0, o = offset + (be.length - 1); i < be.length; ++i, --o) {
+      data[o] = be[i];
+    }
+    if (val.signum() < 0) {
+      data[offset + (byteSize - 1)] |= (byte) 0b1000_0000;
+    }
+    return byteSize;
+  }
+
+  private static BigInteger getUIntLE(final byte[] data, final int offset, final int byteSize) {
+    final byte[] be = new byte[byteSize];
+    for (int i = 0, o = offset + (byteSize - 1); i < be.length; ++i, --o) {
+      be[i] = data[o];
+    }
+    return new BigInteger(be);
+  }
+
+  private static BigInteger getIntLE(final byte[] data, final int offset, final int byteSize) {
+    int o = offset + (byteSize - 1);
+    final boolean signed = (data[o] & 0b1000_0000) == 0b1000_0000;
+    final byte[] be = new byte[byteSize];
+    byte b = (byte) (data[o--] & 0b0111_1111);
+    boolean zero = b == 0;
+    be[0] = b;
+    for (int i = 1; i < be.length; ++i, --o) {
+      b = data[o];
+      be[i] = b;
+      if (zero) {
+        zero = b == 0;
+      }
+    }
+    return new BigInteger(signed ? -1 : zero ? 0 : 1, be);
+  }
+
   public static int putInt128LE(final byte[] data, final int offset, final BigInteger val) {
-    throw new UnsupportedOperationException("TODO: convert 2's compliment encoding to regular LE byte encoding.");
+    return putIntLE(data, offset, val, 16);
+  }
+
+  public static BigInteger getUInt128LE(final byte[] data, final int offset) {
+    return getUIntLE(data, offset, 16);
   }
 
   public static BigInteger getInt128LE(final byte[] data, final int offset) {
-    throw new UnsupportedOperationException("TODO: convert 2's compliment encoding to regular LE byte encoding.");
+    return getIntLE(data, offset, 16);
   }
+
+  public static int putInt256LE(final byte[] data, final int offset, final BigInteger val) {
+    return putIntLE(data, offset, val, 32);
+  }
+
+  public static BigInteger getUInt256LE(final byte[] data, final int offset) {
+    return getUIntLE(data, offset, 32);
+  }
+
+  public static BigInteger getInt256LE(final byte[] data, final int offset) {
+    return getIntLE(data, offset, 32);
+  }
+
 
   public static int indexOf(final byte[] data, final int start, final int end,
                             final byte[] sub, final int subStart, final int subEnd) {
