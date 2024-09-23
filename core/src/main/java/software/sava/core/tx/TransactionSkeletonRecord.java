@@ -98,6 +98,15 @@ record TransactionSkeletonRecord(byte[] data,
     return accounts;
   }
 
+  @Override
+  public PublicKey[] parseNonSignerPublicKeys() {
+    final var accounts = new PublicKey[numIncludedAccounts - numSigners];
+    for (int a = 0, o = accountsOffset + (numSigners * PUBLIC_KEY_LENGTH); a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = readPubKey(data, o);
+    }
+    return accounts;
+  }
+
   private AccountMeta parseVersionedReadAccount(final PublicKey pubKey, final int a) {
     return Arrays.binarySearch(invokedIndexes, a) < 0 ? createRead(pubKey) : createInvoked(pubKey);
   }

@@ -2,12 +2,6 @@ package software.sava.core.accounts.lookup;
 
 import software.sava.core.accounts.PublicKey;
 
-import java.util.HashSet;
-import java.util.Set;
-
-import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
-import static software.sava.core.accounts.PublicKey.readPubKey;
-
 abstract class AddressLookupTableRoot implements AddressLookupTable {
 
   protected final PublicKey address;
@@ -25,12 +19,12 @@ abstract class AddressLookupTableRoot implements AddressLookupTable {
   }
 
   @Override
-  public byte[] data() {
+  public final byte[] data() {
     return data;
   }
 
   @Override
-  public PublicKey address() {
+  public final PublicKey address() {
     return address;
   }
 

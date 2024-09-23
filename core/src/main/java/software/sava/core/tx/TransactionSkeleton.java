@@ -139,6 +139,8 @@ public interface TransactionSkeleton {
 
   AccountMeta[] parseNonSignerAccounts();
 
+  PublicKey[] parseNonSignerPublicKeys();
+
   AccountMeta[] parseAccounts(final AddressLookupTable lookupTable);
 
   int serializedInstructionsLength();
