@@ -86,13 +86,14 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public AccountMeta[] parseNonSignerAccounts() {
-    final var accounts = new AccountMeta[numIncludedAccounts - numSigners];
+    final int numAccounts = numIncludedAccounts - numSigners;
+    final var accounts = new AccountMeta[numAccounts];
     int o = accountsOffset + (numSigners * PUBLIC_KEY_LENGTH);
     int a = 0;
-    for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
+    for (final int to = numAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = createWrite(readPubKey(data, o));
     }
-    for (; a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
+    for (; a < numAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = createRead(readPubKey(data, o));
     }
     return accounts;
@@ -100,8 +101,9 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public PublicKey[] parseNonSignerPublicKeys() {
-    final var accounts = new PublicKey[numIncludedAccounts - numSigners];
-    for (int a = 0, o = accountsOffset + (numSigners * PUBLIC_KEY_LENGTH); a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
+    final int numAccounts = numIncludedAccounts - numSigners;
+    final var accounts = new PublicKey[numAccounts];
+    for (int a = 0, o = accountsOffset + (numSigners * PUBLIC_KEY_LENGTH); a < numAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = readPubKey(data, o);
     }
     return accounts;
