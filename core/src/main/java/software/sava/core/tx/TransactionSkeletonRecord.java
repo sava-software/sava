@@ -192,19 +192,32 @@ record TransactionSkeletonRecord(byte[] data,
     return instructions;
   }
 
+  @Override
+  public PublicKey[] parseProgramAccounts() {
+    final var programs = new PublicKey[numInstructions];
+    for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
+      programAccountIndex = data[o++] & 0xFF;
+      programs[i] = PublicKey.readPubKey(data, accountsOffset + (programAccountIndex * PUBLIC_KEY_LENGTH));
+      numIxAccounts = CompactU16Encoding.decode(data, o);
+      o += 1 + numIxAccounts;
+      len = CompactU16Encoding.decode(data, o);
+      o += 1 + len;
+    }
+    return programs;
+  }
+
   private static final List<AccountMeta> NO_ACCOUNTS = List.of();
 
   @Override
   public Instruction[] parseInstructionsWithoutAccounts() {
     final var instructions = new Instruction[numInstructions];
-    for (int i = 0, o = instructionsOffset, numIxAccounts; i < numInstructions; ++i) {
+    for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
       final int programAccountIndex = data[o++] & 0xFF;
       final var programAccount = PublicKey.readPubKey(data, accountsOffset + (programAccountIndex * PUBLIC_KEY_LENGTH));
       numIxAccounts = CompactU16Encoding.decode(data, o);
-      ++o;
-      o += numIxAccounts;
+      o += 1 + numIxAccounts;
 
-      final int len = CompactU16Encoding.decode(data, o);
+      len = CompactU16Encoding.decode(data, o);
       ++o;
       instructions[i] = createInstruction(programAccount, NO_ACCOUNTS, data, o, len);
       o += len;

@@ -149,6 +149,8 @@ public interface TransactionSkeleton {
     return parseInstructions(parseAccounts());
   }
 
+  PublicKey[] parseProgramAccounts();
+
   Instruction[] parseInstructionsWithoutAccounts();
 
   Instruction[] parseInstructionsWithAccounts();
