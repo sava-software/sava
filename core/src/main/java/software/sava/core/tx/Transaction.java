@@ -22,6 +22,7 @@ public interface Transaction {
   int MAX_SERIALIZED_LENGTH = 1232;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
+  int MAX_ACCOUNTS = 64;
 
   BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
@@ -60,6 +61,7 @@ public interface Transaction {
   int MSG_HEADER_LENGTH = 3;
   int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
   byte VERSIONED_BIT_MASK = (byte) (1 << 7);
+  int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
 
   static String getBase58Id(final byte[] signedTransaction) {
     if (signedTransaction[0] == 0) {
@@ -110,11 +112,10 @@ public interface Transaction {
   }
 
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {
-    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(256);
+    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
     return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(accounts));
   }
-
 
   static Transaction createTx(final AccountMeta feePayer, final Instruction instruction) {
     return createTx(feePayer, List.of(instruction));
@@ -130,7 +131,7 @@ public interface Transaction {
     if (lookupTable == null) {
       return createTx(feePayer, instructions);
     }
-    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(256);
+    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
     return createTx(instructions, serializedInstructionLength, sortV0Accounts(accounts), lookupTable);
   }
@@ -389,7 +390,7 @@ public interface Transaction {
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final LookupTableAccountMeta[] tableAccountMetas) {
-    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(256);
+    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
     return createTx(instructions, serializedInstructionLength, accounts, tableAccountMetas);
   }
@@ -410,8 +411,6 @@ public interface Transaction {
       return createTx(instructions, serializedInstructionLength, sortV0Accounts(mergedAccounts), tableAccountMetas);
     }
   }
-
-  int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
 
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,

@@ -137,13 +137,21 @@ public interface TransactionSkeleton {
     return parseAccounts(lookupTableMap);
   }
 
+  AccountMeta[] parseNonSignerAccounts();
+
   AccountMeta[] parseAccounts(final AddressLookupTable lookupTable);
+
+  int serializedInstructionsLength();
 
   Instruction[] parseInstructions(final AccountMeta[] accounts);
 
   default Instruction[] parseLegacyInstructions() {
     return parseInstructions(parseAccounts());
   }
+
+  Instruction[] parseInstructionsWithoutAccounts();
+
+  Instruction[] parseInstructionsWithAccounts();
 
   Instruction[] parseInstructionsWithoutTableAccounts();
 }

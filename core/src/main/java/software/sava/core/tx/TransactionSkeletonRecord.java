@@ -7,11 +7,13 @@ import software.sava.core.encoding.Base58;
 import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 import static software.sava.core.accounts.meta.AccountMeta.*;
+import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
 import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
@@ -82,6 +84,20 @@ record TransactionSkeletonRecord(byte[] data,
     return accounts;
   }
 
+  @Override
+  public AccountMeta[] parseNonSignerAccounts() {
+    final var accounts = new AccountMeta[numIncludedAccounts - numSigners];
+    int o = accountsOffset + (numSigners * PUBLIC_KEY_LENGTH);
+    int a = 0;
+    for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = createWrite(readPubKey(data, o));
+    }
+    for (; a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = createRead(readPubKey(data, o));
+    }
+    return accounts;
+  }
+
   private AccountMeta parseVersionedReadAccount(final PublicKey pubKey, final int a) {
     return Arrays.binarySearch(invokedIndexes, a) < 0 ? createRead(pubKey) : createInvoked(pubKey);
   }
@@ -103,6 +119,22 @@ record TransactionSkeletonRecord(byte[] data,
     return lookupTable == null
         ? parseAccounts()
         : parseAccounts(Map.of(lookupTable.address(), lookupTable));
+  }
+
+  @Override
+  public int serializedInstructionsLength() {
+    int serializedInstructionsLength = 0;
+    int o = instructionsOffset;
+    for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
+      numAccounts = CompactU16Encoding.decode(data, o);
+      o += 1 + numAccounts;
+      len = CompactU16Encoding.decode(data, o);
+      o += 1 + len;
+
+      serializedInstructionsLength += 1 // programId index
+          + getByteLen(numAccounts) + numAccounts + getByteLen(len) + len;
+    }
+    return serializedInstructionsLength;
   }
 
   @Override
@@ -158,6 +190,32 @@ record TransactionSkeletonRecord(byte[] data,
       o += len;
     }
     return instructions;
+  }
+
+  private static final List<AccountMeta> NO_ACCOUNTS = List.of();
+
+  @Override
+  public Instruction[] parseInstructionsWithoutAccounts() {
+    final var instructions = new Instruction[numInstructions];
+    for (int i = 0, o = instructionsOffset, numIxAccounts; i < numInstructions; ++i) {
+      final int programAccountIndex = data[o++] & 0xFF;
+      final var programAccount = PublicKey.readPubKey(data, accountsOffset + (programAccountIndex * PUBLIC_KEY_LENGTH));
+      numIxAccounts = CompactU16Encoding.decode(data, o);
+      ++o;
+      o += numIxAccounts;
+
+      final int len = CompactU16Encoding.decode(data, o);
+      ++o;
+      instructions[i] = createInstruction(programAccount, NO_ACCOUNTS, data, o, len);
+      o += len;
+    }
+    return instructions;
+  }
+
+  @Override
+  public Instruction[] parseInstructionsWithAccounts() {
+    final var accounts = parseAccounts();
+    return parseInstructions(accounts);
   }
 
   private AccountMeta[] parseIncludedAccounts() {
