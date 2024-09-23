@@ -140,4 +140,10 @@ public interface TransactionSkeleton {
   AccountMeta[] parseAccounts(final AddressLookupTable lookupTable);
 
   Instruction[] parseInstructions(final AccountMeta[] accounts);
+
+  default Instruction[] parseLegacyInstructions() {
+    return parseInstructions(parseAccounts());
+  }
+
+  Instruction[] parseInstructionsWithoutTableAccounts();
 }

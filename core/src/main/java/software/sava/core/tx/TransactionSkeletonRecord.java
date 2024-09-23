@@ -159,4 +159,15 @@ record TransactionSkeletonRecord(byte[] data,
     }
     return instructions;
   }
+
+  private AccountMeta[] parseIncludedAccounts() {
+    final var accounts = new AccountMeta[numAccounts];
+    parseVersionedIncludedAccounts(accounts);
+    return accounts;
+  }
+
+  @Override
+  public Instruction[] parseInstructionsWithoutTableAccounts() {
+    return parseInstructions(parseIncludedAccounts());
+  }
 }
