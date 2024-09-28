@@ -5,7 +5,6 @@ import java.math.BigInteger;
 import java.util.Arrays;
 
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
-import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.LITTLE_ENDIAN;
 
 public final class ByteUtil {
@@ -15,12 +14,6 @@ public final class ByteUtil {
   private static final VarHandle LONG_LE = byteArrayViewVarHandle(long[].class, LITTLE_ENDIAN);
   private static final VarHandle FLOAT_LE = byteArrayViewVarHandle(float[].class, LITTLE_ENDIAN);
   private static final VarHandle DOUBLE_LE = byteArrayViewVarHandle(double[].class, LITTLE_ENDIAN);
-
-  private static final VarHandle SHORT_BE = byteArrayViewVarHandle(short[].class, BIG_ENDIAN);
-  private static final VarHandle INT_BE = byteArrayViewVarHandle(int[].class, BIG_ENDIAN);
-  private static final VarHandle LONG_BE = byteArrayViewVarHandle(long[].class, BIG_ENDIAN);
-  private static final VarHandle FLOAT_BE = byteArrayViewVarHandle(float[].class, BIG_ENDIAN);
-  private static final VarHandle DOUBLE_BE = byteArrayViewVarHandle(double[].class, BIG_ENDIAN);
 
   public static void putInt16LE(final byte[] b, final int off, final int val) {
     putInt16LE(b, off, (short) val);
@@ -58,10 +51,6 @@ public final class ByteUtil {
     return (double) DOUBLE_LE.get(b, off);
   }
 
-  public static void putInt32BE(final byte[] b, final int off, final int val) {
-    INT_BE.set(b, off, val);
-  }
-
   public static int getInt8LE(final byte[] b, final int off) {
     return b[off] & 0xFF;
   }
@@ -78,15 +67,22 @@ public final class ByteUtil {
     return (long) LONG_LE.get(b, off);
   }
 
-  private static int putIntLE(final byte[] data, final int offset,
-                              final BigInteger val,
-                              final int byteSize) {
-    final byte[] be = val.abs().toByteArray();
-    for (int i = 0, o = offset + (be.length - 1); i < be.length; ++i, --o) {
-      data[o] = be[i];
-    }
-    if (val.signum() < 0) {
+  public static int putIntLE(final byte[] data,
+                             final int offset,
+                             final BigInteger val,
+                             final int byteSize) {
+    final int signum = val.signum();
+    if (signum < 0) {
+      final byte[] be = val.negate().toByteArray();
+      for (int i = 0, o = offset + (be.length - 1); i < be.length; ++i, --o) {
+        data[o] = be[i];
+      }
       data[offset + (byteSize - 1)] |= (byte) 0b1000_0000;
+    } else if (signum > 0) {
+      final byte[] be = val.toByteArray();
+      for (int i = 0, o = offset + (be.length - 1); i < be.length; ++i, --o) {
+        data[o] = be[i];
+      }
     }
     return byteSize;
   }
