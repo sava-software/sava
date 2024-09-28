@@ -51,7 +51,7 @@ public interface AddressLookupTable {
     final var distinctAccounts = HashMap.<PublicKey, PublicKey>newHashMap(numAccounts);
     final var accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
-    for (int i = 0; o < data.length; ++i, o += PUBLIC_KEY_LENGTH) {
+    for (int i = 0; i < numAccounts; ++i, o += PUBLIC_KEY_LENGTH) {
       final var pubKey = readPubKey(data, o);
       final var previous = distinctAccounts.putIfAbsent(pubKey, pubKey);
       if (previous == null) {
