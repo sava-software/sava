@@ -29,12 +29,15 @@ public interface AddressLookupTable {
   static AddressLookupTable read(final PublicKey address, final byte[] data) {
     if (data == null || data.length == 0) {
       return null;
+    } else {
+      return read(address, data, 0, data.length);
     }
-    final int numAccounts = (data.length - LOOKUP_TABLE_META_SIZE) >> 5;
-    return read(address, data, 0, numAccounts);
   }
 
-  static AddressLookupTable read(final PublicKey address, final byte[] data, final int offset, final int numAccounts) {
+  static AddressLookupTable read(final PublicKey address,
+                                 final byte[] data,
+                                 final int offset,
+                                 final int length) {
     final byte[] discriminator = new byte[4];
     System.arraycopy(data, 0, discriminator, 0, 4);
     int o = offset + 4;
@@ -48,6 +51,7 @@ public interface AddressLookupTable {
         ? null
         : readPubKey(data, o + 1);
     o = LOOKUP_TABLE_META_SIZE;
+    final int numAccounts = (length - LOOKUP_TABLE_META_SIZE) >> 5;
     final var distinctAccounts = HashMap.<PublicKey, PublicKey>newHashMap(numAccounts);
     final var accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
@@ -73,7 +77,9 @@ public interface AddressLookupTable {
         distinctAccounts,
         accounts,
         reverseLookupTable,
-        data
+        data.length == length
+            ? data
+            : Arrays.copyOfRange(data, offset, length)
     );
   }
 
@@ -81,7 +87,7 @@ public interface AddressLookupTable {
     if (data == null || data.length == 0) {
       return null;
     }
-    return new AddressLookupTableOverlay(address, data);
+    return new AddressLookupTableOverlay(address, data, 0, data.length);
   }
 
   AddressLookupTable withReverseLookup();
@@ -120,9 +126,9 @@ public interface AddressLookupTable {
 
   byte[] data();
 
-  default int dataLength() {
-    return data().length;
-  }
+  int offset();
+
+  int length();
 
   Set<PublicKey> uniqueAccounts();
 }

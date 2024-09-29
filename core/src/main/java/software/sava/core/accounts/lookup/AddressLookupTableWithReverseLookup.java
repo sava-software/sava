@@ -37,6 +37,16 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   }
 
   @Override
+  public int offset() {
+    return 0;
+  }
+
+  @Override
+  public int length() {
+    return data.length;
+  }
+
+  @Override
   public AddressLookupTable withReverseLookup() {
     return this;
   }

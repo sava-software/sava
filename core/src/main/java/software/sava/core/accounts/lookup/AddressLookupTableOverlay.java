@@ -12,37 +12,60 @@ import static software.sava.core.accounts.PublicKey.readPubKey;
 
 final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
-  AddressLookupTableOverlay(final PublicKey address, final byte[] data) {
+  private final int offset;
+  private final int length;
+
+  AddressLookupTableOverlay(final PublicKey address, final byte[] data, final int offset, final int length) {
     super(address, data);
+    this.offset = offset;
+    this.length = length;
+  }
+
+  @Override
+  public int offset() {
+    return offset;
+  }
+
+  @Override
+  public int length() {
+    return length;
+  }
+
+  private int from() {
+    return offset + LOOKUP_TABLE_META_SIZE;
+  }
+
+  private int to() {
+    return offset + length;
   }
 
   @Override
   public byte[] discriminator() {
     final byte[] discriminator = new byte[4];
-    System.arraycopy(data, 0, discriminator, 0, 4);
+    System.arraycopy(data, offset, discriminator, 0, 4);
     return discriminator;
   }
 
   @Override
   public long deactivationSlot() {
-    return ByteUtil.getInt64LE(data, DEACTIVATION_SLOT_OFFSET);
+    return ByteUtil.getInt64LE(data, offset + DEACTIVATION_SLOT_OFFSET);
   }
 
   @Override
   public long lastExtendedSlot() {
-    return ByteUtil.getInt64LE(data, LAST_EXTENDED_OFFSET);
+    return ByteUtil.getInt64LE(data, offset + LAST_EXTENDED_OFFSET);
   }
 
   @Override
   public int lastExtendedSlotStartIndex() {
-    return data[LAST_EXTENDED_SLOT_START_INDEX_OFFSET] & 0xFF;
+    return data[offset + LAST_EXTENDED_SLOT_START_INDEX_OFFSET] & 0xFF;
   }
 
   @Override
   public PublicKey authority() {
-    return data[AUTHORITY_OPTION_OFFSET] == 0
+    return data[offset + AUTHORITY_OPTION_OFFSET] == 0
         ? null
-        : readPubKey(data, AUTHORITY_OFFSET);
+        : readPubKey(data, offset + AUTHORITY_OFFSET);
   }
 
   @Override
@@ -51,8 +74,8 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
     final var distinctAccounts = HashMap.<PublicKey, PublicKey>newHashMap(numAccounts);
     final var accounts = new PublicKey[numAccounts];
     final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
-    for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
-      final var pubKey = readPubKey(data, offset);
+    for (int i = 0, from = from(), to = to(); from < to; ++i, from += PUBLIC_KEY_LENGTH) {
+      final var pubKey = readPubKey(data, from);
       final var previous = distinctAccounts.putIfAbsent(pubKey, pubKey);
       if (previous == null) {
         accounts[i] = pubKey;
@@ -73,7 +96,9 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
         distinctAccounts,
         accounts,
         reverseLookupTable,
-        data
+        data.length == length
+            ? data
+            : Arrays.copyOfRange(data, offset, length)
     );
   }
 
@@ -82,8 +107,8 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
     final int numAccounts = numAccounts();
     final var distinctAccounts = HashSet.<PublicKey>newHashSet(numAccounts);
     int numUnique = 0;
-    for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
-      final var pubKey = readPubKey(data, offset);
+    for (int i = 0, from = from(), to = to(); from < to; ++i, from += PUBLIC_KEY_LENGTH) {
+      final var pubKey = readPubKey(data, from);
       if (distinctAccounts.add(pubKey)) {
         ++numUnique;
       }
@@ -95,8 +120,8 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
   public Set<PublicKey> uniqueAccounts() {
     final int numAccounts = numAccounts();
     final var distinctAccounts = HashSet.<PublicKey>newHashSet(numAccounts);
-    for (int i = 0, offset = LOOKUP_TABLE_META_SIZE; offset < data.length; ++i, offset += PUBLIC_KEY_LENGTH) {
-      final var pubKey = readPubKey(data, offset);
+    for (int i = 0, from = from(), to = to(); from < to; ++i, from += PUBLIC_KEY_LENGTH) {
+      final var pubKey = readPubKey(data, from);
       distinctAccounts.add(pubKey);
     }
     return distinctAccounts;
@@ -104,13 +129,13 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
   @Override
   public PublicKey account(final int index) {
-    return readPubKey(data, LOOKUP_TABLE_META_SIZE + (index << 5));
+    return readPubKey(data, from() + (index << 5));
   }
 
   @Override
   public int indexOf(final PublicKey publicKey) {
     final byte[] bytes = publicKey.toByteArray();
-    for (int from = LOOKUP_TABLE_META_SIZE, to = from + PUBLIC_KEY_LENGTH, i = 0; from < data.length; ++i) {
+    for (int from = from(), to = from + PUBLIC_KEY_LENGTH, numAccounts = numAccounts(), i = 0; i < numAccounts; ++i) {
       if (Arrays.equals(
           bytes, 0, PUBLIC_KEY_LENGTH,
           data, from, to)) {
@@ -134,12 +159,13 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
   @Override
   public int numAccounts() {
-    return (data.length - LOOKUP_TABLE_META_SIZE) >> 5;
+    return (length - LOOKUP_TABLE_META_SIZE) >> 5;
   }
 
   @Override
   protected String keysToString() {
-    return IntStream.iterate(LOOKUP_TABLE_META_SIZE, i -> i < data.length, i -> i + PUBLIC_KEY_LENGTH)
+    final int to = this.to();
+    return IntStream.iterate(from(), i -> i < to, i -> i + PUBLIC_KEY_LENGTH)
         .mapToObj(i -> readPubKey(data, i))
         .map(PublicKey::toBase58)
         .collect(Collectors.joining(", ", "[", "]"));
