@@ -3,7 +3,10 @@ package software.sava.core.accounts.lookup;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -12,23 +15,8 @@ import static software.sava.core.accounts.PublicKey.readPubKey;
 
 final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
-  private final int offset;
-  private final int length;
-
   AddressLookupTableOverlay(final PublicKey address, final byte[] data, final int offset, final int length) {
-    super(address, data);
-    this.offset = offset;
-    this.length = length;
-  }
-
-  @Override
-  public int offset() {
-    return offset;
-  }
-
-  @Override
-  public int length() {
-    return length;
+    super(address, data, offset, length);
   }
 
   private int from() {
@@ -96,24 +84,8 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
         distinctAccounts,
         accounts,
         reverseLookupTable,
-        data.length == length
-            ? data
-            : Arrays.copyOfRange(data, offset, length)
+        data, offset, length
     );
-  }
-
-  @Override
-  public int numUniqueAccounts() {
-    final int numAccounts = numAccounts();
-    final var distinctAccounts = HashSet.<PublicKey>newHashSet(numAccounts);
-    int numUnique = 0;
-    for (int i = 0, from = from(), to = to(); from < to; ++i, from += PUBLIC_KEY_LENGTH) {
-      final var pubKey = readPubKey(data, from);
-      if (distinctAccounts.add(pubKey)) {
-        ++numUnique;
-      }
-    }
-    return numUnique;
   }
 
   @Override
@@ -121,10 +93,14 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
     final int numAccounts = numAccounts();
     final var distinctAccounts = HashSet.<PublicKey>newHashSet(numAccounts);
     for (int i = 0, from = from(), to = to(); from < to; ++i, from += PUBLIC_KEY_LENGTH) {
-      final var pubKey = readPubKey(data, from);
-      distinctAccounts.add(pubKey);
+      distinctAccounts.add(readPubKey(data, from));
     }
     return distinctAccounts;
+  }
+
+  @Override
+  public int numUniqueAccounts() {
+    return uniqueAccounts().size();
   }
 
   @Override
@@ -175,11 +151,11 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
   public boolean equals(final Object obj) {
     return obj instanceof AddressLookupTableOverlay overlay
         && address.equals(overlay.address)
-        && Arrays.equals(data, overlay.data);
+        && Arrays.equals(data, offset, to(), overlay.data, overlay.offset, overlay.to());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(address, Arrays.hashCode(data));
+    return address.hashCode();
   }
 }

@@ -6,16 +6,29 @@ abstract class AddressLookupTableRoot implements AddressLookupTable {
 
   protected final PublicKey address;
   protected final byte[] data;
+  protected final int offset;
+  protected final int length;
 
-  AddressLookupTableRoot(final PublicKey address, final byte[] data) {
+  AddressLookupTableRoot(final PublicKey address, final byte[] data, final int offset, final int length) {
     this.address = address;
     this.data = data;
+    this.offset = offset;
+    this.length = length;
+  }
+
+  @Override
+  public final int offset() {
+    return offset;
+  }
+
+  @Override
+  public final int length() {
+    return length;
   }
 
   @Override
   public final int write(final byte[] out, final int offset) {
-    final int length = length();
-    System.arraycopy(data, offset(), out, offset, length);
+    System.arraycopy(data, this.offset, out, offset, length);
     return length;
   }
 

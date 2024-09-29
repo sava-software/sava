@@ -39,7 +39,7 @@ public interface AddressLookupTable {
                                  final int offset,
                                  final int length) {
     final byte[] discriminator = new byte[4];
-    System.arraycopy(data, 0, discriminator, 0, 4);
+    System.arraycopy(data, offset, discriminator, 0, 4);
     int o = offset + 4;
     final long deactivationSlot = ByteUtil.getInt64LE(data, o);
     o += Long.BYTES;
@@ -77,9 +77,7 @@ public interface AddressLookupTable {
         distinctAccounts,
         accounts,
         reverseLookupTable,
-        data.length == length
-            ? data
-            : Arrays.copyOfRange(data, offset, length)
+        data, offset, length
     );
   }
 

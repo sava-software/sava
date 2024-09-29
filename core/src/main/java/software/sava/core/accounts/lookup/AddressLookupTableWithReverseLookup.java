@@ -24,8 +24,10 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
                                       final Map<PublicKey, PublicKey> distinctAccounts,
                                       final PublicKey[] accounts,
                                       final AccountIndexLookupTableEntry[] reverseLookupTable,
-                                      final byte[] data) {
-    super(address, data);
+                                      final byte[] data,
+                                      final int offset,
+                                      final int length) {
+    super(address, data, offset, length);
     this.discriminator = discriminator;
     this.deactivationSlot = deactivationSlot;
     this.lastExtendedSlot = lastExtendedSlot;
@@ -34,16 +36,6 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
     this.accounts = accounts;
     this.reverseLookupTable = reverseLookupTable;
     this.distinctAccounts = distinctAccounts;
-  }
-
-  @Override
-  public int offset() {
-    return 0;
-  }
-
-  @Override
-  public int length() {
-    return data.length;
   }
 
   @Override
@@ -119,20 +111,22 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   @Override
   public boolean equals(Object obj) {
     if (obj == this) return true;
-    if (obj == null || obj.getClass() != this.getClass()) return false;
-    var that = (AddressLookupTableWithReverseLookup) obj;
-    return Objects.equals(this.address, that.address) &&
-        Arrays.equals(this.discriminator, that.discriminator) &&
-        this.deactivationSlot == that.deactivationSlot &&
-        this.lastExtendedSlot == that.lastExtendedSlot &&
-        this.lastExtendedSlotStartIndex == that.lastExtendedSlotStartIndex &&
-        Objects.equals(this.authority, that.authority) &&
-        Arrays.equals(this.accounts, that.accounts) &&
-        Arrays.equals(this.reverseLookupTable, that.reverseLookupTable);
+    if (obj instanceof AddressLookupTableWithReverseLookup that) {
+      return address.equals(that.address) &&
+          Arrays.equals(this.discriminator, that.discriminator) &&
+          this.deactivationSlot == that.deactivationSlot &&
+          this.lastExtendedSlot == that.lastExtendedSlot &&
+          this.lastExtendedSlotStartIndex == that.lastExtendedSlotStartIndex &&
+          Objects.equals(this.authority, that.authority) &&
+          Arrays.equals(this.accounts, that.accounts) &&
+          Arrays.equals(this.reverseLookupTable, that.reverseLookupTable);
+    } else {
+      return false;
+    }
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(address, Arrays.hashCode(discriminator), deactivationSlot, lastExtendedSlot, lastExtendedSlotStartIndex, authority, Arrays.hashCode(accounts), Arrays.hashCode(reverseLookupTable));
+    return address.hashCode();
   }
 }
