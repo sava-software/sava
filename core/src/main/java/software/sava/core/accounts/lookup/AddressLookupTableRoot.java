@@ -24,6 +24,11 @@ abstract class AddressLookupTableRoot implements AddressLookupTable {
   }
 
   @Override
+  public final int length() {
+    return data.length;
+  }
+
+  @Override
   public final PublicKey address() {
     return address;
   }

@@ -102,5 +102,7 @@ public interface AddressLookupTable {
 
   byte[] data();
 
+  int length();
+
   Set<PublicKey> uniqueAccounts();
 }
