@@ -4,7 +4,6 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.sysvar.Clock;
 import software.sava.core.encoding.ByteUtil;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -29,44 +28,24 @@ public interface AddressLookupTable {
   static AddressLookupTable read(final PublicKey address, final byte[] data) {
     if (data == null || data.length == 0) {
       return null;
-    } else {
-      return read(address, data, 0, data.length);
     }
-  }
-
-  static AddressLookupTable read(final PublicKey address,
-                                 final byte[] data,
-                                 final int offset,
-                                 final int length) {
     final byte[] discriminator = new byte[4];
-    System.arraycopy(data, offset, discriminator, 0, 4);
-    int o = offset + 4;
-    final long deactivationSlot = ByteUtil.getInt64LE(data, o);
-    o += Long.BYTES;
-    final long lastExtendedSlot = ByteUtil.getInt64LE(data, o);
-    o += Long.BYTES;
-    final int lastExtendedSlotStartIndex = data[o] & 0xFF;
-    ++o;
-    final var authority = data[o] == 0
+    System.arraycopy(data, 0, discriminator, 0, 4);
+    final long deactivationSlot = ByteUtil.getInt64LE(data, DEACTIVATION_SLOT_OFFSET);
+    final long lastExtendedSlot = ByteUtil.getInt64LE(data, LAST_EXTENDED_OFFSET);
+    final int lastExtendedSlotStartIndex = data[LAST_EXTENDED_SLOT_START_INDEX_OFFSET] & 0xFF;
+    final var authority = data[AUTHORITY_OPTION_OFFSET] == 0
         ? null
-        : readPubKey(data, o + 1);
-    o = LOOKUP_TABLE_META_SIZE;
-    final int numAccounts = (length - LOOKUP_TABLE_META_SIZE) >> 5;
-    final var distinctAccounts = HashMap.<PublicKey, PublicKey>newHashMap(numAccounts);
+        : readPubKey(data, AUTHORITY_OFFSET);
+    final int numAccounts = (data.length - LOOKUP_TABLE_META_SIZE) >> 5;
     final var accounts = new PublicKey[numAccounts];
-    final var reverseLookupTable = new AccountIndexLookupTableEntry[numAccounts];
-    for (int i = 0; i < numAccounts; ++i, o += PUBLIC_KEY_LENGTH) {
+    final var distinctAccounts = HashMap.<PublicKey, Integer>newHashMap(numAccounts);
+
+    for (int i = 0, o = LOOKUP_TABLE_META_SIZE; i < numAccounts; ++i, o += PUBLIC_KEY_LENGTH) {
       final var pubKey = readPubKey(data, o);
-      final var previous = distinctAccounts.putIfAbsent(pubKey, pubKey);
-      if (previous == null) {
-        accounts[i] = pubKey;
-        reverseLookupTable[i] = new AccountIndexLookupTableEntry(pubKey.toByteArray(), i);
-      } else {
-        accounts[i] = previous;
-        reverseLookupTable[i] = new AccountIndexLookupTableEntry(previous.toByteArray(), i);
-      }
+      distinctAccounts.putIfAbsent(pubKey, i);
+      accounts[i] = pubKey;
     }
-    Arrays.sort(reverseLookupTable);
     return new AddressLookupTableWithReverseLookup(
         address,
         discriminator,
@@ -76,8 +55,7 @@ public interface AddressLookupTable {
         authority,
         distinctAccounts,
         accounts,
-        reverseLookupTable,
-        data, offset, length
+        data
     );
   }
 
@@ -85,7 +63,7 @@ public interface AddressLookupTable {
     if (data == null || data.length == 0) {
       return null;
     }
-    return new AddressLookupTableOverlay(address, data, 0, data.length);
+    return new AddressLookupTableOverlay(address, data);
   }
 
   AddressLookupTable withReverseLookup();
@@ -123,10 +101,6 @@ public interface AddressLookupTable {
   int write(final byte[] out, final int offset);
 
   byte[] data();
-
-  int offset();
-
-  int length();
 
   Set<PublicKey> uniqueAccounts();
 }

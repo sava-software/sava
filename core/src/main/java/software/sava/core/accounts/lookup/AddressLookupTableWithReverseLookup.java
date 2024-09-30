@@ -11,9 +11,8 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   private final long lastExtendedSlot;
   private final int lastExtendedSlotStartIndex;
   private final PublicKey authority;
-  private final Map<PublicKey, PublicKey> distinctAccounts;
+  private final Map<PublicKey, Integer> distinctAccounts;
   private final PublicKey[] accounts;
-  private final AccountIndexLookupTableEntry[] reverseLookupTable;
 
   AddressLookupTableWithReverseLookup(final PublicKey address,
                                       final byte[] discriminator,
@@ -21,20 +20,16 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
                                       final long lastExtendedSlot,
                                       final int lastExtendedSlotStartIndex,
                                       final PublicKey authority,
-                                      final Map<PublicKey, PublicKey> distinctAccounts,
+                                      final Map<PublicKey, Integer> distinctAccounts,
                                       final PublicKey[] accounts,
-                                      final AccountIndexLookupTableEntry[] reverseLookupTable,
-                                      final byte[] data,
-                                      final int offset,
-                                      final int length) {
-    super(address, data, offset, length);
+                                      final byte[] data) {
+    super(address, data);
     this.discriminator = discriminator;
     this.deactivationSlot = deactivationSlot;
     this.lastExtendedSlot = lastExtendedSlot;
     this.lastExtendedSlotStartIndex = lastExtendedSlotStartIndex;
     this.authority = authority;
     this.accounts = accounts;
-    this.reverseLookupTable = reverseLookupTable;
     this.distinctAccounts = distinctAccounts;
   }
 
@@ -49,18 +44,25 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
   }
 
   @Override
-  public int indexOf(final PublicKey publicKey) {
-    return AccountIndexLookupTableEntry.lookupAccountIndex(this.reverseLookupTable, publicKey);
-  }
-
-  @Override
   public boolean containKey(final PublicKey publicKey) {
     return distinctAccounts.containsKey(publicKey);
   }
 
+  private static final Integer NOT_PRESENT = -1;
+
+  @Override
+  public int indexOf(final PublicKey publicKey) {
+    return distinctAccounts.getOrDefault(publicKey, NOT_PRESENT);
+  }
+
   @Override
   public byte indexOfOrThrow(final PublicKey publicKey) {
-    return AccountIndexLookupTableEntry.lookupAccountIndexOrThrow(this.reverseLookupTable, publicKey);
+    final int index = indexOf(publicKey);
+    if (index < 0) {
+      throw new IllegalStateException(String.format("Could not find %s in lookup table.", publicKey.toBase58()));
+    } else {
+      return (byte) index;
+    }
   }
 
   @Override
@@ -118,8 +120,7 @@ final class AddressLookupTableWithReverseLookup extends AddressLookupTableRoot {
           this.lastExtendedSlot == that.lastExtendedSlot &&
           this.lastExtendedSlotStartIndex == that.lastExtendedSlotStartIndex &&
           Objects.equals(this.authority, that.authority) &&
-          Arrays.equals(this.accounts, that.accounts) &&
-          Arrays.equals(this.reverseLookupTable, that.reverseLookupTable);
+          Arrays.equals(this.accounts, that.accounts);
     } else {
       return false;
     }
