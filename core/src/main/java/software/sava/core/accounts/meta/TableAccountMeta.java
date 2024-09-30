@@ -6,6 +6,7 @@ import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.Arrays;
+import java.util.Map;
 
 final class TableAccountMeta implements LookupTableAccountMeta {
 
@@ -59,6 +60,22 @@ final class TableAccountMeta implements LookupTableAccountMeta {
   public int indexReads(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int i) {
     for (int r = 0; r < numReads; ++r, ++i) {
       accountIndexLookupTable[i] = createAccountIndexLookupTableEntry(readAccounts[r] & 0xFF, i);
+    }
+    return i;
+  }
+
+  @Override
+  public int indexWrites(final Map<PublicKey, Integer> accountIndexLookupTable, int i) {
+    for (int w = 0; w < numWrites; ++w, ++i) {
+      accountIndexLookupTable.put(lookupTable.account(writeAccounts[w] & 0xFF), i);
+    }
+    return i;
+  }
+
+  @Override
+  public int indexReads(final Map<PublicKey, Integer> accountIndexLookupTable, int i) {
+    for (int r = 0; r < numReads; ++r, ++i) {
+      accountIndexLookupTable.put(lookupTable.account(readAccounts[r] & 0xFF), i);
     }
     return i;
   }

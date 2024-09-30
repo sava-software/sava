@@ -1,9 +1,11 @@
 package software.sava.core.accounts.meta;
 
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AccountIndexLookupTableEntry;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 
 import java.util.Collection;
+import java.util.Map;
 
 import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE_MAX_ADDRESSES;
 
@@ -50,6 +52,10 @@ public interface LookupTableAccountMeta {
   int indexWrites(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int i);
 
   int indexReads(final AccountIndexLookupTableEntry[] accountIndexLookupTable, int i);
+
+  int indexWrites(final Map<PublicKey, Integer> accountIndexLookupTable, int i);
+
+  int indexReads(final Map<PublicKey, Integer> accountIndexLookupTable, int i);
 
   void reset();
 

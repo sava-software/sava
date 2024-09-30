@@ -5,6 +5,7 @@ import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Map;
 
 public record AccountIndexLookupTableEntry(byte[] publicKey, int index) implements PublicKey {
 
@@ -23,6 +24,26 @@ public record AccountIndexLookupTableEntry(byte[] publicKey, int index) implemen
       throw new IllegalStateException(String.format("Could not find %s in lookup table.", publicKey.toBase58()));
     } else {
       return (byte) lookupTable[index].index;
+    }
+  }
+
+  private static final Integer NOT_PRESENT = Integer.MIN_VALUE;
+
+  public static int indexOf(final Map<PublicKey, Integer> accountMap, final PublicKey publicKey) {
+    final int index = accountMap.getOrDefault(publicKey, NOT_PRESENT);
+    if (index < 0) {
+      return Integer.MIN_VALUE;
+    } else {
+      return index;
+    }
+  }
+
+  public static byte indexOfOrThrow(final Map<PublicKey, Integer> accountMap, final PublicKey publicKey) {
+    final int index = accountMap.getOrDefault(publicKey, NOT_PRESENT);
+    if (index < 0) {
+      throw new IllegalStateException(String.format("Could not find %s in lookup table.", publicKey.toBase58()));
+    } else {
+      return (byte) index;
     }
   }
 

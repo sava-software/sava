@@ -56,6 +56,8 @@ public interface Instruction {
 
   int serialize(final byte[] out, int i, final AccountIndexLookupTableEntry[] accountIndexLookupTable);
 
+  int serialize(final byte[] out, int i, final Map<PublicKey, Integer> accountIndexLookupTable);
+
   AccountMeta programId();
 
   List<AccountMeta> accounts();

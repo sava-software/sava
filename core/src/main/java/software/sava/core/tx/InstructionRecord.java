@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.lookupAccountIndexOrThrow;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.tx.Transaction.MERGE_ACCOUNT_META;
@@ -106,6 +107,19 @@ record InstructionRecord(AccountMeta programId,
     i += CompactU16Encoding.encodeLength(out, i, accounts.size());
     for (final var account : accounts) {
       out[i++] = lookupAccountIndexOrThrow(accountIndexLookupTable, account.publicKey());
+    }
+    i += CompactU16Encoding.encodeLength(out, i, len);
+    System.arraycopy(data, offset, out, i, len);
+    return i + len;
+  }
+
+  @Override
+  public int serialize(final byte[] out, int i, final Map<PublicKey, Integer> accountIndexLookupTable) {
+    out[i] = indexOfOrThrow(accountIndexLookupTable, programId.publicKey());
+    ++i;
+    i += CompactU16Encoding.encodeLength(out, i, accounts.size());
+    for (final var account : accounts) {
+      out[i++] = indexOfOrThrow(accountIndexLookupTable, account.publicKey());
     }
     i += CompactU16Encoding.encodeLength(out, i, len);
     System.arraycopy(data, offset, out, i, len);
