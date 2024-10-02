@@ -27,6 +27,26 @@
     - java.net.http
     - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)
 
+### Add Dependency
+
+Create
+a [GitHub user access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic)
+with read access to GitHub Packages.
+
+Then add the following to your Gradle build script.
+
+```groovy
+repositories {
+  maven {
+    url = "https://maven.pkg.github.com/sava-software/sava"
+    credentials {
+      username = GITHUB_USERNAME
+      password = GITHUB_PERSONAL_ACCESS_TOKEN
+    }
+  }
+}
+```
+
 ### Contribution
 
 Unit tests are needed and welcomed. Otherwise, please open an issue or send an email before working on a pull request.
