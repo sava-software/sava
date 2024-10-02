@@ -45,6 +45,11 @@ repositories {
     }
   }
 }
+
+dependencies {
+  implementation "software.sava:sava-core:$VERSION"
+  implementation "software.sava:sava-rpc:$VERSION"
+}
 ```
 
 ### Contribution
