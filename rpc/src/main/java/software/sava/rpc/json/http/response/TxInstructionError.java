@@ -6,7 +6,7 @@ import systems.comodal.jsoniter.ValueType;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record TxInstructionError(int instructionIndex, String type, int code) {
+public record TxInstructionError(int instructionIndex, String type, long code) {
 
   public static TxInstructionError parseError(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
@@ -29,7 +29,7 @@ public record TxInstructionError(int instructionIndex, String type, int code) {
         final var type = ji.readObjField();
         builder.type(type);
         if ("Custom".equalsIgnoreCase(type)) {
-          builder.code(ji.readInt());
+          builder.code(ji.readLong());
         } else {
           throw new UnsupportedOperationException("Unhandled tx error type " + new String(buf, offset, len));
         }
@@ -51,7 +51,7 @@ public record TxInstructionError(int instructionIndex, String type, int code) {
 
     private int instructionIndex;
     private String type;
-    private int code;
+    private long code;
 
     private Builder() {
     }
@@ -68,7 +68,7 @@ public record TxInstructionError(int instructionIndex, String type, int code) {
       this.type = type;
     }
 
-    private void code(final int code) {
+    private void code(final long code) {
       this.code = code;
     }
   }

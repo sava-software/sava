@@ -271,7 +271,6 @@ public final class Ed25519Util {
       X25519Field.normalize(var22.xyd);
     }
 
-
     for (var12 = 0; var12 < var1; ++var12) {
       var13 = var4[var1 + var12];
       var22 = PointPrecomp.create();
@@ -306,7 +305,6 @@ public final class Ed25519Util {
       var21 += 10;
     }
   }
-
 
   public static boolean isNotOnCurve(final byte[] p) {
     final long[][] r = new long[4][16];
