@@ -63,7 +63,7 @@ public interface Discriminator extends Predicate<Instruction> {
     final int len = data.length - offset;
     return len >= thisData.length && Arrays.equals(
         thisData, 0, thisData.length,
-        data, offset, offset + data.length
+        data, offset, offset + thisData.length
     );
   }
 
