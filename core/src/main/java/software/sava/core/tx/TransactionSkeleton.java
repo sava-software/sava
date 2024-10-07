@@ -137,6 +137,8 @@ public interface TransactionSkeleton {
     return parseAccounts(lookupTableMap);
   }
 
+  PublicKey feePayer();
+
   AccountMeta[] parseNonSignerAccounts();
 
   PublicKey[] parseNonSignerPublicKeys();

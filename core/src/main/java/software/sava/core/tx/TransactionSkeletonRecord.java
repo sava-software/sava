@@ -57,8 +57,13 @@ record TransactionSkeletonRecord(byte[] data,
     return Base58.encode(data, recentBlockHashIndex, recentBlockHashIndex + BLOCK_HASH_LENGTH);
   }
 
+  @Override
+  public PublicKey feePayer() {
+    return readPubKey(data, accountsOffset);
+  }
+
   private int parseSignatureAccounts(final AccountMeta[] accounts) {
-    accounts[0] = createFeePayer(readPubKey(data, accountsOffset));
+    accounts[0] = createFeePayer(feePayer());
     int o = accountsOffset + PUBLIC_KEY_LENGTH;
     int a = 1;
     for (final int numWriteSigners = numSigners - numReadonlySignedAccounts; a < numWriteSigners; ++a, o += PUBLIC_KEY_LENGTH) {
