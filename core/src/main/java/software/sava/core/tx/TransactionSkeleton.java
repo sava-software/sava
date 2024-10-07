@@ -125,6 +125,14 @@ public interface TransactionSkeleton {
 
   String base58BlockHash();
 
+  int numIncludedAccounts();
+
+  int numAccounts();
+
+  default int numIndexedAccounts() {
+    return numAccounts() - numIncludedAccounts();
+  }
+
   PublicKey[] lookupTableAccounts();
 
   AccountMeta[] parseAccounts();
