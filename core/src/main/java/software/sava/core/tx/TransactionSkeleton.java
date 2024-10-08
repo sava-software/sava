@@ -3,7 +3,6 @@ package software.sava.core.tx;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
-import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -12,7 +11,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
-import static software.sava.core.encoding.CompactU16Encoding.signedByte;
+import static software.sava.core.encoding.CompactU16Encoding.*;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
 import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 import static software.sava.core.tx.TransactionSkeletonRecord.LEGACY_INVOKED_INDEXES;
@@ -22,8 +21,8 @@ public interface TransactionSkeleton {
 
   static TransactionSkeleton deserializeSkeleton(final byte[] data) {
     int o = 0;
-    final int numSignatures = CompactU16Encoding.decode(data, o);
-    ++o;
+    final int numSignatures = decode(data, o);
+    o += getByteLen(data, o);
     o += (numSignatures * SIGNATURE_LENGTH);
 
     int version = data[o++] & 0xFF;
@@ -38,28 +37,34 @@ public interface TransactionSkeleton {
     final int numReadonlySignedAccounts = data[o++];
     final int numReadonlyUnsignedAccounts = data[o++];
 
-    final int numIncludedAccounts = CompactU16Encoding.decode(data, o);
-    ++o;
+    final int numIncludedAccounts = decode(data, o);
+    o += getByteLen(data, o);
     final int accountsOffset = o;
     o += numIncludedAccounts << 5;
 
     final int recentBlockHashIndex = o;
     o += Transaction.BLOCK_HASH_LENGTH;
 
-    final int numInstructions = CompactU16Encoding.decode(data, o);
-    ++o;
+    final int numInstructions = decode(data, o);
+    o += getByteLen(data, o);
     final int instructionsOffset = o;
+
     if (version >= 0) {
       final int[] invokedIndexes = new int[numInstructions];
       for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
-        invokedIndexes[i] = data[o++] & 0xFF;
-        numAccounts = CompactU16Encoding.decode(data, o);
-        o += 1 + numAccounts;
-        len = CompactU16Encoding.decode(data, o);
-        o += 1 + len;
+        invokedIndexes[i] = decode(data, o);
+        o += getByteLen(data, o);
+
+        numAccounts = decode(data, o);
+        o += getByteLen(data, o);
+        o += numAccounts;
+
+        len = decode(data, o);
+        o += getByteLen(data, o);
+        o += len;
       }
       if (o < data.length) {
-        final int numLookupTables = CompactU16Encoding.decode(data, o);
+        final int numLookupTables = decode(data, o);
         if (numLookupTables > 0) {
           ++o;
           final int lookupTablesOffset = o;
@@ -68,11 +73,15 @@ public interface TransactionSkeleton {
           for (int t = 0, numWriteIndexes, numReadIndexes; t < numLookupTables; ++t) {
             lookupTableAccounts[t] = PublicKey.readPubKey(data, o);
             o += PUBLIC_KEY_LENGTH;
-            numWriteIndexes = CompactU16Encoding.decode(data, o);
-            o += 1 + numWriteIndexes;
+
+            numWriteIndexes = decode(data, o);
+            o += getByteLen(data, o);
+            o += numWriteIndexes;
             numAccounts += numWriteIndexes;
-            numReadIndexes = CompactU16Encoding.decode(data, o);
-            o += 1 + numReadIndexes;
+
+            numReadIndexes = decode(data, o);
+            o += getByteLen(data, o);
+            o += numReadIndexes;
             numAccounts += numReadIndexes;
           }
           Arrays.sort(invokedIndexes);
@@ -89,11 +98,15 @@ public interface TransactionSkeleton {
       }
     } else {
       for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
-        ++o; // program index
-        numAccounts = CompactU16Encoding.decode(data, o);
-        o += 1 + numAccounts;
-        len = CompactU16Encoding.decode(data, o);
-        o += 1 + len;
+        o += getByteLen(data, o); // program index
+
+        numAccounts = decode(data, o);
+        o += getByteLen(data, o);
+        o += numAccounts;
+
+        len = decode(data, o);
+        o += getByteLen(data, o);
+        o += len;
       }
     }
     return new TransactionSkeletonRecord(

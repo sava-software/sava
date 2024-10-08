@@ -4,7 +4,6 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.Base58;
-import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.Arrays;
 import java.util.List;
@@ -13,6 +12,7 @@ import java.util.Map;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 import static software.sava.core.accounts.meta.AccountMeta.*;
+import static software.sava.core.encoding.CompactU16Encoding.decode;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
@@ -142,10 +142,13 @@ record TransactionSkeletonRecord(byte[] data,
     int serializedInstructionsLength = 0;
     int o = instructionsOffset;
     for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
-      numAccounts = CompactU16Encoding.decode(data, o);
-      o += 1 + numAccounts;
-      len = CompactU16Encoding.decode(data, o);
-      o += 1 + len;
+      numAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numAccounts;
+
+      len = decode(data, o);
+      o += getByteLen(data, o);
+      o += len;
 
       serializedInstructionsLength += 1 // programId index
           + getByteLen(numAccounts) + numAccounts + getByteLen(len) + len;
@@ -158,29 +161,33 @@ record TransactionSkeletonRecord(byte[] data,
     final var accounts = new AccountMeta[numAccounts];
     int a = parseVersionedIncludedAccounts(accounts);
 
+    // Parse Writes
     int o = lookupTablesOffset;
     for (final var lookupTableKey : lookupTableAccounts) {
       final var lookupTable = lookupTables.get(lookupTableKey);
       o += PUBLIC_KEY_LENGTH;
-      final int numWriteIndexes = data[o] & 0xFF;
-      ++o;
+      final int numWriteIndexes = decode(data, o);
+      o += getByteLen(data, o);
       for (int w = 0; w < numWriteIndexes; ++w, ++a, ++o) {
         accounts[a] = createWrite(lookupTable.account(data[o] & 0xFF));
       }
-      final int numReadIndexes = data[o] & 0xFF;
-      ++o;
+
+      final int numReadIndexes = decode(data, o);
+      o += getByteLen(data, o);
       o += numReadIndexes;
     }
 
+    // Parse Reads
     o = lookupTablesOffset;
     for (final var lookupTableKey : lookupTableAccounts) {
       final var lookupTable = lookupTables.get(lookupTableKey);
       o += PUBLIC_KEY_LENGTH;
-      final int numWriteIndexes = data[o] & 0xFF;
-      ++o;
+      final int numWriteIndexes = decode(data, o);
+      o += getByteLen(data, o);
       o += numWriteIndexes;
-      final int numReadIndexes = data[o] & 0xFF;
-      ++o;
+
+      final int numReadIndexes = decode(data, o);
+      o += getByteLen(data, o);
       for (int r = 0; r < numReadIndexes; ++r, ++a, ++o) {
         accounts[a] = createRead(lookupTable.account(data[o] & 0xFF));
       }
@@ -192,16 +199,19 @@ record TransactionSkeletonRecord(byte[] data,
   public Instruction[] parseInstructions(final AccountMeta[] accounts) {
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, accountIndex; i < numInstructions; ++i) {
-      final var programAccount = accounts[data[o++] & 0xFF];
-      numIxAccounts = CompactU16Encoding.decode(data, o);
+      final var programAccount = accounts[decode(data, o)];
+      o += getByteLen(data, o);
+
+      numIxAccounts = decode(data, o);
       final var ixAccounts = new AccountMeta[numIxAccounts];
-      ++o;
+      o += getByteLen(data, o);
       for (int a = 0; a < numIxAccounts; ++a) {
         accountIndex = data[o++] & 0xFF;
         ixAccounts[a] = accounts[accountIndex];
       }
-      final int len = CompactU16Encoding.decode(data, o);
-      ++o;
+
+      final int len = decode(data, o);
+      o += getByteLen(data, o);
       instructions[i] = createInstruction(programAccount, Arrays.asList(ixAccounts), data, o, len);
       o += len;
     }
@@ -212,12 +222,17 @@ record TransactionSkeletonRecord(byte[] data,
   public PublicKey[] parseProgramAccounts() {
     final var programs = new PublicKey[numInstructions];
     for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
-      programAccountIndex = data[o++] & 0xFF;
+      programAccountIndex = decode(data, o);
+      o += getByteLen(data, o);
       programs[i] = PublicKey.readPubKey(data, accountsOffset + (programAccountIndex * PUBLIC_KEY_LENGTH));
-      numIxAccounts = CompactU16Encoding.decode(data, o);
-      o += 1 + numIxAccounts;
-      len = CompactU16Encoding.decode(data, o);
-      o += 1 + len;
+
+      numIxAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numIxAccounts;
+
+      len = decode(data, o);
+      o += getByteLen(data, o);
+      o += len;
     }
     return programs;
   }
@@ -228,13 +243,16 @@ record TransactionSkeletonRecord(byte[] data,
   public Instruction[] parseInstructionsWithoutAccounts() {
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = data[o++] & 0xFF;
+      final int programAccountIndex = decode(data, o);
+      o += getByteLen(data, o);
       final var programAccount = PublicKey.readPubKey(data, accountsOffset + (programAccountIndex * PUBLIC_KEY_LENGTH));
-      numIxAccounts = CompactU16Encoding.decode(data, o);
-      o += 1 + numIxAccounts;
 
-      len = CompactU16Encoding.decode(data, o);
-      ++o;
+      numIxAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numIxAccounts;
+
+      len = decode(data, o);
+      o += getByteLen(data, o);
       instructions[i] = createInstruction(programAccount, NO_ACCOUNTS, data, o, len);
       o += len;
     }

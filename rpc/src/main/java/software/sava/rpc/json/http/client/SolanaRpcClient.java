@@ -54,6 +54,12 @@ public interface SolanaRpcClient {
     return createClient(endpoint, httpClient, requestTimeout, null, defaultCommitment);
   }
 
+  static SolanaRpcClient createClient(final URI endpoint,
+                                      final HttpClient httpClient,
+                                      final Commitment defaultCommitment) {
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, defaultCommitment);
+  }
+
   static SolanaRpcClient createClient(final URI endpoint, final HttpClient httpClient) {
     return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, CONFIRMED);
   }
