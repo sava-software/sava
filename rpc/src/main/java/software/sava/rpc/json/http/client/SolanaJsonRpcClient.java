@@ -9,7 +9,6 @@ import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.PublicKeyEncoding;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
-import software.sava.rpc.json.http.request.RpcEncoding;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
 
@@ -718,11 +717,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<Tx> getTransaction(final String txSignature) {
     return getTransaction(defaultCommitment, txSignature);
-  }
-
-  @Override
-  public CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
-    return getTransaction(defaultCommitment, txSignature, Integer.MIN_VALUE, RpcEncoding.base64.name());
   }
 
   @Override

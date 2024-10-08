@@ -7,6 +7,7 @@ import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
+import software.sava.rpc.json.http.request.RpcEncoding;
 import software.sava.rpc.json.http.response.*;
 
 import java.net.URI;
@@ -30,6 +31,7 @@ import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 public interface SolanaRpcClient {
 
   int MAX_MULTIPLE_ACCOUNTS = 100;
+  int MAX_GET_SIGNATURES = 1_000;
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
@@ -333,16 +335,39 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Tx> getTransaction(final String txSignature);
 
-  CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature);
+  default CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
+    return getTransaction(commitment, txSignature, 0, RpcEncoding.base64.name());
+  }
+
+  default CompletableFuture<Tx> getTransaction(final String txSignature, final String encoding) {
+    return getTransaction(txSignature, 0, encoding);
+  }
+
+  default CompletableFuture<Tx> getTransaction(final String txSignature, final RpcEncoding encoding) {
+    return getTransaction(txSignature, 0, encoding.name());
+  }
 
   CompletableFuture<Tx> getTransaction(final String txSignature,
                                        final int maxSupportedTransactionVersion,
                                        final String encoding);
 
+  default CompletableFuture<Tx> getTransaction(final String txSignature,
+                                               final int maxSupportedTransactionVersion,
+                                               final RpcEncoding encoding) {
+    return getTransaction(txSignature, maxSupportedTransactionVersion, encoding.name());
+  }
+
   CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                        final String txSignature,
                                        final int maxSupportedTransactionVersion,
                                        final String encoding);
+
+  default CompletableFuture<Tx> getTransaction(final Commitment commitment,
+                                               final String txSignature,
+                                               final int maxSupportedTransactionVersion,
+                                               final RpcEncoding encoding) {
+    return getTransaction(commitment, txSignature, maxSupportedTransactionVersion, encoding.name());
+  }
 
   CompletableFuture<Long> getTransactionCount();
 
