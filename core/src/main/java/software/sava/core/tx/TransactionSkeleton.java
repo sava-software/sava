@@ -3,6 +3,7 @@ package software.sava.core.tx;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
+import software.sava.core.programs.Discriminator;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -166,6 +167,8 @@ public interface TransactionSkeleton {
 
   AccountMeta[] parseAccounts(final AddressLookupTable lookupTable);
 
+  PublicKey[] parseProgramAccounts();
+
   int serializedInstructionsLength();
 
   Instruction[] parseInstructions(final AccountMeta[] accounts);
@@ -174,11 +177,23 @@ public interface TransactionSkeleton {
     return parseInstructions(parseAccounts());
   }
 
-  PublicKey[] parseProgramAccounts();
-
+  /**
+   * Program accounts will be included for each instruction.
+   * Instruction accounts will not.
+   */
   Instruction[] parseInstructionsWithoutAccounts();
 
-  Instruction[] parseInstructionsWithAccounts();
-
+  /**
+   * If this is a versioned transaction accounts which are indexed into a lookup table will be null.
+   * Signing accounts and program accounts will always be included.
+   */
   Instruction[] parseInstructionsWithoutTableAccounts();
+
+  Instruction[] filterInstructions(final AccountMeta[] accounts, final Discriminator discriminator);
+
+  default Instruction[] filterInstructionsWithoutTableAccounts(final Discriminator discriminator) {
+    return filterInstructions(parseAccounts(), discriminator);
+  }
+
+  Instruction[] filterInstructionsWithoutAccounts(final Discriminator discriminator);
 }

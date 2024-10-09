@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.ws;
 
-public enum Channel {
+enum Channel {
 
   account,
   logs,
@@ -17,11 +17,11 @@ public enum Channel {
     this.unSubscribe = name() + "Unsubscribe";
   }
 
-  public String subscribe() {
+  String subscribe() {
     return subscribe;
   }
 
-  public String unSubscribe() {
+  String unSubscribe() {
     return unSubscribe;
   }
 }

@@ -65,37 +65,44 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   }
 
   @Override
-  public void uri(final URI uri) {
+  public SolanaRpcWebsocket.Builder uri(final URI uri) {
     this.wsUri = uri;
+    return this;
   }
 
   @Override
-  public void webSocketBuilder(final WebSocket.Builder webSocketBuilder) {
+  public SolanaRpcWebsocket.Builder webSocketBuilder(final WebSocket.Builder webSocketBuilder) {
     this.webSocketBuilder = webSocketBuilder;
+    return this;
   }
 
   @Override
-  public void reConnect(final long reConnect) {
+  public SolanaRpcWebsocket.Builder reConnect(final long reConnect) {
     this.reConnect = reConnect;
+    return this;
   }
 
   @Override
-  public void writeOrPingDelay(final long writeOrPingDelay) {
+  public SolanaRpcWebsocket.Builder writeOrPingDelay(final long writeOrPingDelay) {
     this.writeOrPingDelay = writeOrPingDelay;
+    return this;
   }
 
   @Override
-  public void subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay) {
+  public SolanaRpcWebsocket.Builder subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay) {
     this.subscriptionAndPingCheckDelay = subscriptionAndPingCheckDelay;
+    return this;
   }
 
   @Override
-  public void commitment(final Commitment commitment) {
+  public SolanaRpcWebsocket.Builder commitment(final Commitment commitment) {
     this.commitment = commitment;
+    return this;
   }
 
   @Override
-  public void solanaAccounts(final SolanaAccounts solanaAccounts) {
+  public SolanaRpcWebsocket.Builder solanaAccounts(final SolanaAccounts solanaAccounts) {
     this.solanaAccounts = solanaAccounts;
+    return this;
   }
 }

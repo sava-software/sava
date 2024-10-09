@@ -5,13 +5,13 @@ import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
-import software.sava.rpc.json.http.request.RpcEncoding;
 import software.sava.rpc.json.http.request.TransactionDetails;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -24,11 +24,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static java.lang.System.Logger.Level.*;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.util.concurrent.TimeUnit.HOURS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.stream.Collectors.joining;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
@@ -389,7 +390,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     if (sub == null || !sub.containsKey(commitment)) {
       final var filtersJson = filters.isEmpty() ? "" : filters.stream()
           .map(Filter::toJson)
-          .collect(Collectors.joining(",", ",\"filters\":[", "]"));
+          .collect(joining(",", ",\"filters\":[", "]"));
 
       final var params = String.format("""
               "%s",{"commitment":"%s","encoding":"base64"%s}""",
@@ -410,42 +411,42 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return queueUnsubscribe(program.toBase58(), Channel.program, commitment, this.programSubs);
   }
 
-  @Override
-  public boolean transactionSubscribe(final Commitment commitment,
-                                      final boolean vote,
-                                      final boolean failed,
-                                      final String signature,
-                                      final Collection<PublicKey> accountInclude,
-                                      final Collection<PublicKey> accountExclude,
-                                      final Collection<PublicKey> accountRequired,
-                                      final RpcEncoding encoding,
-                                      final TransactionDetails transactionDetails,
-                                      final boolean showRewards,
-                                      final Consumer<TxResult> consumer) {
-    final var signatureField = signature == null || signature.isBlank()
-        ? ""
-        : String.format("""
-        ",signature":"%s\"""", signature);
-
+  /// Only supported by Helius on a Business or Professional plan
+  private boolean transactionSubscribe(final Commitment commitment,
+                                       final boolean vote,
+                                       final boolean failed,
+                                       final Collection<PublicKey> accountInclude,
+                                       final Collection<PublicKey> accountExclude,
+                                       final Collection<PublicKey> accountRequired,
+                                       final TransactionDetails transactionDetails,
+                                       final boolean showRewards,
+                                       final Consumer<TxResult> consumer) {
     final var includes = accountInclude == null || accountInclude.isEmpty()
         ? ""
-        : accountInclude.stream().map(PublicKey::toBase58).collect(Collectors.joining("\",\"", ",\"accountInclude\":[\"", "\"]"));
+        : accountInclude.stream()
+        .map(PublicKey::toBase58)
+        .collect(joining("\",\"", ",\"accountInclude\":[\"", "\"]"));
+
     final var excludes = accountExclude == null || accountExclude.isEmpty()
         ? ""
-        : accountExclude.stream().map(PublicKey::toBase58).collect(Collectors.joining("\",\"", ",\"accountExclude\":[\"", "\"]"));
+        : accountExclude.stream()
+        .map(PublicKey::toBase58).
+        collect(joining("\",\"", ",\"accountExclude\":[\"", "\"]"));
+
     final var required = accountRequired == null || accountRequired.isEmpty()
         ? ""
-        : accountRequired.stream().map(PublicKey::toBase58).collect(Collectors.joining("\",\"", ",\"accountRequired\":[\"", "\"]"));
+        : accountRequired.stream()
+        .map(PublicKey::toBase58)
+        .collect(joining("\",\"", ",\"accountRequired\":[\"", "\"]"));
+
     final var params = String.format("""
-            {"vote":%b,"failed":%b%s%s%s%s},{"commitment":"%s","encoding":"%s","transactionDetails":"%s","showRewards":%b,"maxSupportedTransactionVersion":0}""",
+            {"vote":%b,"failed":%b%s%s%s},{"commitment":"%s","encoding":"base64","transactionDetails":"%s","showRewards":%b,"maxSupportedTransactionVersion":0}""",
         vote,
         failed,
-        signatureField,
         includes,
         excludes,
         required,
         commitment.getValue(),
-        encoding,
         transactionDetails,
         showRewards
     );
@@ -561,7 +562,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                               final int tail,
                               final JsonIterator ji,
                               final WebSocket webSocket) {
-    // System.out.format("<- %s%n", new String(msg, offset, tail - offset));
+    System.out.format("<- %s%n", new String(msg, offset, tail - offset));
     try {
       if (ji.skipUntil("method") == null) {
         if (ji.reset(offset).skipUntil("error") != null) {
@@ -606,6 +607,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             ji.skipUntil("result");
             if (channel == Channel.transaction) {
               ji.skipUntil("transaction");
+
+
             } else {
               final int resultMark = ji.mark();
               ji.skipUntil("context");
@@ -826,5 +829,27 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.signatureSubs.clear();
     this.programSubs.clear();
     this.slotSub.set(null);
+  }
+
+
+  public static void main(final String[] args) throws InterruptedException {
+    final var meteoraProgramId = PublicKey.fromBase58Encoded("LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo");
+    try (final var executorService = Executors.newVirtualThreadPerTaskExecutor()) {
+      try (final var httpClient = HttpClient.newBuilder().executor(executorService).build()) {
+        final var websocketBuilder = SolanaRpcWebsocket.build();
+        websocketBuilder.uri(URI.create("wss://atlas-mainnet.helius-rpc.com?api-key="));
+        websocketBuilder.webSocketBuilder(httpClient);
+        websocketBuilder.commitment(Commitment.CONFIRMED);
+        final var webSocket = websocketBuilder.create();
+//        webSocket.transactionSubscribe(
+//            Commitment.CONFIRMED,
+//            List.of(), List.of(),
+//            List.of(meteoraProgramId),
+//            result -> System.out.println(result)
+//        );
+        webSocket.connect();
+        HOURS.sleep(1);
+      }
+    }
   }
 }

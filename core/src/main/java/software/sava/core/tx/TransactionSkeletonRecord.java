@@ -4,6 +4,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.Base58;
+import software.sava.core.programs.Discriminator;
 
 import java.util.Arrays;
 import java.util.List;
@@ -207,7 +208,7 @@ record TransactionSkeletonRecord(byte[] data,
       o += getByteLen(data, o);
       for (int a = 0; a < numIxAccounts; ++a) {
         accountIndex = data[o++] & 0xFF;
-        ixAccounts[a] = accounts[accountIndex];
+        ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
       }
 
       final int len = decode(data, o);
@@ -218,13 +219,21 @@ record TransactionSkeletonRecord(byte[] data,
     return instructions;
   }
 
+  private int accountOffset(final int accountIndex) {
+    return accountsOffset + (accountIndex * PUBLIC_KEY_LENGTH);
+  }
+
+  private PublicKey getAccount(final int accountIndex) {
+    return PublicKey.readPubKey(data, accountOffset(accountIndex));
+  }
+
   @Override
   public PublicKey[] parseProgramAccounts() {
     final var programs = new PublicKey[numInstructions];
     for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
       programAccountIndex = decode(data, o);
       o += getByteLen(data, o);
-      programs[i] = PublicKey.readPubKey(data, accountsOffset + (programAccountIndex * PUBLIC_KEY_LENGTH));
+      programs[i] = getAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -245,7 +254,7 @@ record TransactionSkeletonRecord(byte[] data,
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
       final int programAccountIndex = decode(data, o);
       o += getByteLen(data, o);
-      final var programAccount = PublicKey.readPubKey(data, accountsOffset + (programAccountIndex * PUBLIC_KEY_LENGTH));
+      final var programAccount = getAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -260,9 +269,59 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
-  public Instruction[] parseInstructionsWithAccounts() {
-    final var accounts = parseAccounts();
-    return parseInstructions(accounts);
+  public Instruction[] filterInstructions(final AccountMeta[] accounts, final Discriminator discriminator) {
+    final var instructions = new Instruction[numInstructions];
+    int d = 0;
+    for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
+      final int programAccountIndex = decode(data, o);
+      o += getByteLen(data, o);
+
+      numIxAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      int accountsOffset = o;
+      o += numIxAccounts;
+
+      len = decode(data, o);
+      o += getByteLen(data, o);
+
+      if (discriminator.equals(data, o)) {
+        final var ixAccounts = new AccountMeta[numIxAccounts];
+        for (int a = 0; a < numIxAccounts; ++a) {
+          final int accountIndex = data[accountsOffset++] & 0xFF;
+          ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
+        }
+        instructions[d++] = createInstruction(getAccount(programAccountIndex), Arrays.asList(ixAccounts), data, o, len);
+      }
+      o += len;
+    }
+    return d == numInstructions
+        ? instructions
+        : Arrays.copyOfRange(instructions, 0, d);
+  }
+
+  @Override
+  public Instruction[] filterInstructionsWithoutAccounts(final Discriminator discriminator) {
+    final var instructions = new Instruction[numInstructions];
+    int d = 0;
+    for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
+      final int programAccountIndex = decode(data, o);
+      o += getByteLen(data, o);
+
+      numIxAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numIxAccounts;
+
+      len = decode(data, o);
+      o += getByteLen(data, o);
+
+      if (discriminator.equals(data, o)) {
+        instructions[d++] = createInstruction(getAccount(programAccountIndex), NO_ACCOUNTS, data, o, len);
+      }
+      o += len;
+    }
+    return d == numInstructions
+        ? instructions
+        : Arrays.copyOfRange(instructions, 0, d);
   }
 
   private AccountMeta[] parseIncludedAccounts() {
