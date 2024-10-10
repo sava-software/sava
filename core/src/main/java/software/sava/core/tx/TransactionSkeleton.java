@@ -66,9 +66,9 @@ public interface TransactionSkeleton {
       }
       if (o < data.length) {
         final int numLookupTables = decode(data, o);
+        ++o;
+        final int lookupTablesOffset = o;
         if (numLookupTables > 0) {
-          ++o;
-          final int lookupTablesOffset = o;
           final PublicKey[] lookupTableAccounts = new PublicKey[numLookupTables];
           int numAccounts = numIncludedAccounts;
           for (int t = 0, numWriteIndexes, numReadIndexes; t < numLookupTables; ++t) {
@@ -95,7 +95,27 @@ public interface TransactionSkeleton {
               lookupTablesOffset, lookupTableAccounts,
               numAccounts
           );
+        } else {
+          return new TransactionSkeletonRecord(
+              data,
+              version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+              numIncludedAccounts, accountsOffset,
+              recentBlockHashIndex,
+              numInstructions, instructionsOffset, invokedIndexes,
+              lookupTablesOffset, NO_TABLES,
+              numIncludedAccounts
+          );
         }
+      } else {
+        return new TransactionSkeletonRecord(
+            data,
+            version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+            numIncludedAccounts, accountsOffset,
+            recentBlockHashIndex,
+            numInstructions, instructionsOffset, invokedIndexes,
+            data.length, NO_TABLES,
+            numIncludedAccounts
+        );
       }
     } else {
       for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
@@ -109,16 +129,16 @@ public interface TransactionSkeleton {
         o += getByteLen(data, o);
         o += len;
       }
+      return new TransactionSkeletonRecord(
+          data,
+          version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+          numIncludedAccounts, accountsOffset,
+          recentBlockHashIndex,
+          numInstructions, instructionsOffset, LEGACY_INVOKED_INDEXES,
+          -1, NO_TABLES,
+          numIncludedAccounts
+      );
     }
-    return new TransactionSkeletonRecord(
-        data,
-        version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
-        numIncludedAccounts, accountsOffset,
-        recentBlockHashIndex,
-        numInstructions, instructionsOffset, LEGACY_INVOKED_INDEXES,
-        -1, NO_TABLES,
-        numIncludedAccounts
-    );
   }
 
   byte[] data();

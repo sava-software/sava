@@ -345,29 +345,45 @@ public interface SolanaRpcClient {
     return getTransaction(commitment, txSignature, 0, RpcEncoding.base64.name());
   }
 
+  default CompletableFuture<Tx> getTransaction(final int maxSupportedTransactionVersion, final String txSignature) {
+    return getTransaction(txSignature, maxSupportedTransactionVersion, RpcEncoding.base64.name());
+  }
+
+  default CompletableFuture<Tx> getTransaction(final Commitment commitment,
+                                               final int maxSupportedTransactionVersion,
+                                               final String txSignature) {
+    return getTransaction(commitment, txSignature, maxSupportedTransactionVersion, RpcEncoding.base64.name());
+  }
+
+  @Deprecated()
   default CompletableFuture<Tx> getTransaction(final String txSignature, final String encoding) {
     return getTransaction(txSignature, 0, encoding);
   }
 
+  @Deprecated()
   default CompletableFuture<Tx> getTransaction(final String txSignature, final RpcEncoding encoding) {
     return getTransaction(txSignature, 0, encoding.name());
   }
 
+  @Deprecated()
   CompletableFuture<Tx> getTransaction(final String txSignature,
                                        final int maxSupportedTransactionVersion,
                                        final String encoding);
 
+  @Deprecated()
   default CompletableFuture<Tx> getTransaction(final String txSignature,
                                                final int maxSupportedTransactionVersion,
                                                final RpcEncoding encoding) {
     return getTransaction(txSignature, maxSupportedTransactionVersion, encoding.name());
   }
 
+  @Deprecated()
   CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                        final String txSignature,
                                        final int maxSupportedTransactionVersion,
                                        final String encoding);
 
+  @Deprecated()
   default CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                                final String txSignature,
                                                final int maxSupportedTransactionVersion,

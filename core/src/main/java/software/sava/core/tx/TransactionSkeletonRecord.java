@@ -115,22 +115,6 @@ record TransactionSkeletonRecord(byte[] data,
     return accounts;
   }
 
-  private AccountMeta parseVersionedReadAccount(final PublicKey pubKey, final int a) {
-    return Arrays.binarySearch(invokedIndexes, a) < 0 ? createRead(pubKey) : createInvoked(pubKey);
-  }
-
-  private int parseVersionedIncludedAccounts(final AccountMeta[] accounts) {
-    int o = parseSignatureAccounts(accounts);
-    int a = numSigners;
-    for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createWrite(readPubKey(data, o));
-    }
-    for (; a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = parseVersionedReadAccount(readPubKey(data, o), a);
-    }
-    return a;
-  }
-
   @Override
   public AccountMeta[] parseAccounts(final AddressLookupTable lookupTable) {
     return lookupTable == null
@@ -155,6 +139,22 @@ record TransactionSkeletonRecord(byte[] data,
           + getByteLen(numAccounts) + numAccounts + getByteLen(len) + len;
     }
     return serializedInstructionsLength;
+  }
+
+  private AccountMeta parseVersionedReadAccount(final PublicKey pubKey, final int a) {
+    return Arrays.binarySearch(invokedIndexes, a) < 0 ? createRead(pubKey) : createInvoked(pubKey);
+  }
+
+  private int parseVersionedIncludedAccounts(final AccountMeta[] accounts) {
+    int o = parseSignatureAccounts(accounts);
+    int a = numSigners;
+    for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = createWrite(readPubKey(data, o));
+    }
+    for (; a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = parseVersionedReadAccount(readPubKey(data, o), a);
+    }
+    return a;
   }
 
   @Override
@@ -324,14 +324,10 @@ record TransactionSkeletonRecord(byte[] data,
         : Arrays.copyOfRange(instructions, 0, d);
   }
 
-  private AccountMeta[] parseIncludedAccounts() {
-    final var accounts = new AccountMeta[numAccounts];
-    parseVersionedIncludedAccounts(accounts);
-    return accounts;
-  }
-
   @Override
   public Instruction[] parseInstructionsWithoutTableAccounts() {
-    return parseInstructions(parseIncludedAccounts());
+    final var accounts = new AccountMeta[numAccounts];
+    parseVersionedIncludedAccounts(accounts);
+    return parseInstructions(accounts);
   }
 }
