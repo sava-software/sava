@@ -100,13 +100,13 @@ try (final var httpClient = HttpClient.newBuilder().executor(executorService).bu
     final var noAuthorityFilter = Filter.createMemCompFilter(AUTHORITY_OPTION_OFFSET, new byte[]{0});
     
     final var accountInfoFuture = rpcClient.getProgramAccounts(
-    SolanaAccounts.MAIN_NET.addressLookupTableProgram(),
-    List.of(
+        SolanaAccounts.MAIN_NET.addressLookupTableProgram(),
+        List.of(
             // Filter all active frozen tables.
             activeFilter,
             noAuthorityFilter
-    ),
-    AddressLookupTable.FACTORY
+        ),
+        AddressLookupTable.FACTORY
     );
     
     final var accountInfoList = accountInfoFuture.join();
@@ -143,6 +143,7 @@ try (final var httpClient = HttpClient.newBuilder().build()) {
     });
     
     webSocket.connect();
+    
     Thread.sleep(Integer.MAX_VALUE);
   }
 }
