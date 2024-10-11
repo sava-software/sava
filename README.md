@@ -72,7 +72,7 @@ try (final var httpClient = HttpClient.newBuilder().executor(executorService).bu
     final var rpcClient = SolanaRpcClient.createClient(SolanaNetwork.MAIN_NET.getEndpoint(), httpClient);
     
     final var accountInfoFuture = rpcClient.getAccountInfo(
-        PublicKey.fromBase58Encoded("Fuy3RVz8u2pNaeGLHG7wp8eBg7JA3vzBcDB82PXTGAHz"), 
+        PublicKey.fromBase58Encoded("7Y9fsUT7EcnkH3jhN2GM4TBSBe1BeCyTCUwA2bxi29pr"), 
         AddressLookupTable.FACTORY
     );
     
@@ -83,6 +83,8 @@ try (final var httpClient = HttpClient.newBuilder().executor(executorService).bu
 ```
 
 #### Memory Compare Filter Program Accounts
+
+Retrieve all lookup tables which are active and frozen.
 
 Note: You will need access to an RPC node which has getProgramAccounts enabled, such as [Helius](helius.dev).
 
@@ -118,7 +120,9 @@ try (final var httpClient = HttpClient.newBuilder().executor(executorService).bu
 }
 ```
 
-#### Stream Address Lookup Table Updates
+#### Stream Program Accounts
+
+Subscribe to the Address Lookup Table Program.
 
 ```java
 try (final var httpClient = HttpClient.newBuilder().build()) {
