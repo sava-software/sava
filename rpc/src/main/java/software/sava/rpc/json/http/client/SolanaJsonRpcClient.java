@@ -735,8 +735,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         ? ""
         : String.format("\"maxSupportedTransactionVersion\":%d,", maxSupportedTransactionVersion);
     return sendPostRequest(TRANSACTION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s",%s"encoding":"%s"}]}""",
-        id.incrementAndGet(), txSignature, commitment.getValue(), maxVersionParam, encoding));
+            {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s",%s"encoding":"base64"}]}""",
+        id.incrementAndGet(), txSignature, commitment.getValue(), maxVersionParam));
   }
 
   @Override

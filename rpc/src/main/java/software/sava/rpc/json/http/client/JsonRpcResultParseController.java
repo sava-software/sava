@@ -12,6 +12,7 @@ record JsonRpcResultParseController<R>(Function<JsonIterator, R> parser) impleme
 
   @Override
   public R apply(final HttpResponse<byte[]> httpResponse) {
+    // System.out.println(new String(httpResponse.body()));
     try {
       final var ji = JsonRpcHttpClient.createJsonIterator(httpResponse);
       return parser.apply(ji);
