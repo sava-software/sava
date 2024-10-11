@@ -6,8 +6,7 @@ enum Channel {
   logs,
   program,
   signature,
-  slot,
-  transaction;
+  slot;
 
   private final String subscribe;
   private final String unSubscribe;

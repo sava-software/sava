@@ -11,7 +11,6 @@ import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -27,7 +26,6 @@ import java.util.function.Function;
 
 import static java.lang.System.Logger.Level.*;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
-import static java.util.concurrent.TimeUnit.HOURS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.joining;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
@@ -49,8 +47,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Map<String, Map<Commitment, Subscription<AccountInfo<byte[]>>>> accountSubs;
   private final Map<String, Map<Commitment, Subscription<TxLogs>>> txLogSubs;
   private final Map<String, Map<Commitment, Subscription<TxResult>>> signatureSubs;
-  private final Map<String, Map<Commitment, Subscription<TxResult>>> transactionSubs;
-  private final Map<String, Map<Commitment, Subscription<Map<PublicKey, AccountInfo<byte[]>>>>> programSubs;
+  private final Map<String, Map<Commitment, Subscription<AccountInfo<byte[]>>>> programSubs;
   private final Set<Consumer<RuntimeException>> exceptionSubs;
   private final AtomicReference<Subscription<ProcessedSlot>> slotSub;
   private final Map<Long, Subscription<?>> subscriptionsBySubId;
@@ -80,7 +77,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.accountSubs = new ConcurrentSkipListMap<>();
     this.txLogSubs = new ConcurrentSkipListMap<>();
     this.signatureSubs = new ConcurrentSkipListMap<>();
-    this.transactionSubs = new ConcurrentSkipListMap<>();
     this.programSubs = new ConcurrentSkipListMap<>();
     this.slotSub = new AtomicReference<>();
     this.subscriptionsBySubId = new ConcurrentSkipListMap<>();
@@ -125,7 +121,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.pendingSubscriptions.clear();
     queuePendingSubsOnOpen(this.accountSubs);
     queuePendingSubsOnOpen(this.txLogSubs);
-    queuePendingSubsOnOpen(this.transactionSubs);
     queuePendingSubsOnOpen(this.signatureSubs);
     queuePendingSubsOnOpen(this.programSubs);
     final var slotSub = this.slotSub.get();
@@ -328,7 +323,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   @Override
   public boolean subscribeToTokenAccount(final PublicKey tokenMint,
                                          final PublicKey ownerAddress,
-                                         final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer) {
+                                         final Consumer<AccountInfo<byte[]>> consumer) {
     return subscribeToTokenAccount(this.defaultCommitment, tokenMint, ownerAddress, consumer);
   }
 
@@ -336,7 +331,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public boolean subscribeToTokenAccount(final Commitment commitment,
                                          final PublicKey tokenMint,
                                          final PublicKey ownerAddress,
-                                         final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer) {
+                                         final Consumer<AccountInfo<byte[]>> consumer) {
     return programSubscribe(
         commitment,
         solanaAccounts.tokenProgram(),
@@ -350,14 +345,14 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   @Override
-  public boolean subscribeToTokenAccounts(final PublicKey ownerAddress, final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer) {
+  public boolean subscribeToTokenAccounts(final PublicKey ownerAddress, final Consumer<AccountInfo<byte[]>> consumer) {
     return subscribeToTokenAccounts(this.defaultCommitment, ownerAddress, consumer);
   }
 
   @Override
   public boolean subscribeToTokenAccounts(final Commitment commitment,
                                           final PublicKey ownerAddress,
-                                          final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer) {
+                                          final Consumer<AccountInfo<byte[]>> consumer) {
     return programSubscribe(
         commitment,
         solanaAccounts.tokenProgram(),
@@ -370,14 +365,14 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   @Override
-  public boolean programSubscribe(final PublicKey program, final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer) {
+  public boolean programSubscribe(final PublicKey program, final Consumer<AccountInfo<byte[]>> consumer) {
     return programSubscribe(this.defaultCommitment, program, List.of(), consumer);
   }
 
   @Override
   public boolean programSubscribe(final PublicKey program,
                                   final List<Filter> filters,
-                                  final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer) {
+                                  final Consumer<AccountInfo<byte[]>> consumer) {
     return programSubscribe(this.defaultCommitment, program, filters, consumer);
   }
 
@@ -385,7 +380,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public boolean programSubscribe(final Commitment commitment,
                                   final PublicKey program,
                                   final List<Filter> filters,
-                                  final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer) {
+                                  final Consumer<AccountInfo<byte[]>> consumer) {
     final var sub = this.programSubs.get(program.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
       final var filtersJson = filters.isEmpty() ? "" : filters.stream()
@@ -412,6 +407,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   /// Only supported by Helius on a Business or Professional plan
+  /// TODO implement as Helius Websocket
   private boolean transactionSubscribe(final Commitment commitment,
                                        final boolean vote,
                                        final boolean failed,
@@ -450,12 +446,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         transactionDetails,
         showRewards
     );
-    final var sub = this.transactionSubs.get(params);
-    if (sub == null) {
-      return queueSubscription(commitment, Channel.transaction, params, params, this.transactionSubs, consumer);
-    } else {
-      return false;
-    }
+//    final var sub = this.transactionSubs.get(params);
+//    if (sub == null) {
+//      return queueSubscription(commitment, Channel.transaction, params, params, this.transactionSubs, consumer);
+//    } else {
+//    }
+    return false;
   }
 
   @Override
@@ -486,14 +482,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private static final CharBufferFunction<Channel> METHOD_PARSER = (buf, offset, len) -> {
     if (fieldEquals("accountNotification", buf, offset, len)) {
       return Channel.account;
-    } else if (fieldEquals("logsNotification", buf, offset, len)) {
-      return Channel.logs;
     } else if (fieldEquals("signatureNotification", buf, offset, len)) {
       return Channel.signature;
-    } else if (fieldEquals("transactionNotification", buf, offset, len)) {
-      return Channel.transaction;
     } else if (fieldEquals("programNotification", buf, offset, len)) {
       return Channel.program;
+    } else if (fieldEquals("logsNotification", buf, offset, len)) {
+      return Channel.logs;
     } else if (fieldEquals("slotNotification", buf, offset, len)) {
       return Channel.slot;
     } else {
@@ -562,7 +556,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                               final int tail,
                               final JsonIterator ji,
                               final WebSocket webSocket) {
-    System.out.format("<- %s%n", new String(msg, offset, tail - offset));
+    // System.out.format("<- %s%n", new String(msg, offset, tail - offset));
     try {
       if (ji.skipUntil("method") == null) {
         if (ji.reset(offset).skipUntil("error") != null) {
@@ -605,44 +599,39 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             log.log(DEBUG, () -> new String(msg, offset, tail - offset));
             final int paramsMark = ji.mark();
             ji.skipUntil("result");
-            if (channel == Channel.transaction) {
-              ji.skipUntil("transaction");
 
-
-            } else {
-              final int resultMark = ji.mark();
-              ji.skipUntil("context");
-              final var context = Context.parse(ji);
-              if (ji.skipUntil("value") == null) {
-                ji.reset(resultMark).skipUntil("value");
-              }
-              switch (channel) {
-                case account ->
-                    publish(webSocket, channel, ji, paramsMark, sub -> AccountInfo.parse(sub.publicKey(), ji, context, AccountInfo.BYTES_IDENTITY));
-                case logs -> publish(webSocket, channel, ji, paramsMark, TxLogs.parse(ji, context));
-                case program ->
-                    publish(webSocket, channel, ji, paramsMark, AccountInfo.parseAccount(ji, context, BYTES_IDENTITY));
-                case signature -> {
-                  final var result = TxResult.parseResult(ji, context);
-                  ji.skipRestOfObject();
-                  if (ji.skipUntil("subscription") == null) {
-                    ji.reset(paramsMark).skipUntil("subscription");
-                  }
-                  final long subId = ji.readLong();
-                  @SuppressWarnings("unchecked") final var sub = (Subscription<TxResult>) this.subscriptionsBySubId.get(subId);
-                  if (sub == null) {
-                    sendUnSubscription(webSocket, channel, subId);
-                  } else {
-                    if (result != null) {
-                      sub.accept(result);
-                      if (result.value() == null) {
-                        this.subscriptionsBySubId.remove(subId);
-                      }
+            final int resultMark = ji.mark();
+            ji.skipUntil("context");
+            final var context = Context.parse(ji);
+            if (ji.skipUntil("value") == null) {
+              ji.reset(resultMark).skipUntil("value");
+            }
+            switch (channel) {
+              case account ->
+                  publish(webSocket, channel, ji, paramsMark, sub -> AccountInfo.parse(sub.publicKey(), ji, context, AccountInfo.BYTES_IDENTITY));
+              case logs -> publish(webSocket, channel, ji, paramsMark, TxLogs.parse(ji, context));
+              case program ->
+                  publish(webSocket, channel, ji, paramsMark, AccountInfo.parseAccount(ji, context, BYTES_IDENTITY));
+              case signature -> {
+                final var result = TxResult.parseResult(ji, context);
+                ji.skipRestOfObject();
+                if (ji.skipUntil("subscription") == null) {
+                  ji.reset(paramsMark).skipUntil("subscription");
+                }
+                final long subId = ji.readLong();
+                @SuppressWarnings("unchecked") final var sub = (Subscription<TxResult>) this.subscriptionsBySubId.get(subId);
+                if (sub == null) {
+                  sendUnSubscription(webSocket, channel, subId);
+                } else {
+                  if (result != null) {
+                    sub.accept(result);
+                    if (result.value() == null) {
+                      this.subscriptionsBySubId.remove(subId);
                     }
                   }
                 }
-                default -> { // ignored.
-                }
+              }
+              default -> { // ignored.
               }
             }
           }
@@ -824,32 +813,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.pendingUnsubscriptions.clear();
     this.subscriptionsBySubId.clear();
     this.accountSubs.clear();
-    this.transactionSubs.clear();
     this.txLogSubs.clear();
     this.signatureSubs.clear();
     this.programSubs.clear();
     this.slotSub.set(null);
-  }
-
-
-  public static void main(final String[] args) throws InterruptedException {
-    final var meteoraProgramId = PublicKey.fromBase58Encoded("LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo");
-    try (final var executorService = Executors.newVirtualThreadPerTaskExecutor()) {
-      try (final var httpClient = HttpClient.newBuilder().executor(executorService).build()) {
-        final var websocketBuilder = SolanaRpcWebsocket.build();
-        websocketBuilder.uri(URI.create("wss://atlas-mainnet.helius-rpc.com?api-key="));
-        websocketBuilder.webSocketBuilder(httpClient);
-        websocketBuilder.commitment(Commitment.CONFIRMED);
-        final var webSocket = websocketBuilder.create();
-//        webSocket.transactionSubscribe(
-//            Commitment.CONFIRMED,
-//            List.of(), List.of(),
-//            List.of(meteoraProgramId),
-//            result -> System.out.println(result)
-//        );
-        webSocket.connect();
-        HOURS.sleep(1);
-      }
-    }
   }
 }

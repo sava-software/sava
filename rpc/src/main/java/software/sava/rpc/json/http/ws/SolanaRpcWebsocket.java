@@ -14,7 +14,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 public interface SolanaRpcWebsocket extends AutoCloseable {
@@ -70,30 +69,30 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   boolean subscribeToTokenAccount(final PublicKey tokenMint,
                                   final PublicKey ownerAddress,
-                                  final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer);
+                                  final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean subscribeToTokenAccount(final Commitment commitment,
                                   final PublicKey tokenMint,
                                   final PublicKey ownerAddress,
-                                  final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer);
+                                  final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean subscribeToTokenAccounts(final PublicKey ownerAddress,
-                                   final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer);
+                                   final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean subscribeToTokenAccounts(final Commitment commitment,
                                    final PublicKey ownerAddress,
-                                   final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer);
+                                   final Consumer<AccountInfo<byte[]>> consumer);
 
-  boolean programSubscribe(final PublicKey program, final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer);
+  boolean programSubscribe(final PublicKey program, final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean programSubscribe(final PublicKey program,
                            final List<Filter> filters,
-                           final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer);
+                           final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean programSubscribe(final Commitment commitment,
                            final PublicKey program,
                            final List<Filter> filters,
-                           final Consumer<Map<PublicKey, AccountInfo<byte[]>>> consumer);
+                           final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean programUnsubscribe(final PublicKey program);
 
