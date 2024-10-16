@@ -29,6 +29,7 @@ final JLV = JavaLanguageVersion.of(project.findProperty('jv') as Integer ?: 23)
 subprojects {
   apply plugin: 'java-library'
   apply plugin: 'maven-publish'
+  apply plugin: 'signing'
 
   project.group = 'software.sava'
   project.version = "$VERSION"
@@ -53,13 +54,6 @@ subprojects {
     mavenCentral()
   }
 
-  configurations.configureEach {
-    resolutionStrategy {
-      cacheDynamicVersionsFor 5, 'minutes'
-      cacheChangingModulesFor 5, 'minutes'
-    }
-  }
-
   dependencies {
     testImplementation libs.junit.jupiter
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -74,38 +68,68 @@ subprojects {
     }
   }
 
-  tasks.register('sourcesJar', Jar) {
-    from sourceSets.main.allJava
-    archiveClassifier.set('sources')
+  java {
+    withJavadocJar()
+    withSourcesJar()
   }
 
   publishing {
     publications {
       mavenJava(MavenPublication) {
-        from components.java
-        artifact sourcesJar
         groupId project.group
         artifactId project.parent.name + '-' + project.name
         version = project.version
+
+        from components.java
+
         pom {
           name = project.parent.name + '-' + project.name
+          description = "Solana Java Core & RPC SDK"
           url = "$VCS_URL"
+          licenses {
+            license {
+              name = 'MIT License'
+              url = 'https://github.com/sava-software/sava/blob/main/LICENSE'
+            }
+          }
+          developers {
+            developer {
+              name = 'Jim'
+              id = 'jpe7s'
+              email = 'jpe7s.salt188@passfwd.com'
+              organization = 'Sava Software'
+              organizationUrl = 'https://github.com/sava-software'
+            }
+          }
           scm {
             connection = 'scm:git:git@github.com:sava-software/sava.git'
+            developerConnection = 'scm:git:ssh@github.com:sava-software/sava.git'
             url = "$VCS_URL"
           }
         }
       }
     }
     repositories {
+//      maven {
+//        name = "GithubPackages"
+//        url = "https://maven.pkg.github.com/sava-software/sava"
+//        credentials {
+//          username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user.write")
+//          password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token.write")
+//        }
+//      }
       maven {
-        name = "GithubPackages"
-        url = "https://maven.pkg.github.com/sava-software/sava"
+        name = "MavenCentral"
+        url = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
         credentials {
-          username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user.write")
-          password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token.write")
+          username = System.getenv("OSSRH_USER") ?: project.findProperty("ossrhUsername")
+          password = System.getenv("OSSRH_PASS") ?: project.findProperty("ossrhPassword")
         }
       }
     }
+  }
+
+  signing {
+    sign publishing.publications.mavenJava
   }
 }
