@@ -110,20 +110,12 @@ subprojects {
       }
     }
     repositories {
-//      maven {
-//        name = "GithubPackages"
-//        url = "https://maven.pkg.github.com/sava-software/sava"
-//        credentials {
-//          username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user.write")
-//          password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token.write")
-//        }
-//      }
       maven {
-        name = "MavenCentral"
-        url = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+        name = "GithubPackages"
+        url = "https://maven.pkg.github.com/sava-software/sava"
         credentials {
-          username = System.getenv("OSSRH_USER") ?: project.findProperty("ossrhUsername")
-          password = System.getenv("OSSRH_PASS") ?: project.findProperty("ossrhPassword")
+          username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user.write")
+          password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token.write")
         }
       }
     }
