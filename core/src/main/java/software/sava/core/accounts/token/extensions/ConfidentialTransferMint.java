@@ -17,16 +17,9 @@ public record ConfidentialTransferMint(PublicKey authority,
     if (data == null || data.length == 0) {
       return null;
     }
-    int i = offset;
-
-    final var authority = readPubKey(data, i);
-    i += PUBLIC_KEY_LENGTH;
-
-    final boolean autoApproveNewAccounts = data[i] == 1;
-    ++i;
-
-    final var auditorElGamalKey = readPubKey(data, i);
-
+    final var authority = readPubKey(data, offset);
+    final boolean autoApproveNewAccounts = data[offset + PUBLIC_KEY_LENGTH] == 1;
+    final var auditorElGamalKey = readPubKey(data, offset + PUBLIC_KEY_LENGTH + 1);
     return new ConfidentialTransferMint(
         authority,
         autoApproveNewAccounts,
@@ -46,6 +39,9 @@ public record ConfidentialTransferMint(PublicKey authority,
 
   @Override
   public int write(final byte[] data, final int offset) {
-    throw new UnsupportedOperationException("TODO");
+    authority.write(data, offset);
+    data[offset + PUBLIC_KEY_LENGTH] = (byte) (autoApproveNewAccounts ? 1 : 0);
+    auditorElGamalKey.write(data, offset + PUBLIC_KEY_LENGTH + 1);
+    return BYTES;
   }
 }

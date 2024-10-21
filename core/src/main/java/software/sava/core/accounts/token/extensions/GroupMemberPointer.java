@@ -6,22 +6,22 @@ import software.sava.core.accounts.token.ExtensionType;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
-public record MetadataPointer(PublicKey authority, PublicKey metadataAddress) implements TokenExtension {
+public record GroupMemberPointer(PublicKey authority, PublicKey memberAddress) implements TokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH;
 
-  public static MetadataPointer read(final byte[] data, final int offset) {
+  public static GroupMemberPointer read(final byte[] data, final int offset) {
     if (data == null || data.length == 0) {
       return null;
     }
     final var authority = readPubKey(data, offset);
-    final var metadataAddress = readPubKey(data, offset + PUBLIC_KEY_LENGTH);
-    return new MetadataPointer(authority, metadataAddress);
+    final var memberAddress = readPubKey(data, offset + PUBLIC_KEY_LENGTH);
+    return new GroupMemberPointer(authority, memberAddress);
   }
 
   @Override
   public ExtensionType extensionType() {
-    return ExtensionType.MetadataPointer;
+    return ExtensionType.GroupMemberPointer;
   }
 
   @Override
@@ -32,7 +32,7 @@ public record MetadataPointer(PublicKey authority, PublicKey metadataAddress) im
   @Override
   public int write(final byte[] data, final int offset) {
     authority.write(data, offset);
-    metadataAddress.write(data, offset + PUBLIC_KEY_LENGTH);
+    memberAddress.write(data, offset + PUBLIC_KEY_LENGTH);
     return BYTES;
   }
 }

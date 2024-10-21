@@ -2,6 +2,7 @@ package software.sava.core.accounts.token.extensions;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.ExtensionType;
+import software.sava.core.borsh.Borsh;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.Map;
@@ -92,8 +93,22 @@ public record TokenMetadata(PublicKey updateAuthority,
         + additionalMetaDataLength;
   }
 
+
   @Override
   public int write(final byte[] data, final int offset) {
-    throw new UnsupportedOperationException("TODO");
+    updateAuthority.write(data, offset);
+    int i = offset + PUBLIC_KEY_LENGTH;
+    mint.write(data, i);
+    i += PUBLIC_KEY_LENGTH;
+    i += Borsh.write(name, data, i);
+    i += Borsh.write(symbol, data, i);
+    i += Borsh.write(uri, data, i);
+    ByteUtil.putInt32LE(data, i, additionalMetadata.size());
+    i += Integer.BYTES;
+    for (final var entry : additionalMetadata.entrySet()) {
+      i += Borsh.write(entry.getKey(), data, i);
+      i += Borsh.write(entry.getValue(), data, i);
+    }
+    return i - offset;
   }
 }

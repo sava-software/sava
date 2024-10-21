@@ -23,23 +23,16 @@ public record TransferFeeConfig(PublicKey transferFeeConfigAuthority,
     if (data == null || data.length == 0) {
       return null;
     }
-
     int i = offset;
-
     final var transferFeeConfigAuthority = readPubKey(data, i);
     i += PUBLIC_KEY_LENGTH;
-
     final var withdrawWithheldAuthority = readPubKey(data, i);
     i += PUBLIC_KEY_LENGTH;
-
     final long withheldAmount = ByteUtil.getInt64LE(data, i);
     i += Long.BYTES;
-
     final var olderTransferFee = TransferFee.read(data, i);
     i += olderTransferFee.l();
-
     final var newerTransferFee = TransferFee.read(data, i);
-
     return new TransferFeeConfig(
         transferFeeConfigAuthority,
         withdrawWithheldAuthority,
@@ -61,6 +54,14 @@ public record TransferFeeConfig(PublicKey transferFeeConfigAuthority,
 
   @Override
   public int write(final byte[] data, final int offset) {
-    throw new UnsupportedOperationException("TODO");
+    transferFeeConfigAuthority.write(data, offset);
+    int i = offset + PUBLIC_KEY_LENGTH;
+    withdrawWithheldAuthority.write(data, offset);
+    i += PUBLIC_KEY_LENGTH;
+    ByteUtil.putInt64LE(data, i, withheldAmount);
+    i += Long.BYTES;
+    i += olderTransferFee.write(data, i);
+    newerTransferFee.write(data, i);
+    return BYTES;
   }
 }

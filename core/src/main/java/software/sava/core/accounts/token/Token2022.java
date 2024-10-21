@@ -3,13 +3,16 @@ package software.sava.core.accounts.token;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
+import software.sava.core.serial.Serializable;
 
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.function.BiFunction;
 
-public record Token2022(Mint mint, List<TokenExtension> tokenExtensions) {
+public record Token2022(Mint mint,
+                        int accountType,
+                        List<TokenExtension> tokenExtensions) implements Serializable {
 
   private static final int PADDING_AFTER_MINT = 83;
 
@@ -21,7 +24,7 @@ public record Token2022(Mint mint, List<TokenExtension> tokenExtensions) {
     }
     final var mint = Mint.read(address, data);
     int i = Mint.BYTES + PADDING_AFTER_MINT;
-    // int accountType = data[i] & 0xFF; // mint
+    final int accountType = data[i] & 0xFF;
     ++i;
     final var extensions = new ArrayList<TokenExtension>();
     final var extensionTypes = ExtensionType.values();
@@ -31,28 +34,63 @@ public record Token2022(Mint mint, List<TokenExtension> tokenExtensions) {
       int length = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
       final var extensionData = switch (extensionTypes[extensionType]) {
+        case Uninitialized -> Uninitialized.INSTANCE;
         case TransferFeeConfig -> TransferFeeConfig.read(data, i);
         case TransferFeeAmount -> TransferFeeAmount.read(data, i);
         case MintCloseAuthority -> MintCloseAuthority.read(data, i);
         case ConfidentialTransferMint -> ConfidentialTransferMint.read(data, i);
+        case DefaultAccountState -> DefaultAccountState.read(data, i);
+        case ImmutableOwner -> ImmutableOwner.INSTANCE;
+        case MemoTransfer -> MemoTransfer.read(data, i);
+        case NonTransferable -> NonTransferable.INSTANCE;
+        case InterestBearingConfig -> InterestBearingConfig.read(data, i);
+        case CpiGuard -> CpiGuard.read(data, i);
+        case PermanentDelegate -> PermanentDelegate.read(data, i);
+        case NonTransferableAccount -> NonTransferableAccount.INSTANCE;
+        case TransferHook -> TransferHook.read(data, i);
+        case TransferHookAccount -> TransferHookAccount.read(data, i);
         case MetadataPointer -> MetadataPointer.read(data, i);
         case TokenMetadata -> TokenMetadata.read(data, i);
-        default -> null;
+        case GroupPointer -> GroupPointer.read(data, i);
+        case TokenGroup -> TokenGroup.INSTANCE;
+        case GroupMemberPointer -> GroupMemberPointer.read(data, i);
+        case TokenGroupMember -> TokenGroupMember.INSTANCE;
+        case ConfidentialTransferAccount, ConfidentialTransferFeeAmount, ConfidentialTransferFeeConfig -> null;
       };
       if (extensionData != null) {
         extensions.add(extensionData);
       }
       i += length;
     }
-    return new Token2022(mint, List.copyOf(extensions));
+    return new Token2022(mint, accountType, java.util.List.copyOf(extensions));
   }
 
+  @Override
+  public int l() {
+    int l = Mint.BYTES + PADDING_AFTER_MINT + 1 + (tokenExtensions.size() * Integer.BYTES);
+    for (final var extension : tokenExtensions) {
+      l += extension.l();
+    }
+    return l;
+  }
+
+  @Override
+  public int write(final byte[] data, final int offset) {
+    int i = offset + mint.write(data, offset) + PADDING_AFTER_MINT;
+    data[i] = (byte) accountType;
+    ++i;
+    for (final var extension : tokenExtensions) {
+      i += TokenExtension.write(extension, data, i);
+    }
+    return i - offset;
+  }
 
   public static void main(final String[] args) {
     final byte[] data = Base64.getDecoder().decode("""
         AQAAAL0bqBXg71MaIuhnJGvlnfWFAR/enZ3TzgTF+LFU5oyPAAAAAAAAAAAJAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARIAQAC9G6gV4O9TGiLoZyRr5Z31hQEf3p2d084ExfixVOaMj70bqBXg71MaIuhnJGvlnfWFAR/enZ3TzgTF+LFU5oyPAwAgAL0bqBXg71MaIuhnJGvlnfWFAR/enZ3TzgTF+LFU5oyPEwCiAr0bqBXg71MaIuhnJGvlnfWFAR/enZ3TzgTF+LFU5oyPvRuoFeDvUxoi6Gcka+Wd9YUBH96dndPOBMX4sVTmjI8NAAAAVGVzdCBGdW5kIDAwMQQAAAB0U09MTgAAAGh0dHBzOi8vYXBpLmdsYW0uc3lzdGVtcy9tZXRhZGF0YS9EakNXcW42RW1TbUFqN0dzeEtaeEN0bm9wZ21HWlljRFIycWoxVkR0VEpuegsAAAAGAAAARnVuZElkLAAAAEJrYllNNkg1emFnN1oxNVUxVnZhRjdhRTVnUVl4RjZVd1M1dEFNN2N4VnhSCAAAAEltYWdlVXJpTwAAAGh0dHBzOi8vYXBpLmdsYW0uc3lzdGVtcy9pbWFnZS9EakNXcW42RW1TbUFqN0dzeEtaeEN0bm9wZ21HWlljRFIycWoxVkR0VEpuei5wbmcSAAAAU2hhcmVDbGFzc0N1cnJlbmN5AwAAAFNPTB0AAABDdXJyZW5jeU9mTWluaW1hbFN1YnNjcmlwdGlvbgMAAABTT0wSAAAARnVsbFNoYXJlQ2xhc3NOYW1lDQAAAFRlc3QgRnVuZCAwMDEQAAAASW52ZXN0bWVudFN0YXR1cwQAAABvcGVuIgAAAE1pbmltYWxJbml0aWFsU3Vic2NyaXB0aW9uQ2F0ZWdvcnkGAAAAYW1vdW50IgAAAE1pbmltYWxJbml0aWFsU3Vic2NyaXB0aW9uSW5BbW91bnQBAAAAMRwAAABTaGFyZUNsYXNzRGlzdHJpYnV0aW9uUG9saWN5DAAAAGFjY3VtdWxhdGluZxQAAABTaGFyZUNsYXNzTGF1bmNoRGF0ZQoAAAAyMDI0LTA4LTI1EwAAAFNoYXJlQ2xhc3NMaWZlY3ljbGUGAAAAYWN0aXZl""");
 
     final var token2022 = Token2022.read(PublicKey.fromBase58Encoded("DjCWqn6EmSmAj7GsxKZxCtnopgmGZYcDR2qj1VDtTJnz"), data);
-    System.out.println(token2022);
+    System.out.println(token2022.mint);
+    token2022.tokenExtensions.forEach(System.out::println);
   }
 }

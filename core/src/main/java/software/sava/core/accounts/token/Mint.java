@@ -1,8 +1,10 @@
 package software.sava.core.accounts.token;
 
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.serial.Serializable;
 import software.sava.core.encoding.ByteUtil;
+import software.sava.core.serial.Serializable;
+
+import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
@@ -15,6 +17,8 @@ public record Mint(PublicKey address,
                    PublicKey freezeAuthority) implements Serializable {
 
   public static final int BYTES = 82;
+
+  public static final BiFunction<PublicKey, byte[], Mint> FACTORY = Mint::read;
 
   public static Mint read(final PublicKey address, final byte[] data) {
     if (data == null || data.length == 0) {
