@@ -1,6 +1,6 @@
-package software.sava.core.borsh;
+package software.sava.core.serial;
 
-record Borshed(byte[] data) implements Borsh {
+record Serialized(byte[] data) implements Serializable {
 
   @Override
   public int l() {

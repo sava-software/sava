@@ -1,7 +1,7 @@
 package software.sava.core.accounts.token;
 
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.borsh.Borsh;
+import software.sava.core.serial.Serializable;
 import software.sava.core.encoding.ByteUtil;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
@@ -12,7 +12,7 @@ public record Mint(PublicKey address,
                    long supply,
                    int decimals,
                    boolean initialized,
-                   PublicKey freezeAuthority) implements Borsh {
+                   PublicKey freezeAuthority) implements Serializable {
 
   public static final int BYTES = 82;
 

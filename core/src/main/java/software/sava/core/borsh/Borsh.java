@@ -2,6 +2,7 @@ package software.sava.core.borsh;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
+import software.sava.core.serial.Serializable;
 
 import java.lang.reflect.Array;
 import java.math.BigInteger;
@@ -13,31 +14,13 @@ import java.util.OptionalLong;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 @SuppressWarnings("unchecked")
-public interface Borsh {
-
-  int l();
-
-  int write(final byte[] data, final int offset);
-
-  default int write(final byte[] data) {
-    return write(data, 0);
-  }
-
-  default byte[] write() {
-    final byte[] data = new byte[l()];
-    write(data);
-    return data;
-  }
+public interface Borsh extends Serializable {
 
   default byte[] writeOptional() {
     final byte[] data = new byte[1 + l()];
     data[0] = 1;
     write(data, 1);
     return data;
-  }
-
-  default Borsh reusable() {
-    return new Borshed(write());
   }
 
   // Serialization Utility Methods

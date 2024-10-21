@@ -23,7 +23,6 @@ public record TokenMetadata(PublicKey updateAuthority,
     }
 
     int i = offset;
-    System.out.println(ByteUtil.indexOf(data, i, PublicKey.fromBase58Encoded("DjCWqn6EmSmAj7GsxKZxCtnopgmGZYcDR2qj1VDtTJnz").toByteArray()));
 
     final var updateAuthority = readPubKey(data, i);
     i += PUBLIC_KEY_LENGTH;
