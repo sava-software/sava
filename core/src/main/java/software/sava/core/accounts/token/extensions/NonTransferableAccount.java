@@ -1,7 +1,5 @@
 package software.sava.core.accounts.token.extensions;
 
-import software.sava.core.accounts.token.ExtensionType;
-
 public record NonTransferableAccount() implements TokenExtension {
 
   public static final NonTransferableAccount INSTANCE = new NonTransferableAccount();

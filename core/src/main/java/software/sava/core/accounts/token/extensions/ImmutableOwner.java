@@ -1,7 +1,5 @@
 package software.sava.core.accounts.token.extensions;
 
-import software.sava.core.accounts.token.ExtensionType;
-
 public record ImmutableOwner() implements TokenExtension {
 
   public static final ImmutableOwner INSTANCE = new ImmutableOwner();

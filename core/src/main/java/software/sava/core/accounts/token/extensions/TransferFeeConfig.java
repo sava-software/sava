@@ -1,7 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.accounts.token.ExtensionType;
 import software.sava.core.encoding.ByteUtil;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;

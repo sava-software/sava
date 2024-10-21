@@ -1,7 +1,5 @@
 package software.sava.core.accounts.token.extensions;
 
-import software.sava.core.accounts.token.ExtensionType;
-
 public record ConfidentialTransferFeeConfig() implements TokenExtension {
 
   public static ConfidentialTransferFeeConfig read(final byte[] data, final int offset) {

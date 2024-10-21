@@ -1,6 +1,5 @@
 package software.sava.core.accounts.token.extensions;
 
-import software.sava.core.accounts.token.ExtensionType;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
