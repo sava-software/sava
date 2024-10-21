@@ -5,14 +5,14 @@ import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.List;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.function.BiFunction;
 
 public record Token2022(Mint mint,
-                        int accountType,
-                        List<TokenExtension> tokenExtensions) implements Serializable {
+                        AccountType accountType,
+                        Map<ExtensionType, TokenExtension> tokenExtensions) implements Serializable {
 
   private static final int PADDING_AFTER_MINT = 83;
 
@@ -24,16 +24,19 @@ public record Token2022(Mint mint,
     }
     final var mint = Mint.read(address, data);
     int i = Mint.BYTES + PADDING_AFTER_MINT;
-    final int accountType = data[i] & 0xFF;
+    final var accountTypes = AccountType.values();
+    final int ordinal = data[i] & 0xFF;
+    final var accountType = ordinal < accountTypes.length ? accountTypes[ordinal] : null;
     ++i;
-    final var extensions = new ArrayList<TokenExtension>();
+    final var extensions = new EnumMap<ExtensionType, TokenExtension>(ExtensionType.class);
     final var extensionTypes = ExtensionType.values();
     while (i < data.length) {
       int extensionType = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
       int length = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
-      final var extensionData = switch (extensionTypes[extensionType]) {
+      final var type = extensionTypes[extensionType];
+      final var extensionData = switch (type) {
         case Uninitialized -> Uninitialized.INSTANCE;
         case TransferFeeConfig -> TransferFeeConfig.read(data, i);
         case TransferFeeAmount -> TransferFeeAmount.read(data, i);
@@ -55,20 +58,23 @@ public record Token2022(Mint mint,
         case TokenGroup -> TokenGroup.INSTANCE;
         case GroupMemberPointer -> GroupMemberPointer.read(data, i);
         case TokenGroupMember -> TokenGroupMember.INSTANCE;
-        case ConfidentialTransferAccount, ConfidentialTransferFeeAmount, ConfidentialTransferFeeConfig -> null;
+        case ConfidentialTransferAccount, ConfidentialTransferFeeAmount, ConfidentialTransferFeeConfig -> {
+          System.out.println("TODO: " + extensionTypes[extensionType]);
+          yield null;
+        }
       };
       if (extensionData != null) {
-        extensions.add(extensionData);
+        extensions.put(type, extensionData);
       }
       i += length;
     }
-    return new Token2022(mint, accountType, java.util.List.copyOf(extensions));
+    return new Token2022(mint, accountType, extensions);
   }
 
   @Override
   public int l() {
     int l = Mint.BYTES + PADDING_AFTER_MINT + 1 + (tokenExtensions.size() * Integer.BYTES);
-    for (final var extension : tokenExtensions) {
+    for (final var extension : tokenExtensions.values()) {
       l += extension.l();
     }
     return l;
@@ -77,9 +83,9 @@ public record Token2022(Mint mint,
   @Override
   public int write(final byte[] data, final int offset) {
     int i = offset + mint.write(data, offset) + PADDING_AFTER_MINT;
-    data[i] = (byte) accountType;
+    data[i] = (byte) accountType.ordinal();
     ++i;
-    for (final var extension : tokenExtensions) {
+    for (final var extension : tokenExtensions.values()) {
       i += TokenExtension.write(extension, data, i);
     }
     return i - offset;
@@ -93,6 +99,7 @@ public record Token2022(Mint mint,
 
     final var token2022 = Token2022.read(PublicKey.fromBase58Encoded("2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo"), data);
     System.out.println(token2022.mint);
-    token2022.tokenExtensions.forEach(System.out::println);
+    System.out.println(token2022.accountType);
+    token2022.tokenExtensions.values().forEach(System.out::println);
   }
 }
