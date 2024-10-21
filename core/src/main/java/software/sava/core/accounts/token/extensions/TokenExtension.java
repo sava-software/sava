@@ -4,7 +4,7 @@ import software.sava.core.accounts.token.ExtensionType;
 import software.sava.core.serial.Serializable;
 
 public sealed interface TokenExtension extends Serializable permits
-    ConfidentialTransferMint, MintCloseAuthority, TokenMetadata, TransferFeeAmount, TransferFeeConfig {
+    ConfidentialTransferMint, MetadataPointer, MintCloseAuthority, TokenMetadata, TransferFeeAmount, TransferFeeConfig {
 
   ExtensionType extensionType();
 

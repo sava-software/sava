@@ -35,6 +35,7 @@ public record Token2022(Mint mint, List<TokenExtension> tokenExtensions) {
         case TransferFeeAmount -> TransferFeeAmount.read(data, i);
         case MintCloseAuthority -> MintCloseAuthority.read(data, i);
         case ConfidentialTransferMint -> ConfidentialTransferMint.read(data, i);
+        case MetadataPointer -> MetadataPointer.read(data, i);
         case TokenMetadata -> TokenMetadata.read(data, i);
         default -> null;
       };
