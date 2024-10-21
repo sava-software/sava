@@ -29,7 +29,7 @@ final JLV = JavaLanguageVersion.of(project.findProperty('jv') as Integer ?: 23)
 subprojects {
   apply plugin: 'java-library'
   apply plugin: 'maven-publish'
-  apply plugin: 'signing'
+  // apply plugin: 'signing'
 
   project.group = 'software.sava'
   project.version = "$VERSION"
@@ -121,7 +121,7 @@ subprojects {
     }
   }
 
-  signing {
-    sign publishing.publications.mavenJava
-  }
+//  signing {
+//    sign publishing.publications.mavenJava
+//  }
 }
