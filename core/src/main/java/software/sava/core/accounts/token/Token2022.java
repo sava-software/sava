@@ -1,8 +1,7 @@
 package software.sava.core.accounts.token;
 
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.accounts.token.extensions.TokenExtension;
-import software.sava.core.accounts.token.extensions.TokenMetadata;
+import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.ArrayList;
@@ -25,14 +24,22 @@ public record Token2022(Mint mint, List<TokenExtension> tokenExtensions) {
     // int accountType = data[i] & 0xFF; // mint
     ++i;
     final var extensions = new ArrayList<TokenExtension>();
+    final var extensionTypes = ExtensionType.values();
     while (i < data.length) {
       int extensionType = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
       int length = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
-      if (extensionType == ExtensionType.TokenMetadata.ordinal()) {
-        final var extension = TokenMetadata.read(data, i);
-        extensions.add(extension);
+      final var extensionData = switch (extensionTypes[extensionType]) {
+        case TransferFeeConfig -> TransferFeeConfig.read(data, i);
+        case TransferFeeAmount -> TransferFeeAmount.read(data, i);
+        case MintCloseAuthority -> MintCloseAuthority.read(data, i);
+        case ConfidentialTransferMint -> ConfidentialTransferMint.read(data, i);
+        case TokenMetadata -> TokenMetadata.read(data, i);
+        default -> null;
+      };
+      if (extensionData != null) {
+        extensions.add(extensionData);
       }
       i += length;
     }

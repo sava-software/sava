@@ -70,7 +70,30 @@ public record TokenMetadata(PublicKey updateAuthority,
   }
 
   @Override
-  public int ordinal() {
-    return ExtensionType.TokenMetadata.ordinal();
+  public ExtensionType extensionType() {
+    return ExtensionType.TokenMetadata;
+  }
+
+  @Override
+  public int l() {
+    final int additionalMetaDataLength = Integer.BYTES
+        + (Long.BYTES * additionalMetadata.size())
+        + additionalMetadata.entrySet().stream()
+        .mapToInt(entry -> entry.getKey().length() + entry.getValue().length())
+        .sum();
+    return PUBLIC_KEY_LENGTH
+        + PUBLIC_KEY_LENGTH
+        + Integer.BYTES
+        + name.length()
+        + Integer.BYTES
+        + symbol.length()
+        + Integer.BYTES
+        + uri.length()
+        + additionalMetaDataLength;
+  }
+
+  @Override
+  public int write(final byte[] data, final int offset) {
+    throw new UnsupportedOperationException("TODO");
   }
 }
