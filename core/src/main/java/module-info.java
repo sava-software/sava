@@ -14,4 +14,5 @@ module software.sava.core {
   exports software.sava.core.rpc;
   exports software.sava.core.tx;
   exports software.sava.core.util;
+  exports software.sava.core.accounts.token.extensions;
 }
