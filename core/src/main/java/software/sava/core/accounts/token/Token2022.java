@@ -5,7 +5,6 @@ import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.EnumMap;
 import java.util.Map;
@@ -13,7 +12,7 @@ import java.util.function.BiFunction;
 
 public record Token2022(Mint mint,
                         AccountType accountType,
-                        Map<ExtensionType, TokenExtension> tokenExtensions) implements Serializable {
+                        Map<ExtensionType, TokenExtension> extensions) implements Serializable {
 
   private static final int PADDING_AFTER_MINT = 83;
 
@@ -43,6 +42,7 @@ public record Token2022(Mint mint,
         case TransferFeeAmount -> TransferFeeAmount.read(data, i);
         case MintCloseAuthority -> MintCloseAuthority.read(data, i);
         case ConfidentialTransferMint -> ConfidentialTransferMint.read(data, i);
+        case ConfidentialTransferAccount -> ConfidentialTransferAccount.read(data, i, i + length);
         case DefaultAccountState -> DefaultAccountState.read(data, i);
         case ImmutableOwner -> ImmutableOwner.INSTANCE;
         case MemoTransfer -> MemoTransfer.read(data, i);
@@ -54,18 +54,13 @@ public record Token2022(Mint mint,
         case TransferHook -> TransferHook.read(data, i);
         case TransferHookAccount -> TransferHookAccount.read(data, i);
         case ConfidentialTransferFeeConfig -> ConfidentialTransferFeeConfig.read(data, i, i + length);
+        case ConfidentialTransferFeeAmount -> ConfidentialTransferFeeAmount.read(data, i, i + length);
         case MetadataPointer -> MetadataPointer.read(data, i);
         case TokenMetadata -> TokenMetadata.read(data, i);
         case GroupPointer -> GroupPointer.read(data, i);
         case TokenGroup -> TokenGroup.INSTANCE;
         case GroupMemberPointer -> GroupMemberPointer.read(data, i);
         case TokenGroupMember -> TokenGroupMember.INSTANCE;
-        case ConfidentialTransferAccount, ConfidentialTransferFeeAmount -> {
-          System.out.println(Base64.getEncoder().encodeToString(Arrays.copyOfRange(data, i, i + length)));
-          System.out.println(length);
-          System.out.println("TODO (please reach out): " + type);
-          yield null;
-        }
       };
       if (extensionData != null) {
         extensions.put(type, extensionData);
@@ -77,8 +72,8 @@ public record Token2022(Mint mint,
 
   @Override
   public int l() {
-    int l = Mint.BYTES + PADDING_AFTER_MINT + 1 + (tokenExtensions.size() * Integer.BYTES);
-    for (final var extension : tokenExtensions.values()) {
+    int l = Mint.BYTES + PADDING_AFTER_MINT + 1 + (extensions.size() * Integer.BYTES);
+    for (final var extension : extensions.values()) {
       l += extension.l();
     }
     return l;
@@ -89,7 +84,7 @@ public record Token2022(Mint mint,
     int i = offset + mint.write(data, offset) + PADDING_AFTER_MINT;
     data[i] = (byte) accountType.ordinal();
     ++i;
-    for (final var extension : tokenExtensions.values()) {
+    for (final var extension : extensions.values()) {
       i += TokenExtension.write(extension, data, i);
     }
     return i - offset;
@@ -104,6 +99,12 @@ public record Token2022(Mint mint,
     final var token2022 = Token2022.read(PublicKey.fromBase58Encoded("2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo"), data);
     System.out.println(token2022.mint);
     System.out.println(token2022.accountType);
-    token2022.tokenExtensions.values().forEach(System.out::println);
+    token2022.extensions.values().forEach(System.out::println);
+
+    final var ext = token2022.extensions.get(ExtensionType.ConfidentialTransferFeeConfig);
+    if (ext instanceof ConfidentialTransferFeeConfig config) {
+      System.out.println(config.withdrawWithheldAuthorityElgamalPubkey().toBase64());
+      System.out.println(Base64.getEncoder().encodeToString(config.withheldAmount()));
+    }
   }
 }
