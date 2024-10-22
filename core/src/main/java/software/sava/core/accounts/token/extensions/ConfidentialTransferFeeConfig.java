@@ -18,6 +18,7 @@ public record ConfidentialTransferFeeConfig(PublicKey authority,
     final var withdrawWithheldAuthorityElgamalPubkey = PublicKey.readPubKey(data, i);
     i += PUBLIC_KEY_LENGTH;
     final boolean harvestToMintEnabled = data[i] == 1;
+    ++i;
     final byte[] withheldAmount = new byte[to - i];
     System.arraycopy(data, i, withheldAmount, 0, withheldAmount.length);
     return new ConfidentialTransferFeeConfig(
