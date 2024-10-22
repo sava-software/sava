@@ -1,12 +1,31 @@
 package software.sava.core.accounts.token.extensions;
 
-public record ConfidentialTransferFeeConfig() implements TokenExtension {
+import software.sava.core.accounts.PublicKey;
 
-  public static ConfidentialTransferFeeConfig read(final byte[] data, final int offset) {
+import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
+
+public record ConfidentialTransferFeeConfig(PublicKey authority,
+                                            PublicKey withdrawWithheldAuthorityElgamalPubkey,
+                                            boolean harvestToMintEnabled,
+                                            byte[] withheldAmount) implements TokenExtension {
+
+  public static ConfidentialTransferFeeConfig read(final byte[] data, final int offset, final int to) {
     if (data == null || data.length == 0) {
       return null;
     }
-    throw new UnsupportedOperationException("TODO");
+    final var authority = PublicKey.readPubKey(data, offset);
+    int i = offset + PUBLIC_KEY_LENGTH;
+    final var withdrawWithheldAuthorityElgamalPubkey = PublicKey.readPubKey(data, i);
+    i += PUBLIC_KEY_LENGTH;
+    final boolean harvestToMintEnabled = data[i] == 1;
+    final byte[] withheldAmount = new byte[to - i];
+    System.arraycopy(data, i, withheldAmount, 0, withheldAmount.length);
+    return new ConfidentialTransferFeeConfig(
+        authority,
+        withdrawWithheldAuthorityElgamalPubkey,
+        harvestToMintEnabled,
+        withheldAmount
+    );
   }
 
   @Override
@@ -16,11 +35,18 @@ public record ConfidentialTransferFeeConfig() implements TokenExtension {
 
   @Override
   public int l() {
-    throw new UnsupportedOperationException("TODO");
+    return PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH + 1 + withheldAmount.length;
   }
 
   @Override
   public int write(final byte[] data, final int offset) {
-    throw new UnsupportedOperationException("TODO");
+    authority.write(data, offset);
+    int i = offset + PUBLIC_KEY_LENGTH;
+    i += withdrawWithheldAuthorityElgamalPubkey.write(data, i);
+    data[i] = (byte) (harvestToMintEnabled ? 1 : 0);
+    ++i;
+    System.arraycopy(withheldAmount, 0, data, i, withheldAmount.length);
+    i += withheldAmount.length;
+    return i - offset;
   }
 }

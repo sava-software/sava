@@ -5,6 +5,7 @@ import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.EnumMap;
 import java.util.Map;
@@ -52,14 +53,17 @@ public record Token2022(Mint mint,
         case NonTransferableAccount -> NonTransferableAccount.INSTANCE;
         case TransferHook -> TransferHook.read(data, i);
         case TransferHookAccount -> TransferHookAccount.read(data, i);
+        case ConfidentialTransferFeeConfig -> ConfidentialTransferFeeConfig.read(data, i, i + length);
         case MetadataPointer -> MetadataPointer.read(data, i);
         case TokenMetadata -> TokenMetadata.read(data, i);
         case GroupPointer -> GroupPointer.read(data, i);
         case TokenGroup -> TokenGroup.INSTANCE;
         case GroupMemberPointer -> GroupMemberPointer.read(data, i);
         case TokenGroupMember -> TokenGroupMember.INSTANCE;
-        case ConfidentialTransferAccount, ConfidentialTransferFeeAmount, ConfidentialTransferFeeConfig -> {
-          System.out.println("TODO: " + extensionTypes[extensionType]);
+        case ConfidentialTransferAccount, ConfidentialTransferFeeAmount -> {
+          System.out.println(Base64.getEncoder().encodeToString(Arrays.copyOfRange(data, i, i + length)));
+          System.out.println(length);
+          System.out.println("TODO (please reach out): " + type);
           yield null;
         }
       };
