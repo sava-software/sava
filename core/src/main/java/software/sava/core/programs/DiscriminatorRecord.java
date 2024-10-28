@@ -19,9 +19,9 @@ record DiscriminatorRecord(byte[] data) implements Discriminator {
   }
 
   @Override
-  public int write(final byte[] data, final int offset) {
-    System.arraycopy(this.data, 0, data, offset, this.data.length);
-    return data.length;
+  public int write(final byte[] dest, final int offset) {
+    System.arraycopy(this.data, 0, dest, offset, this.data.length);
+    return this.data.length;
   }
 
   @Override
