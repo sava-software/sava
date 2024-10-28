@@ -54,12 +54,6 @@ public record TokenAccount(PublicKey address,
     return createMemCompFilter(CLOSE_AUTHORITY_OFFSET, closeAuthority);
   }
 
-  public enum AccountState {
-    Uninitialized,
-    Initialized,
-    Frozen
-  }
-
   public static final BiFunction<PublicKey, byte[], TokenAccount> FACTORY = TokenAccount::read;
 
   public static TokenAccount read(final PublicKey publicKey, final byte[] data) {
@@ -80,7 +74,7 @@ public record TokenAccount(PublicKey address,
         ? PublicKey.readPubKey(data, i)
         : null;
     i += PUBLIC_KEY_LENGTH;
-    final var state = TokenAccount.AccountState.values()[data[i]];
+    final var state = AccountState.values()[data[i]];
     ++i;
     final int isNativeOption = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
