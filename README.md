@@ -128,7 +128,7 @@ Subscribe to the Address Lookup Table Program.
 try (final var httpClient = HttpClient.newBuilder().build()) {
 
     final var webSocket = SolanaRpcWebsocket.build()
-        .uri(SolanaNetwork.MAIN_NET.getEndpoint())
+        .uri(SolanaNetwork.MAIN_NET.getWebSocketEndpoint())
         .webSocketBuilder(httpClient)
         .commitment(Commitment.CONFIRMED)
         .create();
