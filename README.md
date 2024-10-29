@@ -131,6 +131,8 @@ try (final var httpClient = HttpClient.newBuilder().build()) {
         .uri(SolanaNetwork.MAIN_NET.getWebSocketEndpoint())
         .webSocketBuilder(httpClient)
         .commitment(Commitment.CONFIRMED)
+        .onClose((_, statusCode, reason) -> System.out.format("%d: %s%n", statusCode, reason))
+        .onError((_, throwable) -> throwable.printStackTrace())
         .create();
 
     webSocket.programSubscribe(SolanaAccounts.MAIN_NET.addressLookupTableProgram(), accountInfo -> {

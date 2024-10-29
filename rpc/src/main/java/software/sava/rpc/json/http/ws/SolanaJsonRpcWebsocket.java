@@ -737,13 +737,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public CompletionStage<?> onClose(final WebSocket webSocket, final int statusCode, final String reason) {
-    onClose.accept(this, statusCode, reason);
+    if (onClose != null) {
+      onClose.accept(this, statusCode, reason);
+    }
     return null;
   }
 
   @Override
   public void onError(final WebSocket webSocket, final Throwable error) {
-    onError.accept(this, error);
+    if (onError != null) {
+      onError.accept(this, error);
+    }
   }
 
   @Override

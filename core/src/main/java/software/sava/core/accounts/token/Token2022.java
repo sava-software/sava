@@ -5,7 +5,6 @@ import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
-import java.util.Base64;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -88,23 +87,5 @@ public record Token2022(Mint mint,
       i += TokenExtension.write(extension, data, i);
     }
     return i - offset;
-  }
-
-  public static void main(final String[] args) {
-    final byte[] data = Base64.getDecoder().decode("""
-        AQAAAEWL8jQUbMmHNpVOADdvZA1z7a1jyDebZa3bW4Jv0uMVmDvV22fxAAAGAQEAAAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQMAIAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKwwAIAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKwEAbAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKxeFMmHvarhTKmfwU4ZarTEpP88HzxIKtbmhVwZUjcArAAAAAAAAAABdAgAAAAAAAAAAAAAAAAAAAABdAgAAAAAAAAAAAAAAAAAAAAAEAEEAF4UyYe9quFMqZ/BThlqtMSk/zwfPEgq1uaFXBlSNwCsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAIEAF4UyYe9quFMqZ/BThlqtMSk/zwfPEgq1uaFXBlSNwCscN+ZDO3ME3YJzeuQNm4vzxJ9bDmxJqNUzKLPlBpAcVwEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgBAABeFMmHvarhTKmfwU4ZarTEpP88HzxIKtbmhVwZUjcArAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASAEAAgnQVMyO1m+9u94xUbiBsQYh7lCdtZO+gj0jz14I76NgXkkg7bIoqh7dHHYFPlZH5OVyECpzj2fTVun06S4p0nhMArgCCdBUzI7Wb7273jFRuIGxBiHuUJ21k76CPSPPXgjvo2BeSSDtsiiqHt0cdgU+Vkfk5XIQKnOPZ9NW6fTpLinSeCgAAAFBheVBhbCBVU0QFAAAAUFlVU0RPAAAAaHR0cHM6Ly90b2tlbi1tZXRhZGF0YS5wYXhvcy5jb20vcHl1c2RfbWV0YWRhdGEvcHJvZC9zb2xhbmEvcHl1c2RfbWV0YWRhdGEuanNvbgAAAAA=
-        """.strip()
-    );
-
-    final var token2022 = Token2022.read(PublicKey.fromBase58Encoded("2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo"), data);
-    System.out.println(token2022.mint);
-    System.out.println(token2022.accountType);
-    token2022.extensions.values().forEach(System.out::println);
-
-    final var ext = token2022.extensions.get(ExtensionType.ConfidentialTransferFeeConfig);
-    if (ext instanceof ConfidentialTransferFeeConfig config) {
-      System.out.println(config.withdrawWithheldAuthorityElgamalPubkey().toBase64());
-      System.out.println(Base64.getEncoder().encodeToString(config.withheldAmount()));
-    }
   }
 }
