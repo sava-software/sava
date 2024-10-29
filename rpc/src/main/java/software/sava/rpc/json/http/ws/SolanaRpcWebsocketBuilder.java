@@ -6,6 +6,7 @@ import software.sava.rpc.json.http.request.Commitment;
 import java.net.URI;
 import java.net.http.WebSocket;
 import java.time.Duration;
+import java.util.function.BiConsumer;
 
 public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
 
@@ -16,6 +17,8 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   private long subscriptionAndPingCheckDelay = 200;
   private SolanaAccounts solanaAccounts = SolanaAccounts.MAIN_NET;
   private Commitment commitment = Commitment.CONFIRMED;
+  private SolanaRpcWebsocket.OnClose onClose;
+  private BiConsumer<SolanaRpcWebsocket, Throwable> onError;
 
   SolanaRpcWebsocketBuilder() {
   }
@@ -25,7 +28,9 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
     return new SolanaJsonRpcWebsocket(
         wsUri, solanaAccounts, commitment,
         webSocketBuilder.connectTimeout(Duration.ofMillis(reConnect)),
-        new Timings(reConnect, writeOrPingDelay, subscriptionAndPingCheckDelay)
+        new Timings(reConnect, writeOrPingDelay, subscriptionAndPingCheckDelay),
+        onClose,
+        onError
     );
   }
 
@@ -103,6 +108,18 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   @Override
   public SolanaRpcWebsocket.Builder solanaAccounts(final SolanaAccounts solanaAccounts) {
     this.solanaAccounts = solanaAccounts;
+    return this;
+  }
+
+  @Override
+  public SolanaRpcWebsocket.Builder onClose(final SolanaRpcWebsocket.OnClose onClose) {
+    this.onClose = onClose;
+    return this;
+  }
+
+  @Override
+  public SolanaRpcWebsocket.Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
+    this.onError = onError;
     return this;
   }
 }

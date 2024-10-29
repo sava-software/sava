@@ -5,7 +5,6 @@ import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
-import software.sava.rpc.json.http.request.TransactionDetails;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonIterator;
@@ -21,6 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -41,6 +41,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Timings timings;
   private final WebSocket.Builder webSocketBuilder;
   private final ScheduledExecutorService executorService;
+  private final OnClose onClose;
+  private final BiConsumer<SolanaRpcWebsocket, Throwable> onError;
   private final AtomicLong msgId;
   private final Map<Long, Subscription<?>> pendingSubscriptions;
   private final Map<Long, String> pendingUnsubscriptions;
@@ -64,12 +66,16 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final SolanaAccounts solanaAccounts,
                          final Commitment defaultCommitment,
                          final WebSocket.Builder webSocketBuilder,
-                         final Timings timings) {
+                         final Timings timings,
+                         final OnClose onClose,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
     this.wsUri = wsUri;
     this.solanaAccounts = solanaAccounts;
     this.defaultCommitment = defaultCommitment;
     this.timings = timings;
     this.webSocketBuilder = webSocketBuilder;
+    this.onClose = onClose;
+    this.onError = onError;
     this.msgId = new AtomicLong(1);
     this.lastOutGoing = new AtomicLong(0);
     this.pendingSubscriptions = new ConcurrentSkipListMap<>();
@@ -406,54 +412,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return queueUnsubscribe(program.toBase58(), Channel.program, commitment, this.programSubs);
   }
 
-  /// Only supported by Helius on a Business or Professional plan
-  /// TODO implement as Helius Websocket
-  private boolean transactionSubscribe(final Commitment commitment,
-                                       final boolean vote,
-                                       final boolean failed,
-                                       final Collection<PublicKey> accountInclude,
-                                       final Collection<PublicKey> accountExclude,
-                                       final Collection<PublicKey> accountRequired,
-                                       final TransactionDetails transactionDetails,
-                                       final boolean showRewards,
-                                       final Consumer<TxResult> consumer) {
-    final var includes = accountInclude == null || accountInclude.isEmpty()
-        ? ""
-        : accountInclude.stream()
-        .map(PublicKey::toBase58)
-        .collect(joining("\",\"", ",\"accountInclude\":[\"", "\"]"));
-
-    final var excludes = accountExclude == null || accountExclude.isEmpty()
-        ? ""
-        : accountExclude.stream()
-        .map(PublicKey::toBase58).
-        collect(joining("\",\"", ",\"accountExclude\":[\"", "\"]"));
-
-    final var required = accountRequired == null || accountRequired.isEmpty()
-        ? ""
-        : accountRequired.stream()
-        .map(PublicKey::toBase58)
-        .collect(joining("\",\"", ",\"accountRequired\":[\"", "\"]"));
-
-    final var params = String.format("""
-            {"vote":%b,"failed":%b%s%s%s},{"commitment":"%s","encoding":"base64","transactionDetails":"%s","showRewards":%b,"maxSupportedTransactionVersion":0}""",
-        vote,
-        failed,
-        includes,
-        excludes,
-        required,
-        commitment.getValue(),
-        transactionDetails,
-        showRewards
-    );
-//    final var sub = this.transactionSubs.get(params);
-//    if (sub == null) {
-//      return queueSubscription(commitment, Channel.transaction, params, params, this.transactionSubs, consumer);
-//    } else {
-//    }
-    return false;
-  }
-
   @Override
   public boolean slotSubscribe(final Consumer<ProcessedSlot> consumer) {
     final long msgId = this.msgId.incrementAndGet();
@@ -779,23 +737,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public CompletionStage<?> onClose(final WebSocket webSocket, final int statusCode, final String reason) {
-    connect();
-    if (reason == null || reason.isBlank()) {
-      log.log(WARNING,
-          "WebSocket connection to {0} closed with code {1,number,integer}.",
-          wsUri, statusCode);
-    } else {
-      log.log(WARNING,
-          "WebSocket connection to {0} closed with code {1,number,integer} because ''{2}''.",
-          wsUri, statusCode, reason);
-    }
+    onClose.accept(this, statusCode, reason);
     return null;
   }
 
   @Override
   public void onError(final WebSocket webSocket, final Throwable error) {
-    connect();
-    log.log(WARNING, String.format("Error on connection to %s", this.wsUri), error);
+    onError.accept(this, error);
   }
 
   @Override

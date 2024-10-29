@@ -14,9 +14,18 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public interface SolanaRpcWebsocket extends AutoCloseable {
+
+  @FunctionalInterface
+  interface OnClose {
+
+    void accept(final SolanaRpcWebsocket websocket,
+                final int statusCode,
+                final String reason);
+  }
 
   static Builder build() {
     return new SolanaRpcWebsocketBuilder();
@@ -148,5 +157,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     SolanaAccounts solanaAccounts();
 
     Commitment commitment();
+
+    Builder onClose(OnClose onClose);
+
+    Builder onError(BiConsumer<SolanaRpcWebsocket, Throwable> onError);
   }
 }

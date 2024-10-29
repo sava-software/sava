@@ -996,6 +996,7 @@ public interface Borsh extends Serializable {
 
   // BigInteger
 
+  @Deprecated
   static int readArray(final BigInteger[][] result, final byte[] data, final int offset) {
     int i = offset;
     for (final var out : result) {
@@ -1004,6 +1005,7 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  @Deprecated
   static int readArray(final BigInteger[] result, final byte[] data, final int offset) {
     int o = offset;
     for (int i = 0; i < result.length; ++i) {
@@ -1013,6 +1015,7 @@ public interface Borsh extends Serializable {
     return o - offset;
   }
 
+  @Deprecated
   static BigInteger[] readBigIntegerVector(final byte[] data, final int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     final var result = new BigInteger[len];
@@ -1020,6 +1023,7 @@ public interface Borsh extends Serializable {
     return result;
   }
 
+  @Deprecated
   static BigInteger[][] readMultiDimensionBigIntegerVector(final byte[] data, int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
     offset += Integer.BYTES;
@@ -1032,6 +1036,7 @@ public interface Borsh extends Serializable {
     return result;
   }
 
+  @Deprecated
   static BigInteger[][] readMultiDimensionBigIntegerVectorArray(final int fixedLength,
                                                                 final byte[] data,
                                                                 final int offset) {
@@ -1041,10 +1046,12 @@ public interface Borsh extends Serializable {
     return result;
   }
 
+  @Deprecated
   static int write(final BigInteger val, final byte[] data, final int offset) {
     return ByteUtil.putInt128LE(data, offset, val);
   }
 
+  @Deprecated
   static int writeOptional(final BigInteger val, final byte[] data, final int offset) {
     if (val == null) {
       data[offset] = (byte) 0;
@@ -1055,6 +1062,7 @@ public interface Borsh extends Serializable {
     }
   }
 
+  @Deprecated
   static int writeArray(final BigInteger[] array, final byte[] data, final int offset) {
     int i = offset;
     for (final var a : array) {
@@ -1063,11 +1071,13 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  @Deprecated
   static int writeVector(final BigInteger[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
   }
 
+  @Deprecated
   static int writeArray(final BigInteger[][] array, final byte[] data, final int offset) {
     int i = offset;
     for (final var a : array) {
@@ -1076,6 +1086,7 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  @Deprecated
   static int writeVector(final BigInteger[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -1085,23 +1096,28 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  @Deprecated
   static int writeVectorArray(final BigInteger[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
   }
 
+  @Deprecated
   static int lenOptional(final BigInteger val) {
     return val == null ? 1 : 17;
   }
 
+  @Deprecated
   static int lenArray(final BigInteger[] array) {
     return array.length * 16;
   }
 
+  @Deprecated
   static int lenVector(final BigInteger[] array) {
     return Integer.BYTES + lenArray(array);
   }
 
+  @Deprecated
   static int lenArray(final BigInteger[][] array) {
     int len = 0;
     for (final var a : array) {
@@ -1110,6 +1126,7 @@ public interface Borsh extends Serializable {
     return len;
   }
 
+  @Deprecated
   static int lenVector(final BigInteger[][] array) {
     int len = Integer.BYTES;
     for (final var a : array) {
@@ -1118,8 +1135,265 @@ public interface Borsh extends Serializable {
     return len;
   }
 
+  @Deprecated
   static int lenVectorArray(final BigInteger[][] array) {
     return Integer.BYTES + lenArray(array);
+  }
+
+  // 128 bit integers
+
+  static int read128Array(final BigInteger[][] result, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var out : result) {
+      i += read128Array(out, data, i);
+    }
+    return i - offset;
+  }
+
+  static int read128Array(final BigInteger[] result, final byte[] data, final int offset) {
+    int o = offset;
+    for (int i = 0; i < result.length; ++i) {
+      result[i] = ByteUtil.getInt128LE(data, o);
+      o += 16;
+    }
+    return o - offset;
+  }
+
+  static BigInteger[] read128Vector(final byte[] data, final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final var result = new BigInteger[len];
+    read128Array(result, data, offset + Integer.BYTES);
+    return result;
+  }
+
+  static BigInteger[][] readMultiDimension128Vector(final byte[] data, int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    offset += Integer.BYTES;
+    final var result = new BigInteger[len][];
+    for (int i = 0; i < result.length; ++i) {
+      final var instance = read128Vector(data, offset);
+      result[i] = instance;
+      offset += len128Vector(instance);
+    }
+    return result;
+  }
+
+  static BigInteger[][] readMultiDimension128VectorArray(final int fixedLength,
+                                                         final byte[] data,
+                                                         final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final BigInteger[][] result = new BigInteger[len][fixedLength];
+    read128Array(result, data, offset + Integer.BYTES);
+    return result;
+  }
+
+  static int write128(final BigInteger val, final byte[] data, final int offset) {
+    return ByteUtil.putInt128LE(data, offset, val);
+  }
+
+  static int write128Optional(final BigInteger val, final byte[] data, final int offset) {
+    if (val == null) {
+      data[offset] = (byte) 0;
+      return 1;
+    } else {
+      data[offset] = (byte) 1;
+      return 1 + write128(val, data, offset + 1);
+    }
+  }
+
+  static int write128Array(final BigInteger[] array, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += write128(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write128Vector(final BigInteger[] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + write128Array(array, data, offset + Integer.BYTES);
+  }
+
+  static int write128Array(final BigInteger[][] array, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += write128Array(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write128Vector(final BigInteger[][] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    int i = Integer.BYTES + offset;
+    for (final var a : array) {
+      i += write128Vector(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write128VectorArray(final BigInteger[][] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + write128Array(array, data, offset + Integer.BYTES);
+  }
+
+  static int len128Optional(final BigInteger val) {
+    return val == null ? 1 : 17;
+  }
+
+  static int len128Array(final BigInteger[] array) {
+    return array.length * 16;
+  }
+
+  static int len128Vector(final BigInteger[] array) {
+    return Integer.BYTES + len128Array(array);
+  }
+
+  static int len128Array(final BigInteger[][] array) {
+    int len = 0;
+    for (final var a : array) {
+      len += len128Array(a);
+    }
+    return len;
+  }
+
+  static int len128Vector(final BigInteger[][] array) {
+    int len = Integer.BYTES;
+    for (final var a : array) {
+      len += len128Vector(a);
+    }
+    return len;
+  }
+
+  static int len128VectorArray(final BigInteger[][] array) {
+    return Integer.BYTES + len128Array(array);
+  }
+
+  // 256 bit integers
+
+  static int read256Array(final BigInteger[][] result, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var out : result) {
+      i += read256Array(out, data, i);
+    }
+    return i - offset;
+  }
+
+  static int read256Array(final BigInteger[] result, final byte[] data, final int offset) {
+    int o = offset;
+    for (int i = 0; i < result.length; ++i) {
+      result[i] = ByteUtil.getInt256LE(data, o);
+      o += 32;
+    }
+    return o - offset;
+  }
+
+  static BigInteger[] read256Vector(final byte[] data, final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final var result = new BigInteger[len];
+    read256Array(result, data, offset + Integer.BYTES);
+    return result;
+  }
+
+  static BigInteger[][] readMultiDimension256Vector(final byte[] data, int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    offset += Integer.BYTES;
+    final var result = new BigInteger[len][];
+    for (int i = 0; i < result.length; ++i) {
+      final var instance = read256Vector(data, offset);
+      result[i] = instance;
+      offset += len256Vector(instance);
+    }
+    return result;
+  }
+
+  static BigInteger[][] readMultiDimension256VectorArray(final int fixedLength,
+                                                         final byte[] data,
+                                                         final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final BigInteger[][] result = new BigInteger[len][fixedLength];
+    read256Array(result, data, offset + Integer.BYTES);
+    return result;
+  }
+
+  static int write256(final BigInteger val, final byte[] data, final int offset) {
+    return ByteUtil.putInt256LE(data, offset, val);
+  }
+
+  static int write256Optional(final BigInteger val, final byte[] data, final int offset) {
+    if (val == null) {
+      data[offset] = (byte) 0;
+      return 1;
+    } else {
+      data[offset] = (byte) 1;
+      return 1 + write256(val, data, offset + 1);
+    }
+  }
+
+  static int write256Array(final BigInteger[] array, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += write256(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write256Vector(final BigInteger[] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + write256Array(array, data, offset + Integer.BYTES);
+  }
+
+  static int write256Array(final BigInteger[][] array, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += write256Array(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write256Vector(final BigInteger[][] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    int i = Integer.BYTES + offset;
+    for (final var a : array) {
+      i += write256Vector(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write256VectorArray(final BigInteger[][] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + write256Array(array, data, offset + Integer.BYTES);
+  }
+
+  static int len256Optional(final BigInteger val) {
+    return val == null ? 1 : 33;
+  }
+
+  static int len256Array(final BigInteger[] array) {
+    return array.length * 32;
+  }
+
+  static int len256Vector(final BigInteger[] array) {
+    return Integer.BYTES + len256Array(array);
+  }
+
+  static int len256Array(final BigInteger[][] array) {
+    int len = 0;
+    for (final var a : array) {
+      len += len256Array(a);
+    }
+    return len;
+  }
+
+  static int len256Vector(final BigInteger[][] array) {
+    int len = Integer.BYTES;
+    for (final var a : array) {
+      len += len256Vector(a);
+    }
+    return len;
+  }
+
+  static int len256VectorArray(final BigInteger[][] array) {
+    return Integer.BYTES + len256Array(array);
   }
 
   // PublicKey
