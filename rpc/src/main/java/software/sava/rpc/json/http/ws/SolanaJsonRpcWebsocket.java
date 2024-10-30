@@ -737,7 +737,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public CompletionStage<?> onClose(final WebSocket webSocket, final int statusCode, final String reason) {
-    if (onClose != null) {
+    if (onClose == null) {
+      if (reason == null || reason.isBlank()) {
+        log.log(WARNING,
+            "WebSocket connection to {0} closed with code {1,number,integer}.",
+            wsUri, statusCode);
+      } else {
+        log.log(WARNING,
+            "WebSocket connection to {0} closed with code {1,number,integer} because ''{2}''.",
+            wsUri, statusCode, reason);
+      }
+    } else {
       onClose.accept(this, statusCode, reason);
     }
     return null;
@@ -745,7 +755,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public void onError(final WebSocket webSocket, final Throwable error) {
-    if (onError != null) {
+    if (onError == null) {
+      log.log(ERROR, "Error on connection to %s" + this.wsUri, error);
+    } else {
       onError.accept(this, error);
     }
   }
