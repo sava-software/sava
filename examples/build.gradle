@@ -1,4 +1,5 @@
 dependencies {
   implementation libs.json.iterator
   implementation project(':core')
+  implementation project(':rpc')
 }

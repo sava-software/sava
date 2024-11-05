@@ -67,7 +67,7 @@ In addition to the MIT License, this project is under active development and bre
 More parses are available for programs which have Anchor IDL's in the [sava anchor-programs project](https://github.com/sava-software/anchor-programs).
 
 ```java
-try (final var httpClient = HttpClient.newBuilder().executor(executorService).build()) {
+try (final var httpClient = HttpClient.newHttpClient()) {
 
     final var rpcClient = SolanaRpcClient.createClient(SolanaNetwork.MAIN_NET.getEndpoint(), httpClient);
     
@@ -89,7 +89,7 @@ Retrieve all lookup tables which are active and frozen.
 Note: You will need access to an RPC node which has getProgramAccounts enabled, such as [Helius](helius.dev).
 
 ```java
-try (final var httpClient = HttpClient.newBuilder().executor(executorService).build()) {
+try (final var httpClient = HttpClient.newHttpClient()) {
 
     final var rpcClient = SolanaRpcClient.createClient(
         URI.create("https://mainnet.helius-rpc.com/?api-key="),
@@ -125,7 +125,7 @@ try (final var httpClient = HttpClient.newBuilder().executor(executorService).bu
 Subscribe to the Address Lookup Table Program.
 
 ```java
-try (final var httpClient = HttpClient.newBuilder().build()) {
+try (final var httpClient = HttpClient.newHttpClient()) {
 
     final var webSocket = SolanaRpcWebsocket.build()
         .uri(SolanaNetwork.MAIN_NET.getWebSocketEndpoint())
@@ -151,6 +151,5 @@ try (final var httpClient = HttpClient.newBuilder().build()) {
     webSocket.connect();
     
     Thread.sleep(Integer.MAX_VALUE);
-  }
 }
 ```
