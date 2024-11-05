@@ -1,10 +1,9 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
-import java.util.List;
 import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -12,82 +11,66 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 public record Tx(int slot,
                  OptionalLong blockTime,
                  TxMeta meta,
-                 List<String> signatures,
-                 List<AccountKey> accountKeys,
-                 List<TxParsedInstruction> instructions,
-                 String recentBlockHash,
-                 byte[] data) {
+                 byte[] data,
+                 int version) {
 
-  public static Tx parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+  public boolean isLegacy() {
+    return version < 0;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("slot", buf, offset, len)) {
-      builder.slot(ji.readInt());
-    } else if (fieldEquals("blockTime", buf, offset, len)) {
-      builder.blockTime(ji.readLong());
-    } else if (fieldEquals("meta", buf, offset, len)) {
-      builder.meta(TxMeta.parse(ji));
-    } else if (fieldEquals("transaction", buf, offset, len)) {
-      if (ji.whatIsNext() == ValueType.ARRAY) {
-        ji.openArray();
-        builder.data = ji.decodeBase64String();
-        ji.skipRestOfArray();
-      } else {
-        ji.skip();
-      }
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
+  public static Tx parse(final JsonIterator ji) {
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
+  }
 
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private int slot;
     private long blockTime;
     private TxMeta meta;
-    private List<String> signatures;
-    private List<AccountKey> accountKeys;
-    private List<TxParsedInstruction> instructions;
-    private String recentBlockHash;
     private byte[] data;
+    private int version = Integer.MIN_VALUE;
 
-    private Builder() {
-      super();
+    private Parser() {
     }
 
     private Tx create() {
-      return new Tx(slot, blockTime <= 0 ? OptionalLong.empty() : OptionalLong.of(blockTime), meta, signatures, accountKeys, instructions, recentBlockHash, data);
+      return new Tx(
+          slot,
+          blockTime <= 0 ? OptionalLong.empty() : OptionalLong.of(blockTime),
+          meta,
+          data,
+          version
+      );
     }
 
-    private void slot(final int slot) {
-      this.slot = slot;
-    }
-
-    private void blockTime(final long blockTime) {
-      this.blockTime = blockTime;
-    }
-
-    private void meta(final TxMeta meta) {
-      this.meta = meta;
-    }
-
-    private void signatures(final List<String> signatures) {
-      this.signatures = signatures;
-    }
-
-    private void accountKeys(final List<AccountKey> accountKeys) {
-      this.accountKeys = accountKeys;
-    }
-
-    private void instructions(final List<TxParsedInstruction> instructions) {
-      this.instructions = instructions;
-    }
-
-    private void recentBlockHash(final String recentBlockHash) {
-      this.recentBlockHash = recentBlockHash;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("slot", buf, offset, len)) {
+        this.slot = ji.readInt();
+      } else if (fieldEquals("blockTime", buf, offset, len)) {
+        this.blockTime = ji.readLong();
+      } else if (fieldEquals("meta", buf, offset, len)) {
+        this.meta = TxMeta.parse(ji);
+      } else if (fieldEquals("transaction", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.ARRAY) {
+          ji.openArray();
+          this.data = ji.decodeBase64String();
+          ji.skipRestOfArray();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("version", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          this.version = ji.readInt();
+        } else {
+          ji.skip();
+        }
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

@@ -766,13 +766,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public void close() {
     this.msgId.set(Long.MIN_VALUE);
 
-    this.executorService.shutdown();
-
     final var webSocket = this.webSocket;
     if (webSocket != null) {
       this.webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
     }
 
+    this.executorService.shutdown();
     this.pendingSubscriptions.clear();
     this.pendingUnsubscriptions.clear();
     this.subscriptionsBySubId.clear();
