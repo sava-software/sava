@@ -27,8 +27,12 @@ public interface Borsh extends Serializable {
 
   // String
 
-  static String string(final byte[] data, final int offset) {
+  static String readString(final byte[] data, final int offset) {
     return new String(data, offset + Integer.BYTES, ByteUtil.getInt32LE(data, offset), UTF_8);
+  }
+
+  static String string(final byte[] data, final int offset) {
+    return readString(data, offset);
   }
 
   static byte[] getBytes(final String str) {
@@ -39,13 +43,117 @@ public interface Borsh extends Serializable {
     final int len = strings.length;
     final byte[][] bytes = new byte[len][];
     for (int i = 0; i < len; ++i) {
-      bytes[i] = strings[i].getBytes(UTF_8);
+      bytes[i] = getBytes(strings[i]);
     }
     return bytes;
   }
 
+  static int len(final String val) {
+    return Integer.BYTES + val.length();
+  }
+
+  static int lenOptional(final String val) {
+    return val == null ? 1 : 1 + len(val);
+  }
+
+  static int lenVector(final String[] array) {
+    int len = Integer.BYTES;
+    for (final var s : array) {
+      len += len(s);
+    }
+    return len;
+  }
+
+  static int lenVector(final String[][] array) {
+    int len = Integer.BYTES;
+    for (final var a : array) {
+      len += lenVector(a);
+    }
+    return len;
+  }
+
+  static int readArray(final String[] result, final byte[] data, final int offset) {
+    int o = offset;
+    for (int i = 0; i < result.length; ++i) {
+      result[i] = string(data, o);
+      o += 32;
+    }
+    return o - offset;
+  }
+
+  static int readArray(final String[][] result, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var out : result) {
+      i += readArray(out, data, i);
+    }
+    return i - offset;
+  }
+
+  static String[] readStringVector(final byte[] data, final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final var result = new String[len];
+    readArray(result, data, offset + Integer.BYTES);
+    return result;
+  }
+
+  static String[][] readMultiDimensionStringVector(final byte[] data, int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    offset += Integer.BYTES;
+    final var result = new String[len][];
+    for (int i = 0; i < result.length; ++i) {
+      final var instance = readStringVector(data, offset);
+      result[i] = instance;
+      offset += lenVector(instance);
+    }
+    return result;
+  }
+
+  static String[][] readMultiDimensionStringVectorArray(final int fixedLength,
+                                                        final byte[] data,
+                                                        final int offset) {
+    final int len = ByteUtil.getInt32LE(data, offset);
+    final var result = new String[len][fixedLength];
+    readArray(result, data, offset + Integer.BYTES);
+    return result;
+  }
+
   static int write(final String str, final byte[] data, final int offset) {
     return writeVector(str.getBytes(UTF_8), data, offset);
+  }
+
+  static int writeArray(final String[] array, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += write(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeVector(final String[] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
+  }
+
+  static int writeArray(final String[][] array, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArray(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeVector(final String[][] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    int i = Integer.BYTES + offset;
+    for (final var a : array) {
+      i += writeVector(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeVectorArray(final String[][] array, final byte[] data, final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
   }
 
   // byte
@@ -1270,14 +1378,6 @@ public interface Borsh extends Serializable {
 
   // 256 bit integers
 
-  static int read256Array(final BigInteger[][] result, final byte[] data, final int offset) {
-    int i = offset;
-    for (final var out : result) {
-      i += read256Array(out, data, i);
-    }
-    return i - offset;
-  }
-
   static int read256Array(final BigInteger[] result, final byte[] data, final int offset) {
     int o = offset;
     for (int i = 0; i < result.length; ++i) {
@@ -1285,6 +1385,14 @@ public interface Borsh extends Serializable {
       o += 32;
     }
     return o - offset;
+  }
+
+  static int read256Array(final BigInteger[][] result, final byte[] data, final int offset) {
+    int i = offset;
+    for (final var out : result) {
+      i += read256Array(out, data, i);
+    }
+    return i - offset;
   }
 
   static BigInteger[] read256Vector(final byte[] data, final int offset) {
