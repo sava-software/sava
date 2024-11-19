@@ -26,6 +26,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static java.net.http.HttpRequest.BodyPublishers.ofString;
+import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
 import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 
 final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
@@ -504,14 +506,18 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                                         final Commitment commitment,
                                                                         final List<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    final var builder = newRequest(endpoint, requestTimeout).header("X-Account-Index", "2.0");
     final var filtersJson = filters == null || filters.isEmpty() ? "" : filters.stream()
         .map(Filter::toJson)
         .collect(Collectors.joining(",", ",\"filters\":[", "]"));
-    return sendPostRequest(applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory)),
-        requestTimeout,
-        format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getProgramAccounts","params":["%s",{"commitment":"%s","withContext":true,"encoding":"base64"%s}]}""",
-            id.incrementAndGet(), programId.toBase58(), commitment.getValue(), filtersJson));
+    final var body = format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getProgramAccounts","params":["%s",{"commitment":"%s","withContext":true,"encoding":"base64"%s}]}""",
+        id.incrementAndGet(), programId.toBase58(), commitment.getValue(), filtersJson
+    );
+    final var request = builder.POST(ofString(body)).build();
+    return httpClient
+        .sendAsync(request, ofByteArray())
+        .thenApply(wrapParser(applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory))));
   }
 
   @Override
