@@ -74,9 +74,11 @@ public interface Borsh extends Serializable {
 
   static int readArray(final String[] result, final byte[] data, final int offset) {
     int o = offset;
+    String s;
     for (int i = 0; i < result.length; ++i) {
-      result[i] = string(data, o);
-      o += 32;
+      s = string(data, o);
+      result[i] = s;
+      o += len(s);
     }
     return o - offset;
   }

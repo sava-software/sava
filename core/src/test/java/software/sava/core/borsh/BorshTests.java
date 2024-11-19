@@ -8,6 +8,7 @@ import software.sava.core.encoding.ByteUtil;
 import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Random;
 import java.util.function.Function;
 
@@ -19,6 +20,21 @@ final class BorshTests {
 
   private static final int VECTOR_SIZE = 8;
   private static final int ELEMENTS_PER_ARRAY = 4;
+
+  @Test
+  void stringVector() {
+    final byte[] data = Base64.getDecoder().decode("""
+        yDjlfHGaIBqjB2upnpcidYt7YbvI/HTwOmmqTRrPGf+JOPeD0Es6TwYAAAALAAAAQnVybmluZyBDYXQDAAAAUFBQCAAAAEluIFNwYWNlCQAAAERpc2NvdmVyeQsAAABKdXBpdmVyc2U/PxMAAABUaGUgQ3VycmVudCBEZWZhdWx0""");
+
+    final String[] strings = Borsh.readStringVector(data, 40);
+    assertEquals(6, strings.length);
+    assertEquals("Burning Cat", strings[0]);
+    assertEquals("PPP", strings[1]);
+    assertEquals("In Space", strings[2]);
+    assertEquals("Discovery", strings[3]);
+    assertEquals("Jupiverse??", strings[4]);
+    assertEquals("The Current Default", strings[5]);
+  }
 
   @Test
   void initMultiDimensionalVector() {
