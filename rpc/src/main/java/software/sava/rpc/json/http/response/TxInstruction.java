@@ -25,13 +25,13 @@ public record TxInstruction(int programIdIndex, int[] accountIndices, String b58
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("programIdIndex", buf, offset, len)) {
       builder.programIdIndex(ji.readInt());
-    } else if (fieldEquals("accountIndices", buf, offset, len)) {
+    } else if (fieldEquals("accounts", buf, offset, len)) {
       final var indices = new ArrayList<Integer>();
       while (ji.readArray()) {
         indices.add(ji.readInt());
       }
       builder.accountIndices(indices.stream().mapToInt(Integer::intValue).toArray());
-    } else if (fieldEquals("b58Data", buf, offset, len)) {
+    } else if (fieldEquals("data", buf, offset, len)) {
       builder.b58Data(ji.readString());
     } else {
       ji.skip();
