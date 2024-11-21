@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
@@ -16,74 +16,17 @@ public record TxMeta(TxInstructionError error,
                      List<TokenBalance> preTokenBalances,
                      List<TokenBalance> postTokenBalances,
                      List<TxInnerInstruction> innerInstructions,
-                     List<String> readOnly,
-                     List<String> writable,
+                     LoadedAddresses loadedAddresses,
                      List<String> logMessages,
                      List<TxReward> rewards) {
 
   public static TxMeta parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> ADDRESSES = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("readonly", buf, offset, len)) {
-      builder.readOnly = new ArrayList<>();
-      while (ji.readArray()) {
-        builder.readOnly.add(ji.readString());
-      }
-    } else if (fieldEquals("writable", buf, offset, len)) {
-      builder.writable = new ArrayList<>();
-      while (ji.readArray()) {
-        builder.writable.add(ji.readString());
-      }
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TxInstructionError.parseError(ji));
-    } else if (fieldEquals("computeUnitsConsumed", buf, offset, len)) {
-      builder.computeUnitsConsumed(ji.readInt());
-    } else if (fieldEquals("fee", buf, offset, len)) {
-      builder.fee(ji.readLong());
-    } else if (fieldEquals("preBalances", buf, offset, len)) {
-      final var balances = new ArrayList<Long>();
-      while (ji.readArray()) {
-        balances.add(ji.readLong());
-      }
-      builder.preBalances(balances);
-    } else if (fieldEquals("postBalances", buf, offset, len)) {
-      final var balances = new ArrayList<Long>();
-      while (ji.readArray()) {
-        balances.add(ji.readLong());
-      }
-      builder.postBalances(balances);
-    } else if (fieldEquals("preTokenBalances", buf, offset, len)) {
-      builder.preTokenBalances(TokenBalance.parseBalances(ji));
-    } else if (fieldEquals("postTokenBalances", buf, offset, len)) {
-      builder.postTokenBalances(TokenBalance.parseBalances(ji));
-    } else if (fieldEquals("innerInstructions", buf, offset, len)) {
-      builder.innerInstructions(TxInnerInstruction.parseInstructions(ji));
-    } else if (fieldEquals("loadedAddresses", buf, offset, len)) {
-      ji.testObject(builder, ADDRESSES);
-    } else if (fieldEquals("logMessages", buf, offset, len)) {
-      final var logMessages = new ArrayList<String>();
-      while (ji.readArray()) {
-        logMessages.add(ji.readString());
-      }
-      builder.logMessages(logMessages);
-    } else if (fieldEquals("rewards", buf, offset, len)) {
-      builder.rewards(TxReward.parseRewards(ji));
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private TxInstructionError error;
     private int computeUnitsConsumed;
@@ -93,56 +36,69 @@ public record TxMeta(TxInstructionError error,
     private List<TokenBalance> preTokenBalances;
     private List<TokenBalance> postTokenBalances;
     private List<TxInnerInstruction> innerInstructions;
-    private List<String> readOnly;
-    private List<String> writable;
+    private LoadedAddresses loadedAddresses;
     private List<String> logMessages;
     private List<TxReward> rewards;
 
-    private Builder() {
+    private Parser() {
     }
 
     private TxMeta create() {
-      return new TxMeta(error, computeUnitsConsumed, fee, preBalances, postBalances, preTokenBalances, postTokenBalances, innerInstructions, readOnly, writable, logMessages, rewards);
+      return new TxMeta(
+          error,
+          computeUnitsConsumed,
+          fee,
+          preBalances,
+          postBalances,
+          preTokenBalances,
+          postTokenBalances,
+          innerInstructions,
+          loadedAddresses,
+          logMessages,
+          rewards
+      );
     }
 
-    private void error(final TxInstructionError error) {
-      this.error = error;
-    }
-
-    private void computeUnitsConsumed(final int computeUnitsConsumed) {
-      this.computeUnitsConsumed = computeUnitsConsumed;
-    }
-
-    private void fee(final long fee) {
-      this.fee = fee;
-    }
-
-    private void preBalances(final List<Long> preBalances) {
-      this.preBalances = preBalances;
-    }
-
-    private void postBalances(final List<Long> postBalances) {
-      this.postBalances = postBalances;
-    }
-
-    private void preTokenBalances(final List<TokenBalance> preTokenBalances) {
-      this.preTokenBalances = preTokenBalances;
-    }
-
-    private void postTokenBalances(final List<TokenBalance> postTokenBalances) {
-      this.postTokenBalances = postTokenBalances;
-    }
-
-    private void innerInstructions(final List<TxInnerInstruction> innerInstructions) {
-      this.innerInstructions = innerInstructions;
-    }
-
-    private void logMessages(final List<String> logMessages) {
-      this.logMessages = logMessages;
-    }
-
-    private void rewards(final List<TxReward> rewards) {
-      this.rewards = rewards;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("err", buf, offset, len)) {
+        this.error = TxInstructionError.parseError(ji);
+      } else if (fieldEquals("computeUnitsConsumed", buf, offset, len)) {
+        this.computeUnitsConsumed = ji.readInt();
+      } else if (fieldEquals("fee", buf, offset, len)) {
+        this.fee = ji.readLong();
+      } else if (fieldEquals("preBalances", buf, offset, len)) {
+        final var balances = new ArrayList<Long>();
+        while (ji.readArray()) {
+          balances.add(ji.readLong());
+        }
+        this.preBalances = balances;
+      } else if (fieldEquals("postBalances", buf, offset, len)) {
+        final var balances = new ArrayList<Long>();
+        while (ji.readArray()) {
+          balances.add(ji.readLong());
+        }
+        this.postBalances = balances;
+      } else if (fieldEquals("preTokenBalances", buf, offset, len)) {
+        this.preTokenBalances = TokenBalance.parseBalances(ji);
+      } else if (fieldEquals("postTokenBalances", buf, offset, len)) {
+        this.postTokenBalances = TokenBalance.parseBalances(ji);
+      } else if (fieldEquals("innerInstructions", buf, offset, len)) {
+        this.innerInstructions = TxInnerInstruction.parseInstructions(ji);
+      } else if (fieldEquals("loadedAddresses", buf, offset, len)) {
+        this.loadedAddresses = LoadedAddresses.parse(ji);
+      } else if (fieldEquals("logMessages", buf, offset, len)) {
+        final var logMessages = new ArrayList<String>();
+        while (ji.readArray()) {
+          logMessages.add(ji.readString());
+        }
+        this.logMessages = logMessages;
+      } else if (fieldEquals("rewards", buf, offset, len)) {
+        this.rewards = TxReward.parseRewards(ji);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

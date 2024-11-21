@@ -1,7 +1,10 @@
 package software.sava.rpc.json.http.response;
 
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.util.DecimalIntegerAmount;
+import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.math.BigInteger;
@@ -11,14 +14,16 @@ import java.util.List;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record TokenBalance(int accountIndex,
-                           String mint,
-                           String owner,
-                           String programId,
+                           PublicKey mint,
+                           PublicKey owner,
+                           PublicKey programId,
                            BigInteger amount,
                            int decimals) implements DecimalIntegerAmount {
 
   public static TokenBalance parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
   public static List<TokenBalance> parseBalances(final JsonIterator ji) {
@@ -29,72 +34,49 @@ public record TokenBalance(int accountIndex,
     return balances;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> TOKEN_AMOUNT_PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("amount", buf, offset, len)) {
-      builder.amount(ji.readBigInteger());
-    } else if (fieldEquals("decimals", buf, offset, len)) {
-      builder.decimals(ji.readInt());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("accountIndex", buf, offset, len)) {
-      builder.accountIndex(ji.readInt());
-    } else if (fieldEquals("mint", buf, offset, len)) {
-      builder.mint(ji.readString());
-    } else if (fieldEquals("owner", buf, offset, len)) {
-      builder.owner(ji.readString());
-    } else if (fieldEquals("programId", buf, offset, len)) {
-      builder.programId(ji.readString());
-    } else if (fieldEquals("uiTokenAmount", buf, offset, len)) {
-      ji.testObject(builder, TOKEN_AMOUNT_PARSER);
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private int accountIndex;
-    private String mint;
-    private String owner;
-    private String programId;
+    private PublicKey mint;
+    private PublicKey owner;
+    private PublicKey programId;
     private BigInteger amount;
     private int decimals;
 
-    private Builder() {
+    private Parser() {
     }
 
     private TokenBalance create() {
       return new TokenBalance(accountIndex, mint, owner, programId, amount, decimals);
     }
 
-    private void accountIndex(final int accountIndex) {
-      this.accountIndex = accountIndex;
-    }
+    private static final ContextFieldBufferPredicate<Parser> TOKEN_AMOUNT_PARSER = (parser, buf, offset, len, ji) -> {
+      if (fieldEquals("amount", buf, offset, len)) {
+        parser.amount = ji.readBigInteger();
+      } else if (fieldEquals("decimals", buf, offset, len)) {
+        parser.decimals = ji.readInt();
+      } else {
+        ji.skip();
+      }
+      return true;
+    };
 
-    private void mint(final String mint) {
-      this.mint = mint;
-    }
-
-    private void owner(final String owner) {
-      this.owner = owner;
-    }
-
-    private void programId(final String programId) {
-      this.programId = programId;
-    }
-
-    private void amount(final BigInteger amount) {
-      this.amount = amount;
-    }
-
-    private void decimals(final int decimals) {
-      this.decimals = decimals;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("accountIndex", buf, offset, len)) {
+        this.accountIndex = ji.readInt();
+      } else if (fieldEquals("mint", buf, offset, len)) {
+        this.mint = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else if (fieldEquals("owner", buf, offset, len)) {
+        this.owner = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else if (fieldEquals("programId", buf, offset, len)) {
+        this.programId = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else if (fieldEquals("uiTokenAmount", buf, offset, len)) {
+        ji.testObject(this, TOKEN_AMOUNT_PARSER);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }
