@@ -7,6 +7,7 @@ import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.PublicKeyEncoding;
+import software.sava.rpc.json.http.SolanaNetwork;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
 import software.sava.rpc.json.http.response.*;
@@ -984,5 +985,16 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     return sendPostRequest(applyResponseValue((ji, context) -> TxSimulation.parse(List.of(), ji, context)), format("""
             {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"commitment":"%s"}]}""",
         id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, commitment.getValue()));
+  }
+
+  public static void main(String[] args) {
+    final var rpcClient = SolanaRpcClient.createClient(
+        SolanaNetwork.MAIN_NET.getEndpoint(),
+        HttpClient.newHttpClient(),
+        response -> {
+          System.out.println(new String(response.body()));
+          return true;
+        }
+    );
   }
 }

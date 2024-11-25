@@ -12,10 +12,13 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 public record TxStatus(Context context,
                        long slot,
                        OptionalInt confirmations,
-                       TxInstructionError error,
+                       TransactionError error,
                        Commitment confirmationStatus,
+                       @Deprecated
                        Boolean deprecatedOkayStatus,
+                       @Deprecated
                        String deprecatedError,
+                       @Deprecated
                        Map<String, String> unhandledFields) {
 
   public static Map<String, TxStatus> parse(final List<String> txIds, final JsonIterator ji, final Context context) {
@@ -27,33 +30,6 @@ public record TxStatus(Context context,
     return statuses;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> STATUS_PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("Ok", buf, offset, len)) {
-      builder.deprecatedOkayStatus = Boolean.TRUE;
-      ji.skip();
-    } else if (fieldEquals("Err", buf, offset, len)) {
-      switch (ji.whatIsNext()) {
-        case STRING -> builder.deprecatedError = ji.readString();
-        case NUMBER -> builder.deprecatedError = ji.readNumberAsString();
-        case OBJECT -> {
-          if (builder.error == null) {
-            builder.error(TxInstructionError.parseError(ji));
-          } else {
-            ji.skip();
-          }
-        }
-        default -> {
-          builder.deprecatedError = ji.currentBuffer();
-          ji.skip();
-        }
-      }
-    } else {
-      final var field = "status." + new String(buf, offset, len);
-      builder.recordUnhandledField(field, ji);
-    }
-    return true;
-  };
-
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("slot", buf, offset, len)) {
       builder.slot(ji.readLong());
@@ -64,14 +40,11 @@ public record TxStatus(Context context,
         ji.skip();
       }
     } else if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TxInstructionError.parseError(ji));
+      builder.error(TransactionError.parseError(ji));
     } else if (fieldEquals("confirmationStatus", buf, offset, len)) {
       builder.confirmationStatus(ji.readString());
-    } else if (fieldEquals("status", buf, offset, len)) {
-      ji.testObject(builder, STATUS_PARSER);
     } else {
-      final var field = new String(buf, offset, len);
-      builder.recordUnhandledField(field, ji);
+      ji.skip();
     }
     return true;
   };
@@ -82,7 +55,7 @@ public record TxStatus(Context context,
 
     private long slot;
     private int confirmations = -1;
-    private TxInstructionError error;
+    private TransactionError error;
     private Commitment confirmationStatus;
     private Boolean deprecatedOkayStatus;
     private String deprecatedError;
@@ -104,35 +77,6 @@ public record TxStatus(Context context,
           Objects.requireNonNullElse(unhandledFields, ALL_FIELDS_HANDLED));
     }
 
-    private void recordUnhandledField(final String field, final JsonIterator ji) {
-      final var value = switch (ji.whatIsNext()) {
-        case STRING -> ji.readString();
-        case NUMBER -> ji.readNumberAsString();
-        case BOOLEAN -> Boolean.toString(ji.readBoolean());
-        case INVALID -> {
-          ji.skip();
-          yield "?";
-        }
-        case NULL -> {
-          ji.skip();
-          yield "null";
-        }
-        case ARRAY -> {
-          ji.skip();
-          yield "[<?>]";
-        }
-        case OBJECT -> {
-          ji.skip();
-          yield "{<?>}";
-        }
-      };
-      if (this.unhandledFields == null) {
-        this.unhandledFields = new HashMap<>();
-      }
-      this.unhandledFields.put(field, value);
-      System.err.format("%nUnhandled TxStatus field [%s]=[%s]%n", field, value);
-    }
-
     private void slot(final long slot) {
       this.slot = slot;
     }
@@ -141,7 +85,7 @@ public record TxStatus(Context context,
       this.confirmations = confirmations;
     }
 
-    private void error(final TxInstructionError error) {
+    private void error(final TransactionError error) {
       this.error = error;
     }
 

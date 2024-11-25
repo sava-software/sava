@@ -16,7 +16,7 @@ public record TxSig(long slot,
                     Commitment confirmationStatus,
                     String signature,
                     String memo,
-                    TxInstructionError instructionError) {
+                    TransactionError transactionError) {
 
   public static List<TxSig> parse(final JsonIterator ji) {
     final var signatures = new ArrayList<TxSig>(1_000);
@@ -39,7 +39,7 @@ public record TxSig(long slot,
     } else if (fieldEquals("signature", buf, offset, len)) {
       builder.signature(ji.readString());
     } else if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TxInstructionError.parseError(ji));
+      builder.error(TransactionError.parseError(ji));
     } else {
       ji.skip();
     }
@@ -53,7 +53,7 @@ public record TxSig(long slot,
     private Commitment confirmationStatus;
     private String signature;
     private String memo;
-    private TxInstructionError error;
+    private TransactionError error;
 
     private Builder() {
     }
@@ -64,7 +64,8 @@ public record TxSig(long slot,
           confirmationStatus,
           signature,
           memo,
-          error);
+          error
+      );
     }
 
     private void slot(final long slot) {
@@ -87,7 +88,7 @@ public record TxSig(long slot,
       this.memo = memo;
     }
 
-    private void error(final TxInstructionError error) {
+    private void error(final TransactionError error) {
       this.error = error;
     }
   }

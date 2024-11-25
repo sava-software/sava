@@ -8,7 +8,7 @@ import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record TxMeta(TxInstructionError error,
+public record TxMeta(TransactionError error,
                      int computeUnitsConsumed,
                      long fee,
                      List<Long> preBalances,
@@ -28,7 +28,7 @@ public record TxMeta(TxInstructionError error,
 
   private static final class Parser implements FieldBufferPredicate {
 
-    private TxInstructionError error;
+    private TransactionError error;
     private int computeUnitsConsumed;
     private long fee;
     private List<Long> preBalances;
@@ -62,7 +62,7 @@ public record TxMeta(TxInstructionError error,
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("err", buf, offset, len)) {
-        this.error = TxInstructionError.parseError(ji);
+        this.error = TransactionError.parseError(ji);
       } else if (fieldEquals("computeUnitsConsumed", buf, offset, len)) {
         this.computeUnitsConsumed = ji.readInt();
       } else if (fieldEquals("fee", buf, offset, len)) {

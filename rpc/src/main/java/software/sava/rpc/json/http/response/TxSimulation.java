@@ -15,7 +15,7 @@ import static software.sava.rpc.json.http.response.JsonUtil.parseEncodedData;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record TxSimulation(Context context,
-                           TxInstructionError error,
+                           TransactionError error,
                            List<String> logs,
                            List<AccountInfo<byte[]>> accounts,
                            OptionalInt unitsConsumed,
@@ -39,7 +39,7 @@ public record TxSimulation(Context context,
 
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TxInstructionError.parseError(ji));
+      builder.error(TransactionError.parseError(ji));
     } else if (fieldEquals("logs", buf, offset, len)) {
       final var logs = new ArrayList<String>();
       while (ji.readArray()) {
@@ -65,7 +65,7 @@ public record TxSimulation(Context context,
   private static final class Builder extends RootBuilder {
 
     private final List<PublicKey> accountPubKeys;
-    private TxInstructionError error;
+    private TransactionError error;
     private List<String> logs;
     private List<AccountInfo<byte[]>> accounts;
     private int unitsConsumed = -1;
@@ -81,7 +81,7 @@ public record TxSimulation(Context context,
       return new TxSimulation(context, error, logs, accounts, unitsConsumed < 0 ? OptionalInt.empty() : OptionalInt.of(unitsConsumed), programId, data);
     }
 
-    private void error(final TxInstructionError error) {
+    private void error(final TransactionError error) {
       this.error = error;
     }
 

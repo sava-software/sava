@@ -5,7 +5,7 @@ import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record TxResult(Context context, String value, TxInstructionError error) {
+public record TxResult(Context context, String value, TransactionError error) {
 
   public static TxResult parseResult(final JsonIterator ji, final Context context) {
     return switch (ji.whatIsNext()) {
@@ -22,7 +22,7 @@ public record TxResult(Context context, String value, TxInstructionError error) 
 
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TxInstructionError.parseError(ji));
+      builder.error(TransactionError.parseError(ji));
     } else {
       ji.skip();
     }
@@ -31,7 +31,7 @@ public record TxResult(Context context, String value, TxInstructionError error) 
 
   private static final class Builder extends RootBuilder {
 
-    private TxInstructionError error;
+    private TransactionError error;
 
     private Builder(final Context context) {
       super(context);
@@ -41,7 +41,7 @@ public record TxResult(Context context, String value, TxInstructionError error) 
       return new TxResult(context, null, error);
     }
 
-    private void error(final TxInstructionError error) {
+    private void error(final TransactionError error) {
       this.error = error;
     }
   }

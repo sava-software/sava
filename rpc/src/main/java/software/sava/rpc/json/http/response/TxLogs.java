@@ -8,7 +8,7 @@ import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record TxLogs(Context context, String signature, TxInstructionError error, List<String> logs) {
+public record TxLogs(Context context, String signature, TransactionError error, List<String> logs) {
 
   public static TxLogs parse(final JsonIterator ji, final Context context) {
     return ji.testObject(new Builder(context), PARSER).create();
@@ -18,7 +18,7 @@ public record TxLogs(Context context, String signature, TxInstructionError error
     if (fieldEquals("signature", buf, offset, len)) {
       builder.signature(ji.readString());
     } else if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TxInstructionError.parseError(ji));
+      builder.error(TransactionError.parseError(ji));
     } else if (fieldEquals("logs", buf, offset, len)) {
       final var logs = new ArrayList<String>();
       while (ji.readArray()) {
@@ -34,7 +34,7 @@ public record TxLogs(Context context, String signature, TxInstructionError error
   private static final class Builder extends RootBuilder {
 
     private String signature;
-    private TxInstructionError error;
+    private TransactionError error;
     private List<String> logs;
 
     private Builder(final Context context) {
@@ -49,7 +49,7 @@ public record TxLogs(Context context, String signature, TxInstructionError error
       this.signature = signature;
     }
 
-    private void error(final TxInstructionError error) {
+    private void error(final TransactionError error) {
       this.error = error;
     }
 
