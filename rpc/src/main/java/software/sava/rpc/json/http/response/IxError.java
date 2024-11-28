@@ -64,7 +64,6 @@ public sealed interface IxError permits
     IxError.Unknown {
 
   record Unknown(String type) implements IxError {
-
   }
 
   record GenericError() implements IxError {

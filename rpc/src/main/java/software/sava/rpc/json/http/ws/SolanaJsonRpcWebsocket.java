@@ -115,10 +115,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   private void queuePendingSubsOnOpen(final Map<String, ? extends Map<Commitment, ? extends Subscription<?>>> subs) {
-    subs.values().stream()
-        .map(Map::values)
-        .flatMap(Collection::stream)
-        .forEach((Subscription<?> sub) -> this.pendingSubscriptions.put(sub.msgId(), sub));
+    for (final var subscriptions : subs.values()) {
+      for (final var sub : subscriptions.values()) {
+        this.pendingSubscriptions.put(sub.msgId(), sub);
+      }
+    }
   }
 
   @Override

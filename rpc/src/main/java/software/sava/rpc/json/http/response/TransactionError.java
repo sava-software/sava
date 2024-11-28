@@ -49,7 +49,6 @@ public sealed interface TransactionError permits
     TransactionError.Unknown {
 
   record Unknown(String type) implements TransactionError {
-
   }
 
   record AccountInUse() implements TransactionError {
@@ -84,8 +83,7 @@ public sealed interface TransactionError permits
     static final BlockhashNotFound INSTANCE = new BlockhashNotFound();
   }
 
-  record InstructionError(int ixIndex,
-                          IxError ixError) implements TransactionError {
+  record InstructionError(int ixIndex, IxError ixError) implements TransactionError {
   }
 
   record CallChainTooDeep() implements TransactionError {
@@ -176,7 +174,6 @@ public sealed interface TransactionError permits
   }
 
   record InsufficientFundsForRent(int accountIndex) implements TransactionError {
-
   }
 
   record MaxLoadedAccountsDataSizeExceeded() implements TransactionError {
@@ -192,7 +189,6 @@ public sealed interface TransactionError permits
   }
 
   record ProgramExecutionTemporarilyRestricted(int accountIndex) implements TransactionError {
-
   }
 
   record UnbalancedTransaction() implements TransactionError {
@@ -206,7 +202,11 @@ public sealed interface TransactionError permits
   static TransactionError parseError(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
       case STRING -> ji.applyChars(PARSER);
-      case OBJECT -> ji.applyObject(OBJECT_PARSER);
+      case OBJECT -> {
+        final var error = ji.applyObject(OBJECT_PARSER);
+        ji.skipRestOfObject();
+        yield error;
+      }
       default -> {
         ji.skip();
         yield null;
@@ -295,21 +295,17 @@ public sealed interface TransactionError permits
       ji.continueArray();
       final var error = IxError.parseError(ji);
       ji.skipRestOfArray();
-      ji.skipRestOfObject();
       return new InstructionError(index, error);
     } else if (fieldEquals("InsufficientFundsForRent", buf, offset, len)) {
       final int accountIndex = ji.skipUntil("account_index").readInt();
-      ji.skipRestOfObject();
       ji.skipRestOfObject();
       return new InsufficientFundsForRent(accountIndex);
     } else if (fieldEquals("ProgramExecutionTemporarilyRestricted", buf, offset, len)) {
       final int accountIndex = ji.skipUntil("account_index").readInt();
       ji.skipRestOfObject();
-      ji.skipRestOfObject();
       return new ProgramExecutionTemporarilyRestricted(accountIndex);
     } else if (fieldEquals("DuplicateInstruction", buf, offset, len)) {
-      final int index = ji.readInt();
-      return new DuplicateInstruction(index);
+      return new DuplicateInstruction(ji.readInt());
     } else {
       final var type = new String(buf, offset, len);
       ji.skip();

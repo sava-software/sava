@@ -12,7 +12,7 @@ import static software.sava.rpc.json.http.request.Commitment.FINALIZED;
 final class ParseTransactionErrorTests {
 
   @Test
-  void testIncorrectProgramIdInstructionError() {
+  void incorrectProgramIdInstructionError() {
     final var json = """
         {
           "jsonrpc":"2.0",
@@ -122,7 +122,7 @@ final class ParseTransactionErrorTests {
   }
 
   @Test
-  void testCustomInstructionError() {
+  void customInstructionError() {
     final var json = """
         {
           "jsonrpc":"2.0",
@@ -396,7 +396,7 @@ final class ParseTransactionErrorTests {
   }
 
   @Test
-  void testInsufficientFundsForRent() {
+  void insufficientFundsForRent() {
     final var json = """
         {
           "jsonrpc":"2.0",
@@ -547,7 +547,7 @@ final class ParseTransactionErrorTests {
   }
 
   @Test
-  void testSigStatus() {
+  void sigStatusInstructionError() {
     final var json = """
         {
           "jsonrpc":"2.0",
@@ -585,13 +585,105 @@ final class ParseTransactionErrorTests {
           "id":1732556781437
         }""";
 
+    final var error = validateSigStatus(json);
+    assertInstanceOf(TransactionError.InstructionError.class, error);
+    final var instructionError = (TransactionError.InstructionError) error;
+    assertEquals(2, instructionError.ixIndex());
+    final var ixError = instructionError.ixError();
+    assertInstanceOf(IxError.Custom.class, ixError);
+    final var customError = (IxError.Custom) ixError;
+    assertEquals(3012, customError.error());
+  }
+
+  @Test
+  void sigStatusDuplicateInstruction() {
+    final var json = """
+        {
+          "jsonrpc":"2.0",
+          "result":{
+            "context":{
+              "apiVersion":"2.0.15",
+              "slot":303578453
+            },
+            "value":[
+              {
+                "confirmationStatus":"finalized",
+                "confirmations":null,
+                "err":{
+                  "DuplicateInstruction": 1
+                },
+                "slot":303578335,
+                "status":{
+                  "Err":{
+                    "DuplicateInstruction": 1
+                  }
+                }
+              }
+            ]
+          },
+          "id":1732556781437
+        }""";
+
+    final var error = validateSigStatus(json);
+    assertInstanceOf(TransactionError.DuplicateInstruction.class, error);
+    final var instructionError = (TransactionError.DuplicateInstruction) error;
+    assertEquals(1, instructionError.index());
+  }
+
+  @Test
+  void sigStatusUnknownError() {
+    final var json = """
+        {
+          "jsonrpc":"2.0",
+          "result":{
+            "context":{
+              "apiVersion":"2.0.15",
+              "slot":303578453
+            },
+            "value":[
+              {
+                "confirmationStatus":"finalized",
+                "confirmations":null,
+                "err":{
+                  "NewUnknownError":[
+                    2,
+                    {
+                      "Custom":3012
+                    }
+                  ]
+                },
+                "slot":303578335,
+                "status":{
+                  "Err":{
+                    "NewUnknownError":[
+                      2,
+                      {
+                        "Custom":3012
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "id":1732556781437
+        }""";
+
+    final var error = validateSigStatus(json);
+    assertInstanceOf(TransactionError.Unknown.class, error);
+    final var instructionError = (TransactionError.Unknown) error;
+    assertEquals("NewUnknownError", instructionError.type());
+  }
+
+  private TransactionError validateSigStatus(final String json) {
+    final var sig = "4CMrEPktKxqHeGiLVbFHhN2QdaJX9ovTH1NBiSzktxfwWgne5cMKmS2o1S8drF2EpVgnNdgZVzbQBYqXcSyrCBzm";
+
     final var ji = JsonIterator.parse(json);
     ji.skipUntil("result");
     ji.skipUntil("context");
     final var context = Context.parse(ji);
 
     ji.skipUntil("value");
-    final var sig = "4CMrEPktKxqHeGiLVbFHhN2QdaJX9ovTH1NBiSzktxfwWgne5cMKmS2o1S8drF2EpVgnNdgZVzbQBYqXcSyrCBzm";
     final var statusMap = TxStatus.parse(List.of(sig), ji, context);
 
     assertEquals(1, statusMap.size());
@@ -600,14 +692,9 @@ final class ParseTransactionErrorTests {
     assertEquals(FINALIZED, status.confirmationStatus());
     assertTrue(status.confirmations().isEmpty());
     assertEquals(303578335L, status.slot());
+
     final var error = status.error();
     assertNotNull(error);
-    assertInstanceOf(TransactionError.InstructionError.class, error);
-    final var instructionError = (TransactionError.InstructionError) error;
-    assertEquals(2, instructionError.ixIndex());
-    final var ixError = instructionError.ixError();
-    assertInstanceOf(IxError.Custom.class, ixError);
-    final var customError = (IxError.Custom) ixError;
-    assertEquals(3012, customError.error());
+    return error;
   }
 }
