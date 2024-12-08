@@ -3,6 +3,8 @@ package software.sava.rpc.json.http.client;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
+import software.sava.core.accounts.SolanaAccounts;
+import software.sava.core.accounts.sysvar.EpochRewards;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
@@ -15,6 +17,7 @@ import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
@@ -24,6 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -101,9 +105,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   SolanaJsonRpcClient(final URI endpoint,
                       final HttpClient httpClient,
                       final Duration requestTimeout,
+                      final UnaryOperator<HttpRequest.Builder> extendRequest,
                       final Predicate<HttpResponse<byte[]>> applyResponse,
                       final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout, applyResponse);
+    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse);
     this.id = new AtomicLong(System.currentTimeMillis());
     this.defaultCommitment = defaultCommitment;
     this.latestBlockhashResponseParser = wrapParser(LATEST_BLOCK_HASH);
@@ -507,7 +512,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                                         final Commitment commitment,
                                                                         final List<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    final var builder = newRequest(endpoint, requestTimeout).header("X-Account-Index", "2.0");
     final var filtersJson = filters == null || filters.isEmpty() ? "" : filters.stream()
         .map(Filter::toJson)
         .collect(Collectors.joining(",", ",\"filters\":[", "]"));
@@ -515,7 +519,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
             {"jsonrpc":"2.0","id":%d,"method":"getProgramAccounts","params":["%s",{"commitment":"%s","withContext":true,"encoding":"base64"%s}]}""",
         id.incrementAndGet(), programId.toBase58(), commitment.getValue(), filtersJson
     );
-    final var request = builder.POST(ofString(body)).build();
+    final var request = newRequest("POST", ofString(body)).build();
     return httpClient
         .sendAsync(request, ofByteArray())
         .thenApply(wrapParser(applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory))));
@@ -988,13 +992,16 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   public static void main(String[] args) {
-    final var rpcClient = SolanaRpcClient.createClient(
-        SolanaNetwork.MAIN_NET.getEndpoint(),
-        HttpClient.newHttpClient(),
-        response -> {
-          System.out.println(new String(response.body()));
-          return true;
-        }
-    );
+    try (final var httpClient = HttpClient.newHttpClient()) {
+      final var rpcClient = SolanaRpcClient.createClient(
+          SolanaNetwork.MAIN_NET.getEndpoint(),
+          httpClient
+      );
+
+      final var epochRewards = rpcClient.getAccountInfo(SolanaAccounts.MAIN_NET.epochRewardsSysVar(), EpochRewards.FACTORY).join();
+
+      System.out.println(epochRewards);
+      System.out.println(EpochRewards.BYTES);
+    }
   }
 }

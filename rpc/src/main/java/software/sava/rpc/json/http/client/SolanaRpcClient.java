@@ -12,6 +12,7 @@ import software.sava.rpc.json.http.response.*;
 
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.DEFAULT_REQUEST_TIMEOUT;
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.PROGRAM_ACCOUNTS_TIMEOUT;
@@ -36,32 +38,40 @@ public interface SolanaRpcClient {
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final Duration requestTimeout,
+                                      final UnaryOperator<HttpRequest.Builder> extendRequest,
                                       final Predicate<HttpResponse<byte[]>> applyResponse,
                                       final Commitment defaultCommitment) {
-    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, applyResponse, defaultCommitment);
+    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, defaultCommitment);
+  }
+
+  static SolanaRpcClient createClient(final URI endpoint,
+                                      final HttpClient httpClient,
+                                      final UnaryOperator<HttpRequest.Builder> extendRequest,
+                                      final Predicate<HttpResponse<byte[]>> applyResponse) {
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, extendRequest, applyResponse, CONFIRMED);
   }
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final Predicate<HttpResponse<byte[]>> applyResponse) {
-    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, applyResponse, CONFIRMED);
+    return createClient(endpoint, httpClient, null, applyResponse);
   }
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final Duration requestTimeout,
                                       final Commitment defaultCommitment) {
-    return createClient(endpoint, httpClient, requestTimeout, null, defaultCommitment);
+    return createClient(endpoint, httpClient, requestTimeout, null, null, defaultCommitment);
   }
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final Commitment defaultCommitment) {
-    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, defaultCommitment);
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, null, defaultCommitment);
   }
 
   static SolanaRpcClient createClient(final URI endpoint, final HttpClient httpClient) {
-    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, CONFIRMED);
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, null, CONFIRMED);
   }
 
   URI endpoint();

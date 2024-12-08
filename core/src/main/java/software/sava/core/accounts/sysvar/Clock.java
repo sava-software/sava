@@ -28,7 +28,7 @@ public record Clock(PublicKey address,
   }
 
   public static Clock read(final PublicKey address, final byte[] data) {
-    return read(null, data, 0);
+    return read(address, data, 0);
   }
 
   public static Clock read(final PublicKey address, final byte[] data, int offset) {

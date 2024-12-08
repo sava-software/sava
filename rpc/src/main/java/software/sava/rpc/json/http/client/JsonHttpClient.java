@@ -11,6 +11,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 import static java.net.http.HttpRequest.BodyPublishers.ofString;
 import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
@@ -20,22 +21,25 @@ public abstract class JsonHttpClient {
   protected final URI endpoint;
   protected final HttpClient httpClient;
   protected final Duration requestTimeout;
+  protected final UnaryOperator<HttpRequest.Builder> extendRequest;
   protected final Predicate<HttpResponse<byte[]>> applyResponse;
 
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout,
+                           final UnaryOperator<HttpRequest.Builder> extendRequest,
                            final Predicate<HttpResponse<byte[]>> applyResponse) {
     this.endpoint = endpoint;
     this.httpClient = httpClient;
     this.requestTimeout = requestTimeout;
+    this.extendRequest = extendRequest == null ? UnaryOperator.identity() : extendRequest;
     this.applyResponse = applyResponse;
   }
 
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout) {
-    this(endpoint, httpClient, requestTimeout, null);
+    this(endpoint, httpClient, requestTimeout, null, null);
   }
 
   public final URI endpoint() {
@@ -58,11 +62,25 @@ public abstract class JsonHttpClient {
     return applyResponse == null ? parser : response -> applyResponse.test(response) ? parser.apply(response) : null;
   }
 
-  protected HttpRequest.Builder newRequest(final URI endpoint, final Duration requestTimeout) {
+  private static HttpRequest.Builder newJsonRequest(final URI endpoint, final Duration requestTimeout) {
     return HttpRequest
         .newBuilder(endpoint)
         .header("Content-Type", "application/json")
         .timeout(requestTimeout);
+  }
+
+  // GET methods
+
+  private HttpRequest.Builder newRequest(final URI endpoint, final Duration requestTimeout) {
+    return extendRequest.apply(newJsonRequest(endpoint, requestTimeout));
+  }
+
+  protected final HttpRequest.Builder newRequest(final String path, final Duration requestTimeout) {
+    return newRequest(endpoint.resolve(path), requestTimeout);
+  }
+
+  protected final HttpRequest.Builder newRequest(final String path) {
+    return newRequest(path, requestTimeout);
   }
 
   protected final HttpRequest.Builder newRequest(final URI endpoint) {
@@ -77,40 +95,47 @@ public abstract class JsonHttpClient {
     return newRequest(endpoint);
   }
 
-  protected final HttpRequest.Builder newRequest(final String path, final Duration requestTimeout) {
-    return newRequest(endpoint.resolve(path), requestTimeout);
+  // POST/PUT methods
+
+  private HttpRequest.Builder newRequest(final URI endpoint,
+                                         final Duration requestTimeout,
+                                         final String method,
+                                         final HttpRequest.BodyPublisher bodyPublisher) {
+    return extendRequest.apply(newJsonRequest(endpoint, requestTimeout).method(method, bodyPublisher));
   }
 
-  protected final HttpRequest.Builder newRequest(final String path) {
-    return newRequest(path, requestTimeout);
+  protected final HttpRequest.Builder newRequest(final URI endpoint,
+                                                 final String method,
+                                                 final HttpRequest.BodyPublisher bodyPublisher) {
+    return newRequest(endpoint, requestTimeout, method, bodyPublisher);
   }
 
-  protected final HttpRequest.Builder newGetRequest(final String path, final Duration requestTimeout) {
-    return newRequest(path, requestTimeout).GET();
+  protected final HttpRequest.Builder newRequest(final Duration requestTimeout,
+                                                 final String method,
+                                                 final HttpRequest.BodyPublisher bodyPublisher) {
+    return newRequest(endpoint, requestTimeout, method, bodyPublisher);
   }
 
-  protected final HttpRequest.Builder newGetRequest(final String path) {
-    return newRequest(path).GET();
+  protected final HttpRequest.Builder newRequest(final String method,
+                                                 final HttpRequest.BodyPublisher bodyPublisher) {
+    return newRequest(endpoint, method, bodyPublisher);
   }
 
-  protected final HttpRequest.Builder newGetRequest(final URI endpoint) {
-    return newRequest(endpoint).GET();
+  protected final HttpRequest.Builder newRequest(final String path,
+                                                 final Duration requestTimeout,
+                                                 final String method,
+                                                 final HttpRequest.BodyPublisher bodyPublisher) {
+    return newRequest(endpoint.resolve(path), requestTimeout, method, bodyPublisher);
   }
 
-  protected final HttpRequest newPostRequest(final String body) {
-    return newRequest().POST(ofString(body)).build();
-  }
-
-  protected final HttpRequest newPostRequest(final Duration requestTimeout, final String body) {
-    return newRequest(requestTimeout).POST(ofString(body)).build();
-  }
-
-  protected final HttpRequest newPostRequest(final URI endpoint, final String body) {
-    return newRequest(endpoint).POST(ofString(body)).build();
+  protected final HttpRequest.Builder newRequest(final String path,
+                                                 final String method,
+                                                 final HttpRequest.BodyPublisher bodyPublisher) {
+    return newRequest(path, requestTimeout, method, bodyPublisher);
   }
 
   protected final HttpRequest newPostRequest(final URI endpoint, final Duration requestTimeout, final String body) {
-    return newRequest(endpoint, requestTimeout).POST(ofString(body)).build();
+    return newRequest(endpoint, requestTimeout, "POST", ofString(body)).build();
   }
 
   protected final <R> CompletableFuture<R> sendPostRequest(final URI endpoint,
@@ -144,14 +169,14 @@ public abstract class JsonHttpClient {
   protected final <R> CompletableFuture<R> sendGetRequest(final Function<HttpResponse<byte[]>, R> parser,
                                                           final String path) {
     return httpClient
-        .sendAsync(newGetRequest(path).build(), ofByteArray())
+        .sendAsync(newRequest(path).build(), ofByteArray())
         .thenApply(wrapParser(parser));
   }
 
   protected final <R> CompletableFuture<R> sendGetRequest(final URI endpoint,
                                                           final Function<HttpResponse<byte[]>, R> parser) {
     return httpClient
-        .sendAsync(newGetRequest(endpoint).build(), ofByteArray())
+        .sendAsync(newRequest(endpoint).build(), ofByteArray())
         .thenApply(wrapParser(parser));
   }
 
@@ -186,14 +211,14 @@ public abstract class JsonHttpClient {
   protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final Function<HttpResponse<byte[]>, R> parser,
                                                                 final String path) {
     return httpClient
-        .sendAsync(newGetRequest(path).build(), ofByteArray())
+        .sendAsync(newRequest(path).build(), ofByteArray())
         .thenApply(parser);
   }
 
   protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final URI endpoint,
                                                                 final Function<HttpResponse<byte[]>, R> parser) {
     return httpClient
-        .sendAsync(newGetRequest(endpoint).build(), ofByteArray())
+        .sendAsync(newRequest(endpoint).build(), ofByteArray())
         .thenApply(parser);
   }
 }

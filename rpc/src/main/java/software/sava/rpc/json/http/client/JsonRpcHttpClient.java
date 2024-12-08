@@ -7,11 +7,13 @@ import systems.comodal.jsoniter.ValueType;
 
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 import static software.sava.rpc.json.http.client.JsonResponseController.throwUncheckedIOException;
 
@@ -20,14 +22,15 @@ public abstract class JsonRpcHttpClient extends JsonHttpClient {
   public JsonRpcHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout,
+                           final UnaryOperator<HttpRequest.Builder> extendRequest,
                            final Predicate<HttpResponse<byte[]>> applyResponse) {
-    super(endpoint, httpClient, requestTimeout, applyResponse);
+    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse);
   }
 
   public JsonRpcHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout) {
-    super(endpoint, httpClient, requestTimeout, null);
+    super(endpoint, httpClient, requestTimeout, null, null);
   }
 
   static JsonIterator createJsonIterator(final HttpResponse<byte[]> httpResponse) {
