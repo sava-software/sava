@@ -2,15 +2,21 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record ReplacementBlockHash(String blockhash, long lastValidBlockHeight) {
 
   static ReplacementBlockHash parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    if (ji.whatIsNext() == ValueType.NULL) {
+      ji.skip();
+      return null;
+    } else {
+      final var parser = new Parser();
+      ji.testObject(parser);
+      return parser.create();
+    }
   }
 
   private static final class Parser implements FieldBufferPredicate {

@@ -1,42 +1,38 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.OptionalLong;
 
-import static software.sava.rpc.json.http.client.JsonResponseController.log;
+import static software.sava.rpc.json.http.response.TxSimulation.NO_LOGS;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
-import static systems.comodal.jsoniter.ValueType.NULL;
 
 public final class JsonRpcException extends RuntimeException {
 
-  private final int code;
   private final OptionalLong retryAfterSeconds;
-  private final long numSlotsBehind;
-  private final List<String> logs;
+  private final long code;
+  private final RpcCustomError customError;
 
-  private JsonRpcException(final int code,
+  private JsonRpcException(final long code,
                            final String message,
                            final OptionalLong retryAfterSeconds,
-                           final long numSlotsBehind,
-                           final List<String> logs) {
+                           final RpcCustomError customError) {
     super(message);
     this.code = code;
-    this.retryAfterSeconds = retryAfterSeconds;
-    this.numSlotsBehind = numSlotsBehind;
-    this.logs = logs;
+    this.retryAfterSeconds = Objects.requireNonNullElse(retryAfterSeconds, OptionalLong.empty());
+    this.customError = customError;
   }
 
-  public static JsonRpcException parseException(final JsonIterator ji,
-                                                final OptionalLong retryAfterSeconds) {
-    return ji.testObject(new Builder(), PARSER).create(retryAfterSeconds);
+  public static JsonRpcException parseException(final JsonIterator ji, final OptionalLong retryAfterSeconds) {
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create(retryAfterSeconds);
   }
 
-  public int code() {
+  public long code() {
     return code;
   }
 
@@ -44,66 +40,31 @@ public final class JsonRpcException extends RuntimeException {
     return retryAfterSeconds;
   }
 
+  public RpcCustomError customError() {
+    return customError;
+  }
+
+  @Deprecated
   public List<String> logs() {
-    return logs;
+    return customError instanceof RpcCustomError.SendTransactionPreflightFailure(final TxSimulation simulation)
+        ? simulation.logs()
+        : NO_LOGS;
   }
 
+  @Deprecated
   public long numSlotsBehind() {
-    return numSlotsBehind;
+    return customError instanceof RpcCustomError.NodeUnhealthy(final OptionalLong numSlotsBehind)
+        ? numSlotsBehind.orElse(Integer.MIN_VALUE)
+        : Integer.MIN_VALUE;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> DATA_PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("logs", buf, offset, len)) {
-      if (ji.whatIsNext() == ValueType.ARRAY) {
-        builder.logs = new ArrayList<>();
-        while (ji.readArray()) {
-          builder.logs.add(ji.readString());
-        }
-      } else {
-        ji.skip();
-      }
-    } else if (fieldEquals("numSlotsBehind", buf, offset, len)) {
-      if (ji.whatIsNext() == NULL) {
-        ji.skip();
-      } else {
-        final var numSlotsBehind = ji.readNumberOrNumberString();
-        if (numSlotsBehind != null && !numSlotsBehind.isBlank()) {
-          try {
-            builder.numSlotsBehind = Long.parseLong(numSlotsBehind);
-          } catch (final RuntimeException ex) {
-            log.log(System.Logger.Level.WARNING, "Failed to parse numSlotsBehind field: " + numSlotsBehind);
-          }
-        }
-      }
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
+  private static final class Parser implements FieldBufferPredicate {
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("code", buf, offset, len)) {
-      builder.code(ji.readInt());
-    } else if (fieldEquals("message", buf, offset, len)) {
-      builder.message(ji.readString());
-    } else if (fieldEquals("data", buf, offset, len)) {
-      ji.testObject(builder, DATA_PARSER);
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
-
-    private static final List<String> NO_LOGS = List.of();
-
-    private int code;
+    private long code;
     private String message;
-    private List<String> logs;
-    private long numSlotsBehind = Integer.MIN_VALUE;
+    private RpcCustomError customError;
 
-    private Builder() {
+    private Parser() {
     }
 
     private JsonRpcException create(final OptionalLong retryAfterSeconds) {
@@ -111,17 +72,22 @@ public final class JsonRpcException extends RuntimeException {
           code,
           message,
           retryAfterSeconds,
-          numSlotsBehind,
-          logs == null || logs.isEmpty() ? NO_LOGS : logs
+          customError == null ? RpcCustomError.parseError(code) : customError
       );
     }
 
-    private void code(final int code) {
-      this.code = code;
-    }
-
-    private void message(final String message) {
-      this.message = message;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("code", buf, offset, len)) {
+        code = ji.readLong();
+      } else if (fieldEquals("message", buf, offset, len)) {
+        message = ji.readString();
+      } else if (fieldEquals("data", buf, offset, len)) {
+        customError = RpcCustomError.parseError(code, ji);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

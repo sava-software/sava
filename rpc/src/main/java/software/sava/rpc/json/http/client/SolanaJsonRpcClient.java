@@ -1048,7 +1048,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         simulationResult.unitsConsumed().orElse(-1),
         simulationResult.error(),
         simulationResult.replacementBlockHash(),
-        simulationResult.innerInstructions().stream().map(InnerInstructions::toString).collect(Collectors.joining("\n    * ", "  * ", "")),
+        simulationResult.innerInstructions().stream().map(InnerInstructions::toString)
+            .collect(Collectors.joining("\n    * ", "  * ", "")),
         simulationResult.logs().stream().collect(Collectors.joining("\n    * ", "  * ", ""))
     );
   }

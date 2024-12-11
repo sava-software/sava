@@ -32,6 +32,10 @@ public record TxSimulation(Context context,
     return parser.create();
   }
 
+  public static TxSimulation parse(final JsonIterator ji) {
+    return parse(null, ji, null);
+  }
+
   private static final ContextFieldBufferPredicate<Parser> RETURN_DATA_PARSER = (parser, buf, offset, len, ji) -> {
     if (fieldEquals("programId", buf, offset, len)) {
       parser.programId = PublicKeyEncoding.parseBase58Encoded(ji);
@@ -43,12 +47,12 @@ public record TxSimulation(Context context,
     return true;
   };
 
-  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
+  private static final OptionalInt NO_BUDGET = OptionalInt.empty();
+  static final List<String> NO_LOGS = List.of();
+  static final List<AccountInfo<byte[]>> NO_ACCOUNTS = List.of();
+  static final List<InnerInstructions> NO_INNER_INSTRUCTIONS = List.of();
 
-    private static final OptionalInt NO_BUDGET = OptionalInt.empty();
-    private static final List<String> NO_LOGS = List.of();
-    private static final List<AccountInfo<byte[]>> NO_ACCOUNTS = List.of();
-    private static final List<InnerInstructions> NO_INNER_INSTRUCTIONS = List.of();
+  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
     private final List<PublicKey> accountPubKeys;
     private TransactionError error;
@@ -84,7 +88,7 @@ public record TxSimulation(Context context,
       if (fieldEquals("err", buf, offset, len)) {
         error = TransactionError.parseError(ji);
       } else if (fieldEquals("logs", buf, offset, len)) {
-        this.logs = new ArrayList<String>();
+        this.logs = new ArrayList<>();
         while (ji.readArray()) {
           logs.add(ji.readString());
         }
