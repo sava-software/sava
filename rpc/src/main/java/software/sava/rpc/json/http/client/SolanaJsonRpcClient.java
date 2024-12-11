@@ -3,8 +3,6 @@ package software.sava.rpc.json.http.client;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
-import software.sava.core.accounts.SolanaAccounts;
-import software.sava.core.accounts.sysvar.EpochRewards;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
@@ -986,22 +984,89 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
                                                              final String base64EncodedTx,
                                                              final boolean replaceRecentBlockhash) {
+    return simulateTransaction(commitment, base64EncodedTx, replaceRecentBlockhash, false);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Transaction transaction) {
+    return simulateTransaction(defaultCommitment, transaction, true, true);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final String base64EncodedTx) {
+    return simulateTransaction(defaultCommitment, base64EncodedTx, true, true);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
+                                                             final boolean replaceRecentBlockhash,
+                                                             final boolean innerInstructions) {
+    return simulateTransaction(defaultCommitment, transaction, replaceRecentBlockhash, innerInstructions);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
+                                                             final Transaction transaction,
+                                                             final boolean replaceRecentBlockhash,
+                                                             final boolean innerInstructions) {
+    final var base64TxData = transaction.base64EncodeToString();
+    return simulateTransaction(commitment, base64TxData, replaceRecentBlockhash, innerInstructions);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
+                                                             final boolean replaceRecentBlockhash,
+                                                             final boolean innerInstructions) {
+    return simulateTransaction(defaultCommitment, base64EncodedTx, replaceRecentBlockhash, innerInstructions);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
+                                                             final String base64EncodedTx,
+                                                             final boolean replaceRecentBlockhash,
+                                                             final boolean innerInstructions) {
     return sendPostRequest(applyResponseValue((ji, context) -> TxSimulation.parse(List.of(), ji, context)), format("""
-            {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"commitment":"%s"}]}""",
-        id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, commitment.getValue()));
+            {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"innerInstructions":%b,"commitment":"%s"}]}""",
+        id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue()));
+  }
+
+  private static void logSimulationResult(final TxSimulation simulationResult) {
+    System.out.format("""
+            
+            Simulation Result:
+              program: %s
+              CU consumed: %d
+              error: %s
+              blockhash: %s
+              inner instructions:
+              %s
+              logs:
+              %s
+            
+            """,
+        simulationResult.programId(),
+        simulationResult.unitsConsumed().orElse(-1),
+        simulationResult.error(),
+        simulationResult.replacementBlockHash(),
+        simulationResult.innerInstructions().stream().map(InnerInstructions::toString).collect(Collectors.joining("\n    * ", "  * ", "")),
+        simulationResult.logs().stream().collect(Collectors.joining("\n    * ", "  * ", ""))
+    );
   }
 
   public static void main(String[] args) {
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
           SolanaNetwork.MAIN_NET.getEndpoint(),
-          httpClient
+          httpClient,
+          response -> {
+            System.out.println(new String(response.body()));
+            return true;
+          }
       );
 
-      final var epochRewards = rpcClient.getAccountInfo(SolanaAccounts.MAIN_NET.epochRewardsSysVar(), EpochRewards.FACTORY).join();
-
-      System.out.println(epochRewards);
-      System.out.println(EpochRewards.BYTES);
+      final var simulation = rpcClient.simulateTransactionWithInnerInstructions("""
+          """.stripTrailing()).join();
+      logSimulationResult(simulation);
     }
   }
 }

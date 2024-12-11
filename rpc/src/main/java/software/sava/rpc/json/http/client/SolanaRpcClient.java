@@ -550,4 +550,25 @@ public interface SolanaRpcClient {
                                                       final String base64EncodedTx,
                                                       final boolean replaceRecentBlockhash);
 
+  CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
+                                                      final String base64EncodedTx,
+                                                      final boolean replaceRecentBlockhash,
+                                                      final boolean innerInstructions);
+
+  CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Transaction transaction);
+
+  CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final String base64EncodedTx);
+
+  CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
+                                                      final boolean replaceRecentBlockhash,
+                                                      final boolean innerInstructions);
+
+  CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
+                                                      final Transaction transaction,
+                                                      final boolean replaceRecentBlockhash,
+                                                      final boolean innerInstructions);
+
+  CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
+                                                      final boolean replaceRecentBlockhash,
+                                                      final boolean innerInstructions);
 }
