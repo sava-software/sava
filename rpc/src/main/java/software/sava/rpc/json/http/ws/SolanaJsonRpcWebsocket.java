@@ -41,6 +41,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Timings timings;
   private final WebSocket.Builder webSocketBuilder;
   private final ScheduledExecutorService executorService;
+  private final Consumer<SolanaRpcWebsocket> onOpen;
   private final OnClose onClose;
   private final BiConsumer<SolanaRpcWebsocket, Throwable> onError;
   private final AtomicLong msgId;
@@ -67,6 +68,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final Commitment defaultCommitment,
                          final WebSocket.Builder webSocketBuilder,
                          final Timings timings,
+                         final Consumer<SolanaRpcWebsocket> onOpen,
                          final OnClose onClose,
                          final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
     this.wsUri = wsUri;
@@ -74,6 +76,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.defaultCommitment = defaultCommitment;
     this.timings = timings;
     this.webSocketBuilder = webSocketBuilder;
+    this.onOpen = onOpen;
     this.onClose = onClose;
     this.onError = onError;
     this.msgId = new AtomicLong(1);
@@ -141,6 +144,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     webSocket.request(Long.MAX_VALUE);
     this.webSocket = webSocket;
     log.log(INFO, "WebSocket connected to {0}.", wsUri);
+    onOpen.accept(this);
   }
 
   private static String createSubscriptionMsg(final long msgId,

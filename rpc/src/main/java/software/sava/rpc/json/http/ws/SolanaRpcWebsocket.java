@@ -158,8 +158,10 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Commitment commitment();
 
-    Builder onClose(OnClose onClose);
+    Builder onOpen(final Consumer<SolanaRpcWebsocket> onOpen);
 
-    Builder onError(BiConsumer<SolanaRpcWebsocket, Throwable> onError);
+    Builder onClose(final OnClose onClose);
+
+    Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError);
   }
 }

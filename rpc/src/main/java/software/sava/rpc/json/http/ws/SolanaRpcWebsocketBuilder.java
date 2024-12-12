@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
 
@@ -17,6 +18,7 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   private long subscriptionAndPingCheckDelay = 200;
   private SolanaAccounts solanaAccounts = SolanaAccounts.MAIN_NET;
   private Commitment commitment = Commitment.CONFIRMED;
+  private Consumer<SolanaRpcWebsocket> onOpen;
   private SolanaRpcWebsocket.OnClose onClose;
   private BiConsumer<SolanaRpcWebsocket, Throwable> onError;
 
@@ -29,6 +31,7 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
         wsUri, solanaAccounts, commitment,
         webSocketBuilder.connectTimeout(Duration.ofMillis(reConnect)),
         new Timings(reConnect, writeOrPingDelay, subscriptionAndPingCheckDelay),
+        onOpen,
         onClose,
         onError
     );
@@ -108,6 +111,12 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   @Override
   public SolanaRpcWebsocket.Builder solanaAccounts(final SolanaAccounts solanaAccounts) {
     this.solanaAccounts = solanaAccounts;
+    return this;
+  }
+
+  @Override
+  public SolanaRpcWebsocket.Builder onOpen(final Consumer<SolanaRpcWebsocket> onOpen) {
+    this.onOpen = onOpen;
     return this;
   }
 
