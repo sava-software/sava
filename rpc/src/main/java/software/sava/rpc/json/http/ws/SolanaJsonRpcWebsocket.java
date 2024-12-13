@@ -144,7 +144,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     webSocket.request(Long.MAX_VALUE);
     this.webSocket = webSocket;
     log.log(INFO, "WebSocket connected to {0}.", wsUri);
-    onOpen.accept(this);
+    if (onOpen != null) {
+      onOpen.accept(this);
+    }
   }
 
   private static String createSubscriptionMsg(final long msgId,
