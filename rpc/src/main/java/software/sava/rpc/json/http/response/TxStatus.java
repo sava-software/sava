@@ -57,9 +57,6 @@ public record TxStatus(Context context,
     private int confirmations = -1;
     private TransactionError error;
     private Commitment confirmationStatus;
-    private Boolean deprecatedOkayStatus;
-    private String deprecatedError;
-    private Map<String, String> unhandledFields;
 
     private Builder(final Context context) {
       super(context);
@@ -72,9 +69,10 @@ public record TxStatus(Context context,
           confirmations < 0 ? OptionalInt.empty() : OptionalInt.of(confirmations),
           error,
           confirmationStatus,
-          deprecatedOkayStatus,
-          deprecatedError,
-          Objects.requireNonNullElse(unhandledFields, ALL_FIELDS_HANDLED));
+          null,
+          null,
+          ALL_FIELDS_HANDLED
+      );
     }
 
     private void slot(final long slot) {

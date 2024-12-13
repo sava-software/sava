@@ -579,18 +579,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                   publish(webSocket, channel, ji, paramsMark, AccountInfo.parseAccount(ji, context, BYTES_IDENTITY));
               case signature -> {
                 final var result = TxResult.parseResult(ji, context);
-                ji.skipRestOfObject();
-                if (ji.skipUntil("subscription") == null) {
-                  ji.reset(paramsMark).skipUntil("subscription");
-                }
-                final long subId = ji.readLong();
-                @SuppressWarnings("unchecked") final var sub = (Subscription<TxResult>) this.subscriptionsBySubId.get(subId);
-                if (sub == null) {
-                  sendUnSubscription(webSocket, channel, subId);
-                } else {
-                  if (result != null) {
+                if (result != null) {
+                  ji.skipRestOfObject();
+                  if (ji.skipUntil("subscription") == null) {
+                    ji.reset(paramsMark).skipUntil("subscription");
+                  }
+                  final long subId = ji.readLong();
+                  @SuppressWarnings("unchecked") final var sub = (Subscription<TxResult>) this.subscriptionsBySubId.get(subId);
+                  if (sub != null) {
                     sub.accept(result);
-                    if (result.value() == null) {
+                    if (!"receivedSignature".equals(result.value())) {
+                      // Server side subscription is automatically cancelled after processed message has been sent.
                       this.subscriptionsBySubId.remove(subId);
                     }
                   }

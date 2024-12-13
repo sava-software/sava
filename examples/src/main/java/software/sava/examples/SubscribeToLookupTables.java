@@ -17,6 +17,7 @@ public final class SubscribeToLookupTables {
           .uri(SolanaNetwork.MAIN_NET.getWebSocketEndpoint())
           .webSocketBuilder(httpClient)
           .commitment(Commitment.CONFIRMED)
+          .onOpen(_ -> System.out.println("Websocket connected"))
           .onClose((_, statusCode, reason) -> System.out.format("%d: %s%n", statusCode, reason))
           .onError((_, throwable) -> throwable.printStackTrace())
           .create();
