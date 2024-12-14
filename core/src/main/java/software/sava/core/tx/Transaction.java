@@ -201,7 +201,6 @@ public interface Transaction {
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts) {
     final int numAccounts = sortedAccounts.length;
-    // final var accountIndexLookupTable = new AccountIndexLookupTableEntry[numAccounts];
     final var accountIndexLookupTable = HashMap.<PublicKey, Integer>newHashMap(numAccounts);
 
     int numRequiredSignatures = 0;
@@ -211,7 +210,6 @@ public interface Transaction {
     AccountMeta feePayer = null;
     for (int i = 0; i < numAccounts; ++i) {
       final var accountMeta = sortedAccounts[i];
-      // accountIndexLookupTable[i] = new AccountIndexLookupTableEntry(accountMeta.publicKey().toByteArray(), i);
       accountIndexLookupTable.put(accountMeta.publicKey(), i);
 
       if (accountMeta.signer()) {
@@ -226,7 +224,6 @@ public interface Transaction {
         ++numReadonlyUnsignedAccounts;
       }
     }
-    // Arrays.sort(accountIndexLookupTable);
 
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int numInstructions = instructions.size();
@@ -288,7 +285,6 @@ public interface Transaction {
       return createTx(instructions, serializedInstructionLength, sortedAccounts);
     }
     final int numAccounts = sortedAccounts.length;
-    // final AccountIndexLookupTableEntry[] accountIndexLookupTable = new AccountIndexLookupTableEntry[numAccounts];
     final var accountIndexLookupTable = HashMap.<PublicKey, Integer>newHashMap(numAccounts);
 
     int numRequiredSignatures = 0;
@@ -330,15 +326,12 @@ public interface Transaction {
         }
         continue; // skip lookup accounts.
       }
-      // accountIndexLookupTable[numIncludedAccounts] = new AccountIndexLookupTableEntry(account.publicKey().toByteArray(), numIncludedAccounts);
       accountIndexLookupTable.put(account.publicKey(), numIncludedAccounts);
       ++numIncludedAccounts;
     }
     for (int a = numIncludedAccounts; a < numAccounts; ++a) {
-      // accountIndexLookupTable[a] = new AccountIndexLookupTableEntry(sortedAccounts[a].publicKey().toByteArray(), a);
       accountIndexLookupTable.put(sortedAccounts[a].publicKey(), a);
     }
-    // Arrays.sort(accountIndexLookupTable);
 
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
@@ -428,7 +421,6 @@ public interface Transaction {
     }
 
     final int numAccounts = sortedAccounts.length;
-    // final AccountIndexLookupTableEntry[] accountIndexLookupTable = new AccountIndexLookupTableEntry[numAccounts];
     final var accountIndexLookupTable = HashMap.<PublicKey, Integer>newHashMap(numAccounts);
 
     int numRequiredSignatures = 0;
@@ -470,7 +462,6 @@ public interface Transaction {
           sortedAccounts[numIncludedAccounts] = account;
         }
       }
-      // accountIndexLookupTable[numIncludedAccounts] = new AccountIndexLookupTableEntry(account.publicKey().toByteArray(), numIncludedAccounts);
       accountIndexLookupTable.put(account.publicKey(), numIncludedAccounts);
       ++numIncludedAccounts;
     }
@@ -481,7 +472,6 @@ public interface Transaction {
     for (final var tableAccountMeta : tableAccountMetas) {
       tai = tableAccountMeta.indexReads(accountIndexLookupTable, tai);
     }
-    // Arrays.sort(accountIndexLookupTable);
 
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen

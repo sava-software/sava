@@ -33,7 +33,7 @@ public enum PrivateKeyEncoding {
     final var privateKey = new byte[Signer.KEY_LENGTH];
     for (int i = 0; ji.readArray(); ) {
       privateKey[i] = (byte) ji.readInt();
-      if (++i == 32) {
+      if (++i == Signer.KEY_LENGTH) {
         break;
       }
     }
@@ -65,6 +65,8 @@ public enum PrivateKeyEncoding {
     if (ji.skipUntil("secret") == null) {
       ji.reset(mark).skipUntil("secret");
     }
-    return fromJsonPrivateKey(ji, encoding);
+    final var signer = fromJsonPrivateKey(ji, encoding);
+    ji.skipRestOfObject();
+    return signer;
   }
 }
