@@ -11,8 +11,4 @@ module software.sava.rpc {
   exports software.sava.rpc.json.http.request;
   exports software.sava.rpc.json.http.response;
   exports software.sava.rpc.json.http.ws;
-  exports software.sava.signing;
-
-  provides software.sava.signing.SigningServiceFactory with
-      software.sava.signing.MemorySignerFactory;
 }
