@@ -1,9 +1,15 @@
 package software.sava.rpc.json;
 
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.encoding.Base58;
 import systems.comodal.jsoniter.CharBufferFunction;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+
+import java.util.Arrays;
+
+import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public enum PrivateKeyEncoding {
 
@@ -14,15 +20,15 @@ public enum PrivateKeyEncoding {
   base58KeyPair;
 
   private static final CharBufferFunction<PrivateKeyEncoding> JSON_PARSER = (buf, offset, len) -> {
-    if (JsonIterator.fieldEquals("jsonKeyPairArray", buf, offset, len)) {
+    if (fieldEquals("jsonKeyPairArray", buf, offset, len)) {
       return PrivateKeyEncoding.jsonKeyPairArray;
-    } else if (JsonIterator.fieldEquals("base64PrivateKey", buf, offset, len)) {
+    } else if (fieldEquals("base64PrivateKey", buf, offset, len)) {
       return PrivateKeyEncoding.base64PrivateKey;
-    } else if (JsonIterator.fieldEquals("base64KeyPair", buf, offset, len)) {
+    } else if (fieldEquals("base64KeyPair", buf, offset, len)) {
       return PrivateKeyEncoding.base64KeyPair;
-    } else if (JsonIterator.fieldEquals("base58PrivateKey", buf, offset, len)) {
+    } else if (fieldEquals("base58PrivateKey", buf, offset, len)) {
       return PrivateKeyEncoding.base58PrivateKey;
-    } else if (JsonIterator.fieldEquals("base58KeyPair", buf, offset, len)) {
+    } else if (fieldEquals("base58KeyPair", buf, offset, len)) {
       return PrivateKeyEncoding.base58KeyPair;
     } else {
       throw new IllegalArgumentException(new String(buf, offset, len) + " private key encoding is not supported.");
@@ -60,13 +66,45 @@ public enum PrivateKeyEncoding {
   }
 
   public static Signer fromJsonPrivateKey(final JsonIterator ji) {
-    final int mark = ji.mark();
-    final var encoding = ji.skipUntil("encoding").applyChars(JSON_PARSER);
-    if (ji.skipUntil("secret") == null) {
-      ji.reset(mark).skipUntil("secret");
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.createSigner(ji);
+  }
+
+  private static final class Parser implements FieldBufferPredicate {
+
+    private PublicKey publicKey;
+    private PrivateKeyEncoding encoding;
+    private Signer signer;
+    private int secretMark;
+
+    Signer createSigner(final JsonIterator ji) {
+      if (signer == null) {
+        if (secretMark == 0) {
+          throw new IllegalStateException("Must configure 'encoding' field " + Arrays.toString(PrivateKeyEncoding.values()));
+        }
+        signer = fromJsonPrivateKey(ji.reset(secretMark), encoding);
+      }
+      if (publicKey != null && !publicKey.equals(signer.publicKey())) {
+        throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
+      }
+      return signer;
     }
-    final var signer = fromJsonPrivateKey(ji, encoding);
-    ji.skipRestOfObject();
-    return signer;
+
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("pubKey", buf, offset, len)) {
+        publicKey = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else if (fieldEquals("encoding", buf, offset, len)) {
+        encoding = ji.applyChars(JSON_PARSER);
+      } else if (fieldEquals("secret", buf, offset, len)) {
+        if (encoding == null) {
+          secretMark = ji.mark();
+        } else {
+          signer = fromJsonPrivateKey(ji, encoding);
+        }
+      }
+      return true;
+    }
   }
 }
