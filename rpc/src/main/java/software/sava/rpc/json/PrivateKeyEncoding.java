@@ -84,6 +84,7 @@ public enum PrivateKeyEncoding {
           throw new IllegalStateException("Must configure 'encoding' field " + Arrays.toString(PrivateKeyEncoding.values()));
         }
         signer = fromJsonPrivateKey(ji.reset(secretMark), encoding);
+        ji.skipRestOfObject();
       }
       if (publicKey != null && !publicKey.equals(signer.publicKey())) {
         throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
