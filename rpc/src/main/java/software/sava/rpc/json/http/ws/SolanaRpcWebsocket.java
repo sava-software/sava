@@ -35,17 +35,16 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);
 
-
-  boolean accountSubscribe(final PublicKey key,
-                           final Consumer<AccountInfo<byte[]>> consumer);
-
   boolean accountSubscribe(final Commitment commitment,
                            final PublicKey key,
                            final Consumer<AccountInfo<byte[]>> consumer);
 
-  boolean accountUnsubscribe(final PublicKey key);
+  boolean accountSubscribe(final PublicKey key,
+                           final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean accountUnsubscribe(final Commitment commitment, final PublicKey key);
+
+  boolean accountUnsubscribe(final PublicKey key);
 
   boolean logsSubscribe(final PublicKey key, final Consumer<TxLogs> consumer);
 

@@ -243,6 +243,24 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return accountSubscribe(this.defaultCommitment, key, consumer);
   }
 
+//  Only supported if your node is started with --rpc-pubsub-enable-block-subscription, public infra does not.
+//  https://solana.com/docs/rpc/websocket/blocksubscribe
+//  public boolean blockSubscribe(final Commitment commitment,
+//                                final BlockTxDetails txDetails,
+//                                final int maxSupportedTransactionVersion,
+//                                final Consumer<Block> consumer) {
+//    final var sub = this.blockSubs.get("all");
+//    if (sub == null || !sub.containsKey(commitment)) {
+//      final var params = String.format("""
+//              "all",{"encoding":"base64","commitment":"%s","showRewards":false,"transactionDetails":"%s","maxSupportedTransactionVersion":%d}""",
+//          commitment.getValue(), txDetails, maxSupportedTransactionVersion
+//      );
+//      return queueSubscription(commitment, Channel.block, "all", params, this.blockSubs, consumer);
+//    } else {
+//      return false;
+//    }
+//  }
+
   @Override
   public boolean accountSubscribe(final Commitment commitment,
                                   final PublicKey key,

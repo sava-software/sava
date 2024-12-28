@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.response;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -12,7 +13,8 @@ public record Block(long blockHeight,
                     String blockHash,
                     String previousBlockHash,
                     long parentSlot,
-                    List<TxReward> rewards) {
+                    List<TxReward> rewards,
+                    List<String> signatures) {
 
   public static Block parse(final JsonIterator ji) {
     return ji.testObject(new Builder(), PARSER).create();
@@ -31,6 +33,12 @@ public record Block(long blockHeight,
       builder.parentSlot = ji.readLong();
     } else if (fieldEquals("rewards", buf, offset, len)) {
       builder.rewards = TxReward.parseRewards(ji);
+    } else if (fieldEquals("signatures", buf, offset, len)) {
+      final var signatures = new ArrayList<String>(2_048);
+      while (ji.readArray()) {
+        signatures.add(ji.readString());
+      }
+      builder.signatures = signatures;
     } else {
       ji.skip();
     }
@@ -45,12 +53,21 @@ public record Block(long blockHeight,
     private String previousBlockHash;
     private long parentSlot;
     private List<TxReward> rewards;
+    private List<String> signatures;
 
     private Builder() {
     }
 
     private Block create() {
-      return new Block(blockHeight, blockTime, blockHash, previousBlockHash, parentSlot, rewards);
+      return new Block(
+          blockHeight,
+          blockTime,
+          blockHash,
+          previousBlockHash,
+          parentSlot,
+          rewards,
+          signatures
+      );
     }
   }
 }

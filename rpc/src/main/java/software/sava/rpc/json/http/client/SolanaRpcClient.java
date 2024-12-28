@@ -5,6 +5,7 @@ import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
+import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
 import software.sava.rpc.json.http.request.RpcEncoding;
@@ -34,6 +35,7 @@ public interface SolanaRpcClient {
 
   int MAX_MULTIPLE_ACCOUNTS = 100;
   int MAX_GET_SIGNATURES = 1_000;
+  int MAX_SIG_STATUS = 256;
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
@@ -126,7 +128,15 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Block> getBlock(final long slot);
 
-  CompletableFuture<Block> getBlock(final Commitment commitment, final long slot);
+  CompletableFuture<Block> getBlock(final long slot, final BlockTxDetails blockTxDetails);
+
+  default CompletableFuture<Block> getBlock(final Commitment commitment, final long slot) {
+    return getBlock(commitment, slot, BlockTxDetails.none);
+  }
+
+  CompletableFuture<Block> getBlock(final Commitment commitment,
+                                    final long slot,
+                                    final BlockTxDetails blockTxDetails);
 
   CompletableFuture<BlockHeight> getBlockHeight();
 
@@ -297,11 +307,17 @@ public interface SolanaRpcClient {
 
   CompletableFuture<List<TxSig>> getSignaturesForAddressUntil(final Commitment commitment, final PublicKey address, final int limit, final String untilTxSig);
 
-  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> txIds) {
-    return getSignatureStatuses(txIds, false);
+  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> signatures) {
+    return getSignatureStatuses(signatures, false);
   }
 
-  CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> txIds, final boolean searchTransactionHistory);
+  CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> signatures, final boolean searchTransactionHistory);
+
+  default CompletableFuture<List<TxStatus>> getSigStatusList(final List<String> signatures) {
+    return getSigStatusList(signatures, false);
+  }
+
+  CompletableFuture<List<TxStatus>> getSigStatusList(final List<String> signatures, final boolean searchTransactionHistory);
 
   CompletableFuture<Long> getSlot();
 
@@ -554,6 +570,12 @@ public interface SolanaRpcClient {
                                                       final String base64EncodedTx,
                                                       final boolean replaceRecentBlockhash,
                                                       final boolean innerInstructions);
+
+  CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Commitment commitment,
+                                                                           final Transaction transaction);
+
+  CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Commitment commitment,
+                                                                           final String base64EncodedTx);
 
   CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Transaction transaction);
 

@@ -22,6 +22,7 @@ public interface Transaction {
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
+  int BLOCK_QUEUE_SIZE = 151;
 
   BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 

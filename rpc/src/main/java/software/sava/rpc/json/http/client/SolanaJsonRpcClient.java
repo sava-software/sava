@@ -8,6 +8,7 @@ import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.PublicKeyEncoding;
 import software.sava.rpc.json.http.SolanaNetwork;
+import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
 import software.sava.rpc.json.http.response.*;
@@ -88,6 +89,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<byte[]>, List<PerfSample>> PERF_SAMPLE = applyResponseResult(PerfSample::parse);
   private static final Function<HttpResponse<byte[]>, List<PrioritizationFee>> PRIORITIZATION_FEE = applyResponseResult(PrioritizationFee::parse);
   private static final Function<HttpResponse<byte[]>, List<TxSig>> TX_SIG = applyResponseResult(TxSig::parse);
+  private static final Function<HttpResponse<byte[]>, List<TxStatus>> SIG_STATUS_LIST = applyResponseValue(TxStatus::parseList);
   private static final Function<HttpResponse<byte[]>, Supply> SUPPLY = applyResponseValue(Supply::parse);
   private static final Function<HttpResponse<byte[]>, TokenAmount> TOKEN_AMOUNT = applyResponseValue(TokenAmount::parse);
   private static final Function<HttpResponse<byte[]>, String> SEND_TX_RESPONSE_PARSER = applyResponseResult(JsonIterator::readString);
@@ -156,10 +158,17 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<Block> getBlock(final Commitment commitment, final long slot) {
+  public CompletableFuture<Block> getBlock(final long slot, final BlockTxDetails blockTxDetails) {
+    return getBlock(this.defaultCommitment, slot, blockTxDetails);
+  }
+
+  @Override
+  public CompletableFuture<Block> getBlock(final Commitment commitment,
+                                           final long slot,
+                                           final BlockTxDetails blockTxDetails) {
     return sendPostRequest(BLOCK, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"commitment":"%s","transactionDetails":"none","rewards":true}]}"""
-        , id.incrementAndGet(), slot, commitment.getValue()));
+            {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"commitment":"%s","transactionDetails":"%s","rewards":true}]}"""
+        , id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails));
   }
 
   @Override
@@ -575,13 +584,25 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         id.incrementAndGet(), address.toBase58(), commitment.getValue(), Math.min(limit, 1_000), untilTxSig));
   }
 
+  private String sigStatusBody(final List<String> signatures, final boolean searchTransactionHistory) {
+    final var joined = String.join("\",\"", signatures);
+    return format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getSignatureStatuses","params":[["%s"],{"searchTransactionHistory":%b}]}""",
+        id.incrementAndGet(), joined, searchTransactionHistory
+    );
+  }
+
   @Override
-  public CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> txIds, final boolean searchTransactionHistory) {
-    final var joinedAccounts = String.join("\",\"", txIds);
-    return sendPostRequest(applyResponseValue((ji, context) -> TxStatus.parse(txIds, ji, context)),
-        format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getSignatureStatuses","params":[["%s"],{"searchTransactionHistory":%b}]}""",
-            id.incrementAndGet(), joinedAccounts, searchTransactionHistory));
+  public CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> signatures, final boolean searchTransactionHistory) {
+    return sendPostRequest(
+        applyResponseValue((ji, context) -> TxStatus.parse(signatures, ji, context)),
+        sigStatusBody(signatures, searchTransactionHistory)
+    );
+  }
+
+  @Override
+  public CompletableFuture<List<TxStatus>> getSigStatusList(final List<String> signatures, final boolean searchTransactionHistory) {
+    return sendPostRequest(SIG_STATUS_LIST, sigStatusBody(signatures, searchTransactionHistory));
   }
 
   @Override
@@ -988,13 +1009,25 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
+  public CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Commitment commitment,
+                                                                                  final Transaction transaction) {
+    return simulateTransaction(commitment, transaction, true, true);
+  }
+
+  @Override
   public CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Transaction transaction) {
-    return simulateTransaction(defaultCommitment, transaction, true, true);
+    return simulateTransactionWithInnerInstructions(defaultCommitment, transaction);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Commitment commitment,
+                                                                                  final String base64EncodedTx) {
+    return simulateTransaction(commitment, base64EncodedTx, true, true);
   }
 
   @Override
   public CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final String base64EncodedTx) {
-    return simulateTransaction(defaultCommitment, base64EncodedTx, true, true);
+    return simulateTransactionWithInnerInstructions(defaultCommitment, base64EncodedTx);
   }
 
   @Override
