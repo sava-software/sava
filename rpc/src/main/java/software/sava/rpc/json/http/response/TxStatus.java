@@ -16,12 +16,30 @@ public record TxStatus(Context context,
                        TransactionError error,
                        Commitment confirmationStatus) {
 
+  public boolean nil() {
+    return slot == 0
+        && confirmations.isEmpty()
+        && error == null
+        && confirmationStatus == null;
+  }
+
   public static Map<String, TxStatus> parse(final List<String> txIds, final JsonIterator ji, final Context context) {
     final var statuses = HashMap.<String, TxStatus>newHashMap(txIds.size());
+    TxStatus nil = null;
     for (int i = 0; ji.readArray(); ++i) {
-      final var parser = new Parser();
-      ji.testObject(parser);
-      statuses.put(txIds.get(i), parser.create(context));
+      final TxStatus sigStatus;
+      if (ji.whatIsNext() == null) {
+        ji.skip();
+        if (nil == null) {
+          nil = new TxStatus(context, 0, OptionalInt.empty(), null, null);
+        }
+        sigStatus = nil;
+      } else {
+        final var parser = new Parser();
+        ji.testObject(parser);
+        sigStatus = parser.create(context);
+      }
+      statuses.put(txIds.get(i), sigStatus);
     }
     return statuses;
   }
@@ -53,12 +71,6 @@ public record TxStatus(Context context,
       );
     }
 
-    private void confirmationStatus(final String confirmationStatus) {
-      this.confirmationStatus = confirmationStatus == null || confirmationStatus.isBlank()
-          ? null
-          : Commitment.valueOf(confirmationStatus.toUpperCase(Locale.ENGLISH));
-    }
-
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("slot", buf, offset, len)) {
@@ -72,7 +84,7 @@ public record TxStatus(Context context,
       } else if (fieldEquals("err", buf, offset, len)) {
         this.error = TransactionError.parseError(ji);
       } else if (fieldEquals("confirmationStatus", buf, offset, len)) {
-        confirmationStatus(ji.readString());
+        this.confirmationStatus = ji.applyChars(Commitment.PARSER);
       } else {
         ji.skip();
       }

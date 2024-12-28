@@ -88,7 +88,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<byte[]>, long[]> LONG_ARRAY = applyResponseResult(PARSE_LONG_ARRAY);
   private static final Function<HttpResponse<byte[]>, List<PerfSample>> PERF_SAMPLE = applyResponseResult(PerfSample::parse);
   private static final Function<HttpResponse<byte[]>, List<PrioritizationFee>> PRIORITIZATION_FEE = applyResponseResult(PrioritizationFee::parse);
-  private static final Function<HttpResponse<byte[]>, List<TxSig>> TX_SIG = applyResponseResult(TxSig::parse);
+  private static final Function<HttpResponse<byte[]>, List<TxSig>> TX_SIGNATURES = applyResponseResult(TxSig::parseSignatures);
   private static final Function<HttpResponse<byte[]>, List<TxStatus>> SIG_STATUS_LIST = applyResponseValue(TxStatus::parseList);
   private static final Function<HttpResponse<byte[]>, Supply> SUPPLY = applyResponseValue(Supply::parse);
   private static final Function<HttpResponse<byte[]>, TokenAmount> TOKEN_AMOUNT = applyResponseValue(TokenAmount::parse);
@@ -555,7 +555,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   @Override
   public CompletableFuture<List<TxSig>> getSignaturesForAddress(final Commitment commitment, final PublicKey address, final int limit) {
-    return sendPostRequest(TX_SIG, format("""
+    return sendPostRequest(TX_SIGNATURES, format("""
             {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d}]}""",
         id.incrementAndGet(), address, commitment.getValue(), Math.min(limit, 1_000)));
   }
@@ -567,7 +567,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   @Override
   public CompletableFuture<List<TxSig>> getSignaturesForAddressBefore(final Commitment commitment, final PublicKey address, final int limit, final String beforeTxSig) {
-    return sendPostRequest(TX_SIG, format("""
+    return sendPostRequest(TX_SIGNATURES, format("""
             {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d,"before":"%s"}]}""",
         id.incrementAndGet(), address.toBase58(), commitment.getValue(), Math.min(limit, 1_000), beforeTxSig));
   }
@@ -579,12 +579,12 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   @Override
   public CompletableFuture<List<TxSig>> getSignaturesForAddressUntil(final Commitment commitment, final PublicKey address, final int limit, final String untilTxSig) {
-    return sendPostRequest(TX_SIG, format("""
+    return sendPostRequest(TX_SIGNATURES, format("""
             {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d,"until":"%s"}]}""",
         id.incrementAndGet(), address.toBase58(), commitment.getValue(), Math.min(limit, 1_000), untilTxSig));
   }
 
-  private String sigStatusBody(final List<String> signatures, final boolean searchTransactionHistory) {
+  private String sigStatusBody(final Collection<String> signatures, final boolean searchTransactionHistory) {
     final var joined = String.join("\",\"", signatures);
     return format("""
             {"jsonrpc":"2.0","id":%d,"method":"getSignatureStatuses","params":[["%s"],{"searchTransactionHistory":%b}]}""",
@@ -1087,7 +1087,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     );
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws InterruptedException {
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
           SolanaNetwork.MAIN_NET.getEndpoint(),
@@ -1098,9 +1098,22 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           }
       );
 
-      final var simulation = rpcClient.simulateTransactionWithInnerInstructions("""
-          """.stripTrailing()).join();
-      logSimulationResult(simulation);
+      final var blockHash = rpcClient.getLatestBlockHash(Commitment.PROCESSED).join();
+      final var block = rpcClient.getBlock(blockHash.context().slot(), BlockTxDetails.signatures).join();
+      final var sig = block.signatures().getFirst();
+
+      for (; ; ) {
+        final var sigStatus = rpcClient.getSigStatusList(List.of(sig)).join().getFirst();
+        System.out.println(sigStatus);
+        if (sigStatus.nil()) {
+          break;
+        }
+        Thread.sleep(4_000);
+      }
+
+//      final var simulation = rpcClient.simulateTransactionWithInnerInstructions("""
+//          """.stripTrailing()).join();
+//      logSimulationResult(simulation);
     }
   }
 }

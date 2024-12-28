@@ -1,12 +1,11 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.rpc.json.http.request.Commitment;
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -18,35 +17,18 @@ public record TxSig(long slot,
                     String memo,
                     TransactionError transactionError) {
 
-  public static List<TxSig> parse(final JsonIterator ji) {
-    final var signatures = new ArrayList<TxSig>(1_000);
+  public static List<TxSig> parseSignatures(final JsonIterator ji) {
+    final var signatures = new ArrayList<TxSig>(2_048);
     while (ji.readArray()) {
-      final var signature = ji.testObject(new Builder(), PARSER).create();
+      final var parser = new Parser();
+      ji.testObject(parser);
+      final var signature = parser.create();
       signatures.add(signature);
     }
     return signatures;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("slot", buf, offset, len)) {
-      builder.slot(ji.readLong());
-    } else if (fieldEquals("blockTime", buf, offset, len)) {
-      builder.blockTime(ji.readLong());
-    } else if (fieldEquals("confirmationStatus", buf, offset, len)) {
-      builder.confirmationStatus(ji.readString());
-    } else if (fieldEquals("memo", buf, offset, len)) {
-      builder.memo(ji.readString());
-    } else if (fieldEquals("signature", buf, offset, len)) {
-      builder.signature(ji.readString());
-    } else if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TransactionError.parseError(ji));
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long slot;
     private long blockTime;
@@ -55,7 +37,7 @@ public record TxSig(long slot,
     private String memo;
     private TransactionError error;
 
-    private Builder() {
+    private Parser() {
     }
 
     private TxSig create() {
@@ -68,28 +50,25 @@ public record TxSig(long slot,
       );
     }
 
-    private void slot(final long slot) {
-      this.slot = slot;
-    }
 
-    private void blockTime(final long blockTime) {
-      this.blockTime = blockTime;
-    }
-
-    private void confirmationStatus(final String confirmationStatus) {
-      this.confirmationStatus = confirmationStatus == null || confirmationStatus.isBlank() ? null : Commitment.valueOf(confirmationStatus.toUpperCase(Locale.ENGLISH));
-    }
-
-    private void signature(final String signature) {
-      this.signature = signature;
-    }
-
-    private void memo(final String memo) {
-      this.memo = memo;
-    }
-
-    private void error(final TransactionError error) {
-      this.error = error;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("slot", buf, offset, len)) {
+        this.slot = ji.readLong();
+      } else if (fieldEquals("blockTime", buf, offset, len)) {
+        this.blockTime = ji.readLong();
+      } else if (fieldEquals("confirmationStatus", buf, offset, len)) {
+        this.confirmationStatus = ji.applyChars(Commitment.PARSER);
+      } else if (fieldEquals("memo", buf, offset, len)) {
+        this.memo = ji.readString();
+      } else if (fieldEquals("signature", buf, offset, len)) {
+        this.signature = ji.readString();
+      } else if (fieldEquals("err", buf, offset, len)) {
+        this.error = TransactionError.parseError(ji);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

@@ -1,5 +1,9 @@
 package software.sava.rpc.json.http.request;
 
+import systems.comodal.jsoniter.CharBufferFunction;
+
+import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+
 public enum Commitment {
 
   FINALIZED("finalized"),
@@ -15,4 +19,16 @@ public enum Commitment {
   public String getValue() {
     return value;
   }
+
+  public static final CharBufferFunction<Commitment> PARSER = (buf, offset, len) -> {
+    if (fieldEquals("processed", buf, offset, len)) {
+      return PROCESSED;
+    } else if (fieldEquals("confirmed", buf, offset, len)) {
+      return CONFIRMED;
+    } else if (fieldEquals("finalized", buf, offset, len)) {
+      return FINALIZED;
+    } else {
+      return null;
+    }
+  };
 }

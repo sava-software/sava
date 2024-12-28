@@ -515,7 +515,7 @@ final class ParseTransactionErrorTests {
 
     final var ji = JsonIterator.parse(json);
     ji.skipUntil("result");
-    final var txSignatures = TxSig.parse(ji);
+    final var txSignatures = TxSig.parseSignatures(ji);
     assertEquals(10, txSignatures.size());
 
     var txSig = txSignatures.getFirst();
