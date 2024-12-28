@@ -19,10 +19,12 @@ import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 public interface Transaction {
 
   int MAX_SERIALIZED_LENGTH = 1232;
+  int MAX_BASE_64_ENCODED_LENGTH = 1683;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
   int BLOCK_QUEUE_SIZE = 151;
+  int BLOCKS_UNTIL_FINALIZED = 32;
 
   BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
@@ -634,6 +636,12 @@ public interface Transaction {
   String getBase58Id();
 
   byte[] getId();
+
+  int size();
+
+  default boolean exceedsSizeLimit() {
+    return size() > Transaction.MAX_SERIALIZED_LENGTH;
+  }
 
   List<Instruction> instructions();
 

@@ -106,6 +106,11 @@ record TransactionRecord(AccountMeta feePayer,
     return Transaction.getId(this.data);
   }
 
+  @Override
+  public int size() {
+    return data.length;
+  }
+
   private void resetTableMetas() {
     for (final var tableMeta : tableAccountMetas) {
       tableMeta.reset();
