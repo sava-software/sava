@@ -25,9 +25,6 @@ public interface AddressLookupTable {
 
   BiFunction<PublicKey, byte[], AddressLookupTable> FACTORY = AddressLookupTable::read;
 
-  public static void main(final String[] args) {
-    System.out.println(AUTHORITY_OFFSET);
-  }
   static AddressLookupTable read(final PublicKey address, final byte[] data) {
     if (data == null || data.length == 0) {
       return null;

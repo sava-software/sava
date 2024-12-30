@@ -12,10 +12,10 @@ import java.util.List;
 
 public final class FetchTablesByAuthority {
 
-
   public static void main(final String[] args) {
     final var rpcEndpoint = "https://mainnet.helius-rpc.com/?api-key=";
     final var authority = PublicKey.fromBase58Encoded("");
+
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(URI.create(rpcEndpoint), httpClient);
 
