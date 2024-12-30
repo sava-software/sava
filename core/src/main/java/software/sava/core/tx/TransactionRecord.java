@@ -168,4 +168,11 @@ record TransactionRecord(AccountMeta feePayer,
     resetTableMetas();
     return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
   }
+
+  @Override
+  public Transaction replaceInstruction(final int index, final Instruction instruction) {
+    final var ixArray = instructions.toArray(Instruction[]::new);
+    ixArray[index] = instruction;
+    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+  }
 }

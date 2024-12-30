@@ -9,7 +9,7 @@ import java.net.http.HttpClient;
 public final class SimpleTxSkeletonExample {
 
   public static void main(final String[] args) {
-    try (final var httpClient = HttpClient.newBuilder().build()) {
+    try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(SolanaNetwork.MAIN_NET.getEndpoint(), httpClient);
 
       // pump.fun buy/sell swap transaction.
