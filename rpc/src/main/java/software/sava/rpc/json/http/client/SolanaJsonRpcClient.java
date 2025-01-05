@@ -1098,19 +1098,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           }
       );
 
-      final var blockHash = rpcClient.getLatestBlockHash(Commitment.PROCESSED).join();
-      final var block = rpcClient.getBlock(blockHash.context().slot(), BlockTxDetails.signatures).join();
-      final var sig = block.signatures().getFirst();
-      final var sigList = List.of(sig);
-      for (; ; ) {
-        final var sigStatus = rpcClient.getSigStatusList(sigList).join().getFirst();
-        System.out.println(sigStatus);
-        if (sigStatus.nil()) {
-          break;
-        }
-        Thread.sleep(4_000);
-      }
-
 //      final var simulation = rpcClient.simulateTransactionWithInnerInstructions("""
 //          """.stripTrailing()).join();
 //      logSimulationResult(simulation);

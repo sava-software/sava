@@ -54,11 +54,29 @@ final class BorshTests {
                              final byte[] vectorArray,
                              final Function<byte[], T> factory,
                              final Serializer<T> serializer) {
+    return multiDimensional(
+        clas,
+        dataTypeByteLength,
+        VECTOR_SIZE, ELEMENTS_PER_ARRAY,
+        vectorArray,
+        factory,
+        serializer
+    );
+  }
+
+  @SuppressWarnings("unchecked")
+  <T> T[][] multiDimensional(final Class<T> clas,
+                             final int dataTypeByteLength,
+                             final int vectorSize,
+                             final int elementsPerArray,
+                             final byte[] vectorArray,
+                             final Function<byte[], T> factory,
+                             final Serializer<T> serializer) {
     final var random = new Random();
-    final var expectedMatrix = (T[][]) Array.newInstance(clas, VECTOR_SIZE, ELEMENTS_PER_ARRAY);
-    for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
+    final var expectedMatrix = (T[][]) Array.newInstance(clas, vectorSize, elementsPerArray);
+    for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < vectorSize; ++i) {
       final var expectedArray = expectedMatrix[i];
-      for (int j = 0; j < ELEMENTS_PER_ARRAY; ) {
+      for (int j = 0; j < elementsPerArray; ) {
         final byte[] randomBytes = new byte[dataTypeByteLength];
         random.nextBytes(randomBytes);
         final var val = factory.apply(randomBytes);
@@ -71,6 +89,67 @@ final class BorshTests {
     }
     return expectedMatrix;
   }
+
+  @Test
+  void multiDimensional128BitIntegers() {
+    final int dataTypeByteLength = 128 / Byte.SIZE;
+    final int elementsPerArray = ELEMENTS_PER_ARRAY;
+    final int vectorSize = VECTOR_SIZE;
+    final int arrayLength = elementsPerArray * dataTypeByteLength;
+    final int arrayByteLength = vectorSize * arrayLength;
+    final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
+    ByteUtil.putInt32LE(vectorArray, 0, vectorSize);
+
+    final var expectedMatrix = multiDimensional(
+        BigInteger.class,
+        dataTypeByteLength,
+        vectorSize,
+        elementsPerArray,
+        vectorArray,
+        BigInteger::new,
+        (val, _vectorArray, from) -> ByteUtil.putInt128LE(_vectorArray, from, val)
+    );
+
+    // verify read/write arrays
+    final var arrayResult = new BigInteger[vectorSize][elementsPerArray];
+    int len = read128Array(arrayResult, vectorArray, Integer.BYTES);
+    assertEquals(arrayByteLength, len);
+    for (int i = 0; i < expectedMatrix.length; ++i) {
+      assertArrayEquals(expectedMatrix[i], arrayResult[i], Integer.toString(i));
+    }
+
+    byte[] data = new byte[Borsh.len128Array(arrayResult)];
+    assertEquals(arrayByteLength, data.length);
+    len = write128Array(arrayResult, data, 0);
+    assertEquals(arrayByteLength, len);
+    assertArrayEquals(Arrays.copyOfRange(vectorArray, 4, vectorArray.length), data);
+
+    // verify vector array write/read
+    var result = readMultiDimension128VectorArray(elementsPerArray, vectorArray, 0);
+    assertEquals(expectedMatrix.length, result.length);
+    for (int i = 0; i < expectedMatrix.length; ++i) {
+      assertArrayEquals(expectedMatrix[i], result[i]);
+    }
+
+    data = new byte[Borsh.len128VectorArray(result)];
+    assertEquals(vectorArray.length, data.length);
+    len = Borsh.write128VectorArray(expectedMatrix, data, 0);
+    assertEquals(vectorArray.length, len);
+    assertArrayEquals(vectorArray, data);
+
+    // verify vector write/read
+    final int vectorLength = Integer.BYTES + (vectorSize * Integer.BYTES) + (vectorSize * arrayLength);
+    data = new byte[Borsh.len128Vector(result)];
+    assertEquals(vectorLength, data.length);
+    len = Borsh.write128Vector(expectedMatrix, data, 0);
+    assertEquals(vectorLength, len);
+
+    result = Borsh.readMultiDimension128Vector(data, 0);
+    for (int i = 0; i < expectedMatrix.length; ++i) {
+      assertArrayEquals(expectedMatrix[i], result[i]);
+    }
+  }
+
 
   @Test
   void multiDimensionalFloats() {
@@ -257,7 +336,6 @@ final class BorshTests {
       assertArrayEquals(expectedMatrix[i], result[i]);
     }
   }
-
 
   @Test
   void multiDimensionalBytes() {
@@ -502,62 +580,6 @@ final class BorshTests {
     assertEquals(vectorLength, len);
 
     result = Borsh.readMultiDimensionlongVector(data, 0);
-    for (int i = 0; i < expectedMatrix.length; ++i) {
-      assertArrayEquals(expectedMatrix[i], result[i]);
-    }
-  }
-
-  @Test
-  void multiDimensional128BitIntegers() {
-    final int dataTypeByteLength = 128 / Byte.SIZE;
-    final int arrayLength = ELEMENTS_PER_ARRAY * dataTypeByteLength;
-    final int arrayByteLength = VECTOR_SIZE * arrayLength;
-    final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
-    ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
-
-    final var expectedMatrix = multiDimensional(
-        BigInteger.class,
-        dataTypeByteLength,
-        vectorArray,
-        BigInteger::new,
-        (val, _vectorArray, from) -> ByteUtil.putInt128LE(_vectorArray, from, val)
-    );
-
-    // verify read/write arrays
-    final var arrayResult = new BigInteger[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
-    int len = read128Array(arrayResult, vectorArray, Integer.BYTES);
-    assertEquals(arrayByteLength, len);
-    for (int i = 0; i < expectedMatrix.length; ++i) {
-      assertArrayEquals(expectedMatrix[i], arrayResult[i]);
-    }
-
-    byte[] data = new byte[Borsh.len128Array(arrayResult)];
-    assertEquals(arrayByteLength, data.length);
-    len = write128Array(arrayResult, data, 0);
-    assertEquals(arrayByteLength, len);
-    assertArrayEquals(Arrays.copyOfRange(vectorArray, 4, vectorArray.length), data);
-
-    // verify vector array write/read
-    var result = readMultiDimension128VectorArray(ELEMENTS_PER_ARRAY, vectorArray, 0);
-    assertEquals(expectedMatrix.length, result.length);
-    for (int i = 0; i < expectedMatrix.length; ++i) {
-      assertArrayEquals(expectedMatrix[i], result[i]);
-    }
-
-    data = new byte[Borsh.len128VectorArray(result)];
-    assertEquals(vectorArray.length, data.length);
-    len = Borsh.write128VectorArray(expectedMatrix, data, 0);
-    assertEquals(vectorArray.length, len);
-    assertArrayEquals(vectorArray, data);
-
-    // verify vector write/read
-    final int vectorLength = Integer.BYTES + (VECTOR_SIZE * Integer.BYTES) + (VECTOR_SIZE * arrayLength);
-    data = new byte[Borsh.len128Vector(result)];
-    assertEquals(vectorLength, data.length);
-    len = Borsh.write128Vector(expectedMatrix, data, 0);
-    assertEquals(vectorLength, len);
-
-    result = Borsh.readMultiDimension128Vector(data, 0);
     for (int i = 0; i < expectedMatrix.length; ++i) {
       assertArrayEquals(expectedMatrix[i], result[i]);
     }

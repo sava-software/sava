@@ -71,20 +71,34 @@ public final class ByteUtil {
                              final int offset,
                              final BigInteger val,
                              final int byteSize) {
-    final int signum = val.signum();
-    if (signum < 0) {
-      final byte[] be = val.negate().toByteArray();
-      for (int i = 0, o = offset + (be.length - 1); i < be.length; ++i, --o) {
-        data[o] = be[i];
-      }
-      data[offset + (byteSize - 1)] |= (byte) 0b1000_0000;
-    } else if (signum > 0) {
-      final byte[] be = val.toByteArray();
-      for (int i = 0, o = offset + (be.length - 1); i < be.length; ++i, --o) {
-        data[o] = be[i];
+    int j = offset;
+    final byte[] be = val.toByteArray();
+    for (int i = be.length - 1; i >= 0; --i, ++j) {
+      data[j] = be[i];
+    }
+    if (be.length < byteSize) {
+      final int to = offset + byteSize;
+      final byte zero = (byte) (val.signum() < 0 ? -1 : 0);
+      for (; j < to; ++j) {
+        data[j] = zero;
       }
     }
     return byteSize;
+  }
+
+  private static BigInteger getIntLE(final byte[] data, final int offset, final int byteSize) {
+    int i = offset + (byteSize - 1);
+    final int zero = (data[i] & 0b1000_0001) == 0b1000_0001 ? 0b1000_0001 : 0;
+    while (data[i] == zero) {
+      if (--i == offset) {
+        return BigInteger.ZERO;
+      }
+    }
+    final byte[] be = new byte[(i - offset) + 1];
+    for (int j = 0; j < be.length; ++j, --i) {
+      be[j] = data[i];
+    }
+    return new BigInteger(be);
   }
 
   private static BigInteger getUIntLE(final byte[] data, final int offset, final int byteSize) {
@@ -93,23 +107,6 @@ public final class ByteUtil {
       be[i] = data[o];
     }
     return new BigInteger(be);
-  }
-
-  private static BigInteger getIntLE(final byte[] data, final int offset, final int byteSize) {
-    int o = offset + (byteSize - 1);
-    final boolean signed = (data[o] & 0b1000_0000) == 0b1000_0000;
-    final byte[] be = new byte[byteSize];
-    byte b = (byte) (data[o--] & 0b0111_1111);
-    boolean zero = b == 0;
-    be[0] = b;
-    for (int i = 1; i < be.length; ++i, --o) {
-      b = data[o];
-      be[i] = b;
-      if (zero) {
-        zero = b == 0;
-      }
-    }
-    return new BigInteger(signed ? -1 : zero ? 0 : 1, be);
   }
 
   public static int putInt128LE(final byte[] data, final int offset, final BigInteger val) {
@@ -121,6 +118,10 @@ public final class ByteUtil {
   }
 
   public static BigInteger getInt128LE(final byte[] data, final int offset) {
+    return getIntLE(data, offset, 16);
+  }
+
+  public static BigInteger getIntLEFixed(final byte[] data, final int offset) {
     return getIntLE(data, offset, 16);
   }
 
