@@ -18,10 +18,10 @@ final class ByteUtilTests {
       var read = ByteUtil.getInt128LE(write, i);
       assertEquals(expected, read);
 
-      final var abs = expected.negate();
-      ByteUtil.putInt128LE(write, i, abs);
+      final var negate = expected.negate();
+      ByteUtil.putInt128LE(write, i, negate);
       read = ByteUtil.getUInt128LE(write, i);
-      assertEquals(abs, read);
+      assertEquals(negate, read);
     }
   }
 
@@ -43,5 +43,25 @@ final class ByteUtilTests {
     testInt128(new BigInteger("-162272704100837194170455521702674872040"));
     testInt128(new BigInteger("-155155494242896723051467122773477245"));
     testInt128(new BigInteger("-25912721450736272609715131753556298938"));
+  }
+
+  private void testInt256(final BigInteger expected) {
+    byte[] write = new byte[64];
+
+    for (int i = 0; i < 32; ++i) {
+      ByteUtil.putInt256LE(write, i, expected);
+      var read = ByteUtil.getInt256LE(write, i);
+      assertEquals(expected, read);
+
+      final var negate = expected.negate();
+      ByteUtil.putInt256LE(write, i, negate);
+      read = ByteUtil.getInt256LE(write, i);
+      assertEquals(negate, read);
+    }
+  }
+
+  @Test
+  void test256BitIntegers() {
+    testInt256(new BigInteger("240952751974454416887375303278538328657633745834006340121122396849307110663"));
   }
 }

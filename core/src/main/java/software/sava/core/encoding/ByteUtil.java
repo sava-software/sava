@@ -87,26 +87,15 @@ public final class ByteUtil {
   }
 
   private static BigInteger getIntLE(final byte[] data, final int offset, final int byteSize) {
-    int i = offset + (byteSize - 1);
-    final int zero = (data[i] & 0b1000_0001) == 0b1000_0001 ? 0b1000_0001 : 0;
-    while (data[i] == zero) {
-      if (--i == offset) {
-        return BigInteger.ZERO;
-      }
-    }
-    final byte[] be = new byte[(i - offset) + 1];
-    for (int j = 0; j < be.length; ++j, --i) {
-      be[j] = data[i];
-    }
-    return new BigInteger(be);
-  }
-
-  private static BigInteger getUIntLE(final byte[] data, final int offset, final int byteSize) {
     final byte[] be = new byte[byteSize];
     for (int i = 0, o = offset + (byteSize - 1); i < be.length; ++i, --o) {
       be[i] = data[o];
     }
     return new BigInteger(be);
+  }
+
+  private static BigInteger getUIntLE(final byte[] data, final int offset, final int byteSize) {
+    return getIntLE(data, offset, byteSize);
   }
 
   public static int putInt128LE(final byte[] data, final int offset, final BigInteger val) {
@@ -132,7 +121,6 @@ public final class ByteUtil {
   public static BigInteger getInt256LE(final byte[] data, final int offset) {
     return getIntLE(data, offset, 32);
   }
-
 
   public static int indexOf(final byte[] data, final int start, final int end,
                             final byte[] sub, final int subStart, final int subEnd) {
