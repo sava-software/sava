@@ -12,17 +12,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 final class ByteUtilTests {
 
   private void testInt128(final BigInteger expected) {
-    byte[] write = new byte[16];
-    ByteUtil.putInt128LE(write, 0, expected);
-    var read = ByteUtil.getInt128LE(write, 0);
-    assertEquals(expected, read);
+    byte[] write = new byte[32];
 
-    if (expected.signum() < 0) {
-      final var abs = expected.negate();
-      Arrays.fill(write, (byte) 0);
-      ByteUtil.putInt128LE(write, 0, abs);
-      read = ByteUtil.getUInt128LE(write, 0);
-      assertEquals(abs, read);
+    for (int i = 0; i < 16; ++i) {
+      ByteUtil.putInt128LE(write, i, expected);
+      var read = ByteUtil.getInt128LE(write, i);
+      assertEquals(expected, read);
+
+      if (expected.signum() < 0) {
+        final var abs = expected.negate();
+        ByteUtil.putInt128LE(write, i, abs);
+        read = ByteUtil.getUInt128LE(write, i);
+        assertEquals(abs, read);
+      }
     }
   }
 
@@ -30,9 +32,10 @@ final class ByteUtilTests {
   void test128BitIntegers() {
     // 116, 142, 244, 171, 253, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
     final byte[] i128LE = new byte[]{116, -114, -12, -85, -3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-    var i128 = ByteUtil.getIntLEFixed(i128LE, 0);
+    final var i128 = ByteUtil.getIntLEFixed(i128LE, 0);
     final var expected = new BigInteger("-9999970700");
     assertEquals(expected, i128);
+    testInt128(expected);
 
     final byte[] test = new byte[16];
     ByteUtil.putInt128LE(test, 0, i128);
