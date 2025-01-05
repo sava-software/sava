@@ -121,10 +121,6 @@ public final class ByteUtil {
     return getIntLE(data, offset, 16);
   }
 
-  public static BigInteger getIntLEFixed(final byte[] data, final int offset) {
-    return getIntLE(data, offset, 16);
-  }
-
   public static int putInt256LE(final byte[] data, final int offset, final BigInteger val) {
     return putIntLE(data, offset, val, 32);
   }
