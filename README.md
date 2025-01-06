@@ -54,7 +54,7 @@ dependencies {
 
 ### Contribution
 
-Unit tests are needed and welcomed. Otherwise, please open an issue or send an email before working on a pull request.
+Unit tests are needed and welcomed. Otherwise, please open a [discussion](https://github.com/sava-software/sava/discussions), issue, or send an email before working on a pull request.
 
 ### Disclaimer
 
