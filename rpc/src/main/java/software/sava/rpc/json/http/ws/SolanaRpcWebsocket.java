@@ -31,6 +31,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return new SolanaRpcWebsocketBuilder();
   }
 
+  URI endpoint();
+
+  SolanaAccounts solanaAccounts();
+
+  Commitment defaultCommitment();
+
+  Timings timings();
+
   void connect();
 
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);

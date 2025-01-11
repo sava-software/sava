@@ -8,7 +8,7 @@
 - Transaction (de)serialization.
     - Legacy
     - V0
-- Crypto utilities for elliptic curve Ed25519 and Solana accounts.
+- Utilities for elliptic curve Ed25519 and Solana accounts.
 - Borsh (de)serialization.
 
 ### Requirements
@@ -60,11 +60,11 @@ Unit tests are needed and welcomed. Otherwise, please open a [discussion](https:
 
 In addition to the MIT License, this project is under active development and breaking changes are to be expected.
 
-### Examples
+### [Examples](https://github.com/sava-software/sava/tree/main/examples/src/main/java/software/sava/examples)
 
 #### Get & Parse Accounts
 
-More parses are available for programs which have Anchor IDL's in the [sava anchor-programs project](https://github.com/sava-software/anchor-programs).
+More parsers are available for programs which have Anchor IDL's in the [anchor-programs project](https://github.com/sava-software/anchor-programs).
 
 ```java
 try (final var httpClient = HttpClient.newHttpClient()) {
@@ -122,6 +122,38 @@ try (final var httpClient = HttpClient.newHttpClient()) {
 
 #### Stream Program Accounts
 
+##### Token Accounts
+
+```java 
+final var solanaAccounts = SolanaAccounts.MAIN_NET;
+final var tokenProgram = solanaAccounts.tokenProgram();
+final var tokenOwner = PublicKey.fromBase58Encoded("");
+try (final var httpClient = HttpClient.newHttpClient()) {
+  final var webSocket = SolanaRpcWebsocket.build()
+      .uri(SolanaNetwork.MAIN_NET.getWebSocketEndpoint())
+      .webSocketBuilder(httpClient)
+      .commitment(Commitment.CONFIRMED)
+      .solanaAccounts(solanaAccounts)
+      .onOpen(ws -> System.out.println("Websocket connected to " + ws.endpoint()))
+      .create();
+
+  webSocket.programSubscribe(
+      tokenProgram,
+      List.of(
+          Filter.createDataSizeFilter(TokenAccount.BYTES),
+          Filter.createMemCompFilter(TokenAccount.OWNER_OFFSET, tokenOwner)
+      ),
+      accountInfo -> {
+        final var tokenAccount = TokenAccount.read(accountInfo.pubKey(), accountInfo.data());
+        System.out.println(tokenAccount);
+      });
+
+  webSocket.connect();
+}
+```
+
+##### Address Lookup Tables
+
 Subscribe to the Address Lookup Table Program.
 
 ```java
@@ -149,7 +181,5 @@ try (final var httpClient = HttpClient.newHttpClient()) {
     });
     
     webSocket.connect();
-    
-    Thread.sleep(Integer.MAX_VALUE);
 }
 ```
