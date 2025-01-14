@@ -183,3 +183,55 @@ try (final var httpClient = HttpClient.newHttpClient()) {
     webSocket.connect();
 }
 ```
+
+## Private Key Pair Parsing
+
+If the base58 encoded public key is configured via `address` it will be used to validate the public key derived 
+from the private key.
+
+### Usage
+
+```java
+var jsonConfig = "";
+var ji = JsonIterator.parse(jsonConfig);
+var signer = PrivateKeyEncoding.fromJsonPrivateKey(ji);
+```
+
+### JSON Configuration
+
+#### JSON Array
+
+```json
+{
+  "name": "Trade Bot",
+  "address": "<BASE58_ENCODED_PUBLIC_KEY>",
+  "privateKey": {
+    "encoding": "jsonKeyPairArray",
+    "secret": []
+  }
+}
+```
+#### Key Pair
+
+Encoded 64 bytes private/public key pair.  Derived public key will be validated.
+
+* base64KeyPair
+* base58KeyPair
+
+```json
+{
+  "name": "Trade Bot",
+  "address": "<BASE58_ENCODED_PUBLIC_KEY>",
+  "privateKey": {
+    "encoding": "base64KeyPair",
+    "secret": "asdf=="
+  }
+}
+```
+
+#### Private Key Only
+
+Encoded 32 bytes private key.
+
+* base64PrivateKey
+* base58PrivateKey
