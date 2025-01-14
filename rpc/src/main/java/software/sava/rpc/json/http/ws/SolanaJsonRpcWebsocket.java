@@ -14,12 +14,11 @@ import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.util.*;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -31,7 +30,7 @@ import static java.util.stream.Collectors.joining;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebsocket {
+final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebsocket, Runnable {
 
   private static final System.Logger log = System.getLogger(SolanaJsonRpcWebsocket.class.getName());
 
@@ -40,7 +39,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Commitment defaultCommitment;
   private final Timings timings;
   private final WebSocket.Builder webSocketBuilder;
-  private final ScheduledExecutorService executorService;
+  private final ExecutorService executorService;
   private final Consumer<SolanaRpcWebsocket> onOpen;
   private final OnClose onClose;
   private final BiConsumer<SolanaRpcWebsocket, Throwable> onError;
@@ -55,7 +54,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final AtomicReference<Subscription<ProcessedSlot>> slotSub;
   private final Map<Long, Subscription<?>> subscriptionsBySubId;
 
-  private final AtomicLong lastOutGoing;
+  private final ReentrantLock lock;
+  private final Condition newSubscription;
+  private final AtomicLong lastWrite;
   private volatile WebSocket webSocket;
 
   private char[] buffer;
@@ -79,7 +80,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.onClose = onClose;
     this.onError = onError;
     this.msgId = new AtomicLong(1);
-    this.lastOutGoing = new AtomicLong(0);
+    this.lastWrite = new AtomicLong(0);
     this.pendingSubscriptions = new ConcurrentSkipListMap<>();
     this.pendingUnSubscriptions = new ConcurrentSkipListMap<>();
     this.accountSubs = new ConcurrentSkipListMap<>();
@@ -89,11 +90,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.slotSub = new AtomicReference<>();
     this.subscriptionsBySubId = new ConcurrentSkipListMap<>();
     this.exceptionSubs = HashSet.newHashSet(1);
-    this.executorService = Executors.newScheduledThreadPool(1);
-    this.executorService.scheduleWithFixedDelay(this::subOrPing,
-        timings.subscriptionAndPingCheckDelay() << 1, timings.subscriptionAndPingCheckDelay(), MILLISECONDS);
     this.buffer = new char[4_096];
     this.ji = JsonIterator.parse(new byte[0]);
+    this.lock = new ReentrantLock();
+    this.newSubscription = lock.newCondition();
+    this.executorService = Executors.newFixedThreadPool(1);
+    this.executorService.execute(this);
   }
 
   @Override
@@ -117,17 +119,54 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   @Override
-  public void connect() {
-    if (this.msgId.get() >= 0) {
+  public boolean closed() {
+    return this.msgId.get() < 0;
+  }
+
+  @Override
+  public CompletableFuture<?> connect() {
+    if (!closed()) {
       this.webSocket = null;
       final long now = System.currentTimeMillis();
-      final long millisSinceLastWrite = now - this.lastOutGoing.get();
-      if (millisSinceLastWrite < timings.reConnect()) {
-        this.executorService.schedule(this::connect, this.timings.reConnect() - millisSinceLastWrite, MILLISECONDS);
+      final long millisSinceLastWrite = now - this.lastWrite.get();
+      if (millisSinceLastWrite < timings.reConnectDelay()) {
+        final long delay = this.timings.reConnectDelay() - millisSinceLastWrite;
+        final var delayedExecutor = CompletableFuture.delayedExecutor(delay, MILLISECONDS);
+        return CompletableFuture.supplyAsync(() -> {
+          this.lastWrite.set(System.currentTimeMillis());
+          return this.webSocketBuilder.buildAsync(this.endpoint, this).join();
+        }, delayedExecutor);
       } else {
-        this.lastOutGoing.set(System.currentTimeMillis());
-        this.webSocketBuilder.buildAsync(this.endpoint, this);
+        this.lastWrite.set(now);
+        return this.webSocketBuilder.buildAsync(this.endpoint, this);
       }
+    } else {
+      return null;
+    }
+  }
+
+  @SuppressWarnings({"InfiniteLoopStatement", "ResultOfMethodCallIgnored"})
+  @Override
+  public void run() {
+    try {
+      final long sleep = timings.subscriptionAndPingCheckDelay();
+      for (; ; ) {
+        lock.lock();
+        try {
+          newSubscription.await(sleep, MILLISECONDS);
+          final var webSocket = this.webSocket;
+          if (webSocket != null) {
+            handlePendingSubscriptions(webSocket);
+          }
+        } finally {
+          lock.unlock();
+        }
+      }
+    } catch (final InterruptedException e) {
+      close();
+    } catch (final RuntimeException ex) {
+      log.log(ERROR, "Unhandled Solana Websocket exception.", ex);
+      close();
     }
   }
 
@@ -158,13 +197,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
     this.pendingUnSubscriptions.clear();
     this.subscriptionsBySubId.clear();
-    handlePendingSubscriptions(webSocket);
-    // this.lastIncoming = System.currentTimeMillis();
+    lockAndHandlePendingSubscriptions(webSocket);
     webSocket.request(Long.MAX_VALUE);
     this.webSocket = webSocket;
-    log.log(INFO, "WebSocket connected to {0}.", endpoint);
     if (onOpen != null) {
       onOpen.accept(this);
+    } else {
+      log.log(INFO, "WebSocket connected to {0}.", endpoint.getHost());
     }
   }
 
@@ -187,7 +226,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
-      // System.out.println(msg);
+      lock.lock();
+      try {
+        newSubscription.signal();
+      } finally {
+        lock.unlock();
+      }
       return true;
     } else {
       return false;
@@ -206,7 +250,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
-      // System.out.println(msg);
+      lock.lock();
+      try {
+        newSubscription.signal();
+      } finally {
+        lock.unlock();
+      }
       return true;
     } else {
       return false;
@@ -446,6 +495,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var slotSub = Subscription.createSubscription(null, Channel.slot, Channel.slot.name(), msgId, msg, consumer);
     if (this.slotSub.compareAndSet(null, slotSub)) {
       this.pendingSubscriptions.put(msgId, slotSub);
+      lock.lock();
+      try {
+        newSubscription.signal();
+      } finally {
+        lock.unlock();
+      }
       return true;
     } else {
       return false;
@@ -493,9 +548,14 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private void sendUnSubscription(final WebSocket webSocket,
                                   final Channel channel,
                                   final long subId) {
-    final var msg = this.pendingUnSubscriptions.remove(subId);
-    sendText(webSocket, msg == null ? createUnSubMsg(channel, subId) : msg);
-    this.lastOutGoing.set(System.currentTimeMillis());
+    lock.lock();
+    try {
+      final var msg = this.pendingUnSubscriptions.remove(subId);
+      sendText(webSocket, msg == null ? createUnSubMsg(channel, subId) : msg);
+      this.lastWrite.set(System.currentTimeMillis());
+    } finally {
+      lock.unlock();
+    }
   }
 
   private <T> void publish(final WebSocket webSocket,
@@ -581,7 +641,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
               slotSub.accept(slot);
             }
           } else {
-            log.log(DEBUG, () -> new String(msg, offset, tail - offset));
             final int paramsMark = ji.mark();
             ji.skipUntil("result");
 
@@ -593,7 +652,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             }
             switch (channel) {
               case account ->
-                  publish(webSocket, channel, ji, paramsMark, sub -> AccountInfo.parse(sub.publicKey(), ji, context, AccountInfo.BYTES_IDENTITY));
+                  publish(webSocket, channel, ji, paramsMark, sub -> AccountInfo.parse(sub.publicKey(), ji, context, BYTES_IDENTITY));
               case logs -> publish(webSocket, channel, ji, paramsMark, TxLogs.parse(ji, context));
               case program ->
                   publish(webSocket, channel, ji, paramsMark, AccountInfo.parseAccount(ji, context, BYTES_IDENTITY));
@@ -620,7 +679,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             }
           }
         }
-        handlePendingSubscriptions(webSocket);
+        lockAndHandlePendingSubscriptions(webSocket);
       }
     } catch (final RuntimeException ex) {
       log.log(WARNING, "Unexpected json rpc error.", ex);
@@ -642,7 +701,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var buf = (CharBuffer) message;
     final int len = message.length();
     if (last) {
-      // this.lastIncoming = System.currentTimeMillis();
       if (this.offset > 0) {
         final int to = this.offset + len;
         ensureCapacity(to);
@@ -682,14 +740,37 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     throw new UnsupportedOperationException();
   }
 
-  private void subOrPing() {
+  private void lockAndHandlePendingSubscriptions(final WebSocket webSocket) {
+    lock.lock();
     try {
-      final var webSocket = this.webSocket;
-      if (webSocket != null) {
-        handlePendingSubscriptions(webSocket);
+      handlePendingSubscriptions(webSocket);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private void handlePendingSubscriptions(final WebSocket webSocket) {
+    final long now = System.currentTimeMillis();
+    // Mark lastOutGoing to try to prevent a concurrent ping.
+    final long previousSend = this.lastWrite.getAndSet(now);
+    if (this.pendingSubscriptions.isEmpty()) {
+      if (noPendingUnSubscriptions(webSocket) && this.lastWrite.compareAndSet(now, previousSend)) {
+        sendPing(webSocket);
       }
-    } catch (final RuntimeException ex) {
-      log.log(WARNING, "Unexpected exception handlePendingSubscriptions.", ex);
+    } else {
+      int numSubs = 0;
+      for (final var sub : this.pendingSubscriptions.values()) {
+        if (now - sub.lastAttempt() > this.timings.reConnectDelay()) {
+          sub.setLastAttempt(now);
+          sendText(webSocket, sub.msg());
+          ++numSubs;
+        }
+      }
+      if (noPendingUnSubscriptions(webSocket)
+          && numSubs == 0
+          && this.lastWrite.compareAndSet(now, previousSend)) {
+        sendPing(webSocket);
+      }
     }
   }
 
@@ -703,60 +784,35 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return numUnSubs <= 0;
   }
 
-  private void handlePendingSubscriptions(final WebSocket webSocket) {
-    final long now = System.currentTimeMillis();
-    // Mark lastOutGoing to try to prevent a concurrent ping.
-    // TODO: Consider locking to avoid concurrent send issues.
-    final long previousSend = this.lastOutGoing.getAndSet(now);
-    if (this.pendingSubscriptions.isEmpty()) {
-      if (noPendingUnSubscriptions(webSocket) && this.lastOutGoing.compareAndSet(now, previousSend)) {
-        sendPing(webSocket);
-      }
-    } else {
-      int numSubs = 0;
-      for (final var sub : this.pendingSubscriptions.values()) {
-        if (now - sub.lastAttempt() > this.timings.reConnect()) {
-          sub.setLastAttempt(now);
-          sendText(webSocket, sub.msg());
-          ++numSubs;
-        }
-      }
-      if (noPendingUnSubscriptions(webSocket)
-          && numSubs == 0
-          && this.lastOutGoing.compareAndSet(now, previousSend)) {
-        sendPing(webSocket);
-      }
-    }
-  }
-
   @Override
   public CompletionStage<?> onPing(final WebSocket webSocket, final ByteBuffer message) {
     // A pong will be sent by the underlying WebSocket implementation.
     log.log(DEBUG, () -> new String(message.array()));
-    handlePendingSubscriptions(webSocket);
+    lockAndHandlePendingSubscriptions(webSocket);
     return null;
   }
 
   @Override
   public CompletionStage<?> onPong(final WebSocket webSocket, final ByteBuffer message) {
-    handlePendingSubscriptions(webSocket);
+    lockAndHandlePendingSubscriptions(webSocket);
     log.log(DEBUG, () -> new String(message.array()));
     return null;
   }
 
   private void sendPing(final WebSocket webSocket) {
     final long now = System.currentTimeMillis();
-    final long millisSinceLastWrite = now - this.lastOutGoing.get();
-    if (millisSinceLastWrite > timings.writeOrPingDelay()) {
-      this.lastOutGoing.set(now);
+    final long millisSinceLastWrite = now - this.lastWrite.get();
+    if (millisSinceLastWrite > this.timings.pingDelay()) {
+      final long previousWrite = this.lastWrite.getAndSet(now);
       final var pingMsg = String.valueOf(now);
       webSocket.sendPing(ByteBuffer.wrap(pingMsg.getBytes(ISO_8859_1))).whenComplete(((_, throwable) -> {
         if (throwable != null) {
-          this.lastOutGoing.compareAndSet(now, System.currentTimeMillis() - (this.timings.writeOrPingDelay() - this.timings.reConnect()));
-          log.log(WARNING, String.format("Failed to ping %d to %s.", now, this.endpoint), throwable);
+          this.lastWrite.compareAndSet(now, previousWrite);
+          log.log(WARNING, String.format("Failed to ping %d to %s.", now, this.endpoint.getHost()), throwable);
+        } else {
+          log.log(DEBUG, "{0} to {1}.\n", pingMsg, endpoint.getHost());
         }
       }));
-      log.log(DEBUG, "{0} to {1}.\n", pingMsg, endpoint);
     }
   }
 
@@ -764,14 +820,15 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public CompletionStage<?> onClose(final WebSocket webSocket, final int statusCode, final String reason) {
     if (onClose == null) {
       if (reason == null || reason.isBlank()) {
-        log.log(WARNING,
-            "WebSocket connection to {0} closed with code {1,number,integer}.",
-            endpoint, statusCode);
+        log.log(WARNING, "WebSocket connection to {0} closed with code {1,number,integer}.",
+            endpoint.getHost(), statusCode
+        );
       } else {
-        log.log(WARNING,
-            "WebSocket connection to {0} closed with code {1,number,integer} because ''{2}''.",
-            endpoint, statusCode, reason);
+        log.log(WARNING, "WebSocket connection to {0} closed with code {1,number,integer} because ''{2}''.",
+            endpoint.getHost(), statusCode, reason
+        );
       }
+      this.close();
     } else {
       onClose.accept(this, statusCode, reason);
     }
@@ -781,7 +838,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   @Override
   public void onError(final WebSocket webSocket, final Throwable error) {
     if (onError == null) {
-      log.log(ERROR, "Error on connection to %s" + this.endpoint, error);
+      log.log(ERROR, "Error on connection to " + endpoint.getHost(), error);
+      this.close();
     } else {
       onError.accept(this, error);
     }
@@ -793,7 +851,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
     final var webSocket = this.webSocket;
     if (webSocket != null) {
-      this.webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+      if (!webSocket.isOutputClosed()) {
+        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "close");
+      }
+      this.webSocket = null;
     }
 
     this.executorService.shutdown();

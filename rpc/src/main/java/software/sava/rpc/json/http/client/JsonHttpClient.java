@@ -221,4 +221,52 @@ public abstract class JsonHttpClient {
         .sendAsync(newRequest(endpoint).build(), ofByteArray())
         .thenApply(parser);
   }
+
+  protected final <H, R> CompletableFuture<R> sendPostRequestNoWrap(final URI endpoint,
+                                                                    final HttpResponse.BodyHandler<H> bodyHandler,
+                                                                    final Function<HttpResponse<H>, R> parser,
+                                                                    final Duration requestTimeout,
+                                                                    final String body) {
+//    System.out.println(body);
+    return httpClient
+        .sendAsync(newPostRequest(endpoint, requestTimeout, body), bodyHandler)
+        .thenApply(parser);
+  }
+
+  protected final <H, R> CompletableFuture<R> sendPostRequestNoWrap(final HttpResponse.BodyHandler<H> bodyHandler,
+                                                                    final Function<HttpResponse<H>, R> parser,
+                                                                    final Duration requestTimeout,
+                                                                    final String body) {
+    return sendPostRequestNoWrap(endpoint, bodyHandler, parser, requestTimeout, body);
+  }
+
+  protected final <H, R> CompletableFuture<R> sendPostRequestNoWrap(final HttpResponse.BodyHandler<H> bodyHandler,
+                                                                    final Function<HttpResponse<H>, R> parser,
+                                                                    final String body) {
+    // System.out.println(body);
+    return sendPostRequestNoWrap(bodyHandler, parser, requestTimeout, body);
+  }
+
+  protected final <H, R> CompletableFuture<R> sendPostRequestNoWrap(final URI endpoint,
+                                                                    final HttpResponse.BodyHandler<H> bodyHandler,
+                                                                    final Function<HttpResponse<H>, R> parser,
+                                                                    final String body) {
+    return sendPostRequestNoWrap(endpoint, bodyHandler, parser, requestTimeout, body);
+  }
+
+  protected final <H, R> CompletableFuture<R> sendGetRequestNoWrap(final HttpResponse.BodyHandler<H> bodyHandler,
+                                                                   final Function<HttpResponse<H>, R> parser,
+                                                                   final String path) {
+    return httpClient
+        .sendAsync(newRequest(path).build(), bodyHandler)
+        .thenApply(parser);
+  }
+
+  protected final <H, R> CompletableFuture<R> sendGetRequestNoWrap(final URI endpoint,
+                                                                   final HttpResponse.BodyHandler<H> bodyHandler,
+                                                                   final Function<HttpResponse<H>, R> parser) {
+    return httpClient
+        .sendAsync(newRequest(endpoint).build(), bodyHandler)
+        .thenApply(parser);
+  }
 }

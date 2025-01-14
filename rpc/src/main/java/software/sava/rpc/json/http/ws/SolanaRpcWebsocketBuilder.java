@@ -13,9 +13,9 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
 
   private URI wsUri;
   private WebSocket.Builder webSocketBuilder;
-  private long reConnect = 3_000;
-  private long writeOrPingDelay = 15_000;
-  private long subscriptionAndPingCheckDelay = 200;
+  private long reConnectDelay = 3_000;
+  private long pingDelay = 15_000;
+  private long subscriptionAndPingCheckDelay = 1_000;
   private SolanaAccounts solanaAccounts = SolanaAccounts.MAIN_NET;
   private Commitment commitment = Commitment.CONFIRMED;
   private Consumer<SolanaRpcWebsocket> onOpen;
@@ -29,8 +29,8 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   public SolanaRpcWebsocket create() {
     return new SolanaJsonRpcWebsocket(
         wsUri, solanaAccounts, commitment,
-        webSocketBuilder.connectTimeout(Duration.ofMillis(reConnect)),
-        new Timings(reConnect, writeOrPingDelay, subscriptionAndPingCheckDelay),
+        webSocketBuilder.connectTimeout(Duration.ofMillis(reConnectDelay)),
+        new Timings(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay),
         onOpen,
         onClose,
         onError
@@ -49,12 +49,12 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
 
   @Override
   public long reConnect() {
-    return reConnect;
+    return reConnectDelay;
   }
 
   @Override
   public long writeOrPingDelay() {
-    return writeOrPingDelay;
+    return pingDelay;
   }
 
   @Override
@@ -85,14 +85,14 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder reConnect(final long reConnect) {
-    this.reConnect = reConnect;
+  public SolanaRpcWebsocket.Builder reConnectDelay(final long reConnectDelay) {
+    this.reConnectDelay = reConnectDelay;
     return this;
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder writeOrPingDelay(final long writeOrPingDelay) {
-    this.writeOrPingDelay = writeOrPingDelay;
+  public SolanaRpcWebsocket.Builder pingDelay(final long pingDelay) {
+    this.pingDelay = pingDelay;
     return this;
   }
 

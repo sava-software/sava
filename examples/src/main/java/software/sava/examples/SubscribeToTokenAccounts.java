@@ -23,9 +23,15 @@ public final class SubscribeToTokenAccounts {
           .webSocketBuilder(httpClient)
           .commitment(Commitment.CONFIRMED)
           .solanaAccounts(solanaAccounts)
-          .onOpen(ws -> System.out.println("Websocket connected to " + ws.endpoint()))
-          .onClose((_, statusCode, reason) -> System.out.format("%d: %s%n", statusCode, reason))
-          .onError((_, throwable) -> throwable.printStackTrace())
+          .onOpen(ws -> System.out.println("Websocket connected to " + ws.endpoint().getHost()))
+          .onClose((ws, statusCode, reason) -> {
+            ws.close();
+            System.out.format("%d: %s%n", statusCode, reason);
+          })
+          .onError((ws, throwable) -> {
+            ws.close();
+            throwable.printStackTrace(System.err);
+          })
           .create();
 
       webSocket.programSubscribe(
@@ -39,7 +45,7 @@ public final class SubscribeToTokenAccounts {
             System.out.println(tokenAccount);
           });
 
-      webSocket.connect();
+      webSocket.connect().join();
 
       Thread.sleep(Integer.MAX_VALUE);
     }

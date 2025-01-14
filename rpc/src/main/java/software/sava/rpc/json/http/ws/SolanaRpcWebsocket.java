@@ -14,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -39,7 +40,16 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   Timings timings();
 
-  void connect();
+  boolean closed();
+
+  /// @return A CompletableFuture which completes once the underlying WebSocket is connected.
+  /// `null` will be returned if this has been [closed][#close()].
+  ///
+  /// See [java.net.http.WebSocket.Builder#buildAsync(URI,WebSocket.Listener)] for potential exceptions.
+  ///
+  /// This may be used to re-connect the underlying WebSocket if this has not been [closed][#close()].
+  /// The connection attempt will be delayed by [Timings#reConnectDelay] if a previous attempt as already been made.
+  CompletableFuture<?> connect();
 
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);
 
@@ -118,6 +128,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   boolean slotUnsubscribe();
 
+  /// Once closed this WebSocket is no longer usable.
   @Override
   void close();
 
@@ -141,9 +152,19 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder webSocketBuilder(final WebSocket.Builder webSocketBuilder);
 
-    Builder reConnect(final long reConnect);
+    Builder reConnectDelay(final long reConnectDelay);
 
-    Builder writeOrPingDelay(final long writeOrPingDelay);
+    @Deprecated
+    default Builder reConnect(final long reConnect) {
+      return reConnectDelay(reConnect);
+    }
+
+    Builder pingDelay(final long pingDelay);
+
+    @Deprecated
+    default Builder writeOrPingDelay(final long writeOrPingDelay) {
+      return pingDelay(writeOrPingDelay);
+    }
 
     Builder subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay);
 
@@ -167,8 +188,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder onOpen(final Consumer<SolanaRpcWebsocket> onOpen);
 
+    /// The default behavior is to [#close()] this WebSocket.
+    ///
+    /// This behaviour can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
     Builder onClose(final OnClose onClose);
 
+    /// The default behavior is to [#close()] this WebSocket.
+    ///
+    /// This behaviour can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
     Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError);
   }
 }
