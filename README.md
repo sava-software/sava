@@ -203,12 +203,9 @@ var signer = PrivateKeyEncoding.fromJsonPrivateKey(ji);
 
 ```json
 {
-  "name": "Trade Bot",
-  "address": "<BASE58_ENCODED_PUBLIC_KEY>",
-  "privateKey": {
-    "encoding": "jsonKeyPairArray",
-    "secret": []
-  }
+  "pubKey": "<BASE58_ENCODED_PUBLIC_KEY>",
+  "encoding": "jsonKeyPairArray",
+  "secret": []
 }
 ```
 #### Key Pair
@@ -220,12 +217,9 @@ Encoded 64 bytes private/public key pair.  Derived public key will be validated.
 
 ```json
 {
-  "name": "Trade Bot",
-  "address": "<BASE58_ENCODED_PUBLIC_KEY>",
-  "privateKey": {
-    "encoding": "base64KeyPair",
-    "secret": "asdf=="
-  }
+  "pubKey": "<BASE58_ENCODED_PUBLIC_KEY>",
+  "encoding": "base64KeyPair",
+  "secret": "asdf=="
 }
 ```
 
