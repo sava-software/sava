@@ -66,9 +66,15 @@ public enum PrivateKeyEncoding {
   }
 
   public static Signer fromJsonPrivateKey(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.createSigner(ji);
+    return switch (ji.whatIsNext()) {
+      case ARRAY -> fromJsonPrivateKey(ji, jsonKeyPairArray);
+      case OBJECT -> {
+        final var parser = new Parser();
+        ji.testObject(parser);
+        yield parser.createSigner(ji);
+      }
+      default -> throw new IllegalStateException("Must be a JSON object or private key pair array.");
+    };
   }
 
   private static final class Parser implements FieldBufferPredicate {
