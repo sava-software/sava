@@ -1172,7 +1172,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   public static void main(String[] args) throws InterruptedException {
-    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=380ec8e2-1078-48a0-9aae-02d25ad1b38a");
+    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
     final var authority = PublicKey.fromBase58Encoded("SPc3dYPMXGM6Do5zakpUESxBLadBNDWQAJ6ww6QZALT");
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
