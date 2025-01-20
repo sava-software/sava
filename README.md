@@ -72,7 +72,7 @@ try (final var httpClient = HttpClient.newHttpClient()) {
     final var rpcClient = SolanaRpcClient.createClient(SolanaNetwork.MAIN_NET.getEndpoint(), httpClient);
     
     final var accountInfoFuture = rpcClient.getAccountInfo(
-        PublicKey.fromBase58Encoded("7Y9fsUT7EcnkH3jhN2GM4TBSBe1BeCyTCUwA2bxi29pr"), 
+        PublicKey.fromBase58Encoded("SPc3dYPMXGM6Do5zakpUESxBLadBNDWQAJ6ww6QZALT"), 
         AddressLookupTable.FACTORY
     );
     

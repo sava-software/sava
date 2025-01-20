@@ -3,11 +3,12 @@ package software.sava.rpc.json.http.client;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
+import software.sava.core.accounts.SolanaAccounts;
+import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.PublicKeyEncoding;
-import software.sava.rpc.json.http.SolanaNetwork;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
@@ -113,6 +114,11 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     this.defaultCommitment = defaultCommitment;
     this.latestBlockhashResponseParser = wrapParser(LATEST_BLOCK_HASH);
     this.sendTxResponseParser = wrapParser(SEND_TX_RESPONSE_PARSER);
+  }
+
+  @Override
+  public Commitment defaultCommitment() {
+    return defaultCommitment;
   }
 
   @Override
@@ -519,14 +525,85 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                                         final Commitment commitment,
                                                                         final List<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    final var filtersJson = filters == null || filters.isEmpty() ? "" : filters.stream()
-        .map(Filter::toJson)
-        .collect(Collectors.joining(",", ",\"filters\":[", "]"));
-    final var body = format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getProgramAccounts","params":["%s",{"commitment":"%s","withContext":true,"encoding":"base64"%s}]}""",
-        id.incrementAndGet(), programId.toBase58(), commitment.getValue(), filtersJson
-    );
-    final var request = newRequest("POST", ofString(body)).build();
+    return getProgramAccounts(requestTimeout, programId, commitment, 0, filters, 0, 0, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
+                                                                        final Commitment commitment,
+                                                                        final long minContextSlot,
+                                                                        final List<Filter> filters,
+                                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, 0, 0, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
+                                                                        final Commitment commitment,
+                                                                        final List<Filter> filters,
+                                                                        final int length,
+                                                                        final int offset,
+                                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(requestTimeout, programId, commitment, 0, filters, length, offset, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
+                                                                        final Commitment commitment,
+                                                                        final long minContextSlot,
+                                                                        final List<Filter> filters,
+                                                                        final int length,
+                                                                        final int offset,
+                                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    final var builder = new StringBuilder(1_024);
+
+    builder.append("""
+        {"jsonrpc":"2.0","id":""");
+    builder.append(id.incrementAndGet());
+
+    builder.append("""
+        ,"method":"getProgramAccounts","params":[\"""");
+    builder.append(programId.toBase58());
+
+    builder.append("""
+        ",{"withContext":true,"encoding":"base64","commitment":\"""");
+    builder.append(commitment.getValue());
+    builder.append('"');
+
+    if (minContextSlot != 0) {
+      builder.append("""
+          ,"minContextSlot":""");
+      builder.append(Long.toUnsignedString(minContextSlot));
+    }
+
+    if (length != 0) {
+      builder.append("""
+          ,"dataSlice":{"length":""");
+      builder.append(length);
+      builder.append("""
+          ,"offset":""");
+      builder.append(offset);
+      builder.append('}');
+    }
+
+    if (filters == null || filters.isEmpty()) {
+      builder.append("}]}");
+    } else {
+      builder.append("""
+          ,"filters":[""");
+      for (final var filter : filters) {
+        builder.append(filter.toJson());
+      }
+      builder.append("]}]}");
+    }
+
+    final var body = builder.toString();
+    final var request = newRequest("POST", ofString(body))
+        .timeout(Objects.requireNonNullElse(requestTimeout, this.requestTimeout))
+        .build();
     return httpClient
         .sendAsync(request, ofByteArray())
         .thenApply(wrapParser(applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory))));
@@ -1088,15 +1165,30 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   public static void main(String[] args) throws InterruptedException {
+    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
+    final var authority = PublicKey.fromBase58Encoded("SPc3dYPMXGM6Do5zakpUESxBLadBNDWQAJ6ww6QZALT");
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
-          SolanaNetwork.MAIN_NET.getEndpoint(),
+          rpcEndpoint,
           httpClient,
           response -> {
             System.out.println(new String(response.body()));
             return true;
           }
       );
+
+      final var tableAccountInfoList = rpcClient.getProgramAccounts(
+          SolanaAccounts.MAIN_NET.addressLookupTableProgram(),
+          List.of(
+              Filter.createMemCompFilter(AddressLookupTable.AUTHORITY_OFFSET, authority)
+          ),
+          PublicKey.PUBLIC_KEY_LENGTH, AddressLookupTable.AUTHORITY_OFFSET
+      ).join();
+
+      for (final var accountInfo : tableAccountInfoList) {
+        final byte[] data = accountInfo.data();
+        System.out.println(PublicKey.createPubKey(data));
+      }
     }
   }
 }

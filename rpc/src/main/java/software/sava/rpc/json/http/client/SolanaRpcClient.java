@@ -80,6 +80,8 @@ public interface SolanaRpcClient {
 
   HttpClient httpClient();
 
+  Commitment defaultCommitment();
+
   CompletableFuture<NodeHealth> getHealth();
 
   CompletableFuture<FeeForMessage> getFeeForMessage(final String base64Msg);
@@ -286,6 +288,154 @@ public interface SolanaRpcClient {
                                                                  final Commitment commitment,
                                                                  final List<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                 final PublicKey programId,
+                                                                 final Commitment commitment,
+                                                                 final long minContextSlot,
+                                                                 final List<Filter> filters,
+                                                                 final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                 final PublicKey programId,
+                                                                 final Commitment commitment,
+                                                                 final List<Filter> filters,
+                                                                 final int length,
+                                                                 final int offset,
+                                                                 final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                 final PublicKey programId,
+                                                                 final Commitment commitment,
+                                                                 final long minContextSlot,
+                                                                 final List<Filter> filters,
+                                                                 final int length,
+                                                                 final int offset,
+                                                                 final BiFunction<PublicKey, byte[], T> factory);
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
+                                                                          final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final long minContextSlot,
+                                                                          final List<Filter> filters) {
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
+                                                                          final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final List<Filter> filters,
+                                                                          final int length,
+                                                                          final int offset) {
+    return getProgramAccounts(requestTimeout, programId, commitment, filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
+                                                                          final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final long minContextSlot,
+                                                                          final List<Filter> filters,
+                                                                          final int length,
+                                                                          final int offset) {
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final long minContextSlot,
+                                                                         final List<Filter> filters,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, factory);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final List<Filter> filters,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), filters, length, offset, factory);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final long minContextSlot,
+                                                                         final List<Filter> filters,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, length, offset, factory);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final long minContextSlot,
+                                                                          final List<Filter> filters) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final List<Filter> filters,
+                                                                          final int length,
+                                                                          final int offset) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final long minContextSlot,
+                                                                          final List<Filter> filters,
+                                                                          final int length,
+                                                                          final int offset) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final long minContextSlot,
+                                                                         final List<Filter> filters,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, factory);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final List<Filter> filters,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, filters, length, offset, factory);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final long minContextSlot,
+                                                                         final List<Filter> filters,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, length, offset, factory);
+  }
+
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final long minContextSlot,
+                                                                          final List<Filter> filters) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final List<Filter> filters,
+                                                                          final int length,
+                                                                          final int offset) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final long minContextSlot,
+                                                                          final List<Filter> filters,
+                                                                          final int length,
+                                                                          final int offset) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, length, offset, BYTES_IDENTITY);
+  }
 
   CompletableFuture<List<PerfSample>> getRecentPerformanceSamples(final int limit);
 
