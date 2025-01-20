@@ -594,8 +594,15 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     } else {
       builder.append("""
           ,"filters":[""");
-      for (final var filter : filters) {
+      final var iterator = filters.iterator();
+      for (Filter filter; ; ) {
+        filter = iterator.next();
         builder.append(filter.toJson());
+        if (iterator.hasNext()) {
+          builder.append(',');
+        } else {
+          break;
+        }
       }
       builder.append("]}]}");
     }
@@ -1165,7 +1172,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   public static void main(String[] args) throws InterruptedException {
-    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
+    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=380ec8e2-1078-48a0-9aae-02d25ad1b38a");
     final var authority = PublicKey.fromBase58Encoded("SPc3dYPMXGM6Do5zakpUESxBLadBNDWQAJ6ww6QZALT");
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
@@ -1181,14 +1188,13 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           SolanaAccounts.MAIN_NET.addressLookupTableProgram(),
           List.of(
               Filter.createMemCompFilter(AddressLookupTable.AUTHORITY_OFFSET, authority)
-          ),
-          PublicKey.PUBLIC_KEY_LENGTH, AddressLookupTable.AUTHORITY_OFFSET
+          )
       ).join();
 
-      for (final var accountInfo : tableAccountInfoList) {
-        final byte[] data = accountInfo.data();
-        System.out.println(PublicKey.createPubKey(data));
-      }
+//      for (final var accountInfo : tableAccountInfoList) {
+//        final byte[] data = accountInfo.data();
+//        System.out.println(PublicKey.createPubKey(data));
+//      }
     }
   }
 }
