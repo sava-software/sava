@@ -52,7 +52,7 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public byte[] recentBlockHash() {
-    return Arrays.copyOfRange(data, recentBlockHashIndex, Transaction.BLOCK_HASH_LENGTH);
+    return Arrays.copyOfRange(data, recentBlockHashIndex, recentBlockHashIndex + Transaction.BLOCK_HASH_LENGTH);
   }
 
   @Override
