@@ -3,6 +3,7 @@ package software.sava.core.tx;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
+import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.programs.Discriminator;
 
 import java.util.Arrays;
@@ -25,6 +26,7 @@ public interface TransactionSkeleton {
     final int numSignatures = decode(data, o);
     o += getByteLen(data, o);
     o += (numSignatures * SIGNATURE_LENGTH);
+    final int messageOffset = o;
 
     int version = data[o++] & 0xFF;
     final int numRequiredSignatures;
@@ -88,7 +90,9 @@ public interface TransactionSkeleton {
           Arrays.sort(invokedIndexes);
           return new TransactionSkeletonRecord(
               data,
-              version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+              version,
+              messageOffset,
+              numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
               numIncludedAccounts, accountsOffset,
               recentBlockHashIndex,
               numInstructions, instructionsOffset, invokedIndexes,
@@ -98,7 +102,9 @@ public interface TransactionSkeleton {
         } else {
           return new TransactionSkeletonRecord(
               data,
-              version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+              version,
+              messageOffset,
+              numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
               numIncludedAccounts, accountsOffset,
               recentBlockHashIndex,
               numInstructions, instructionsOffset, invokedIndexes,
@@ -109,7 +115,9 @@ public interface TransactionSkeleton {
       } else {
         return new TransactionSkeletonRecord(
             data,
-            version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+            version,
+            messageOffset,
+            numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
             numIncludedAccounts, accountsOffset,
             recentBlockHashIndex,
             numInstructions, instructionsOffset, invokedIndexes,
@@ -131,7 +139,9 @@ public interface TransactionSkeleton {
       }
       return new TransactionSkeletonRecord(
           data,
-          version, numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+          version,
+          messageOffset,
+          numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
           numIncludedAccounts, accountsOffset,
           recentBlockHashIndex,
           numInstructions, instructionsOffset, LEGACY_INVOKED_INDEXES,
@@ -216,4 +226,27 @@ public interface TransactionSkeleton {
   }
 
   Instruction[] filterInstructionsWithoutAccounts(final Discriminator discriminator);
+
+  Transaction createTransaction(final AccountMeta[] accounts);
+
+  default Transaction createTransaction() {
+    final var accounts = parseAccounts();
+    return createTransaction(accounts);
+  }
+
+  Transaction createTransaction(final AccountMeta[] accounts,
+                                final AddressLookupTable lookupTable);
+
+  default Transaction createTransaction(final AddressLookupTable lookupTable) {
+    final var accounts = parseAccounts(lookupTable);
+    return createTransaction(accounts, lookupTable);
+  }
+
+  Transaction createTransaction(final AccountMeta[] accounts,
+                                final LookupTableAccountMeta[] tableAccountMetas);
+
+  default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
+    final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
+    return createTransaction(accounts, tableAccountMetas);
+  }
 }

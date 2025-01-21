@@ -92,7 +92,7 @@ final class PublicKeyTest {
             PublicKey.fromBase58Encoded("HwRVBufQ4haG5XSgpspwKtNd3PC9GM9m1196uJW36vds").toByteArray()),
         programId2);
     assertEquals(programAddress2.publicKey(), PublicKey.fromBase58Encoded("GXLbx3CbJuTTtJDZeS1PGzwJJ5jGYVEqcXum7472kpUp"));
-    assertEquals(programAddress2.nonce(), 254);
+    assertEquals(254, programAddress2.nonce());
   }
 
   @Test

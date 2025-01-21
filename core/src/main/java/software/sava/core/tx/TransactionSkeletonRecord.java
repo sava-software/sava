@@ -3,6 +3,7 @@ package software.sava.core.tx;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
+import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.encoding.Base58;
 import software.sava.core.programs.Discriminator;
 
@@ -21,6 +22,7 @@ import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 
 record TransactionSkeletonRecord(byte[] data,
                                  int version,
+                                 int messageOffset,
                                  int numSigners,
                                  int numReadonlySignedAccounts,
                                  int numReadonlyUnsignedAccounts,
@@ -329,5 +331,49 @@ record TransactionSkeletonRecord(byte[] data,
     final var accounts = new AccountMeta[numAccounts];
     parseVersionedIncludedAccounts(accounts);
     return parseInstructions(accounts);
+  }
+
+  @Override
+  public Transaction createTransaction(final AccountMeta[] accounts) {
+    return new TransactionRecord(
+        AccountMeta.createFeePayer(feePayer()),
+        Arrays.asList(parseInstructions(accounts)),
+        null,
+        TransactionRecord.NO_TABLES,
+        data,
+        numSigners,
+        messageOffset,
+        recentBlockHashIndex
+    );
+  }
+
+  @Override
+  public Transaction createTransaction(final AccountMeta[] accounts,
+                                       final AddressLookupTable lookupTable) {
+    return new TransactionRecord(
+        AccountMeta.createFeePayer(feePayer()),
+        Arrays.asList(parseInstructions(accounts)),
+        lookupTable,
+        TransactionRecord.NO_TABLES,
+        data,
+        numSigners,
+        messageOffset,
+        recentBlockHashIndex
+    );
+  }
+
+  @Override
+  public Transaction createTransaction(final AccountMeta[] accounts,
+                                       final LookupTableAccountMeta[] tableAccountMetas) {
+    return new TransactionRecord(
+        AccountMeta.createFeePayer(feePayer()),
+        Arrays.asList(parseInstructions(accounts)),
+        null,
+        tableAccountMetas,
+        data,
+        numSigners,
+        messageOffset,
+        recentBlockHashIndex
+    );
   }
 }
