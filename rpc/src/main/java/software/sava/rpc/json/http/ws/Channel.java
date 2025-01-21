@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.ws;
 
-enum Channel {
+public enum Channel {
 
   account,
   logs,

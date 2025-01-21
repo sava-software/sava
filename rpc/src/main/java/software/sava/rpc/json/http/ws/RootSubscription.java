@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.ws;
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.request.Commitment;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 
 class RootSubscription<T> implements Subscription<T> {
@@ -13,6 +14,7 @@ class RootSubscription<T> implements Subscription<T> {
   protected final long msgId;
   protected final String msg;
   protected final Consumer<T> consumer;
+  protected final Consumer<Subscription<T>> onSub;
   protected volatile long lastAttempt;
   protected volatile long subId;
 
@@ -21,12 +23,14 @@ class RootSubscription<T> implements Subscription<T> {
                    final String key,
                    final long msgId,
                    final String msg,
+                   final Consumer<Subscription<T>> onSub,
                    final Consumer<T> consumer) {
     this.commitment = commitment;
     this.channel = channel;
     this.key = key;
     this.msgId = msgId;
     this.msg = msg;
+    this.onSub = onSub;
     this.subId = Long.MIN_VALUE;
     this.consumer = consumer;
   }
@@ -82,30 +86,43 @@ class RootSubscription<T> implements Subscription<T> {
   }
 
   @Override
+  public void run() {
+    if (onSub != null) {
+      onSub.accept(this);
+    }
+  }
+
+  @Override
   public final void accept(final T t) {
     this.consumer.accept(t);
   }
 
   @Override
   public final boolean equals(final Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-    final var that = (Subscription<?>) o;
-    return key.equals(that.key());
+    if (o instanceof Subscription<?> subscription) {
+      return Objects.equals(commitment, subscription.commitment())
+          && Objects.equals(channel, subscription.channel())
+          && key.equals(subscription.key());
+    } else {
+      return false;
+    }
   }
 
   @Override
   public final int hashCode() {
-    return key.hashCode();
+    return Objects.hash(commitment, channel, key);
   }
 
   @Override
   public final String toString() {
     return "Subscription[" +
+        "commitment=" + commitment + ", " +
+        "channel=" + channel + ", " +
         "key=" + key + ", " +
         "id=" + msgId + ", " +
         "msg=" + msg + ", " +
         "lastAttempt=" + lastAttempt + ", " +
-        "subId=" + subId + ']';
+        "subId=" + subId
+        + ']';
   }
 }

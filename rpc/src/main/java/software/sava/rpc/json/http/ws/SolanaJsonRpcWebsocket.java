@@ -133,9 +133,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         final long delay = this.timings.reConnectDelay() - millisSinceLastWrite;
         final var delayedExecutor = CompletableFuture.delayedExecutor(delay, MILLISECONDS);
         return CompletableFuture.supplyAsync(() -> {
-          this.lastWrite.set(System.currentTimeMillis());
-          return this.webSocketBuilder.buildAsync(this.endpoint, this).join();
-        }, delayedExecutor);
+              this.lastWrite.set(System.currentTimeMillis());
+              return this.webSocketBuilder.buildAsync(this.endpoint, this).join();
+            }, delayedExecutor
+        );
       } else {
         this.lastWrite.set(now);
         return this.webSocketBuilder.buildAsync(this.endpoint, this);
@@ -200,8 +201,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     lockAndHandlePendingSubscriptions(webSocket);
     webSocket.request(Long.MAX_VALUE);
     this.webSocket = webSocket;
-    if (onOpen != null) {
-      onOpen.accept(this);
+    if (this.onOpen != null) {
+      this.onOpen.accept(this);
     } else {
       log.log(INFO, "WebSocket connected to {0}.", endpoint.getHost());
     }
@@ -219,10 +220,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                         final String key,
                                         final String params,
                                         final Map<String, Map<Commitment, Subscription<T>>> subs,
+                                        final Consumer<Subscription<T>> onSub,
                                         final Consumer<T> consumer) {
     final long msgId = this.msgId.incrementAndGet();
     final var msg = createSubscriptionMsg(msgId, channel, params);
-    final var sub = Subscription.createSubscription(commitment, channel, key, msgId, msg, consumer);
+    final var sub = Subscription.createSubscription(commitment, channel, key, msgId, msg, onSub, consumer);
     final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
@@ -243,10 +245,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                         final PublicKey publicKey,
                                         final String params,
                                         final Map<String, Map<Commitment, Subscription<T>>> subs,
+                                        final Consumer<Subscription<T>> onSub,
                                         final Consumer<T> consumer) {
     final long msgId = this.msgId.incrementAndGet();
     final var msg = createSubscriptionMsg(msgId, channel, params);
-    final var sub = Subscription.createAccountSubscription(commitment, channel, publicKey, msgId, msg, consumer);
+    final var sub = Subscription.createAccountSubscription(commitment, channel, publicKey, msgId, msg, onSub, consumer);
     final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
@@ -314,12 +317,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   @Override
   public boolean accountSubscribe(final Commitment commitment,
                                   final PublicKey key,
+                                  final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
     final var sub = this.accountSubs.get(key.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
       final var params = String.format("""
           "%s",{"encoding":"base64","commitment":"%s"}""", key, commitment.getValue());
-      return queueSubscription(commitment, Channel.account, key, params, this.accountSubs, consumer);
+      return queueSubscription(commitment, Channel.account, key, params, this.accountSubs, onSub, consumer);
     } else {
       return false;
     }
@@ -343,12 +347,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   @Override
   public boolean logsSubscribe(final Commitment commitment,
                                final PublicKey key,
+                               final Consumer<Subscription<TxLogs>> onSub,
                                final Consumer<TxLogs> consumer) {
     final var sub = this.txLogSubs.get(key.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
       final var params = String.format("""
           {"mentions":["%s"]},{"commitment":"%s"}""", key, commitment.getValue());
-      return queueSubscription(commitment, Channel.logs, key.toBase58(), params, this.txLogSubs, consumer);
+      return queueSubscription(commitment, Channel.logs, key.toBase58(), params, this.txLogSubs, onSub, consumer);
     } else {
       return false;
     }
@@ -380,12 +385,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public boolean signatureSubscribe(final Commitment commitment,
                                     final boolean enableReceivedNotification,
                                     final String b58TxSig,
+                                    final Consumer<Subscription<TxResult>> onSub,
                                     final Consumer<TxResult> consumer) {
     final var sub = this.signatureSubs.get(b58TxSig);
     if (sub == null || !sub.containsKey(commitment)) {
       final var params = String.format("""
           "%s",{"commitment":"%s","enableReceivedNotification":%b}""", b58TxSig, commitment.getValue(), enableReceivedNotification);
-      return queueSubscription(commitment, Channel.signature, b58TxSig, params, this.signatureSubs, consumer);
+      return queueSubscription(commitment, Channel.signature, b58TxSig, params, this.signatureSubs, onSub, consumer);
     } else {
       return false;
     }
@@ -447,7 +453,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public boolean programSubscribe(final PublicKey program, final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(this.defaultCommitment, program, List.of(), consumer);
+    return programSubscribe(this.defaultCommitment, program, null, consumer);
   }
 
   @Override
@@ -461,17 +467,18 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public boolean programSubscribe(final Commitment commitment,
                                   final PublicKey program,
                                   final List<Filter> filters,
+                                  final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
     final var sub = this.programSubs.get(program.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
-      final var filtersJson = filters.isEmpty() ? "" : filters.stream()
+      final var filtersJson = filters == null || filters.isEmpty() ? "" : filters.stream()
           .map(Filter::toJson)
           .collect(joining(",", ",\"filters\":[", "]"));
 
       final var params = String.format("""
               "%s",{"commitment":"%s","encoding":"base64"%s}""",
           program, commitment.getValue(), filtersJson);
-      return queueSubscription(commitment, Channel.program, program, params, this.programSubs, consumer);
+      return queueSubscription(commitment, Channel.program, program, params, this.programSubs, onSub, consumer);
     } else {
       return false;
     }
@@ -488,11 +495,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   @Override
-  public boolean slotSubscribe(final Consumer<ProcessedSlot> consumer) {
+  public boolean slotSubscribe(final Consumer<Subscription<ProcessedSlot>> onSub, final Consumer<ProcessedSlot> consumer) {
     final long msgId = this.msgId.incrementAndGet();
     final var msg = String.format("""
         {"jsonrpc":"2.0","id":%d,"method":"%s"}""", msgId, Channel.slot.subscribe());
-    final var slotSub = Subscription.createSubscription(null, Channel.slot, Channel.slot.name(), msgId, msg, consumer);
+    final var slotSub = Subscription.createSubscription(null, Channel.slot, Channel.slot.name(), msgId, msg, onSub, consumer);
     if (this.slotSub.compareAndSet(null, slotSub)) {
       this.pendingSubscriptions.put(msgId, slotSub);
       lock.lock();
@@ -540,9 +547,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         this.msgId.incrementAndGet(), channel.unSubscribe(), subId);
   }
 
-  private void sendText(final WebSocket webSocket, final String msg) {
-    webSocket.sendText(msg, true);
+  private CompletableFuture<WebSocket> sendText(final WebSocket webSocket, final String msg) {
+    final var future = webSocket.sendText(msg, true);
     log.log(DEBUG, msg);
+    return future;
   }
 
   private void sendUnSubscription(final WebSocket webSocket,
@@ -596,6 +604,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
   }
 
+  @SuppressWarnings("unused")
   private void onWholeMessage(final char[] msg,
                               final int offset,
                               final int tail,
@@ -751,7 +760,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   private void handlePendingSubscriptions(final WebSocket webSocket) {
     final long now = System.currentTimeMillis();
-    // Mark lastOutGoing to try to prevent a concurrent ping.
+    // Mark lastWrite to try to prevent a concurrent ping.
     final long previousSend = this.lastWrite.getAndSet(now);
     if (this.pendingSubscriptions.isEmpty()) {
       if (noPendingUnSubscriptions(webSocket) && this.lastWrite.compareAndSet(now, previousSend)) {
@@ -762,7 +771,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       for (final var sub : this.pendingSubscriptions.values()) {
         if (now - sub.lastAttempt() > this.timings.reConnectDelay()) {
           sub.setLastAttempt(now);
-          sendText(webSocket, sub.msg());
+          final var sendFuture = sendText(webSocket, sub.msg());
+          sendFuture.thenRun(sub);
           ++numSubs;
         }
       }

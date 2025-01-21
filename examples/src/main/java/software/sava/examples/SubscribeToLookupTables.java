@@ -22,10 +22,14 @@ public final class SubscribeToLookupTables {
           .onError((_, throwable) -> throwable.printStackTrace())
           .create();
 
-      webSocket.programSubscribe(SolanaAccounts.MAIN_NET.addressLookupTableProgram(), accountInfo -> {
-        final var table = AddressLookupTable.read(accountInfo.pubKey(), accountInfo.data());
-        System.out.println(table);
-      });
+      webSocket.programSubscribe(
+          SolanaAccounts.MAIN_NET.addressLookupTableProgram(),
+          System.out::println,
+          accountInfo -> {
+            final var table = AddressLookupTable.read(accountInfo.pubKey(), accountInfo.data());
+            System.out.println(table);
+          }
+      );
 
       webSocket.connect();
 

@@ -63,20 +63,46 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);
 
-  boolean accountSubscribe(final Commitment commitment,
-                           final PublicKey key,
-                           final Consumer<AccountInfo<byte[]>> consumer);
-
   boolean accountSubscribe(final PublicKey key,
                            final Consumer<AccountInfo<byte[]>> consumer);
 
-  boolean accountUnsubscribe(final Commitment commitment, final PublicKey key);
+  default boolean accountSubscribe(final PublicKey key,
+                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                   final Consumer<AccountInfo<byte[]>> consumer) {
+    return accountSubscribe(defaultCommitment(), key, onSub, consumer);
+  }
+
+  default boolean accountSubscribe(final Commitment commitment,
+                                   final PublicKey key,
+                                   final Consumer<AccountInfo<byte[]>> consumer) {
+    return accountSubscribe(commitment, key, null, consumer);
+  }
+
+  boolean accountSubscribe(final Commitment commitment,
+                           final PublicKey key,
+                           final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                           final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean accountUnsubscribe(final PublicKey key);
 
+  boolean accountUnsubscribe(final Commitment commitment, final PublicKey key);
+
   boolean logsSubscribe(final PublicKey key, final Consumer<TxLogs> consumer);
 
-  boolean logsSubscribe(final Commitment commitment, final PublicKey key, final Consumer<TxLogs> consumer);
+  default boolean logsSubscribe(final PublicKey key,
+                                final Consumer<Subscription<TxLogs>> onSub,
+                                final Consumer<TxLogs> consumer) {
+    return logsSubscribe(defaultCommitment(), key, onSub, consumer);
+  }
+
+  default boolean logsSubscribe(final Commitment commitment, final PublicKey key, final Consumer<TxLogs> consumer) {
+    return logsSubscribe(commitment, key, null, consumer);
+  }
+
+  boolean logsSubscribe(final Commitment commitment,
+                        final PublicKey key,
+                        final Consumer<Subscription<TxLogs>> onSub,
+                        final Consumer<TxLogs> consumer);
 
   boolean logsUnsubscribe(final PublicKey key);
 
@@ -94,9 +120,37 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return signatureSubscribe(commitment, commitment == Commitment.PROCESSED, b58TxSig, consumer);
   }
 
+  default boolean signatureSubscribe(final Commitment commitment,
+                                     final boolean enableReceivedNotification,
+                                     final String b58TxSig,
+                                     final Consumer<TxResult> consumer) {
+    return signatureSubscribe(commitment, enableReceivedNotification, b58TxSig, null, consumer);
+  }
+
+  default boolean signatureSubscribe(final String b58TxSig,
+                                     final Consumer<Subscription<TxResult>> onSub,
+                                     final Consumer<TxResult> consumer) {
+    return signatureSubscribe(defaultCommitment(), b58TxSig, onSub, consumer);
+  }
+
+  default boolean signatureSubscribe(final String b58TxSig,
+                                     final boolean enableReceivedNotification,
+                                     final Consumer<Subscription<TxResult>> onSub,
+                                     final Consumer<TxResult> consumer) {
+    return signatureSubscribe(defaultCommitment(), enableReceivedNotification, b58TxSig, onSub, consumer);
+  }
+
+  default boolean signatureSubscribe(final Commitment commitment,
+                                     final String b58TxSig,
+                                     final Consumer<Subscription<TxResult>> onSub,
+                                     final Consumer<TxResult> consumer) {
+    return signatureSubscribe(commitment, commitment == Commitment.PROCESSED, b58TxSig, onSub, consumer);
+  }
+
   boolean signatureSubscribe(final Commitment commitment,
                              final boolean enableReceivedNotification,
                              final String b58TxSig,
+                             final Consumer<Subscription<TxResult>> onSub,
                              final Consumer<TxResult> consumer);
 
   boolean signatureUnsubscribe(final String b58TxSig);
@@ -125,16 +179,58 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
                            final List<Filter> filters,
                            final Consumer<AccountInfo<byte[]>> consumer);
 
+  default boolean programSubscribe(final Commitment commitment,
+                                   final PublicKey program,
+                                   final List<Filter> filters,
+                                   final Consumer<AccountInfo<byte[]>> consumer) {
+    return programSubscribe(
+        commitment,
+        program,
+        filters,
+        null
+        , consumer
+    );
+  }
+
+  default boolean programSubscribe(final PublicKey program,
+                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                   final Consumer<AccountInfo<byte[]>> consumer) {
+    return programSubscribe(
+        program,
+        null,
+        onSub,
+        consumer
+    );
+  }
+
+  default boolean programSubscribe(final PublicKey program,
+                                   final List<Filter> filters,
+                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                   final Consumer<AccountInfo<byte[]>> consumer) {
+    return programSubscribe(
+        defaultCommitment(),
+        program,
+        filters,
+        onSub,
+        consumer
+    );
+  }
+
   boolean programSubscribe(final Commitment commitment,
                            final PublicKey program,
                            final List<Filter> filters,
+                           final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                            final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean programUnsubscribe(final PublicKey program);
 
   boolean programUnsubscribe(final Commitment commitment, final PublicKey program);
 
-  boolean slotSubscribe(final Consumer<ProcessedSlot> consumer);
+  default boolean slotSubscribe(final Consumer<ProcessedSlot> consumer) {
+    return slotSubscribe(null, consumer);
+  }
+
+  boolean slotSubscribe(final Consumer<Subscription<ProcessedSlot>> onSub, final Consumer<ProcessedSlot> consumer);
 
   boolean slotUnsubscribe();
 
