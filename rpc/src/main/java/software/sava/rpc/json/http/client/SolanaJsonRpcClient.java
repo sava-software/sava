@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 import static java.lang.String.format;
 import static java.net.http.HttpRequest.BodyPublishers.ofString;
 import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
+import static java.util.Objects.requireNonNullElse;
+import static software.sava.core.rpc.Filter.MAX_MEM_COMP_LENGTH;
 import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 
 final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
@@ -558,7 +560,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                                         final int length,
                                                                         final int offset,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    final var builder = new StringBuilder(1_024);
+    final int numFilters = filters == null ? 0 : filters.size();
+    final var builder = new StringBuilder(256 + (numFilters * MAX_MEM_COMP_LENGTH));
 
     builder.append("""
         {"jsonrpc":"2.0","id":""");
@@ -589,7 +592,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
       builder.append('}');
     }
 
-    if (filters == null || filters.isEmpty()) {
+    if (numFilters == 0) {
       builder.append("}]}");
     } else {
       builder.append("""
@@ -609,7 +612,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
     final var body = builder.toString();
     final var request = newRequest("POST", ofString(body))
-        .timeout(Objects.requireNonNullElse(requestTimeout, this.requestTimeout))
+        .timeout(requireNonNullElse(requestTimeout, this.requestTimeout))
         .build();
     return httpClient
         .sendAsync(request, ofByteArray())

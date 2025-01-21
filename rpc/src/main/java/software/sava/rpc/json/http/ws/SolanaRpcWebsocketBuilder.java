@@ -15,7 +15,7 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   private WebSocket.Builder webSocketBuilder;
   private long reConnectDelay = 3_000;
   private long pingDelay = 15_000;
-  private long subscriptionAndPingCheckDelay = 1_000;
+  private long subscriptionAndPingCheckDelay = 2_000;
   private SolanaAccounts solanaAccounts = SolanaAccounts.MAIN_NET;
   private Commitment commitment = Commitment.CONFIRMED;
   private Consumer<SolanaRpcWebsocket> onOpen;
@@ -115,15 +115,30 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   }
 
   @Override
+  public Consumer<SolanaRpcWebsocket> onOpen() {
+    return onOpen;
+  }
+
+  @Override
   public SolanaRpcWebsocket.Builder onOpen(final Consumer<SolanaRpcWebsocket> onOpen) {
     this.onOpen = onOpen;
     return this;
   }
 
   @Override
+  public SolanaRpcWebsocket.OnClose onclose() {
+    return onClose;
+  }
+
+  @Override
   public SolanaRpcWebsocket.Builder onClose(final SolanaRpcWebsocket.OnClose onClose) {
     this.onClose = onClose;
     return this;
+  }
+
+  @Override
+  public BiConsumer<SolanaRpcWebsocket, Throwable> onError() {
+    return onError;
   }
 
   @Override

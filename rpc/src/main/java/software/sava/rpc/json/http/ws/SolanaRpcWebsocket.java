@@ -186,12 +186,18 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Commitment commitment();
 
+    Consumer<SolanaRpcWebsocket> onOpen();
+
     Builder onOpen(final Consumer<SolanaRpcWebsocket> onOpen);
+
+    OnClose onclose();
 
     /// The default behavior is to [#close()] this WebSocket.
     ///
     /// This behaviour can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
     Builder onClose(final OnClose onClose);
+
+    BiConsumer<SolanaRpcWebsocket, Throwable> onError();
 
     /// The default behavior is to [#close()] this WebSocket.
     ///
