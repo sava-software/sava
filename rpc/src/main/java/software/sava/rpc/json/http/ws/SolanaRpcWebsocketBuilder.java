@@ -126,7 +126,7 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   }
 
   @Override
-  public SolanaRpcWebsocket.OnClose onclose() {
+  public SolanaRpcWebsocket.OnClose onClose() {
     return onClose;
   }
 

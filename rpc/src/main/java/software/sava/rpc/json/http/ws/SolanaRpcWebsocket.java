@@ -14,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -26,6 +27,15 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     void accept(final SolanaRpcWebsocket websocket,
                 final int statusCode,
                 final String reason);
+
+    default OnClose andThen(final OnClose after) {
+      Objects.requireNonNull(after);
+
+      return (ws, c, r) -> {
+        accept(ws, c, r);
+        after.accept(ws, c, r);
+      };
+    }
   }
 
   static Builder build() {
@@ -190,7 +200,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder onOpen(final Consumer<SolanaRpcWebsocket> onOpen);
 
-    OnClose onclose();
+    OnClose onClose();
 
     /// The default behavior is to [#close()] this WebSocket.
     ///
