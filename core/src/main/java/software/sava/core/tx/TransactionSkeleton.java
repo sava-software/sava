@@ -7,6 +7,7 @@ import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.programs.Discriminator;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -227,26 +228,39 @@ public interface TransactionSkeleton {
 
   Instruction[] filterInstructionsWithoutAccounts(final Discriminator discriminator);
 
-  Transaction createTransaction(final AccountMeta[] accounts);
+  Transaction createTransaction(final List<Instruction> instructions);
+
+  default Transaction createTransaction(AccountMeta[] accounts) {
+    final var instructions = parseInstructions(accounts);
+    return createTransaction(Arrays.asList(instructions));
+  }
 
   default Transaction createTransaction() {
     final var accounts = parseAccounts();
     return createTransaction(accounts);
   }
 
-  Transaction createTransaction(final AccountMeta[] accounts,
-                                final AddressLookupTable lookupTable);
+  Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
+
+  default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
+    final var instructions = parseInstructions(accounts);
+    return createTransaction(Arrays.asList(instructions), lookupTable);
+  }
 
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
     final var accounts = parseAccounts(lookupTable);
     return createTransaction(accounts, lookupTable);
   }
 
-  Transaction createTransaction(final AccountMeta[] accounts,
-                                final LookupTableAccountMeta[] tableAccountMetas);
+  default Transaction createTransaction(final AccountMeta[] accounts, final LookupTableAccountMeta[] tableAccountMetas) {
+    final var instructions = parseInstructions(accounts);
+    return createTransaction(Arrays.asList(instructions), tableAccountMetas);
+  }
 
   default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
     final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
     return createTransaction(accounts, tableAccountMetas);
   }
+
+  Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
 }

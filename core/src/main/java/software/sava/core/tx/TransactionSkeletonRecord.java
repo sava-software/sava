@@ -334,10 +334,10 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
-  public Transaction createTransaction(final AccountMeta[] accounts) {
+  public Transaction createTransaction(final List<Instruction> instructions) {
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
-        Arrays.asList(parseInstructions(accounts)),
+        instructions,
         null,
         TransactionRecord.NO_TABLES,
         data,
@@ -348,11 +348,11 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
-  public Transaction createTransaction(final AccountMeta[] accounts,
+  public Transaction createTransaction(final List<Instruction> instructions,
                                        final AddressLookupTable lookupTable) {
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
-        Arrays.asList(parseInstructions(accounts)),
+        instructions,
         lookupTable,
         TransactionRecord.NO_TABLES,
         data,
@@ -363,11 +363,11 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
-  public Transaction createTransaction(final AccountMeta[] accounts,
+  public Transaction createTransaction(final List<Instruction> instructions,
                                        final LookupTableAccountMeta[] tableAccountMetas) {
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
-        Arrays.asList(parseInstructions(accounts)),
+        instructions,
         null,
         tableAccountMetas,
         data,
