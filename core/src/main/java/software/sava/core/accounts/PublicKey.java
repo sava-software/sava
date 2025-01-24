@@ -1,5 +1,7 @@
 package software.sava.core.accounts;
 
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
+import org.bouncycastle.crypto.signers.Ed25519Signer;
 import software.sava.core.crypto.Hash;
 import software.sava.core.crypto.ed25519.Ed25519Util;
 import software.sava.core.encoding.Base58;
@@ -16,6 +18,68 @@ public interface PublicKey extends Comparable<PublicKey> {
 
   int PUBLIC_KEY_LENGTH = 32;
   PublicKey NONE = new PublicKeyBytes(new byte[PUBLIC_KEY_LENGTH]); // 11111111111111111111111111111111
+
+  private static boolean verifySignature(final Ed25519PublicKeyParameters publicKeyParameters,
+                                         final byte[] msg,
+                                         final int msgOffset,
+                                         final int msgLength,
+                                         final byte[] signature) {
+    final var verifier = new Ed25519Signer();
+    verifier.init(false, publicKeyParameters);
+    verifier.update(msg, msgOffset, msgLength);
+    return verifier.verifySignature(signature);
+  }
+
+  private static boolean verifySignature(final Ed25519PublicKeyParameters publicKeyParameters,
+                                         final String msg,
+                                         final byte[] signature) {
+    return verifySignature(
+        publicKeyParameters,
+        msg.getBytes(), 0, msg.length(),
+        signature
+    );
+  }
+
+  static boolean verifySignature(final byte[] publicKey,
+                                 final int publicKeyOffset,
+                                 final byte[] msg,
+                                 final int msgOffset,
+                                 final int msgLength,
+                                 final byte[] signature) {
+    final var publicKeyParameters = new Ed25519PublicKeyParameters(publicKey, publicKeyOffset);
+    return verifySignature(
+        publicKeyParameters,
+        msg, msgOffset, msgLength,
+        signature
+    );
+  }
+
+  static boolean verifySignature(final byte[] publicKey,
+                                 final int publicKeyOffset,
+                                 final String msg,
+                                 final byte[] signature) {
+    return verifySignature(
+        publicKey, publicKeyOffset,
+        msg.getBytes(), 0, msg.length(),
+        signature
+    );
+  }
+
+  static boolean verifySignature(final byte[] publicKey, final String msg, final byte[] signature) {
+    return verifySignature(
+        publicKey, 0,
+        msg.getBytes(), 0, msg.length(),
+        signature
+    );
+  }
+
+  static boolean verifySignature(final byte[] publicKey, final String msg, final String signature) {
+    return verifySignature(
+        publicKey, 0,
+        msg,
+        signature.getBytes()
+    );
+  }
 
   static PublicKey readPubKey(final byte[] bytes, final int offset) {
     return new PublicKeyBytes(Arrays.copyOfRange(bytes, offset, offset + PublicKey.PUBLIC_KEY_LENGTH));
@@ -114,5 +178,24 @@ public interface PublicKey extends Comparable<PublicKey> {
 
   default int l() {
     return PUBLIC_KEY_LENGTH;
+  }
+
+  default boolean verifySignature(final byte[] msg,
+                                  final int msgOffset,
+                                  final int msgLength,
+                                  final byte[] signature) {
+    return verifySignature(
+        toByteArray(), 0,
+        msg, msgOffset, msgLength,
+        signature
+    );
+  }
+
+  default boolean verifySignature(final String msg, final byte[] signature) {
+    return verifySignature(toByteArray(), msg, signature);
+  }
+
+  default boolean verifySignature(final String msg, final String signature) {
+    return verifySignature(msg, signature.getBytes());
   }
 }

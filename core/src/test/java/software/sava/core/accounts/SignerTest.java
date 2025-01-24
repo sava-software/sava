@@ -6,8 +6,7 @@ import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static software.sava.core.accounts.Signer.KEY_LENGTH;
 
 final class SignerTest {
@@ -46,5 +45,15 @@ final class SignerTest {
     final byte[] publicKey = new byte[KEY_LENGTH];
     Ed25519.generatePublicKey(privatePublicCopy, 0, publicKey, 0);
     assertArrayEquals(publicKey, signer.publicKey().toByteArray());
+  }
+
+  @Test
+  void sigVerify() {
+    final var msg = "sava";
+    final var keyPair = Signer.generatePrivateKeyPairBytes();
+    final var signer = Signer.createFromKeyPair(keyPair);
+    final var signature = signer.sign(msg.getBytes());
+    final boolean verified = signer.publicKey().verifySignature(msg, signature);
+    assertTrue(verified);
   }
 }

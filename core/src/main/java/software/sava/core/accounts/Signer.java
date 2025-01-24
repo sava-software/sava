@@ -19,8 +19,7 @@ public interface Signer {
     return privateKey;
   }
 
-  static void validateKeyPair(final byte[] privateKey,
-                              final byte[] expectedPublicKey) {
+  static void validateKeyPair(final byte[] privateKey, final byte[] expectedPublicKey) {
     final byte[] publicKey = new byte[Signer.KEY_LENGTH];
     Ed25519.generatePublicKey(privateKey, 0, publicKey, 0);
     if (!Arrays.equals(expectedPublicKey, publicKey)) {
