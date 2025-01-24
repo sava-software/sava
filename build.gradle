@@ -1,26 +1,5 @@
-def getAppVersion = { ->
-  try (final var gitTagOut = new ByteArrayOutputStream()) {
-    exec {
-      commandLine 'git', 'tag', '--points-at', 'HEAD'
-      standardOutput = gitTagOut
-    }
-    final var tagName = gitTagOut.toString().strip()
-    if (tagName.isBlank()) {
-      try (final var gitHashOut = new ByteArrayOutputStream()) {
-        exec {
-          commandLine 'git', 'rev-parse', '--short', 'HEAD'
-          standardOutput = gitHashOut
-        }
-        return 'git-' + gitHashOut.toString().strip()
-      }
-    } else {
-      return tagName
-    }
-  }
-}
-
 ext {
-  VERSION = getAppVersion()
+  VERSION = project.findProperty('version')
   VCS_URL = 'https://github.com/sava-software/sava'
 }
 
@@ -33,6 +12,7 @@ subprojects {
 
   project.group = 'software.sava'
   project.version = "$VERSION"
+  println(project.version)
 
   plugins.withType(JavaPlugin).configureEach {
     java {
@@ -63,8 +43,8 @@ subprojects {
     useJUnitPlatform()
     testLogging {
       events "passed", "skipped", "failed", "standardOut", "standardError"
-      exceptionFormat "full"
-      showStandardStreams true
+      exceptionFormat = "full"
+      showStandardStreams = true
     }
   }
 
@@ -76,8 +56,8 @@ subprojects {
   publishing {
     publications {
       mavenJava(MavenPublication) {
-        groupId project.group
-        artifactId project.parent.name + '-' + project.name
+        groupId = project.group
+        artifactId = project.parent.name + '-' + project.name
         version = project.version
 
         from components.java
