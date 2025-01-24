@@ -12,7 +12,6 @@ subprojects {
 
   project.group = 'software.sava'
   project.version = "$VERSION"
-  println(project.version)
 
   plugins.withType(JavaPlugin).configureEach {
     java {
@@ -46,6 +45,10 @@ subprojects {
       exceptionFormat = "full"
       showStandardStreams = true
     }
+  }
+
+  tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
   }
 
   java {
