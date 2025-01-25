@@ -16,6 +16,11 @@ public record AccountIndexLookupTableView(byte[] lookupTable,
   }
 
   @Override
+  public byte[] copyByteArray() {
+    return toByteArray();
+  }
+
+  @Override
   public int compareTo(final PublicKey o) {
     if (o instanceof AccountIndexLookupTableView view) {
       return Arrays.compare(lookupTable, offset, offset + PUBLIC_KEY_LENGTH, lookupTable, view.offset, view.offset + PUBLIC_KEY_LENGTH);

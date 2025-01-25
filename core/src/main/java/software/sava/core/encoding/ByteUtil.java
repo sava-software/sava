@@ -148,4 +148,20 @@ public final class ByteUtil {
 
   private ByteUtil() {
   }
+
+  public static byte[] reverse(final byte[] bytes, final int offset, final int len) {
+    final byte[] reversed = new byte[len];
+    for (int i = offset, j = (offset + len) - 1; j >= offset; ++i, --j) {
+      reversed[j] = bytes[i];
+    }
+    return reversed;
+  }
+
+  public static byte[] reverse(final byte[] bytes, final int len) {
+    return reverse(bytes, 0, len);
+  }
+
+  public static byte[] reverse(final byte[] bytes) {
+    return reverse(bytes, bytes.length);
+  }
 }

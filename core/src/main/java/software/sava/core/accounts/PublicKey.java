@@ -5,7 +5,17 @@ import org.bouncycastle.crypto.signers.Ed25519Signer;
 import software.sava.core.crypto.Hash;
 import software.sava.core.crypto.ed25519.Ed25519Util;
 import software.sava.core.encoding.Base58;
+import software.sava.core.encoding.ByteUtil;
 
+import java.math.BigInteger;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.Signature;
+import java.security.SignatureException;
+import java.security.spec.EdECPoint;
+import java.security.spec.EdECPublicKeySpec;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.NamedParameterSpec;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -13,11 +23,66 @@ import java.util.List;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static software.sava.core.accounts.PublicKeyBytes.PDA_BYTES;
 import static software.sava.core.crypto.Hash.sha256Digest;
+import static software.sava.core.crypto.SunCrypto.ED_25519_KEY_FACTORY;
 
 public interface PublicKey extends Comparable<PublicKey> {
 
   int PUBLIC_KEY_LENGTH = 32;
   PublicKey NONE = new PublicKeyBytes(new byte[PUBLIC_KEY_LENGTH]); // 11111111111111111111111111111111
+
+  static boolean verifySignature(final java.security.PublicKey publicKey,
+                                 final byte[] msg,
+                                 final int msgOffset,
+                                 final int msgLength,
+                                 final byte[] signature) {
+    try {
+      final var sigAlgo = Signature.getInstance("Ed25519");
+      sigAlgo.initVerify(publicKey);
+      sigAlgo.update(msg, msgOffset, msgLength);
+      return sigAlgo.verify(signature);
+    } catch (final NoSuchAlgorithmException | InvalidKeyException | SignatureException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  static boolean verifySignature(final java.security.PublicKey publicKey,
+                                 final byte[] msg,
+                                 final byte[] signature) {
+    return verifySignature(
+        publicKey,
+        msg, 0, msg.length,
+        signature
+    );
+  }
+
+  static boolean verifySignature(final java.security.PublicKey publicKey,
+                                 final String msg,
+                                 final byte[] signature) {
+    return verifySignature(
+        publicKey,
+        msg.getBytes(),
+        signature
+    );
+  }
+
+  static java.security.PublicKey toJavaPublicKey(final byte[] publicKey, final int off, final int len) {
+    final var reversed = ByteUtil.reverse(publicKey, off, len);
+    final int last = reversed[0] & 0xFF;
+    final boolean xOdd = (last & 0b1000_0000) == 0b1000_0000;
+    reversed[0] = (byte) (last & Byte.MAX_VALUE);
+    final var y = new BigInteger(reversed);
+    final var edECPoint = new EdECPoint(xOdd, y);
+    final var pubSpec = new EdECPublicKeySpec(NamedParameterSpec.ED25519, edECPoint);
+    try {
+      return ED_25519_KEY_FACTORY.generatePublic(pubSpec);
+    } catch (final InvalidKeySpecException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  static java.security.PublicKey toJavaPublicKey(final byte[] publicKey) {
+    return toJavaPublicKey(publicKey, 0, PUBLIC_KEY_LENGTH);
+  }
 
   private static boolean verifySignature(final Ed25519PublicKeyParameters publicKeyParameters,
                                          final byte[] msg,
@@ -31,11 +96,21 @@ public interface PublicKey extends Comparable<PublicKey> {
   }
 
   private static boolean verifySignature(final Ed25519PublicKeyParameters publicKeyParameters,
+                                         final byte[] msg,
+                                         final byte[] signature) {
+    return verifySignature(
+        publicKeyParameters,
+        msg, 0, msg.length,
+        signature
+    );
+  }
+
+  private static boolean verifySignature(final Ed25519PublicKeyParameters publicKeyParameters,
                                          final String msg,
                                          final byte[] signature) {
     return verifySignature(
         publicKeyParameters,
-        msg.getBytes(), 0, msg.length(),
+        msg.getBytes(),
         signature
     );
   }
@@ -172,6 +247,8 @@ public interface PublicKey extends Comparable<PublicKey> {
 
   byte[] toByteArray();
 
+  byte[] copyByteArray();
+
   String toBase58();
 
   String toBase64();
@@ -197,5 +274,9 @@ public interface PublicKey extends Comparable<PublicKey> {
 
   default boolean verifySignature(final String msg, final String signature) {
     return verifySignature(msg, signature.getBytes());
+  }
+
+  default java.security.PublicKey toJavaPublicKey() {
+    return toJavaPublicKey(toByteArray());
   }
 }

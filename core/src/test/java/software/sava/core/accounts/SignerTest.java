@@ -48,12 +48,26 @@ final class SignerTest {
   }
 
   @Test
-  void sigVerify() {
+  void bcSigVerify() {
     final var msg = "sava";
     final var keyPair = Signer.generatePrivateKeyPairBytes();
     final var signer = Signer.createFromKeyPair(keyPair);
     final var signature = signer.sign(msg.getBytes());
-    final boolean verified = signer.publicKey().verifySignature(msg, signature);
+
+    final var publicKey = signer.publicKey();
+    final boolean verified = publicKey.verifySignature(msg, signature);
+    assertTrue(verified);
+  }
+
+  @Test
+  void javaSigVerify() {
+    final var msg = "sava";
+    final var keyPair = Signer.generatePrivateKeyPairBytes();
+    final var signer = Signer.createFromKeyPair(keyPair);
+    final var signature = signer.sign(msg.getBytes());
+
+    final var publicKey = signer.publicKey().toJavaPublicKey();
+    final boolean verified = PublicKey.verifySignature(publicKey, msg, signature);
     assertTrue(verified);
   }
 }

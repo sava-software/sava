@@ -53,6 +53,11 @@ public record AccountIndexLookupTableEntry(byte[] publicKey, int index) implemen
   }
 
   @Override
+  public byte[] copyByteArray() {
+    return Arrays.copyOf(publicKey, publicKey.length);
+  }
+
+  @Override
   public int compareTo(final PublicKey o) {
     return Arrays.compare(this.publicKey, o.toByteArray());
   }

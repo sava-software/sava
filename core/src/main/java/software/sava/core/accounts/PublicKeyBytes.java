@@ -49,6 +49,11 @@ final class PublicKeyBytes implements PublicKey {
   }
 
   @Override
+  public byte[] copyByteArray() {
+    return Arrays.copyOf(publicKey, publicKey.length);
+  }
+
+  @Override
   public int write(final byte[] out, final int off) {
     System.arraycopy(publicKey, 0, out, off, PUBLIC_KEY_LENGTH);
     return PUBLIC_KEY_LENGTH;
