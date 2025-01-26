@@ -4,20 +4,27 @@ include 'core'
 include 'rpc'
 include 'examples'
 
+def gprUser = providers.gradleProperty("gpr.user")
+def gprToken = providers.gradleProperty("gpr.token")
+
 dependencyResolutionManagement {
   repositories {
     maven {
       name = "GithubPackages"
       url = "https://maven.pkg.github.com/sava-software/solana-version-catalog"
       credentials {
-        username = System.getProperty("gpr.user", System.getenv("GITHUB_ACTOR"))
-        password = System.getProperty("gpr.token", System.getenv("GITHUB_TOKEN"))
+        username = gprUser != null && gprUser.isPresent()
+            ? gprUser.get()
+            : System.getProperty("gpr.user", System.getenv("GITHUB_ACTOR"))
+        password = gprToken != null && gprToken.isPresent()
+            ? gprToken.get()
+            : System.getProperty("gpr.token", System.getenv("GITHUB_TOKEN"))
       }
     }
   }
   versionCatalogs {
     libs {
-      from("software.sava:solana-version-catalog:0.4.55")
+      from("software.sava:solana-version-catalog:0.4.106")
     }
   }
 }
