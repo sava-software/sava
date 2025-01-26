@@ -29,8 +29,7 @@
 
 ### Add Dependency
 
-Create
-a [GitHub user access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic)
+Create a classic [GitHub user access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) 
 with read access to GitHub Packages.
 
 Then add the following to your Gradle build script.

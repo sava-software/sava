@@ -3,6 +3,8 @@ ext {
   VCS_URL = 'https://github.com/sava-software/sava'
 }
 
+final JLV = JavaLanguageVersion.of(project.findProperty('javaVersion') as Integer ?: 23)
+
 subprojects {
   apply plugin: 'java-library'
   apply plugin: 'maven-publish'
@@ -10,6 +12,15 @@ subprojects {
 
   project.group = 'software.sava'
   project.version = "$VERSION"
+
+  plugins.withType(JavaPlugin).configureEach {
+    java {
+      modularity.inferModulePath = true
+      toolchain {
+        languageVersion = JLV
+      }
+    }
+  }
 
   repositories {
     maven {
@@ -34,6 +45,11 @@ subprojects {
       exceptionFormat = "full"
       showStandardStreams = true
     }
+  }
+
+  java {
+    withJavadocJar()
+    withSourcesJar()
   }
 
   tasks.withType(Javadoc).configureEach {
