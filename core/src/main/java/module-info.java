@@ -7,6 +7,7 @@ module software.sava.core {
   exports software.sava.core.accounts.sysvar;
   exports software.sava.core.accounts.token;
   exports software.sava.core.accounts.token.extensions;
+  exports software.sava.core.accounts.vanity;
   exports software.sava.core.borsh;
   exports software.sava.core.crypto;
   exports software.sava.core.crypto.ed25519;

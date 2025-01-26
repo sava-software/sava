@@ -92,6 +92,7 @@ subprojects {
         }
       }
     }
+
     repositories {
       maven {
         name = "GithubPackages"
