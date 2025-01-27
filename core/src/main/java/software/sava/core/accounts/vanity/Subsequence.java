@@ -34,7 +34,15 @@ public interface Subsequence {
 
     final long[] masks = SubsequenceRecord.generateMasks(charOptions);
     Arrays.sort(masks);
-    return new SubsequenceRecord(subsequence, subsequence.length(), caseSensitive, _1337Numbers, _1337Letters, masks);
+
+    return new SubsequenceRecord(
+        subsequence,
+        subsequence.length(),
+        caseSensitive,
+        _1337Numbers,
+        _1337Letters,
+        masks
+    );
   }
 
   boolean contains(final char[] encoded, final int from);

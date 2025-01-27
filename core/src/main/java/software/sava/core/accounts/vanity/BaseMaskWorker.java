@@ -4,9 +4,15 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.crypto.Hash;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,6 +24,7 @@ abstract class BaseMaskWorker implements AddressWorker {
 
   static final LongBinaryOperator SUM = Long::sum;
 
+  private final Path keyPath;
   private final SecureRandom secureRandom;
   private final Subsequence beginsWith;
   private final long find;
@@ -32,13 +39,15 @@ abstract class BaseMaskWorker implements AddressWorker {
   private final byte[] mutableKeyPair;
   protected final byte[] mutablePublicKey;
 
-  protected BaseMaskWorker(final SecureRandom secureRandom,
+  protected BaseMaskWorker(final Path keyPath,
+                           final SecureRandom secureRandom,
                            final Subsequence beginsWith,
                            final long find,
                            final AtomicInteger found,
                            final AtomicLong searched,
                            final Queue<Result> results,
                            final int checkFound) {
+    this.keyPath = keyPath;
     this.secureRandom = secureRandom;
     this.beginsWith = beginsWith;
     this.find = find;
@@ -92,12 +101,32 @@ abstract class BaseMaskWorker implements AddressWorker {
       System.arraycopy(publicKey, 0, keyPair, 32, 32);
       Signer.validateKeyPair(keyPair);
 
+      final var publicKey = PublicKey.createPubKey(Arrays.copyOfRange(keyPair, 32, 64));
       final var result = new Result(
-          PublicKey.createPubKey(Arrays.copyOfRange(keyPair, 32, 64)),
+          publicKey,
           keyPair,
           end - timeStart
       );
       results.add(result);
+      if (keyPath != null) {
+        try {
+          Files.writeString(
+              keyPath.resolve(publicKey.toBase58() + ".json"),
+              String.format("""
+                      {
+                        "pubKey": "%s",
+                        "encoding": "base64KeyPair",
+                        "secret": "%s"
+                      }""",
+                  publicKey,
+                  Base64.getEncoder().encodeToString(keyPair)
+              ),
+              StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
+          );
+        } catch (final IOException e) {
+          throw new UncheckedIOException(e);
+        }
+      }
       return true;
     } else {
       return false;

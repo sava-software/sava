@@ -3,6 +3,7 @@ rootProject.name = 'sava'
 include 'core'
 include 'rpc'
 include 'examples'
+include 'vanity'
 
 def gprUser = providers.gradleProperty("gpr.user")
 def gprToken = providers.gradleProperty("gpr.token")
@@ -24,7 +25,7 @@ dependencyResolutionManagement {
   }
   versionCatalogs {
     libs {
-      from("software.sava:solana-version-catalog:0.4.106")
+      from("software.sava:solana-version-catalog:0.4.120")
     }
   }
 }

@@ -1,0 +1,29 @@
+buildscript {
+  repositories {
+    maven { url = 'https://plugins.gradle.org/m2/' }
+  }
+  dependencies {
+    // https://plugins.gradle.org/plugin/org.beryx.jlink
+    classpath "org.beryx:badass-jlink-plugin:+"
+  }
+}
+
+apply plugin: 'org.beryx.jlink'
+
+dependencies {
+  implementation libs.json.iterator
+  implementation project(':core')
+}
+
+afterEvaluate {
+  jlink {
+    imageName.set(project.name)
+    options.addAll(List.of(
+        '--bind-services',
+        '--no-man-pages',
+        '--vm=server',
+        '--ignore-signing-information'
+    ))
+    enableCds()
+  }
+}

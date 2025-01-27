@@ -22,3 +22,4 @@ hs_err_pid*
 out/
 gradle.properties
 ignore
+.keys

@@ -1,5 +1,6 @@
 package software.sava.core.accounts.vanity;
 
+import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -9,7 +10,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public interface VanityAddressGenerator {
 
-  static VanityAddressGenerator createGenerator(final SecureRandomFactory secureRandomFactory,
+  static VanityAddressGenerator createGenerator(final Path keyPath,
+                                                final SecureRandomFactory secureRandomFactory,
                                                 final ExecutorService executor,
                                                 final int numThreads,
                                                 final Subsequence beginsWith,
@@ -26,8 +28,8 @@ public interface VanityAddressGenerator {
         for (int i = 0; i < numThreads; ++i) {
           final var secureRandom = secureRandomFactory.createSecureRandom();
           final var worker = endsWith == null
-              ? new BeginsWithMaskWorker(secureRandom, beginsWith, findKeys, found, searched, results, checkFound)
-              : new MaskWorker(secureRandom, beginsWith, endsWith, findKeys, found, searched, results, checkFound);
+              ? new BeginsWithMaskWorker(keyPath, secureRandom, beginsWith, findKeys, found, searched, results, checkFound)
+              : new MaskWorker(keyPath, secureRandom, beginsWith, endsWith, findKeys, found, searched, results, checkFound);
           executor.execute(worker);
         }
         return new ConcurrentVanityAddressGenerator(findKeys, results, found, searched);
@@ -37,12 +39,14 @@ public interface VanityAddressGenerator {
     }
   }
 
-  static VanityAddressGenerator createGenerator(final ExecutorService executor,
+  static VanityAddressGenerator createGenerator(final Path keyPath,
+                                                final ExecutorService executor,
                                                 final int numThreads,
                                                 final Subsequence beginsWith,
                                                 final Subsequence endsWith,
                                                 final long findKeys) {
     return createGenerator(
+        keyPath,
         SecureRandomFactory.DEFAULT,
         executor,
         numThreads,

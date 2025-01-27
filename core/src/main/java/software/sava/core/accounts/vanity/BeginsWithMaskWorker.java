@@ -2,6 +2,7 @@ package software.sava.core.accounts.vanity;
 
 import software.sava.core.encoding.Base58;
 
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -9,14 +10,15 @@ import java.util.concurrent.atomic.AtomicLong;
 
 final class BeginsWithMaskWorker extends BaseMaskWorker {
 
-  BeginsWithMaskWorker(final SecureRandom secureRandom,
+  BeginsWithMaskWorker(final Path keyPath,
+                       final SecureRandom secureRandom,
                        final Subsequence beginsWith,
                        final long find,
                        final AtomicInteger found,
                        final AtomicLong searched,
                        final Queue<Result> results,
                        final int checkFound) {
-    super(secureRandom, beginsWith, find, found, searched, results, checkFound);
+    super(keyPath, secureRandom, beginsWith, find, found, searched, results, checkFound);
   }
 
   @Override
