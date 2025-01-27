@@ -3,8 +3,11 @@
 set -e
 
 simpleProjectName="vanity"
+readonly simpleProjectName
 moduleName="software.sava.vanity"
+readonly moduleName
 mainClass="software.sava.vanity.Entrypoint"
+readonly mainClass
 
 jvmArgs="-server -Xms64M -Xmx128M"
 
@@ -20,7 +23,7 @@ s1337Letters="false"
 
 numThreads=""
 numKeys=""
-outDir=""
+outDir=".keys"
 
 screen=0;
 

@@ -61,8 +61,7 @@ public final class Entrypoint {
     );
 
     try (final var executor = Executors.newFixedThreadPool(numThreads)) {
-
-      final int findNumKeys = intProp(module, "numKeys", 8);
+      final int findNumKeys = intProp(module, "numKeys", 1);
       final var outDir = System.getProperty(module + ".outDir");
       Path keyPath;
       if (outDir == null || outDir.isBlank()) {
