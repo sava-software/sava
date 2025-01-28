@@ -12,6 +12,7 @@ public interface VanityAddressGenerator {
 
   static VanityAddressGenerator createGenerator(final Path keyPath,
                                                 final SecureRandomFactory secureRandomFactory,
+                                                final boolean sigVerify,
                                                 final ExecutorService executor,
                                                 final int numThreads,
                                                 final Subsequence beginsWith,
@@ -28,8 +29,29 @@ public interface VanityAddressGenerator {
         for (int i = 0; i < numThreads; ++i) {
           final var secureRandom = secureRandomFactory.createSecureRandom();
           final var worker = endsWith == null
-              ? new BeginsWithMaskWorker(keyPath, secureRandom, beginsWith, findKeys, found, searched, results, checkFound)
-              : new MaskWorker(keyPath, secureRandom, beginsWith, endsWith, findKeys, found, searched, results, checkFound);
+              ? new BeginsWithMaskWorker(
+              keyPath,
+              secureRandom,
+              sigVerify,
+              beginsWith,
+              findKeys,
+              found,
+              searched,
+              results,
+              checkFound
+          )
+              : new MaskWorker(
+              keyPath,
+              secureRandom,
+              sigVerify,
+              beginsWith,
+              endsWith,
+              findKeys,
+              found,
+              searched,
+              results,
+              checkFound
+          );
           executor.execute(worker);
         }
         return new ConcurrentVanityAddressGenerator(findKeys, results, found, searched);
@@ -40,6 +62,7 @@ public interface VanityAddressGenerator {
   }
 
   static VanityAddressGenerator createGenerator(final Path keyPath,
+                                                final boolean sigVerify,
                                                 final ExecutorService executor,
                                                 final int numThreads,
                                                 final Subsequence beginsWith,
@@ -48,6 +71,7 @@ public interface VanityAddressGenerator {
     return createGenerator(
         keyPath,
         SecureRandomFactory.DEFAULT,
+        sigVerify,
         executor,
         numThreads,
         beginsWith,

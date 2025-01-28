@@ -12,13 +12,14 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
 
   BeginsWithMaskWorker(final Path keyPath,
                        final SecureRandom secureRandom,
+                       final boolean sigVerify,
                        final Subsequence beginsWith,
                        final long find,
                        final AtomicInteger found,
                        final AtomicLong searched,
                        final Queue<Result> results,
                        final int checkFound) {
-    super(keyPath, secureRandom, beginsWith, find, found, searched, results, checkFound);
+    super(keyPath, secureRandom, sigVerify, beginsWith, find, found, searched, results, checkFound);
   }
 
   @Override

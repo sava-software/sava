@@ -34,13 +34,16 @@ A `prefix` and/or `suffix` must be provided.
 - [nt | numThreads]=
 - [nk | numKeys]=1
 - [o | outDir]='.keys'
+- [sv | sigVerify]=false
 
+#### Prefix
 
 - [p | prefix]=""
 - [pc | pCaseSensitive]=false
 - [pn | p1337Numbers]=true
 - [pl | p1337Letters]=true
 
+#### Suffix
 
 - [s | suffix]=""
 - [sc | sCaseSensitive]=false

@@ -268,6 +268,14 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
+  default boolean verifySignature(final byte[] msg, final byte[] signature) {
+    return verifySignature(
+        toByteArray(), 0,
+        msg, 0, msg.length,
+        signature
+    );
+  }
+
   default boolean verifySignature(final String msg, final byte[] signature) {
     return verifySignature(toByteArray(), msg, signature);
   }

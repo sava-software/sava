@@ -26,6 +26,7 @@ abstract class BaseMaskWorker implements AddressWorker {
 
   private final Path keyPath;
   private final SecureRandom secureRandom;
+  private final boolean sigVerify;
   private final Subsequence beginsWith;
   private final long find;
   private final AtomicInteger found;
@@ -41,6 +42,7 @@ abstract class BaseMaskWorker implements AddressWorker {
 
   protected BaseMaskWorker(final Path keyPath,
                            final SecureRandom secureRandom,
+                           final boolean sigVerify,
                            final Subsequence beginsWith,
                            final long find,
                            final AtomicInteger found,
@@ -49,6 +51,7 @@ abstract class BaseMaskWorker implements AddressWorker {
                            final int checkFound) {
     this.keyPath = keyPath;
     this.secureRandom = secureRandom;
+    this.sigVerify = sigVerify;
     this.beginsWith = beginsWith;
     this.find = find;
     this.found = found;
@@ -92,6 +95,8 @@ abstract class BaseMaskWorker implements AddressWorker {
     return results;
   }
 
+  protected static final byte[] VERIFY_MSG = "sava".getBytes();
+
   protected final boolean queueResult(final long timeStart, final int keyStart) {
     if (beginsWith == null || beginsWith.contains(encoded, keyStart)) {
       final long end = System.currentTimeMillis();
@@ -99,7 +104,26 @@ abstract class BaseMaskWorker implements AddressWorker {
       final byte[] keyPair = new byte[64];
       System.arraycopy(privateKey, 0, keyPair, 0, 32);
       System.arraycopy(publicKey, 0, keyPair, 32, 32);
-      Signer.validateKeyPair(keyPair);
+
+      if (sigVerify) {
+        final var signer = Signer.createFromKeyPair(keyPair);
+        final var sig = signer.sign(VERIFY_MSG);
+        final var publicKey = signer.publicKey();
+        if (!publicKey.verifySignature(VERIFY_MSG, sig)) {
+          throw new IllegalStateException(
+              "Invalid signature for key pair " + Base64.getEncoder().encodeToString(keyPair)
+          );
+        }
+        final var javaPublicKey = publicKey.toJavaPublicKey();
+        if (!PublicKey.verifySignature(javaPublicKey, VERIFY_MSG, sig)) {
+          throw new IllegalStateException(
+              "Failed to verify signature using a Java PublicKey for key pair "
+                  + Base64.getEncoder().encodeToString(keyPair)
+          );
+        }
+      } else {
+        Signer.validateKeyPair(keyPair);
+      }
 
       final var publicKey = PublicKey.createPubKey(Arrays.copyOfRange(keyPair, 32, 64));
       final var result = new Result(
@@ -112,7 +136,8 @@ abstract class BaseMaskWorker implements AddressWorker {
         try {
           Files.writeString(
               keyPath.resolve(publicKey.toBase58() + ".json"),
-              String.format("""
+              String.format(
+                  """
                       {
                         "pubKey": "%s",
                         "encoding": "base64KeyPair",

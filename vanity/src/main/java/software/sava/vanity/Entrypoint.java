@@ -17,14 +17,14 @@ public final class Entrypoint {
   private static int intProp(final String module,
                              final String property,
                              final int def) {
-    final var val = System.getProperty(module + property);
+    final var val = System.getProperty(module + '.' + property);
     return val == null || val.isBlank() ? def : Integer.parseInt(val);
   }
 
   private static boolean boolProp(final String module,
                                   final String property,
                                   final boolean def) {
-    final var val = System.getProperty(module + property);
+    final var val = System.getProperty(module + '.' + property);
     return val == null || val.isBlank() ? def : Boolean.parseBoolean(val);
   }
 
@@ -80,9 +80,10 @@ public final class Entrypoint {
           throw new UncheckedIOException(e);
         }
       }
-
+      final boolean sigVerify = boolProp(module, "sigVerify", false);
       final var generator = VanityAddressGenerator.createGenerator(
           keyPath,
+          sigVerify,
           executor,
           numThreads,
           beginsWith,
@@ -98,7 +99,8 @@ public final class Entrypoint {
         if (result == null) {
           final long numSearched = generator.numSearched();
           if (numSearched > 0) {
-            System.out.printf("""
+            System.out.printf(
+                """
                     Found %,d out of %,d accounts in %s
                     """,
                 generator.numFound(),
@@ -110,7 +112,8 @@ public final class Entrypoint {
             continue;
           }
         } else {
-          System.out.printf("""
+          System.out.printf(
+              """
                   Found account [%s] in %s
                   """,
               result.publicKey(), Duration.ofMillis(result.durationMillis()).toString().substring(2)

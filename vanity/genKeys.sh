@@ -24,6 +24,7 @@ s1337Letters="false"
 numThreads=""
 numKeys=""
 outDir=".keys"
+sigVerify="false"
 
 screen=0;
 
@@ -114,6 +115,7 @@ do
           ;;
         esac
         ;;
+      sv | sigVerify) sigVerify="$val";;
 
       *)
           printf "Unsupported flag '%s' [key=%s] [val=%s].\n" "$arg" "$key" "$val";
@@ -129,7 +131,7 @@ done
 javaExe="$(pwd)/$simpleProjectName/build/$simpleProjectName/bin/java"
 readonly javaExe
 
-jvmArgs="$jvmArgs -D$moduleName.outDir=$outDir -D$moduleName.numThreads=$numThreads -D$moduleName.numKeys=$numKeys -D$moduleName.prefix=$prefix -D$moduleName.pCaseSensitive=$pCaseSensitive -D$moduleName.p1337Numbers=$p1337Numbers -D$moduleName.p1337Letters=$p1337Letters -D$moduleName.suffix=$suffix -D$moduleName.sCaseSensitive=$sCaseSensitive -D$moduleName.s1337Numbers=$s1337Numbers -D$moduleName.s1337Letters=$s1337Letters -m $moduleName/$mainClass"
+jvmArgs="$jvmArgs -D$moduleName.sigVerify=$sigVerify -D$moduleName.outDir=$outDir -D$moduleName.numThreads=$numThreads -D$moduleName.numKeys=$numKeys -D$moduleName.prefix=$prefix -D$moduleName.pCaseSensitive=$pCaseSensitive -D$moduleName.p1337Numbers=$p1337Numbers -D$moduleName.p1337Letters=$p1337Letters -D$moduleName.suffix=$suffix -D$moduleName.sCaseSensitive=$sCaseSensitive -D$moduleName.s1337Numbers=$s1337Numbers -D$moduleName.s1337Letters=$s1337Letters -m $moduleName/$mainClass"
 IFS=' ' read -r -a jvmArgsArray <<< "$jvmArgs"
 
 if [[ "$screen" == 0 ]]; then
