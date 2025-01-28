@@ -107,6 +107,29 @@ public final class Entrypoint {
       final var logDelay = durationProp(module, "logDelay", Duration.ofSeconds(5));
       final long delayNanos = logDelay.toNanos();
       final long upperBound = numThreads * (long) checkFound;
+
+      final int numCombinations;
+      final String basePattern;
+      if (beginsWith == null) {
+        numCombinations = endsWith.numCombinations();
+        basePattern = "..." + endsWith.subsequence();
+      } else if (endsWith == null) {
+        numCombinations = beginsWith.numCombinations();
+        basePattern = beginsWith.subsequence() + "...";
+      } else {
+        numCombinations = beginsWith.numCombinations() * endsWith.numCombinations();
+        basePattern = beginsWith.subsequence() + "..." + endsWith.subsequence();
+      }
+
+      System.out.format(
+          """
+              
+              Searching against %d Base58 character combinations of %s
+              
+              """,
+          numCombinations, basePattern
+      );
+
       final long start = System.nanoTime();
       for (Result result; ; ) {
         result = generator.poll(delayNanos, TimeUnit.NANOSECONDS);

@@ -24,18 +24,6 @@ record SubsequenceRecord(String subsequence,
         numMasks += countMasks(findChars, 1);
       }
     }
-    final char[] vertical = new char[findChars.length];
-    for (int i = 0; i < vertical.length; ++i) {
-      vertical[i] = findChars[i][0];
-    }
-
-    System.out.format("""
-            
-            Searching against %d Base58 character combinations of '%s'...
-            
-            """,
-        numMasks, new String(vertical)
-    );
 
     final long[] masks = new long[numMasks];
     numMasks = 0;
@@ -167,5 +155,10 @@ record SubsequenceRecord(String subsequence,
       mask |= ((long) encoded[--i]) << shift;
     }
     return Arrays.binarySearch(masks, mask) >= 0;
+  }
+
+  @Override
+  public int numCombinations() {
+    return masks.length;
   }
 }

@@ -56,4 +56,6 @@ public interface Subsequence {
   boolean _1337Numbers();
 
   boolean _1337Letters();
+
+  int numCombinations();
 }
