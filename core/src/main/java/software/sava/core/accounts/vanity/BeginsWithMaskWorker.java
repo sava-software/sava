@@ -38,10 +38,10 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
           start = System.currentTimeMillis();
         }
       } else if (++i == checkFound) {
-        searched.getAndAccumulate(i, SUM);
         if (foundLimitOrInterrupted()) {
           return;
         } else {
+          searched.getAndAccumulate(i, SUM);
           i = 0;
         }
       }
