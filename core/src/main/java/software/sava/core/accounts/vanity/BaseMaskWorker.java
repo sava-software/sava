@@ -174,7 +174,7 @@ abstract class BaseMaskWorker implements AddressWorker {
     }
   }
 
-  protected final boolean incrementFoundHitsLimitOrInterrupted() {
-    return this.found.incrementAndGet() >= find || Thread.currentThread().isInterrupted();
+  protected final boolean foundHitLimitOrInterrupted() {
+    return this.found.get() >= find || Thread.currentThread().isInterrupted();
   }
 }

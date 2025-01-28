@@ -50,10 +50,10 @@ final class MaskWorker extends BaseMaskWorker {
             encoded
         );
         if (queueResult(start, keyStart)) {
-          if (incrementFoundHitsLimitOrInterrupted()) {
+          searched.getAndAccumulate(i, SUM);
+          if (foundHitLimitOrInterrupted()) {
             return;
           } else {
-            searched.getAndAccumulate(i, SUM);
             i = 0;
             start = System.currentTimeMillis();
             continue;

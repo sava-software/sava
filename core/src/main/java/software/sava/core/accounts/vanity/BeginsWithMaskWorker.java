@@ -30,10 +30,10 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
 
       keyStart = Base58.mutableEncode(mutablePublicKey, encoded);
       if (queueResult(start, keyStart)) {
-        if (incrementFoundHitsLimitOrInterrupted()) {
+        searched.getAndAccumulate(i, SUM);
+        if (foundHitLimitOrInterrupted()) {
           return;
         } else {
-          searched.getAndAccumulate(i, SUM);
           i = 0;
           start = System.currentTimeMillis();
         }
