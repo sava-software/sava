@@ -15,84 +15,79 @@ import java.util.concurrent.TimeUnit;
 
 public final class Entrypoint {
 
-  private static int intProp(final String module,
-                             final String property,
-                             final int def) {
-    final var val = System.getProperty(module + '.' + property);
+  private static int intProp(final String moduleName, final String property, final int def) {
+    final var val = System.getProperty(moduleName + '.' + property);
     return val == null || val.isBlank() ? def : Integer.parseInt(val);
   }
 
-  private static boolean boolProp(final String module,
-                                  final String property,
-                                  final boolean def) {
-    final var val = System.getProperty(module + '.' + property);
+  private static boolean boolProp(final String moduleName, final String property, final boolean def) {
+    final var val = System.getProperty(moduleName + '.' + property);
     return val == null || val.isBlank() ? def : Boolean.parseBoolean(val);
   }
 
-  private static Duration durationProp(final String module,
-                                       final String property,
-                                       final Duration def) {
-    final var val = System.getProperty(module + '.' + property);
+  private static Duration durationProp(final String moduleName, final String property, final Duration def) {
+    final var val = System.getProperty(moduleName + '.' + property);
     return val == null || val.isBlank()
         ? def
         : Duration.parse(val.startsWith("PT") ? val : "PT" + val);
   }
 
-  private static Subsequence getSequence(final String module,
-                                         final String property,
-                                         final char ps) {
-    final var prefix = System.getProperty(module + '.' + property);
+  private static Subsequence getSequence(final String moduleName, final String property, final char ps) {
+    final var prefix = System.getProperty(moduleName + '.' + property);
     if (prefix == null || prefix.isBlank()) {
       return null;
     } else {
       return Subsequence.create(
           prefix,
-          boolProp(module, ps + "CaseSensitive", false),
-          boolProp(module, ps + "1337Numbers", true),
-          boolProp(module, ps + "1337Letters", true)
+          boolProp(moduleName, ps + "CaseSensitive", false),
+          boolProp(moduleName, ps + "1337Numbers", true),
+          boolProp(moduleName, ps + "1337Letters", true)
       );
     }
   }
 
-  public static void main(final String[] args) throws InterruptedException {
-    final var module = Entrypoint.class.getModule().getName();
+  private static Path readKeyPath(final String moduleName, final Subsequence beginsWith, final Subsequence endsWith) {
+    final var outDir = System.getProperty(moduleName + ".outDir");
+    if (outDir == null || outDir.isBlank()) {
+      return null;
+    } else {
+      var keyPath = Path.of(outDir);
+      if (beginsWith != null) {
+        keyPath = keyPath.resolve(beginsWith.subsequence() + '_');
+      }
+      if (endsWith != null) {
+        keyPath = keyPath.resolve('_' + endsWith.subsequence());
+      }
+      try {
+        Files.createDirectories(keyPath);
+      } catch (final IOException e) {
+        throw new UncheckedIOException(e);
+      }
+      return keyPath;
+    }
+  }
 
-    final var beginsWith = getSequence(module, "prefix", 'p');
-    final var endsWith = getSequence(module, "suffix", 's');
+  public static void main(final String[] args) throws InterruptedException {
+    final var moduleName = Entrypoint.class.getModule().getName();
+
+    final var beginsWith = getSequence(moduleName, "prefix", 'p');
+    final var endsWith = getSequence(moduleName, "suffix", 's');
 
     if (beginsWith == null && endsWith == null) {
       throw new IllegalStateException("Must configure a prefix or suffix.");
     }
 
     final int numThreads = intProp(
-        module,
+        moduleName,
         "numThreads",
         Math.max(1, Runtime.getRuntime().availableProcessors() >> 1)
     );
 
     try (final var executor = Executors.newFixedThreadPool(numThreads)) {
-      final int findNumKeys = intProp(module, "numKeys", 1);
-      final var outDir = System.getProperty(module + ".outDir");
-      Path keyPath;
-      if (outDir == null || outDir.isBlank()) {
-        keyPath = null;
-      } else {
-        keyPath = Path.of(outDir);
-        if (beginsWith != null) {
-          keyPath = keyPath.resolve(beginsWith.subsequence() + '_');
-        }
-        if (endsWith != null) {
-          keyPath = keyPath.resolve('_' + endsWith.subsequence());
-        }
-        try {
-          Files.createDirectories(keyPath);
-        } catch (final IOException e) {
-          throw new UncheckedIOException(e);
-        }
-      }
-
-      final int checkFound = intProp(module, "checkFound", 131_072);
-      final boolean sigVerify = boolProp(module, "sigVerify", false);
+      final var keyPath = readKeyPath(moduleName, beginsWith, endsWith);
+      final int findNumKeys = intProp(moduleName, "numKeys", 1);
+      final int checkFound = intProp(moduleName, "checkFound", 131_072);
+      final boolean sigVerify = boolProp(moduleName, "sigVerify", false);
       final var generator = VanityAddressGenerator.createGenerator(
           keyPath,
           sigVerify,
@@ -104,8 +99,7 @@ public final class Entrypoint {
           checkFound
       );
 
-      final var logDelay = durationProp(module, "logDelay", Duration.ofSeconds(5));
-      final long delayNanos = logDelay.toNanos();
+      final long delayNanos = durationProp(moduleName, "logDelay", Duration.ofSeconds(5)).toNanos();
       final long upperBound = numThreads * (long) checkFound;
 
       final int numCombinations;
@@ -124,10 +118,13 @@ public final class Entrypoint {
       System.out.format(
           """
               
-              %d threads searching for %d keys against %d Base58 character combinations of %s
+              %s searching for %s against %s of %s
               
               """,
-          numThreads, findNumKeys, numCombinations, basePattern
+          maybePlural(numThreads, "thread"),
+          maybePlural(findNumKeys, "key"),
+          maybePlural(numCombinations, "Base58 character combination"),
+          basePattern
       );
 
       int numFound = 0;
@@ -139,11 +136,11 @@ public final class Entrypoint {
           final long numSearched = generator.numSearched();
           System.out.printf(
               """
-                  Found %,d keys out of [%,d, %,d) in %s
+                  Found %,d key(s) out of [%,d, %,d) in %s
                   """,
               numFound,
               numSearched, numSearched + upperBound,
-              Duration.ofNanos(duration).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
+              formatDuration(Duration.ofNanos(duration))
           );
         } else {
           System.out.printf(
@@ -151,7 +148,7 @@ public final class Entrypoint {
                   Found account [%s] in %s
                   """,
               result.publicKey(),
-              Duration.ofMillis(result.durationMillis()).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
+              formatDuration(Duration.ofMillis(result.durationMillis()))
           );
           if (++numFound >= findNumKeys) {
             executor.shutdownNow();
@@ -160,5 +157,14 @@ public final class Entrypoint {
         }
       }
     }
+  }
+
+  private static String maybePlural(final long val, final String context) {
+    final var prefix = Long.toUnsignedString(val) + ' ' + context;
+    return val == 1 ? prefix : prefix + 's';
+  }
+
+  private static String formatDuration(final Duration duration) {
+    return duration.truncatedTo(ChronoUnit.SECONDS).toString().substring(2);
   }
 }

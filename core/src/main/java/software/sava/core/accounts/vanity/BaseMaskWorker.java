@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -105,10 +104,11 @@ abstract class BaseMaskWorker implements AddressWorker {
       System.arraycopy(privateKey, 0, keyPair, 0, 32);
       System.arraycopy(publicKey, 0, keyPair, 32, 32);
 
+      final PublicKey publicKey;
       if (sigVerify) {
         final var signer = Signer.createFromKeyPair(keyPair);
         final var sig = signer.sign(VERIFY_MSG);
-        final var publicKey = signer.publicKey();
+        publicKey = signer.publicKey();
         if (!publicKey.verifySignature(VERIFY_MSG, sig)) {
           throw new IllegalStateException(
               "Invalid signature for key pair " + Base64.getEncoder().encodeToString(keyPair)
@@ -123,14 +123,11 @@ abstract class BaseMaskWorker implements AddressWorker {
         }
       } else {
         Signer.validateKeyPair(keyPair);
+        publicKey = PublicKey.readPubKey(keyPair, 32);
       }
 
-      final var publicKey = PublicKey.createPubKey(Arrays.copyOfRange(keyPair, 32, 64));
-      final var result = new Result(
-          publicKey,
-          keyPair,
-          end - timeStart
-      );
+      final var result = new Result(publicKey, keyPair, end - timeStart);
+
       if (keyPath != null) {
         try {
           Files.writeString(
@@ -151,6 +148,7 @@ abstract class BaseMaskWorker implements AddressWorker {
           throw new UncheckedIOException(e);
         }
       }
+
       results.add(result);
       found.incrementAndGet();
       return true;

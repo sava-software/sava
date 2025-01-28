@@ -160,6 +160,10 @@ public interface PublicKey extends Comparable<PublicKey> {
     return new PublicKeyBytes(Arrays.copyOfRange(bytes, offset, offset + PublicKey.PUBLIC_KEY_LENGTH));
   }
 
+  static PublicKey readPubKey(final byte[] bytes) {
+    return readPubKey(bytes, 0);
+  }
+
   static PublicKey createPubKey(final byte[] publicKey) {
     if (publicKey.length != PublicKey.PUBLIC_KEY_LENGTH) {
       throw new IllegalArgumentException("Invalid public key input");
