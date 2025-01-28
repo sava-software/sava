@@ -124,6 +124,7 @@ abstract class BaseMaskWorker implements AddressWorker {
       } else {
         Signer.validateKeyPair(keyPair);
       }
+      found.incrementAndGet();
 
       final var publicKey = PublicKey.createPubKey(Arrays.copyOfRange(keyPair, 32, 64));
       final var result = new Result(
