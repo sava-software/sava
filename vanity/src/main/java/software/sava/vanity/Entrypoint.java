@@ -79,10 +79,10 @@ public final class Entrypoint {
       } else {
         keyPath = Path.of(outDir);
         if (beginsWith != null) {
-          keyPath = keyPath.resolve('[' + beginsWith.subsequence());
+          keyPath = keyPath.resolve(beginsWith.subsequence() + '_');
         }
         if (endsWith != null) {
-          keyPath = keyPath.resolve(endsWith.subsequence() + ']');
+          keyPath = keyPath.resolve('_' + endsWith.subsequence());
         }
         try {
           Files.createDirectories(keyPath);
