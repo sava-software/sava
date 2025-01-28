@@ -124,7 +124,6 @@ abstract class BaseMaskWorker implements AddressWorker {
       } else {
         Signer.validateKeyPair(keyPair);
       }
-      found.incrementAndGet();
 
       final var publicKey = PublicKey.createPubKey(Arrays.copyOfRange(keyPair, 32, 64));
       final var result = new Result(
@@ -132,7 +131,6 @@ abstract class BaseMaskWorker implements AddressWorker {
           keyPair,
           end - timeStart
       );
-      results.add(result);
       if (keyPath != null) {
         try {
           Files.writeString(
@@ -152,6 +150,8 @@ abstract class BaseMaskWorker implements AddressWorker {
         } catch (final IOException e) {
           throw new UncheckedIOException(e);
         }
+        results.add(result);
+        found.incrementAndGet();
       }
       return true;
     } else {

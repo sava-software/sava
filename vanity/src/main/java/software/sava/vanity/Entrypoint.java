@@ -124,10 +124,10 @@ public final class Entrypoint {
       System.out.format(
           """
               
-              Searching against %d Base58 character combinations of %s
+              %d threads searching for %d keys against %d Base58 character combinations of %s
               
               """,
-          numCombinations, basePattern
+          numThreads, findNumKeys, numCombinations, basePattern
       );
 
       final long start = System.nanoTime();
@@ -145,13 +145,15 @@ public final class Entrypoint {
               Duration.ofNanos(duration).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
           );
         } else {
-          System.out.printf(
-              """
-                  Found account [%s] in %s
-                  """,
-              result.publicKey(),
-              Duration.ofMillis(result.durationMillis()).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
-          );
+          do {
+            System.out.printf(
+                """
+                    Found account [%s] in %s
+                    """,
+                result.publicKey(),
+                Duration.ofMillis(result.durationMillis()).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
+            );
+          } while ((result = generator.take()) != null);
           if (generator.numFound() >= findNumKeys) {
             executor.shutdownNow();
             return;

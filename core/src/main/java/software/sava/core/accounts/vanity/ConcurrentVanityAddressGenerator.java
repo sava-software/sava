@@ -39,11 +39,7 @@ final class ConcurrentVanityAddressGenerator implements VanityAddressGenerator {
 
   @Override
   public Result take() throws InterruptedException {
-    if (found.get() >= findKeys) {
-      return results.isEmpty() ? null : results.take();
-    } else {
-      return results.take();
-    }
+    return results.isEmpty() ? null : results.take();
   }
 
   @Override
