@@ -11,22 +11,22 @@ readonly mainClass
 
 jvmArgs="-server -Xms64M -Xmx128M"
 
-prefix=""
-pCaseSensitive="false"
-p1337Numbers="false"
-p1337Letters="false"
+prefix=
+pCaseSensitive=
+p1337Numbers=
+p1337Letters=
 
-suffix=""
-sCaseSensitive="false"
-s1337Numbers="false"
-s1337Letters="false"
+suffix=
+sCaseSensitive=
+s1337Numbers=
+s1337Letters=
 
-numThreads=""
-numKeys=""
-checkFound=""
-logDelay=""
-outDir=".keys"
-sigVerify="false"
+numThreads=
+numKeys=
+checkFound=
+logDelay=
+outDir=
+sigVerify=
 
 screen=0;
 
