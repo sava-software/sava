@@ -17,14 +17,14 @@ public interface VanityAddressGenerator {
                                                 final int numThreads,
                                                 final Subsequence beginsWith,
                                                 final Subsequence endsWith,
-                                                final long findKeys) {
+                                                final long findKeys,
+                                                final int checkFound) {
     if (findKeys > Integer.MAX_VALUE) {
       throw new IllegalArgumentException("Max find keys is " + Integer.MAX_VALUE);
     } else {
       try {
         final var found = new AtomicInteger(0);
         final var searched = new AtomicLong(0);
-        final int checkFound = 262_144;
         final var results = new ArrayBlockingQueue<Result>(checkFound * numThreads);
         for (int i = 0; i < numThreads; ++i) {
           final var secureRandom = secureRandomFactory.createSecureRandom();
@@ -67,7 +67,8 @@ public interface VanityAddressGenerator {
                                                 final int numThreads,
                                                 final Subsequence beginsWith,
                                                 final Subsequence endsWith,
-                                                final long findKeys) {
+                                                final long findKeys,
+                                                final int checkFound) {
     return createGenerator(
         keyPath,
         SecureRandomFactory.DEFAULT,
@@ -76,7 +77,8 @@ public interface VanityAddressGenerator {
         numThreads,
         beginsWith,
         endsWith,
-        findKeys
+        findKeys,
+        checkFound
     );
   }
 

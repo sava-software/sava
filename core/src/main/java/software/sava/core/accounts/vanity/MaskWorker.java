@@ -61,6 +61,7 @@ final class MaskWorker extends BaseMaskWorker {
         }
       }
       if (++i == checkFound) {
+        searched.getAndAccumulate(i, SUM);
         if (foundLimitOrInterrupted()) {
           return;
         } else {

@@ -30,9 +30,13 @@ A `prefix` and/or `suffix` must be provided.
 
 `numThreads` defaults to half of the systems CPU's.
 
+Each thread will check every `checkFound` iterations if `numKeys` have been found.
+
 - jvmArgs="-server -Xms64M -Xmx128M"
 - [nt | numThreads]=
 - [nk | numKeys]=1
+- [cf | checkFound]=131072
+- [ld | logDelay]="5S"
 - [o | outDir]='.keys'
 - [sv | sigVerify]=false
 

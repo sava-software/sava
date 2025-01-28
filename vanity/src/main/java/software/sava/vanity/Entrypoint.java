@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -26,6 +27,15 @@ public final class Entrypoint {
                                   final boolean def) {
     final var val = System.getProperty(module + '.' + property);
     return val == null || val.isBlank() ? def : Boolean.parseBoolean(val);
+  }
+
+  private static Duration durationProp(final String module,
+                                       final String property,
+                                       final Duration def) {
+    final var val = System.getProperty(module + '.' + property);
+    return val == null || val.isBlank()
+        ? def
+        : Duration.parse(val.startsWith("PT") ? val : "PT" + val);
   }
 
   private static Subsequence getSequence(final String module,
@@ -80,6 +90,8 @@ public final class Entrypoint {
           throw new UncheckedIOException(e);
         }
       }
+
+      final int checkFound = intProp(module, "checkFound", 131_072);
       final boolean sigVerify = boolProp(module, "sigVerify", false);
       final var generator = VanityAddressGenerator.createGenerator(
           keyPath,
@@ -88,42 +100,40 @@ public final class Entrypoint {
           numThreads,
           beginsWith,
           endsWith,
-          findNumKeys
+          findNumKeys,
+          checkFound
       );
 
-      final long start = System.currentTimeMillis();
-      final long defaultDelay = 8;
-      long delay = defaultDelay;
+      final var logDelay = durationProp(module, "logDelay", Duration.ofSeconds(5));
+      final long delayNanos = logDelay.toNanos();
+      final long upperBound = numThreads * (long) checkFound;
+      final long start = System.nanoTime();
       for (Result result; ; ) {
-        result = generator.poll(delay, TimeUnit.SECONDS);
+        result = generator.poll(delayNanos, TimeUnit.NANOSECONDS);
         if (result == null) {
+          final long duration = System.nanoTime() - start;
           final long numSearched = generator.numSearched();
-          if (numSearched > 0) {
-            System.out.printf(
-                """
-                    Found %,d out of %,d accounts in %s
-                    """,
-                generator.numFound(),
-                numSearched,
-                Duration.ofMillis(System.currentTimeMillis() - start).toString().substring(2)
-            );
-          } else {
-            delay = 1;
-            continue;
-          }
+          System.out.printf(
+              """
+                  Found %,d keys out of [%,d, %,d) in %s
+                  """,
+              generator.numFound(),
+              numSearched, numSearched + upperBound,
+              Duration.ofNanos(duration).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
+          );
         } else {
           System.out.printf(
               """
                   Found account [%s] in %s
                   """,
-              result.publicKey(), Duration.ofMillis(result.durationMillis()).toString().substring(2)
+              result.publicKey(),
+              Duration.ofMillis(result.durationMillis()).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
           );
           if (generator.numFound() >= findNumKeys) {
             executor.shutdownNow();
             return;
           }
         }
-        delay = defaultDelay;
       }
     }
   }
