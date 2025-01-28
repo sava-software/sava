@@ -141,7 +141,7 @@ public final class Entrypoint {
               """
                   Found %,d keys out of [%,d, %,d) in %s
                   """,
-              generator.numFound(),
+              numFound,
               numSearched, numSearched + upperBound,
               Duration.ofNanos(duration).truncatedTo(ChronoUnit.SECONDS).toString().substring(2)
           );

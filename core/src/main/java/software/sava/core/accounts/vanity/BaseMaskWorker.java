@@ -150,9 +150,9 @@ abstract class BaseMaskWorker implements AddressWorker {
         } catch (final IOException e) {
           throw new UncheckedIOException(e);
         }
-        results.add(result);
-        found.incrementAndGet();
       }
+      results.add(result);
+      found.incrementAndGet();
       return true;
     } else {
       return false;
