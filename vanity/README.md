@@ -26,13 +26,19 @@ gpr.token=GITHUB_TOKEN
 
 ### Args
 
-A `prefix` and/or `suffix` must be provided.
+* A `prefix` and/or `suffix` must be provided.
+* `numThreads` defaults to half of the systems CPU's.
+* Each thread will check every `checkFound` iterations if `numKeys` have been found.
+* `p1337Letters` allows alphabetic characters to be replaced by visually similar numbers.
+* `1337Numbers` allows numbers to be replaced by visually similar alphabetic characters.
+* `screen` may be enabled to manage the session so that it can be re-attached if a remote session is disconnected.
+    * `ctrl+a -> d` to detach
+    * `screen -r` to re-attach
 
-`numThreads` defaults to half of the systems CPU's.
-
-Each thread will check every `checkFound` iterations if `numKeys` have been found.
+#### Run Control
 
 - jvmArgs="-server -Xms64M -Xmx128M"
+- screen=0
 - [nt | numThreads]=
 - [nk | numKeys]=1
 - [cf | checkFound]=131072
