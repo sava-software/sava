@@ -5,7 +5,7 @@
 [Generate a classic token](https://github.com/settings/tokens) with the `read:packages` scope needed to access
 dependencies hosted on GitHub Package Repository.
 
-Create a `gradle.properties` file in this directory or under `$HOME/.gradle/`.
+Create a `gradle.properties` file in the sava project directory root or under `$HOME/.gradle/`.
 
 ```properties
 gpr.user=GITHUB_USERNAME
