@@ -7,7 +7,7 @@
 - HTTP and WebSocket JSON RPC Clients.
   - Also see
     the [Ravina WebSocketManager](https://github.com/sava-software/ravina/blob/main/solana/README.md#websocketmanager)
-    for managing websocket connectins.
+    for managing websocket connections.
 - Transaction (de)serialization.
   - Legacy
   - V0
