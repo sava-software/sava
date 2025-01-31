@@ -6,7 +6,7 @@
 
 - HTTP and WebSocket JSON RPC Clients.
   - Also see
-    the [Ravina WebSocketManager](https://github.com/sava-software/ravina/blob/main/solana/README.md#websocketmanager)
+    the [Ravina WebSocketManager](https://github.com/sava-software/ravina/blob/main/solana/README.md#web-socket-manager)
     for managing websocket connections.
 - Transaction (de)serialization.
   - Legacy
@@ -14,11 +14,6 @@
 - Utilities for elliptic curve Ed25519 and Solana accounts.
 - [Vanity Address Generator](https://github.com/sava-software/sava/tree/main/vanity#vanity-address-generator)
 - Borsh (de)serialization.
-
-### Requirements
-
-- The latest generally available JDK. This project will continue to move to the latest and will not maintain
-  versions released against previous JDK's.
 
 ### Dependencies
 
@@ -31,6 +26,11 @@
   - java.net.http
   - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)
 
+### Requirements
+
+- The latest generally available JDK. This project will continue to move to the latest and will not maintain
+  versions released against previous JDK's.
+
 ### Dependency Configuration
 
 #### GitHub Access Token
@@ -38,12 +38,21 @@
 [Generate a classic token](https://github.com/settings/tokens) with the `read:packages` scope needed to access
 dependencies hosted on GitHub Package Repository.
 
-#### Gradle Build
+#### Gradle
+
+##### build.gradle
 
 ```groovy
 repositories {
   maven {
     url = "https://maven.pkg.github.com/sava-software/sava"
+    credentials {
+      username = GITHUB_USERNAME
+      password = GITHUB_PERSONAL_ACCESS_TOKEN
+    }
+  }
+  maven {
+    url = "https://maven.pkg.github.com/comodal/json-iterator"
     credentials {
       username = GITHUB_USERNAME
       password = GITHUB_PERSONAL_ACCESS_TOKEN
@@ -55,6 +64,55 @@ dependencies {
   implementation "software.sava:sava-core:$VERSION"
   implementation "software.sava:sava-rpc:$VERSION"
 }
+```
+
+#### Maven
+
+##### pom.xml
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>software.sava</groupId>
+        <artifactId>sava-core</artifactId>
+        <version>VERSION</version>
+    </dependency>
+    <dependency>
+        <groupId>software.sava</groupId>
+        <artifactId>sava-rpc</artifactId>
+        <version>VERSION</version>
+    </dependency>
+</dependencies>
+
+<repositories>
+  <repository>
+      <id>gpr-sava</id>
+      <name>sava-software</name>
+      <url>https://maven.pkg.github.com/sava-software/sava</url>
+  </repository>
+  <repository>
+      <id>gpr-json-iterator</id>
+      <name>comodal</name>
+      <url>https://maven.pkg.github.com/comodal/json-iterator</url>
+  </repository>
+</repositories>
+```
+
+##### conf/settings.xml:
+
+```xml
+<servers>
+    <server>
+        <id>gpr-sava</id>
+        <username>GITHUB_USERNAME</username>
+        <password>GITHUB_PERSONAL_ACCESS_TOKEN</password>
+    </server>
+    <server>
+        <id>gpr-json-iterator</id>
+        <username>GITHUB_USERNAME</username>
+        <password>GITHUB_PERSONAL_ACCESS_TOKEN</password>
+    </server>
+</servers>
 ```
 
 ### Contribution
@@ -90,7 +148,8 @@ try (final var httpClient = HttpClient.newHttpClient()) {
 
 Retrieve all lookup tables which are active and frozen.
 
-Note: You will need access to an RPC node which has getProgramAccounts enabled, such as [Helius](https://www.helius.dev/).
+Note: You will need access to an RPC node which has getProgramAccounts enabled, such
+as [Helius](https://www.helius.dev/).
 
 ```
 try (final var httpClient = HttpClient.newHttpClient()) {
