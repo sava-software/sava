@@ -3,8 +3,6 @@ package software.sava.rpc.json.http.client;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
-import software.sava.core.accounts.SolanaAccounts;
-import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
@@ -131,11 +129,14 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<NodeHealth> getHealth(final Duration requestTimeout) {
     return sendPostRequest(SolanaJsonRpcClient.NODE_HEALTH, requestTimeout, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getHealth"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getHealth"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
-  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final PublicKey account, final BiFunction<PublicKey, byte[], T> factory) {
+  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final PublicKey account,
+                                                              final BiFunction<PublicKey, byte[], T> factory) {
     return getAccountInfo(defaultCommitment, account, factory);
   }
 
@@ -144,8 +145,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                               final PublicKey account,
                                                               final BiFunction<PublicKey, byte[], T> factory) {
     return sendPostRequest(applyResponseValue((ji, context) -> AccountInfo.parse(account, ji, context, factory)), format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getAccountInfo","params":["%s",{"commitment":"%s","encoding":"base64"}]}""",
-        id.incrementAndGet(), account.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getAccountInfo","params":["%s",{"commitment":"%s","encoding":"base64"}]}""",
+            id.incrementAndGet(), account.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -156,8 +159,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<Lamports> getBalance(final Commitment commitment, final PublicKey account) {
     return sendPostRequest(CONTEXT_LONG_VAL, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBalance","params":["%s",{"commitment":"%s"}]}""",
-        id.incrementAndGet(), account, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getBalance","params":["%s",{"commitment":"%s"}]}""",
+            id.incrementAndGet(), account, commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -175,8 +180,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                            final long slot,
                                            final BlockTxDetails blockTxDetails) {
     return sendPostRequest(BLOCK, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"commitment":"%s","transactionDetails":"%s","rewards":true}]}"""
-        , id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"commitment":"%s","transactionDetails":"%s","rewards":true}]}"""
+            , id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails
+        )
+    );
   }
 
   @Override
@@ -187,8 +194,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<BlockHeight> getBlockHeight(final Commitment commitment) {
     return sendPostRequest(BLOCK_HEIGHT, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlockHeight","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlockHeight","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -199,8 +208,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment) {
     return sendPostRequest(BLOCK_PRODUCTION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -211,8 +222,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment, final PublicKey identity) {
     return sendPostRequest(BLOCK_PRODUCTION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","identity":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue(), identity));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","identity":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue(), identity
+        )
+    );
   }
 
   @Override
@@ -223,8 +236,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment, final long firstSlot) {
     return sendPostRequest(BLOCK_PRODUCTION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","firstSlot":%d}]}""",
-        id.incrementAndGet(), commitment.getValue(), firstSlot));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","firstSlot":%d}]}""",
+            id.incrementAndGet(), commitment.getValue(), firstSlot
+        )
+    );
   }
 
   @Override
@@ -233,16 +248,22 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment, final PublicKey identity, final long firstSlot) {
+  public CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment,
+                                                               final PublicKey identity,
+                                                               final long firstSlot) {
     return sendPostRequest(BLOCK_PRODUCTION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","identity":"%s","firstSlot":%d}]}""",
-        id.incrementAndGet(), commitment.getValue(), identity, firstSlot));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","identity":"%s","firstSlot":%d}]}""",
+            id.incrementAndGet(), commitment.getValue(), identity, firstSlot
+        )
+    );
   }
 
   @Override
   public CompletableFuture<BlockCommitment> getBlockCommitment(final long slot) {
     return sendPostRequest(BLOCK_COMMITMENT, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getBlockCommitment","params":[%d]}""", id.incrementAndGet(), slot));
+            {"jsonrpc":"2.0","id":%d,"method":"getBlockCommitment","params":[%d]}""", id.incrementAndGet(), slot
+        )
+    );
   }
 
   @Override
@@ -253,8 +274,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot) {
     return sendPostRequest(LONG_ARRAY, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,{"commitment":"%s"}]}""",
-        id.incrementAndGet(), startSlot, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,{"commitment":"%s"}]}""",
+            id.incrementAndGet(), startSlot, commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -265,8 +288,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot, final long endSlot) {
     return sendPostRequest(LONG_ARRAY, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,%d,{"commitment":"%s"}]}""",
-        id.incrementAndGet(), startSlot, Math.min(endSlot, startSlot + 500_000), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,%d,{"commitment":"%s"}]}""",
+            id.incrementAndGet(), startSlot, Math.min(endSlot, startSlot + 500_000), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -275,22 +300,30 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<long[]> getBlocksWithLimit(final Commitment commitment, final long startSlot, final long limit) {
+  public CompletableFuture<long[]> getBlocksWithLimit(final Commitment commitment,
+                                                      final long startSlot,
+                                                      final long limit) {
     return sendPostRequest(LONG_ARRAY, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlocksWithLimit","params":[%d,%d,{"commitment":"%s"}]}""",
-        id.incrementAndGet(), startSlot, Math.min(limit, 500_000), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getBlocksWithLimit","params":[%d,%d,{"commitment":"%s"}]}""",
+            id.incrementAndGet(), startSlot, Math.min(limit, 500_000), commitment.getValue()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Instant> getBlockTime(final long slot) {
     return sendPostRequest(INSTANT, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getBlockTime","params":[%d]}""", id.incrementAndGet(), slot));
+            {"jsonrpc":"2.0","id":%d,"method":"getBlockTime","params":[%d]}""", id.incrementAndGet(), slot
+        )
+    );
   }
 
   @Override
   public CompletableFuture<List<ClusterNode>> getClusterNodes() {
     return sendPostRequest(CLUSTER_NODES, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getClusterNodes"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getClusterNodes"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
@@ -301,14 +334,18 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<EpochInfo> getEpochInfo(final Commitment commitment) {
     return sendPostRequest(EPOCH_INFO, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getEpochInfo","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getEpochInfo","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<EpochSchedule> getEpochSchedule() {
     return sendPostRequest(EPOCH_SCHEDULE, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getEpochSchedule"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getEpochSchedule"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
@@ -319,32 +356,42 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<FeeForMessage> getFeeForMessage(final Commitment commitment, final String base64Msg) {
     return sendPostRequest(FEE_FOR_MESSAGE, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getFeeForMessage","params":["%s",{"commitment":"%s"}]}""",
-        id.incrementAndGet(), base64Msg, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getFeeForMessage","params":["%s",{"commitment":"%s"}]}""",
+            id.incrementAndGet(), base64Msg, commitment.getValue()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Long> getFirstAvailableBlock() {
     return sendPostRequest(LONG_VAL, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getFirstAvailableBlock"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getFirstAvailableBlock"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<String> getGenesisHash() {
     return sendPostRequest(STRING, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getGenesisHash"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getGenesisHash"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<HighestSnapshotSlot> getHighestSnapshotSlot() {
     return sendPostRequest(HIGHEST_SNAPSHOT_SLOT, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getHighestSnapshotSlot"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getHighestSnapshotSlot"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Identity> getIdentity() {
     return sendPostRequest(IDENTITY, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getIdentity"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getIdentity"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
@@ -355,14 +402,18 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<InflationGovernor> getInflationGovernor(final Commitment commitment) {
     return sendPostRequest(INFLATION_GOVERNOR, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getInflationGovernor","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getInflationGovernor","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<InflationRate> getInflationRate() {
     return sendPostRequest(INFLATION_RATE, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getInflationRate"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getInflationRate"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
@@ -377,8 +428,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         .map(PublicKey::toBase58)
         .collect(Collectors.joining("\",\"", "[\"", "\"]"));
     return sendPostRequest(INFLATION_REWARDS, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s"}]}""",
-        id.incrementAndGet(), joined, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s"}]}""",
+            id.incrementAndGet(), joined, commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -394,8 +447,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         .map(PublicKey::toBase58)
         .collect(Collectors.joining("\",\"", "[\"", "\"]"));
     return sendPostRequest(INFLATION_REWARDS, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s",{"epoch":%d}}]}""",
-        id.incrementAndGet(), joined, commitment.getValue(), epoch));
+                {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s",{"epoch":%d}}]}""",
+            id.incrementAndGet(), joined, commitment.getValue(), epoch
+        )
+    );
   }
 
   @Override
@@ -406,8 +461,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<List<AccountLamports>> getLargestAccounts(final Commitment commitment) {
     return sendPostRequest(TOP_LAMPORT_ACCOUNTS, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getLargestAccounts","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getLargestAccounts","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -418,8 +475,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<LatestBlockHash> getLatestBlockHash(final Commitment commitment) {
     return sendPostRequestNoWrap(latestBlockhashResponseParser, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getLatestBlockhash","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getLatestBlockhash","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -430,8 +489,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment) {
     return sendPostRequest(LEADER_SCHEDULE, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[null,{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[null,{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -442,8 +503,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment, final long slot) {
     return sendPostRequest(LEADER_SCHEDULE, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[%d,{"commitment":"%s"}]}""",
-        id.incrementAndGet(), slot, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[%d,{"commitment":"%s"}]}""",
+            id.incrementAndGet(), slot, commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -452,10 +515,14 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment, final long slot, final PublicKey identity) {
+  public CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment,
+                                                                     final long slot,
+                                                                     final PublicKey identity) {
     return sendPostRequest(LEADER_SCHEDULE, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[%d,{"commitment":"%s","identity":"%s"}]}""",
-        id.incrementAndGet(), slot, commitment.getValue(), identity));
+                {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[%d,{"commitment":"%s","identity":"%s"}]}""",
+            id.incrementAndGet(), slot, commitment.getValue(), identity
+        )
+    );
   }
 
   @Override
@@ -464,29 +531,38 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment, final PublicKey identity) {
+  public CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment,
+                                                                     final PublicKey identity) {
     return sendPostRequest(LEADER_SCHEDULE, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[null,{"commitment":"%s","identity":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue(), identity));
+                {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[null,{"commitment":"%s","identity":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue(), identity
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Long> getMaxRetransmitSlot() {
     return sendPostRequest(LONG_VAL, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getMaxRetransmitSlot"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getMaxRetransmitSlot"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Long> getMaxShredInsertSlot() {
     return sendPostRequest(LONG_VAL, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getMaxShredInsertSlot"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getMaxShredInsertSlot"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Long> getMinimumBalanceForRentExemption(final long accountLength) {
     return sendPostRequest(LONG_VAL, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getMinimumBalanceForRentExemption","params":[%d]}""",
-        id.incrementAndGet(), accountLength));
+                {"jsonrpc":"2.0","id":%d,"method":"getMinimumBalanceForRentExemption","params":[%d]}""",
+            id.incrementAndGet(), accountLength
+        )
+    );
   }
 
   @Override
@@ -503,7 +579,9 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     return sendPostRequest(applyResponseValue((ji, context) -> AccountInfo.parseAccountsFromKeys(keys, ji, context, factory)),
         format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getMultipleAccounts","params":[["%s"],{"commitment":"%s","encoding":"base64"}]}""",
-            id.incrementAndGet(), joinedAccounts, commitment.getValue()));
+            id.incrementAndGet(), joinedAccounts, commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -622,7 +700,9 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<List<PerfSample>> getRecentPerformanceSamples(final int limit) {
     return sendPostRequest(PERF_SAMPLE, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getRecentPerformanceSamples","params":[%d]}""", id.incrementAndGet(), Math.min(limit, 720)));
+            {"jsonrpc":"2.0","id":%d,"method":"getRecentPerformanceSamples","params":[%d]}""", id.incrementAndGet(), Math.min(limit, 720)
+        )
+    );
   }
 
   @Override
@@ -631,7 +711,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         .map(PublicKey::toBase58)
         .collect(Collectors.joining("\",\"", "[\"", "\"]"));
     final var body = format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getRecentPrioritizationFees","params":[%s]}""", id.incrementAndGet(), params);
+        {"jsonrpc":"2.0","id":%d,"method":"getRecentPrioritizationFees","params":[%s]}""", id.incrementAndGet(), params
+    );
     return sendPostRequest(PRIORITIZATION_FEE, body);
   }
 
@@ -641,34 +722,52 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<List<TxSig>> getSignaturesForAddress(final Commitment commitment, final PublicKey address, final int limit) {
+  public CompletableFuture<List<TxSig>> getSignaturesForAddress(final Commitment commitment,
+                                                                final PublicKey address,
+                                                                final int limit) {
     return sendPostRequest(TX_SIGNATURES, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d}]}""",
-        id.incrementAndGet(), address, commitment.getValue(), Math.min(limit, 1_000)));
+                {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d}]}""",
+            id.incrementAndGet(), address, commitment.getValue(), Math.min(limit, 1_000)
+        )
+    );
   }
 
   @Override
-  public CompletableFuture<List<TxSig>> getSignaturesForAddressBefore(final PublicKey address, final int limit, final String beforeTxSig) {
+  public CompletableFuture<List<TxSig>> getSignaturesForAddressBefore(final PublicKey address,
+                                                                      final int limit,
+                                                                      final String beforeTxSig) {
     return getSignaturesForAddressBefore(defaultCommitment, address, limit, beforeTxSig);
   }
 
   @Override
-  public CompletableFuture<List<TxSig>> getSignaturesForAddressBefore(final Commitment commitment, final PublicKey address, final int limit, final String beforeTxSig) {
+  public CompletableFuture<List<TxSig>> getSignaturesForAddressBefore(final Commitment commitment,
+                                                                      final PublicKey address,
+                                                                      final int limit,
+                                                                      final String beforeTxSig) {
     return sendPostRequest(TX_SIGNATURES, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d,"before":"%s"}]}""",
-        id.incrementAndGet(), address.toBase58(), commitment.getValue(), Math.min(limit, 1_000), beforeTxSig));
+                {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d,"before":"%s"}]}""",
+            id.incrementAndGet(), address.toBase58(), commitment.getValue(), Math.min(limit, 1_000), beforeTxSig
+        )
+    );
   }
 
   @Override
-  public CompletableFuture<List<TxSig>> getSignaturesForAddressUntil(final PublicKey address, final int limit, final String untilTxSig) {
+  public CompletableFuture<List<TxSig>> getSignaturesForAddressUntil(final PublicKey address,
+                                                                     final int limit,
+                                                                     final String untilTxSig) {
     return getSignaturesForAddressUntil(defaultCommitment, address, limit, untilTxSig);
   }
 
   @Override
-  public CompletableFuture<List<TxSig>> getSignaturesForAddressUntil(final Commitment commitment, final PublicKey address, final int limit, final String untilTxSig) {
+  public CompletableFuture<List<TxSig>> getSignaturesForAddressUntil(final Commitment commitment,
+                                                                     final PublicKey address,
+                                                                     final int limit,
+                                                                     final String untilTxSig) {
     return sendPostRequest(TX_SIGNATURES, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d,"until":"%s"}]}""",
-        id.incrementAndGet(), address.toBase58(), commitment.getValue(), Math.min(limit, 1_000), untilTxSig));
+                {"jsonrpc":"2.0","id":%d,"method":"getSignaturesForAddress","params":["%s",{"commitment":"%s","limit":%d,"until":"%s"}]}""",
+            id.incrementAndGet(), address.toBase58(), commitment.getValue(), Math.min(limit, 1_000), untilTxSig
+        )
+    );
   }
 
   private String sigStatusBody(final Collection<String> signatures, final boolean searchTransactionHistory) {
@@ -680,7 +779,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> signatures, final boolean searchTransactionHistory) {
+  public CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> signatures,
+                                                                       final boolean searchTransactionHistory) {
     return sendPostRequest(
         applyResponseValue((ji, context) -> TxStatus.parse(signatures, ji, context)),
         sigStatusBody(signatures, searchTransactionHistory)
@@ -688,7 +788,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<List<TxStatus>> getSigStatusList(final List<String> signatures, final boolean searchTransactionHistory) {
+  public CompletableFuture<List<TxStatus>> getSigStatusList(final List<String> signatures,
+                                                            final boolean searchTransactionHistory) {
     return sendPostRequest(SIG_STATUS_LIST, sigStatusBody(signatures, searchTransactionHistory));
   }
 
@@ -700,8 +801,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<Long> getSlot(final Commitment commitment) {
     return sendPostRequest(LONG_VAL, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSlot","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getSlot","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -712,15 +815,19 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<PublicKey> getSlotLeader(final Commitment commitment) {
     return sendPostRequest(PUBLIC_KEY, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSlotLeader","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getSlotLeader","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<List<PublicKey>> getSlotLeaders(final long from, final int limit) {
     return sendPostRequest(PUBLIC_KEY_LIST, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSlotLeaders","params":[%d,%d]}""",
-        id.incrementAndGet(), from, Math.min(limit, 5_000)));
+                {"jsonrpc":"2.0","id":%d,"method":"getSlotLeaders","params":[%d,%d]}""",
+            id.incrementAndGet(), from, Math.min(limit, 5_000)
+        )
+    );
   }
 
   @Override
@@ -731,8 +838,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<Lamports> getStakeMinimumDelegation(final Commitment commitment) {
     return sendPostRequest(CONTEXT_LONG_VAL, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getStakeMinimumDelegation","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getStakeMinimumDelegation","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -741,10 +850,13 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<Supply> getSupply(final Commitment commitment, final boolean excludeNonCirculatingAccountsList) {
+  public CompletableFuture<Supply> getSupply(final Commitment commitment,
+                                             final boolean excludeNonCirculatingAccountsList) {
     return sendPostRequest(SUPPLY, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSupply","params":[{"commitment":"%s","excludeNonCirculatingAccountsList":%b}]}""",
-        id.incrementAndGet(), commitment.getValue(), excludeNonCirculatingAccountsList));
+                {"jsonrpc":"2.0","id":%d,"method":"getSupply","params":[{"commitment":"%s","excludeNonCirculatingAccountsList":%b}]}""",
+            id.incrementAndGet(), commitment.getValue(), excludeNonCirculatingAccountsList
+        )
+    );
   }
 
   @Override
@@ -753,58 +865,81 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<TokenAmount> getTokenAccountBalance(final Commitment commitment, final PublicKey tokenAccount) {
+  public CompletableFuture<TokenAmount> getTokenAccountBalance(final Commitment commitment,
+                                                               final PublicKey tokenAccount) {
     return sendPostRequest(TOKEN_AMOUNT, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountBalance","params":["%s",{"commitment":"%s"}]}""",
-        id.incrementAndGet(), tokenAccount.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountBalance","params":["%s",{"commitment":"%s"}]}""",
+            id.incrementAndGet(), tokenAccount.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final PublicKey delegate, final PublicKey tokenMint) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final PublicKey delegate,
+                                                                                                   final PublicKey tokenMint) {
     return getTokenAccountsForTokenMintByDelegate(defaultCommitment, delegate, tokenMint);
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment, final PublicKey delegate, final PublicKey tokenMint) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
+                                                                                                   final PublicKey delegate,
+                                                                                                   final PublicKey tokenMint) {
     return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByDelegate","params":["%s",{"mint":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-        id.incrementAndGet(), delegate.toBase58(), tokenMint.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByDelegate","params":["%s",{"mint":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
+            id.incrementAndGet(), delegate.toBase58(), tokenMint.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final PublicKey delegate, final PublicKey programId) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final PublicKey delegate,
+                                                                                                 final PublicKey programId) {
     return getTokenAccountsForProgramByDelegate(defaultCommitment, delegate, programId);
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final Commitment commitment, final PublicKey delegate, final PublicKey programId) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
+                                                                                                 final PublicKey delegate,
+                                                                                                 final PublicKey programId) {
     return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByDelegate","params":["%s",{"programId":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-        id.incrementAndGet(), delegate.toBase58(), programId.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByDelegate","params":["%s",{"programId":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
+            id.incrementAndGet(), delegate.toBase58(), programId.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final PublicKey owner, final PublicKey tokenMint) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final PublicKey owner,
+                                                                                                final PublicKey tokenMint) {
     return getTokenAccountsForTokenMintByOwner(defaultCommitment, owner, tokenMint);
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment, final PublicKey owner, final PublicKey tokenMint) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
+                                                                                                final PublicKey owner,
+                                                                                                final PublicKey tokenMint) {
     return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByOwner","params":["%s",{"mint":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-        id.incrementAndGet(), owner.toBase58(), tokenMint.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByOwner","params":["%s",{"mint":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
+            id.incrementAndGet(), owner.toBase58(), tokenMint.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final PublicKey owner, final PublicKey programId) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final PublicKey owner,
+                                                                                              final PublicKey programId) {
     return getTokenAccountsForProgramByOwner(defaultCommitment, owner, programId);
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final Commitment commitment, final PublicKey owner, final PublicKey programId) {
+  public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
+                                                                                              final PublicKey owner,
+                                                                                              final PublicKey programId) {
     return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByOwner","params":["%s",{"programId":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-        id.incrementAndGet(), owner.toBase58(), programId.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByOwner","params":["%s",{"programId":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
+            id.incrementAndGet(), owner.toBase58(), programId.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -813,10 +948,13 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<List<AccountTokenAmount>> getTokenLargestAccounts(final Commitment commitment, final PublicKey tokenMint) {
+  public CompletableFuture<List<AccountTokenAmount>> getTokenLargestAccounts(final Commitment commitment,
+                                                                             final PublicKey tokenMint) {
     return sendPostRequest(ACCOUNT_TOKEN_AMOUNT, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTokenLargestAccounts","params":["%s",{"commitment":"%s"}]}""",
-        id.incrementAndGet(), tokenMint.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTokenLargestAccounts","params":["%s",{"commitment":"%s"}]}""",
+            id.incrementAndGet(), tokenMint.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -827,8 +965,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<TokenAmount> getTokenSupply(final Commitment commitment, final PublicKey tokenMintAccount) {
     return sendPostRequest(TOKEN_AMOUNT, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTokenSupply","params":["%s",{"commitment":"%s"}]}""",
-        id.incrementAndGet(), tokenMintAccount.toBase58(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTokenSupply","params":["%s",{"commitment":"%s"}]}""",
+            id.incrementAndGet(), tokenMintAccount.toBase58(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -852,8 +992,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         ? ""
         : String.format("\"maxSupportedTransactionVersion\":%d,", maxSupportedTransactionVersion);
     return sendPostRequest(TRANSACTION, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s",%s"encoding":"base64"}]}""",
-        id.incrementAndGet(), txSignature, commitment.getValue(), maxVersionParam));
+                {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s",%s"encoding":"base64"}]}""",
+            id.incrementAndGet(), txSignature, commitment.getValue(), maxVersionParam
+        )
+    );
   }
 
   @Override
@@ -864,14 +1006,18 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<Long> getTransactionCount(final Commitment commitment) {
     return sendPostRequest(LONG_VAL, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getTransactionCount","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getTransactionCount","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Version> getVersion() {
     return sendPostRequest(VERSION, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"getVersion"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"getVersion"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
@@ -882,8 +1028,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<VoteAccounts> getVoteAccounts(final Commitment commitment) {
     return sendPostRequest(VOTE_ACCOUNTS, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getVoteAccounts","params":[{"commitment":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"getVoteAccounts","params":[{"commitment":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -892,10 +1040,13 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<VoteAccounts> getVoteAccounts(final Commitment commitment, final PublicKey validatorVoteAddress) {
+  public CompletableFuture<VoteAccounts> getVoteAccounts(final Commitment commitment,
+                                                         final PublicKey validatorVoteAddress) {
     return sendPostRequest(VOTE_ACCOUNTS, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getVoteAccounts","params":[{"commitment":"%s","votePubkey":"%s"}]}""",
-        id.incrementAndGet(), commitment.getValue(), validatorVoteAddress.toBase58()));
+                {"jsonrpc":"2.0","id":%d,"method":"getVoteAccounts","params":[{"commitment":"%s","votePubkey":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue(), validatorVoteAddress.toBase58()
+        )
+    );
   }
 
   @Override
@@ -906,14 +1057,18 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<ContextBoolVal> isBlockHashValid(final Commitment commitment, final String b58BlockHash) {
     return sendPostRequest(CONTEXT_BOOL_VAL, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"isBlockhashValid","params":["%s",{"commitment":"%s"}]}""",
-        id.incrementAndGet(), b58BlockHash, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"isBlockhashValid","params":["%s",{"commitment":"%s"}]}""",
+            id.incrementAndGet(), b58BlockHash, commitment.getValue()
+        )
+    );
   }
 
   @Override
   public CompletableFuture<Long> minimumLedgerSlot() {
     return sendPostRequest(LONG_VAL, format("""
-        {"jsonrpc":"2.0","id":%d,"method":"minimumLedgerSlot"}""", id.incrementAndGet()));
+            {"jsonrpc":"2.0","id":%d,"method":"minimumLedgerSlot"}""", id.incrementAndGet()
+        )
+    );
   }
 
   @Override
@@ -926,8 +1081,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                   final PublicKey key,
                                                   final long lamports) {
     return sendPostRequest(STRING, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"requestAirdrop","params":["%s",%d,{"commitment":"%s"}]}""",
-        id.incrementAndGet(), key.toBase58(), lamports, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"requestAirdrop","params":["%s",%d,{"commitment":"%s"}]}""",
+            id.incrementAndGet(), key.toBase58(), lamports, commitment.getValue()
+        )
+    );
   }
 
   @Override
@@ -968,17 +1125,25 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<String> sendTransaction(final Commitment preflightCommitment, final String base64SignedTx, final int maxRetries) {
+  public CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
+                                                   final String base64SignedTx,
+                                                   final int maxRetries) {
     return sendPostRequestNoWrap(sendTxResponseParser, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","preflightCommitment":"%s","maxRetries":%d}]}""",
-        id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries));
+                {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","preflightCommitment":"%s","maxRetries":%d}]}""",
+            id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries
+        )
+    );
   }
 
   @Override
-  public CompletableFuture<String> sendTransactionSkipPreflight(final Commitment preflightCommitment, final String base64SignedTx, final int maxRetries) {
+  public CompletableFuture<String> sendTransactionSkipPreflight(final Commitment preflightCommitment,
+                                                                final String base64SignedTx,
+                                                                final int maxRetries) {
     return sendPostRequestNoWrap(sendTxResponseParser, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","skipPreflight":true,"preflightCommitment":"%s","maxRetries":%d}]}""",
-        id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries));
+                {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","skipPreflight":true,"preflightCommitment":"%s","maxRetries":%d}]}""",
+            id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries
+        )
+    );
   }
 
   @Override
@@ -1054,8 +1219,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
         .map(PublicKey::toBase58)
         .collect(Collectors.joining("\",\"", ",\"accounts\":{\"addresses\":[\"", "\"],\"encoding\":\"jsonParsed\"}"));
     return sendPostRequest(applyResponseValue((ji, context) -> TxSimulation.parse(returnAccounts, ji, context)), format("""
-            {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"commitment":"%s"%s}]}""",
-        id.incrementAndGet(), base64EncodedTx, commitment.getValue(), joinedAccounts));
+                {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"commitment":"%s"%s}]}""",
+            id.incrementAndGet(), base64EncodedTx, commitment.getValue(), joinedAccounts
+        )
+    );
   }
 
   @Override
@@ -1146,8 +1313,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                              final boolean replaceRecentBlockhash,
                                                              final boolean innerInstructions) {
     return sendPostRequest(applyResponseValue((ji, context) -> TxSimulation.parse(List.of(), ji, context)), format("""
-            {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"innerInstructions":%b,"commitment":"%s"}]}""",
-        id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue()));
+                {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"innerInstructions":%b,"commitment":"%s"}]}""",
+            id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue()
+        )
+    );
   }
 
   private static void logSimulationResult(final TxSimulation simulationResult) {
@@ -1176,7 +1345,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   public static void main(String[] args) throws InterruptedException {
     final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
-    final var authority = PublicKey.fromBase58Encoded("SPc3dYPMXGM6Do5zakpUESxBLadBNDWQAJ6ww6QZALT");
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
           rpcEndpoint,
@@ -1187,17 +1355,19 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           }
       );
 
-      final var tableAccountInfoList = rpcClient.getProgramAccounts(
-          SolanaAccounts.MAIN_NET.addressLookupTableProgram(),
+      final var accounts = rpcClient.getMultipleAccounts(
           List.of(
-              Filter.createMemCompFilter(AddressLookupTable.AUTHORITY_OFFSET, authority)
+              PublicKey.fromBase58Encoded(""),
+              PublicKey.fromBase58Encoded(""),
+              PublicKey.fromBase58Encoded(""),
+              PublicKey.fromBase58Encoded("")
           )
       ).join();
 
-//      for (final var accountInfo : tableAccountInfoList) {
-//        final byte[] data = accountInfo.data();
-//        System.out.println(PublicKey.createPubKey(data));
-//      }
+      for (final var accountInfo : accounts) {
+        final var tokenAccount = TokenAccount.read(accountInfo.pubKey(), accountInfo.data());
+        System.out.println(tokenAccount);
+      }
     }
   }
 }

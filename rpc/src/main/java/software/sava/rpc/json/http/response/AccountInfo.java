@@ -30,7 +30,8 @@ public record AccountInfo<T>(PublicKey pubKey,
 
   public static BiFunction<PublicKey, byte[], byte[]> BYTES_IDENTITY = (_, data) -> data;
 
-  public static void cacheTables(final Collection<AccountInfo<AddressLookupTable>> tableAccounts, final Map<PublicKey, AddressLookupTable> cache) {
+  public static void cacheTables(final Collection<AccountInfo<AddressLookupTable>> tableAccounts,
+                                 final Map<PublicKey, AddressLookupTable> cache) {
     for (final var tableAccount : tableAccounts) {
       cache.put(tableAccount.pubKey, tableAccount.data);
     }
@@ -63,9 +64,9 @@ public record AccountInfo<T>(PublicKey pubKey,
                                                                final Context context,
                                                                final BiFunction<PublicKey, byte[], T> factory) {
     final var accounts = new ArrayList<AccountInfo<T>>(pubKeys.size());
-    for (int i = 0; ji.readArray(); ) {
+    for (int i = 0; ji.readArray(); ++i) {
       if (ji.whatIsNext() == ValueType.OBJECT) {
-        final var builder = new Builder(context, pubKeys.get(i++));
+        final var builder = new Builder(context, pubKeys.get(i));
         ji.testObject(builder, ACCOUNT_PARSER);
         accounts.add(builder.create(factory));
       } else {

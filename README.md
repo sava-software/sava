@@ -31,13 +31,14 @@
   - java.net.http
   - [JSON Iterator](https://github.com/comodal/json-iterator?tab=readme-ov-file#json-iterator)
 
-### Add Dependency
+### Dependency Configuration
 
-Create a
-classic [GitHub user access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic)
-with read access to GitHub Packages.
+#### GitHub Access Token
 
-Then add the following to your Gradle build script.
+[Generate a classic token](https://github.com/settings/tokens) with the `read:packages` scope needed to access
+dependencies hosted on GitHub Package Repository.
+
+#### Gradle Build
 
 ```groovy
 repositories {
@@ -61,10 +62,6 @@ dependencies {
 Unit tests are needed and welcomed. Otherwise, please open
 a [discussion](https://github.com/sava-software/sava/discussions), issue, or send an email before working on a pull
 request.
-
-### Disclaimer
-
-In addition to the MIT License, this project is under active development and breaking changes are to be expected.
 
 ### [Examples](https://github.com/sava-software/sava/tree/main/examples/src/main/java/software/sava/examples)
 
@@ -93,7 +90,7 @@ try (final var httpClient = HttpClient.newHttpClient()) {
 
 Retrieve all lookup tables which are active and frozen.
 
-Note: You will need access to an RPC node which has getProgramAccounts enabled, such as [Helius](helius.dev).
+Note: You will need access to an RPC node which has getProgramAccounts enabled, such as [Helius](https://www.helius.dev/).
 
 ```
 try (final var httpClient = HttpClient.newHttpClient()) {
