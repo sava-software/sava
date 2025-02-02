@@ -230,9 +230,13 @@ public interface TransactionSkeleton {
 
   Transaction createTransaction(final List<Instruction> instructions);
 
-  default Transaction createTransaction(AccountMeta[] accounts) {
-    final var instructions = parseInstructions(accounts);
+  default Transaction createTransaction(final Instruction[] instructions) {
     return createTransaction(Arrays.asList(instructions));
+  }
+
+  default Transaction createTransaction(final AccountMeta[] accounts) {
+    final var instructions = parseInstructions(accounts);
+    return createTransaction(instructions);
   }
 
   default Transaction createTransaction() {
@@ -242,9 +246,13 @@ public interface TransactionSkeleton {
 
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
+  default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
+    return createTransaction(Arrays.asList(instructions), lookupTable);
+  }
+
   default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
     final var instructions = parseInstructions(accounts);
-    return createTransaction(Arrays.asList(instructions), lookupTable);
+    return createTransaction(instructions, lookupTable);
   }
 
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
@@ -252,7 +260,8 @@ public interface TransactionSkeleton {
     return createTransaction(accounts, lookupTable);
   }
 
-  default Transaction createTransaction(final AccountMeta[] accounts, final LookupTableAccountMeta[] tableAccountMetas) {
+  default Transaction createTransaction(final AccountMeta[] accounts,
+                                        final LookupTableAccountMeta[] tableAccountMetas) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(Arrays.asList(instructions), tableAccountMetas);
   }
