@@ -21,13 +21,24 @@ final class PublicKeyBytes implements PublicKey {
   static byte[] createBuffer(final List<byte[]> seeds,
                              final boolean nonce,
                              final PublicKey programId) {
-    final int bufLength = seeds.stream().mapToInt(seed -> {
+    if (seeds.size() > PublicKey.MAX_SEEDS) {
+      throw new IllegalArgumentException(String.format(
+          "Maximum number of seeds [%d] exceeded. Given [%d].",
+          PublicKey.MAX_SEEDS, seeds.size()
+      ));
+    }
+    int bufLength = nonce ? 1 : 0;
+    for (final var seed : seeds) {
       final int len = seed.length;
-      if (len > PUBLIC_KEY_LENGTH) {
-        throw new IllegalArgumentException("Max seed length exceeded: " + len + " > " + PUBLIC_KEY_LENGTH);
+      if (len > MAX_SEED_LENGTH) {
+        throw new IllegalArgumentException(String.format(
+            "Seed [%s] exceeds maximum length of [%d].",
+            new String(seed), MAX_SEED_LENGTH
+        ));
       }
-      return len;
-    }).sum() + (nonce ? 1 : 0);
+      bufLength += len;
+    }
+
     final byte[] buffer = new byte[bufLength + PUBLIC_KEY_LENGTH + PDA_BYTES.length];
 
     int from = 0;

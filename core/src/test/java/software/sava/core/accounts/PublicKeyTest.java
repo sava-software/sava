@@ -61,7 +61,8 @@ final class PublicKeyTest {
     assertEquals(programAddress, PublicKey.fromBase58Encoded("3gF2KMe9KiC6FNVBmfg9i267aMPvK37FewCip4eGBFcT"));
 
     programAddress = PublicKey.createProgramAddress(Arrays.asList("Talking".getBytes(), "Squirrels".getBytes()),
-        programId);
+        programId
+    );
     assertEquals(programAddress, PublicKey.fromBase58Encoded("HwRVBufQ4haG5XSgpspwKtNd3PC9GM9m1196uJW36vds"));
 
     final var programAddress2 = PublicKey.createProgramAddress(List.of("Talking".getBytes()), programId);
@@ -74,7 +75,8 @@ final class PublicKeyTest {
 
     final var programAddress = PublicKey.findProgramAddress(List.of("".getBytes()), programId);
     assertEquals(programAddress.publicKey(), PublicKey.createProgramAddress(
-        Arrays.asList("".getBytes(), new byte[]{(byte) programAddress.nonce()}), programId));
+        Arrays.asList("".getBytes(), new byte[]{(byte) programAddress.nonce()}), programId)
+    );
   }
 
   @Test
@@ -83,14 +85,17 @@ final class PublicKeyTest {
     final var programId2 = PublicKey.fromBase58Encoded("BPFLoader1111111111111111111111111111111111");
 
     final var programAddress = PublicKey.findProgramAddress(List.of(
-        PublicKey.fromBase58Encoded("8VBafTNv1F8k5Bg7DTVwhitw3MGAMTmekHsgLuMJxLC8").toByteArray()), programId);
+        PublicKey.fromBase58Encoded("8VBafTNv1F8k5Bg7DTVwhitw3MGAMTmekHsgLuMJxLC8").toByteArray()), programId
+    );
     assertEquals(programAddress.publicKey(), PublicKey.fromBase58Encoded("FGnnqkzkXUGKD7wtgJCqTemU3WZ6yYqkYJ8xoQoXVvUG"));
 
     final var programAddress2 = PublicKey.findProgramAddress(
         Arrays.asList(PublicKey.fromBase58Encoded("SeedPubey1111111111111111111111111111111111").toByteArray(),
             PublicKey.fromBase58Encoded("3gF2KMe9KiC6FNVBmfg9i267aMPvK37FewCip4eGBFcT").toByteArray(),
-            PublicKey.fromBase58Encoded("HwRVBufQ4haG5XSgpspwKtNd3PC9GM9m1196uJW36vds").toByteArray()),
-        programId2);
+            PublicKey.fromBase58Encoded("HwRVBufQ4haG5XSgpspwKtNd3PC9GM9m1196uJW36vds").toByteArray()
+        ),
+        programId2
+    );
     assertEquals(programAddress2.publicKey(), PublicKey.fromBase58Encoded("GXLbx3CbJuTTtJDZeS1PGzwJJ5jGYVEqcXum7472kpUp"));
     assertEquals(254, programAddress2.nonce());
   }
@@ -103,5 +108,13 @@ final class PublicKeyTest {
         MAIN_NET.systemProgram()
     );
     assertEquals("9h1HyLCW5dZnBVap8C5egQ9Z6pHyjsh5MNy83iPqqRuq", derived.toBase58());
+
+
+    assertThrows(IllegalArgumentException.class, () -> PublicKey.createWithSeed(
+            MAIN_NET.systemProgram(),
+            "1".repeat(33),
+            MAIN_NET.systemProgram()
+        )
+    );
   }
 }

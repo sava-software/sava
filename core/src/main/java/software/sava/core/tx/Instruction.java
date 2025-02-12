@@ -66,6 +66,8 @@ public interface Instruction {
 
   byte[] data();
 
+  byte[] copyData();
+
   int offset();
 
   int len();

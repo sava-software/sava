@@ -4,9 +4,9 @@
 
 ## Documentation
 
-User documentation lives in our [dedicated docs site](https://sava.software/), head over there to get started.
+User documentation lives at [sava.software](https://sava.software/).
 
-* [Build Configuration](https://sava.software/quickstart)
+* [Dependency Configuration](https://sava.software/quickstart)
 * [Core](https://sava.software/libraries/core): Common Solana cryptography and serialization utilities.
 * [RPC](https://sava.software/libraries/rpc): HTTP and WebSocket Clients.
 

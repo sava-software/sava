@@ -28,6 +28,8 @@ import static software.sava.core.crypto.SunCrypto.ED_25519_KEY_FACTORY;
 public interface PublicKey extends Comparable<PublicKey> {
 
   int PUBLIC_KEY_LENGTH = 32;
+  int MAX_SEED_LENGTH = 32;
+  int MAX_SEEDS = 16;
   PublicKey NONE = new PublicKeyBytes(new byte[PUBLIC_KEY_LENGTH]); // 11111111111111111111111111111111
 
   static boolean verifySignature(final java.security.PublicKey publicKey,
@@ -217,6 +219,12 @@ public interface PublicKey extends Comparable<PublicKey> {
                                                             final String baseSeed,
                                                             final PublicKey programId) {
     final byte[] baseSeedBytes = baseSeed.getBytes(US_ASCII);
+    if (baseSeedBytes.length > MAX_SEED_LENGTH) {
+      throw new IllegalArgumentException(String.format(
+          "Seed [%s] exceeds maximum length of [%d].",
+          baseSeed, MAX_SEED_LENGTH
+      ));
+    }
     final byte[] buffer = new byte[PUBLIC_KEY_LENGTH + baseSeedBytes.length + 1 + PUBLIC_KEY_LENGTH];
     base.write(buffer, 0);
     System.arraycopy(baseSeedBytes, 0, buffer, PUBLIC_KEY_LENGTH, baseSeedBytes.length);
@@ -242,9 +250,16 @@ public interface PublicKey extends Comparable<PublicKey> {
   static PublicKey createWithSeed(final PublicKey base,
                                   final String seed,
                                   final PublicKey programId) {
+    final byte[] seedBytes = seed.getBytes(US_ASCII);
+    if (seedBytes.length > MAX_SEED_LENGTH) {
+      throw new IllegalArgumentException(String.format(
+          "Seed [%s] exceeds maximum length of [%d].",
+          seed, MAX_SEED_LENGTH
+      ));
+    }
     final var digest = sha256Digest();
     digest.update(base.toByteArray());
-    digest.update(seed.getBytes(US_ASCII));
+    digest.update(seedBytes);
     digest.update(programId.toByteArray());
     return PublicKey.createPubKey(digest.digest());
   }

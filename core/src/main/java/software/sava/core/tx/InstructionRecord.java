@@ -54,7 +54,8 @@ record InstructionRecord(AccountMeta programId,
   }
 
   @Override
-  public Instruction extraAccounts(final Collection<PublicKey> accounts, final Function<PublicKey, AccountMeta> metaFactory) {
+  public Instruction extraAccounts(final Collection<PublicKey> accounts,
+                                   final Function<PublicKey, AccountMeta> metaFactory) {
     final int numAccounts = accounts.size();
     if (numAccounts == 0) {
       return this;
@@ -133,6 +134,13 @@ record InstructionRecord(AccountMeta programId,
       discriminator[d] = data[i] & 0xFF;
     }
     return discriminator;
+  }
+
+  @Override
+  public byte[] copyData() {
+    final byte[] data = new byte[this.data.length];
+    System.arraycopy(this.data, offset, data, 0, len);
+    return data;
   }
 
   @Override
