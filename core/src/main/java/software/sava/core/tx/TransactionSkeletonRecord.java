@@ -93,6 +93,30 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
+  public AccountMeta[] parseSignerAccounts() {
+    final var accounts = new AccountMeta[numSigners];
+    int o = accountsOffset;
+    accounts[0] = createFeePayer(readPubKey(data, o));
+    int a = 1;
+    for (final int to = numSigners - numReadonlySignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = createWritableSigner(readPubKey(data, o));
+    }
+    for (; a < numSigners; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = createReadOnlySigner(readPubKey(data, o));
+    }
+    return accounts;
+  }
+
+  @Override
+  public PublicKey[] parseSignerPublicKeys() {
+    final var accounts = new PublicKey[numSigners];
+    for (int o = accountsOffset, a = 0; a < numSigners; ++a, o += PUBLIC_KEY_LENGTH) {
+      accounts[a] = readPubKey(data, o);
+    }
+    return accounts;
+  }
+
+  @Override
   public AccountMeta[] parseNonSignerAccounts() {
     final int numAccounts = numIncludedAccounts - numSigners;
     final var accounts = new AccountMeta[numAccounts];

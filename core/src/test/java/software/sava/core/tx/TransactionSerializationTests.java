@@ -23,6 +23,15 @@ final class TransactionSerializationTests {
     final byte[] data = Base64.getDecoder().decode("""
         ATgc2Iye/GlwnpSeIytu+tYkb2A+5VJhc1yui59+7/PMQSuywEqpb3k8wHCKnupEuC5fDTUjvGhASTEH5c90UACAAQAFEU4rs4al2vatnKR6MtsLLzl+Q24T1Y5kkYBmPhrq9O/VzcyvadLTPMXTLHJ2IKteqvqoQAgRH4dVHOW+cw1EkNOJB31VpbsTMHY+t2f1XsB3tBoNB1994dc/uso8Y9VUcRCcPGXQaDMBtOvEnG0Lyr4Lf68erOMMjG6weDn4HuIS6tSjkUAFDNLqypEZqieck8DZMKBobFJb3fYlMJjWpjHvHv25qj1olz/ZenFlAVmw6stGZYC5aF5nQ9ZqQr8vxXTXpuq5/UeOzPqvqL7sJuBwFgO//vEZG9uw6edrxAd2vInnwNHlA4uvk7TwFNJd9xWnndlfBJ5f9fX36m+JwJ9fAlkt3jAFytFpv8wnPC/6I0tpd+F+Bw3UOdTTA8X8HR7XL/DvxwiqYIadWSBAIms1hbo9KoaOYES91ZtNIF/jeSWG+N64PtIqGyqU3OdPOEd0TTjj79CJx+HICgFkwRrNq0B12gG6uYd+a79dybCsJPRSedzSl8R6nwJYXSLJGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkDBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAJWBt/6PKcF0R86zH0ytUdAc7K5LbdbpdsVcWwvkMUGK86EED9glv4WMHdJchvP2ZZvDPQq6PniaYqUsrsmZ94ETjVRi2k6UWSxzbmoMl/cGeYhlpwGEqRE3YD3BBue3swYOAAUCgE8SAA4ABQEAAAIADgAJAyKiAAAAAAAADwYdDAABFg0IllUsHJUO0hoPHQACAwwREhMUARUWFx0eGBkEHxogGxwFBgcICQoLigEyEHMzqHo5LQIAAAACAAAAAAECAAAAAgEDAAAABBIAAAAEBQQGBwIICQoLBAAMDA0ODxABCQAAABEMEhMUFQgCAAQSAAAABBYEFxgCCAoJGQQADAwNGhscCAAAABAnTB2IE8QJ6ANkAAoAAQC0ZeZpAAAAAFDDAAAAAAAAAAAAAAAAAAAAAAAAAAAQAB9Qb3dlcmVkIGJ5IGJsb1hyb3V0ZSBUcmFkZXIgQXBpAonsVzlUh3H7+XOmaklk0KWZm+wt34ECwzGrxcB6Sb7VCQRLSE8FSUpRTgQMAgsHmoTIVF9hkZWFmpxCqc8zcavo9Yu6S8ysQBz59/7iw1ADVllVAA==""");
     final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+
+    assertEquals(1, skeleton.numSigners());
+    assertEquals(0, skeleton.numReadonlySignedAccounts());
+    final var signerAccounts = skeleton.parseSignerAccounts();
+    final var signerKeys = skeleton.parseSignerPublicKeys();
+    for (int i = 0; i < signerKeys.length; ++i) {
+      assertEquals(signerAccounts[i].publicKey(), signerKeys[i]);
+    }
+
     var instructions = skeleton.parseInstructionsWithoutTableAccounts();
     assertEquals(6, instructions.length);
     var ix = instructions[4];
@@ -41,6 +50,9 @@ final class TransactionSerializationTests {
     assertEquals("BQBDhjQ32VYzNzXW8vViqpuLiz2TAYcW1cVZDAL4Hf67", tableAccount.toBase58());
 
     final var accounts = skeleton.parseAccounts();
+    assertEquals(signerAccounts[0], accounts[0]);
+    assertEquals(signerAccounts[0].publicKey(), skeleton.feePayer());
+
     for (int i = 0; i < 3; ++i) {
       ix = instructions[i];
       final var discriminator = toDiscriminator(ix.discriminator(1));
@@ -77,9 +89,20 @@ final class TransactionSerializationTests {
 
   private void testMultipleLookupTables(final TransactionSkeleton skeleton,
                                         final Map<PublicKey, AddressLookupTable> lookupTableMap) {
+    assertEquals(1, skeleton.numSigners());
+    assertEquals(0, skeleton.numReadonlySignedAccounts());
+
     lookupTableMap.values().forEach(table -> assertTrue(table.isActive()));
 
+    final var signerAccounts = skeleton.parseSignerAccounts();
+    final var signerKeys = skeleton.parseSignerPublicKeys();
+    for (int i = 0; i < signerKeys.length; ++i) {
+      assertEquals(signerAccounts[i].publicKey(), signerKeys[i]);
+    }
+
     final var accountMetas = skeleton.parseAccounts(lookupTableMap);
+    assertEquals(signerAccounts[0], accountMetas[0]);
+    assertEquals(signerAccounts[0].publicKey(), skeleton.feePayer());
 
     assertEquals(44, accountMetas.length);
     final var feePayer = accountMetas[0];

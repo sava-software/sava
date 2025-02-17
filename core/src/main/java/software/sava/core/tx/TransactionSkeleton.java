@@ -164,6 +164,10 @@ public interface TransactionSkeleton {
 
   int numSigners();
 
+  int numReadonlySignedAccounts();
+
+  int numReadonlyUnsignedAccounts();
+
   int recentBlockHashIndex();
 
   byte[] blockHash();
@@ -191,6 +195,10 @@ public interface TransactionSkeleton {
   }
 
   PublicKey feePayer();
+
+  AccountMeta[] parseSignerAccounts();
+
+  PublicKey[] parseSignerPublicKeys();
 
   AccountMeta[] parseNonSignerAccounts();
 
