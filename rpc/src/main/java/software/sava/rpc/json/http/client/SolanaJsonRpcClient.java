@@ -7,6 +7,7 @@ import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.PublicKeyEncoding;
+import software.sava.rpc.json.http.SolanaNetwork;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
@@ -1344,7 +1345,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   public static void main(String[] args) throws InterruptedException {
-    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
+//    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
+    final var rpcEndpoint = SolanaNetwork.MAIN_NET.getEndpoint();
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
           rpcEndpoint,
@@ -1365,8 +1367,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
       ).join();
 
       for (final var accountInfo : accounts) {
-        final var tokenAccount = TokenAccount.read(accountInfo.pubKey(), accountInfo.data());
-        System.out.println(tokenAccount);
+        System.out.println(Base64.getEncoder().encodeToString(accountInfo.data()));
       }
     }
   }

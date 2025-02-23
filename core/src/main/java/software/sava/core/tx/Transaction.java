@@ -421,6 +421,11 @@ public interface Transaction {
       return createTx(instructions);
     } else if (numLookupTables == 1) {
       return createTx(instructions, serializedInstructionLength, sortedAccounts, tableAccountMetas[0].lookupTable());
+    } else {
+      // Defensively reset lookup tables.
+      for (final var lookupTable : tableAccountMetas) {
+        lookupTable.reset();
+      }
     }
 
     final int numAccounts = sortedAccounts.length;
@@ -519,7 +524,16 @@ public interface Transaction {
       i = tableAccountMeta.serialize(out, i);
     }
 
-    return new TransactionRecord(feePayer, instructions, null, tableAccountMetas, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
+    return new TransactionRecord(
+        feePayer,
+        instructions,
+        null,
+        tableAccountMetas,
+        out,
+        numRequiredSignatures,
+        sigLen,
+        recentBlockHashIndex
+    );
   }
 
   static void setBlockHash(final byte[] data, final byte[] recentBlockHash) {
