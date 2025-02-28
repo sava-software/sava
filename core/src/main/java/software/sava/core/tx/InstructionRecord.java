@@ -137,6 +137,16 @@ record InstructionRecord(AccountMeta programId,
   }
 
   @Override
+  public boolean beginsWith(final byte[] data) {
+    final int len = data.length;
+    if (len <= this.len) {
+      return Arrays.equals(this.data, offset, offset + len, data, 0, len);
+    } else {
+      return false;
+    }
+  }
+
+  @Override
   public byte[] copyData() {
     final byte[] data = new byte[this.data.length];
     System.arraycopy(this.data, offset, data, 0, len);

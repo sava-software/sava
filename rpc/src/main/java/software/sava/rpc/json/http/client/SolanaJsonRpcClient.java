@@ -1357,18 +1357,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           }
       );
 
-      final var accounts = rpcClient.getMultipleAccounts(
-          List.of(
-              PublicKey.fromBase58Encoded(""),
-              PublicKey.fromBase58Encoded(""),
-              PublicKey.fromBase58Encoded(""),
-              PublicKey.fromBase58Encoded("")
-          )
-      ).join();
 
-      for (final var accountInfo : accounts) {
-        System.out.println(Base64.getEncoder().encodeToString(accountInfo.data()));
-      }
     }
   }
 }
