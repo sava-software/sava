@@ -4,6 +4,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AccountIndexLookupTableEntry;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.CompactU16Encoding;
+import software.sava.core.programs.Discriminator;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -134,6 +135,11 @@ record InstructionRecord(AccountMeta programId,
       discriminator[d] = data[i] & 0xFF;
     }
     return discriminator;
+  }
+
+  @Override
+  public Discriminator wrapDiscriminator(final int len) {
+    return Discriminator.createDiscriminator(Arrays.copyOfRange(data, offset, offset + len));
   }
 
   @Override

@@ -64,9 +64,7 @@ public interface Instruction {
 
   int[] discriminator(final int len);
 
-  default Discriminator wrapDiscriminator(final int len) {
-    return Discriminator.toDiscriminator(discriminator(len));
-  }
+  Discriminator wrapDiscriminator(final int len);
 
   boolean beginsWith(final byte[] data);
 
