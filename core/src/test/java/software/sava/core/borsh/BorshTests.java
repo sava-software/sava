@@ -37,6 +37,21 @@ final class BorshTests {
   }
 
   @Test
+  void testUTF8Lengths() {
+    final byte[] data = Base64.getDecoder().decode("""
+        yDjlfHGaIBq6gRpnZBt32lE4YD0We8vG4clAjfrj6qqWg4Y8i5F9KgMAAABVAAAAWWVzLCBtZW93IGZyb250cyB0aGUgMjgwTSBKVVAgYW5kIGxvY2tzIGluIHVudGlsIDIwMzAgaW4gcmV0dXJuIGZvciBhIDIyME0gSlVQIGJvbnVzLmoAAABObywgdGhlIDI4ME0gSlVQIGNvbWVzIGZyb20gdGhlIHRlYW0ncyBzdHJhdGVnaWMgcmVzZXJ2ZSBhbmQgbWVvd+KAmXMgSlVQIHVubG9ja3MgaW4gSnVuZSAyMDI2IGFzIHBsYW5uZWQuBwAAAEFic3RhaW4=
+        """.stripTrailing());
+
+    final int offset = 40;
+    final var optionDescriptions = Borsh.readStringVector(data, offset);
+    assertEquals(3, optionDescriptions.length);
+
+    assertEquals("Yes, meow fronts the 280M JUP and locks in until 2030 in return for a 220M JUP bonus.", optionDescriptions[0]);
+    assertEquals("No, the 280M JUP comes from the team's strategic reserve and meow’s JUP unlocks in June 2026 as planned.", optionDescriptions[1]);
+    assertEquals("Abstain", optionDescriptions[2]);
+  }
+
+  @Test
   void initMultiDimensionalVector() {
     final BigInteger[][] result = (BigInteger[][]) Array.newInstance(BigInteger.class, 8, 0);
     assertEquals(8, result.length);
@@ -48,7 +63,6 @@ final class BorshTests {
     }
   }
 
-  @SuppressWarnings("unchecked")
   <T> T[][] multiDimensional(final Class<T> clas,
                              final int dataTypeByteLength,
                              final byte[] vectorArray,

@@ -7,9 +7,7 @@ import software.sava.core.serial.Serializable;
 import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.time.Instant;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
-import java.util.OptionalLong;
+import java.util.*;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -28,7 +26,8 @@ public interface Borsh extends Serializable {
   // String
 
   static String readString(final byte[] data, final int offset) {
-    return new String(data, offset + Integer.BYTES, ByteUtil.getInt32LE(data, offset), UTF_8);
+    final int len = ByteUtil.getInt32LE(data, offset);
+    return new String(data, offset + Integer.BYTES, len, UTF_8);
   }
 
   static String string(final byte[] data, final int offset) {
@@ -49,7 +48,8 @@ public interface Borsh extends Serializable {
   }
 
   static int len(final String val) {
-    return Integer.BYTES + val.length();
+    final int len = val.getBytes(UTF_8).length;
+    return Integer.BYTES + len;
   }
 
   static int lenOptional(final String val) {
@@ -75,10 +75,12 @@ public interface Borsh extends Serializable {
   static int readArray(final String[] result, final byte[] data, final int offset) {
     int o = offset;
     String s;
-    for (int i = 0; i < result.length; ++i) {
-      s = string(data, o);
+    for (int i = 0, len; i < result.length; ++i) {
+      len = ByteUtil.getInt32LE(data, o);
+      o += Integer.BYTES;
+      s = new String(data, o, len, UTF_8);
       result[i] = s;
-      o += len(s);
+      o += len;
     }
     return o - offset;
   }
@@ -96,6 +98,16 @@ public interface Borsh extends Serializable {
     final var result = new String[len];
     readArray(result, data, offset + Integer.BYTES);
     return result;
+  }
+
+  public static void main(final String[] args) {
+    final byte[] data = Base64.getDecoder().decode("""
+        yDjlfHGaIBq6gRpnZBt32lE4YD0We8vG4clAjfrj6qqWg4Y8i5F9KgMAAABVAAAAWWVzLCBtZW93IGZyb250cyB0aGUgMjgwTSBKVVAgYW5kIGxvY2tzIGluIHVudGlsIDIwMzAgaW4gcmV0dXJuIGZvciBhIDIyME0gSlVQIGJvbnVzLmoAAABObywgdGhlIDI4ME0gSlVQIGNvbWVzIGZyb20gdGhlIHRlYW0ncyBzdHJhdGVnaWMgcmVzZXJ2ZSBhbmQgbWVvd+KAmXMgSlVQIHVubG9ja3MgaW4gSnVuZSAyMDI2IGFzIHBsYW5uZWQuBwAAAEFic3RhaW4=
+        """.stripTrailing());
+
+    final int offset = 40;
+    final var optionDescriptions = Borsh.readStringVector(data, offset);
+    System.out.println(Arrays.toString(optionDescriptions));
   }
 
   static String[][] readMultiDimensionStringVector(final byte[] data, int offset) {
@@ -1656,7 +1668,10 @@ public interface Borsh extends Serializable {
     T read(final byte[] data, final int offset);
   }
 
-  static <B extends Borsh> int readArray(final B[] result, final Factory<B> factory, final byte[] data, final int offset) {
+  static <B extends Borsh> int readArray(final B[] result,
+                                         final Factory<B> factory,
+                                         final byte[] data,
+                                         final int offset) {
     int o = offset;
     for (int i = 0; i < result.length; ++i) {
       final var instance = factory.read(data, o);
@@ -1666,7 +1681,10 @@ public interface Borsh extends Serializable {
     return o - offset;
   }
 
-  static <B extends Borsh> int readArray(final B[][] result, final Factory<B> factory, final byte[] data, final int offset) {
+  static <B extends Borsh> int readArray(final B[][] result,
+                                         final Factory<B> factory,
+                                         final byte[] data,
+                                         final int offset) {
     int i = offset;
     for (final var out : result) {
       i += readArray(out, factory, data, i);
