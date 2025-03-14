@@ -6,11 +6,9 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.CompactU16Encoding;
 import software.sava.core.programs.Discriminator;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.lookupAccountIndexOrThrow;
@@ -169,5 +167,28 @@ record InstructionRecord(AccountMeta programId,
     } else {
       return false;
     }
+  }
+
+  @Override
+  public String toString() {
+    final var accountsJson = accounts != null && !accounts.isEmpty()
+        ? accounts.stream()
+        .map(AccountMeta::toString)
+        .collect(Collectors.joining(",", "[", "]"))
+        .indent(4).stripTrailing()
+        : "[]";
+    final var dataBase64 = data != null && len > 0
+        ? Base64.getEncoder().encodeToString(Arrays.copyOfRange(data, offset, offset + len))
+        : "";
+    return String.format("""
+            {
+              "programId": "%s",
+              "accounts": %s,
+              "data": "%s"
+            }""",
+        programId.publicKey().toBase58(),
+        accountsJson,
+        dataBase64
+    );
   }
 }

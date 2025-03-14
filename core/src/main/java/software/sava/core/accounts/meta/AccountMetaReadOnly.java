@@ -48,7 +48,7 @@ sealed class AccountMetaReadOnly implements AccountMeta permits
 
   @Override
   public boolean equals(final Object o) {
-    return this == o || (o instanceof AccountMetaReadOnly account && publicKey.equals(account.publicKey));
+    return this == o || (o.getClass() == AccountMetaReadOnly.class && publicKey.equals(((AccountMetaReadOnly) o).publicKey));
   }
 
   @Override
@@ -58,11 +58,19 @@ sealed class AccountMetaReadOnly implements AccountMeta permits
 
   @Override
   public final String toString() {
-    return "AccountMeta[" +
-        "publicKey=" + publicKey + ", " +
-        "isFeePayer=" + feePayer() + ", " +
-        "isSigner=" + signer() + ", " +
-        "isWritable=" + write() + ", " +
-        "invoked=" + invoked() + ']';
+    return """
+        {
+          "publicKey": "%s",
+          "feePayer": %b,
+          "signer": %b,
+          "writable": %b,
+          "invoked": %b
+        }""".formatted(
+        publicKey.toBase58(),
+        feePayer(),
+        signer(),
+        write(),
+        invoked()
+    );
   }
 }
