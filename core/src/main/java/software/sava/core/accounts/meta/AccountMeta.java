@@ -57,6 +57,32 @@ public sealed interface AccountMeta permits AccountMetaReadOnly {
     return accounts;
   }
 
+  static AccountMeta createMeta(final PublicKey account, final boolean writable, final boolean signer) {
+    if (signer) {
+      return writable
+          ? AccountMeta.createWritableSigner(account)
+          : AccountMeta.createReadOnlySigner(account);
+    } else if (writable) {
+      return AccountMeta.createWrite(account);
+    } else {
+      return AccountMeta.createRead(account);
+    }
+  }
+
+  static AccountMeta createMeta(final PublicKey account,
+                                final boolean invoked,
+                                final boolean feePayer,
+                                final boolean writable,
+                                final boolean signer) {
+    if (invoked) {
+      return AccountMeta.createInvoked(account);
+    } else if (feePayer) {
+      return AccountMeta.createFeePayer(account);
+    } else {
+      return createMeta(account, writable, signer);
+    }
+  }
+
   PublicKey publicKey();
 
   boolean signer();
