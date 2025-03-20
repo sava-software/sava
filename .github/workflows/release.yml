@@ -20,7 +20,7 @@ jobs:
       - uses: oracle-actions/setup-java@v1
         if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}
         with:
-          website: jdk.java.net
+          website: ${{ vars.JDK_SRC }}
           release: ${{ vars.GRADLE_JAVA_VERSION }}
 
       - run: |
@@ -30,7 +30,7 @@ jobs:
 
       - uses: oracle-actions/setup-java@v1
         with:
-          website: jdk.java.net
+          website: ${{ vars.JDK_SRC }}
           release: ${{ vars.JAVA_VERSION }}
 
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties

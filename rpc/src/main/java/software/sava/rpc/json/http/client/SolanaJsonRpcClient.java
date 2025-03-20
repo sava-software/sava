@@ -1356,8 +1356,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
             return true;
           }
       );
-
-
     }
   }
 }

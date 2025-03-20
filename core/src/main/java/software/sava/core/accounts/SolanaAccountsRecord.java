@@ -54,6 +54,8 @@ record SolanaAccountsRecord(
     PublicKey memoProgram,
     AccountMeta invokedMemoProgram,
     AccountMeta readMemoProgram,
+    AccountMeta invokedMemoProgramV2,
+    AccountMeta readMemoProgramV2,
     PublicKey nameServiceProgram,
     AccountMeta invokedNameServiceProgram,
     AccountMeta readNameServiceProgram,

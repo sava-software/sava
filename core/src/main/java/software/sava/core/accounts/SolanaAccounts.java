@@ -2,9 +2,9 @@ package software.sava.core.accounts;
 
 import software.sava.core.accounts.meta.AccountMeta;
 
+import static software.sava.core.accounts.PublicKey.fromBase58Encoded;
 import static software.sava.core.accounts.meta.AccountMeta.createInvoked;
 import static software.sava.core.accounts.meta.AccountMeta.createRead;
-import static software.sava.core.accounts.PublicKey.fromBase58Encoded;
 
 public interface SolanaAccounts {
 
@@ -26,6 +26,7 @@ public interface SolanaAccounts {
       "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
       "TkupDoNseygccBCjSsrSpMccjwHfTYwcrjpnDSrFDhC",
       "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo",
+      "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
       "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",
       "shmem4EWT2sPdVGvTZCzXXRAURL9G5vpPxNwSeKhHUL",
       "Feat1YXHhH6t1juaWF74WLcfv4XoNocjXA6sPWHNgAse",
@@ -63,6 +64,7 @@ public interface SolanaAccounts {
       final PublicKey token2022Program,
       final PublicKey tokenUpgradeProgram,
       final PublicKey memoProgram,
+      final PublicKey memoProgramV2,
       final PublicKey nameServiceProgram,
       final PublicKey sharedMemoryProgram,
       final PublicKey featureProposalProgram,
@@ -130,6 +132,8 @@ public interface SolanaAccounts {
         memoProgram,
         createInvoked(memoProgram),
         createRead(memoProgram),
+        createInvoked(memoProgramV2),
+        createRead(memoProgramV2),
         nameServiceProgram,
         createInvoked(nameServiceProgram),
         createRead(nameServiceProgram),
@@ -186,6 +190,7 @@ public interface SolanaAccounts {
       final String token2022Program,
       final String tokenUpgradeProgram,
       final String memoProgram,
+      final String memoProgramV2,
       final String nameServiceProgram,
       final String sharedMemoryProgram,
       final String featureProposalProgram,
@@ -222,6 +227,7 @@ public interface SolanaAccounts {
         fromBase58Encoded(token2022Program),
         fromBase58Encoded(tokenUpgradeProgram),
         fromBase58Encoded(memoProgram),
+        fromBase58Encoded(memoProgramV2),
         fromBase58Encoded(nameServiceProgram),
         fromBase58Encoded(sharedMemoryProgram),
         fromBase58Encoded(featureProposalProgram),
@@ -279,6 +285,10 @@ public interface SolanaAccounts {
   PublicKey memoProgram();
 
   AccountMeta invokedMemoProgram();
+
+  AccountMeta invokedMemoProgramV2();
+
+  AccountMeta readMemoProgramV2();
 
   AccountMeta readMemoProgram();
 
