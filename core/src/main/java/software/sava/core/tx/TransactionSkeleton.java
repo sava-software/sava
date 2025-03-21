@@ -154,15 +154,19 @@ public interface TransactionSkeleton {
 
   byte[] data();
 
+  int numSignatures();
+
+  default int numSigners() {
+    return numSignatures();
+  }
+
+  String id();
+
   int version();
 
   boolean isVersioned();
 
   boolean isLegacy();
-
-  int numSignatures();
-
-  int numSigners();
 
   int numReadonlySignedAccounts();
 

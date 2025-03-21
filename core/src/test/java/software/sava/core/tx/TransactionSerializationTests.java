@@ -18,10 +18,13 @@ final class TransactionSerializationTests {
 
   @Test
   void testVariableLengthIxLength() {
-    // 284yj6foQU2HDuFTfxPuiHb67vQ8vRB3oqqebAkQfVHR2sFwyuK1EHhvG4udEfsdt3xshttFmX66gKgg1Utp6RZ9
     final byte[] data = Base64.getDecoder().decode("""
         ATgc2Iye/GlwnpSeIytu+tYkb2A+5VJhc1yui59+7/PMQSuywEqpb3k8wHCKnupEuC5fDTUjvGhASTEH5c90UACAAQAFEU4rs4al2vatnKR6MtsLLzl+Q24T1Y5kkYBmPhrq9O/VzcyvadLTPMXTLHJ2IKteqvqoQAgRH4dVHOW+cw1EkNOJB31VpbsTMHY+t2f1XsB3tBoNB1994dc/uso8Y9VUcRCcPGXQaDMBtOvEnG0Lyr4Lf68erOMMjG6weDn4HuIS6tSjkUAFDNLqypEZqieck8DZMKBobFJb3fYlMJjWpjHvHv25qj1olz/ZenFlAVmw6stGZYC5aF5nQ9ZqQr8vxXTXpuq5/UeOzPqvqL7sJuBwFgO//vEZG9uw6edrxAd2vInnwNHlA4uvk7TwFNJd9xWnndlfBJ5f9fX36m+JwJ9fAlkt3jAFytFpv8wnPC/6I0tpd+F+Bw3UOdTTA8X8HR7XL/DvxwiqYIadWSBAIms1hbo9KoaOYES91ZtNIF/jeSWG+N64PtIqGyqU3OdPOEd0TTjj79CJx+HICgFkwRrNq0B12gG6uYd+a79dybCsJPRSedzSl8R6nwJYXSLJGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkDBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAJWBt/6PKcF0R86zH0ytUdAc7K5LbdbpdsVcWwvkMUGK86EED9glv4WMHdJchvP2ZZvDPQq6PniaYqUsrsmZ94ETjVRi2k6UWSxzbmoMl/cGeYhlpwGEqRE3YD3BBue3swYOAAUCgE8SAA4ABQEAAAIADgAJAyKiAAAAAAAADwYdDAABFg0IllUsHJUO0hoPHQACAwwREhMUARUWFx0eGBkEHxogGxwFBgcICQoLigEyEHMzqHo5LQIAAAACAAAAAAECAAAAAgEDAAAABBIAAAAEBQQGBwIICQoLBAAMDA0ODxABCQAAABEMEhMUFQgCAAQSAAAABBYEFxgCCAoJGQQADAwNGhscCAAAABAnTB2IE8QJ6ANkAAoAAQC0ZeZpAAAAAFDDAAAAAAAAAAAAAAAAAAAAAAAAAAAQAB9Qb3dlcmVkIGJ5IGJsb1hyb3V0ZSBUcmFkZXIgQXBpAonsVzlUh3H7+XOmaklk0KWZm+wt34ECwzGrxcB6Sb7VCQRLSE8FSUpRTgQMAgsHmoTIVF9hkZWFmpxCqc8zcavo9Yu6S8ysQBz59/7iw1ADVllVAA==""");
     final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    assertEquals(
+        "284yj6foQU2HDuFTfxPuiHb67vQ8vRB3oqqebAkQfVHR2sFwyuK1EHhvG4udEfsdt3xshttFmX66gKgg1Utp6RZ9",
+        skeleton.id()
+    );
 
     assertEquals(1, skeleton.numSigners());
     assertEquals(0, skeleton.numReadonlySignedAccounts());
@@ -184,6 +187,10 @@ final class TransactionSerializationTests {
     final var decoder = Base64.getDecoder();
     final byte[] txData = decoder.decode("ARRw8IKW5g68p4JJly8WK0FeERS1fM8oT768hiqhTUrPKVHA4J3MBvvwB66GG89jl9y58uuLU/d/n5feDm4zQwWAAQAIFcqqGywepKTH2miwSZYlM16b9eL6wOUsHXTJaN/PC3HgZn/LU4VSNrEZJg9hJjEvfwMjmNLCvJDpEyG0zH7Y1yRxM32R3yvnX/HBzojB9fApPOfuRWL27j4EX6B/qtMR3XhSHLF5zruFibVWotXslNJJhoL9+bsq9a1k5JHMQVPajH0GWPl/GBdrvsyAB5oM/DmI+Zim1wtJQfiwcEBhFzuUgNyv8Vh5jpvncwqzug9EmaNqS45ePcJKtUQiZPlalJsmP4XXkRUa4+mVUmtqiwBVOG/QonNYNeS6dAGAu/3DqrPZuTBfiy3tOi8VNLMXUE+81x/vGukWDpnYFI3QNg+w7x9VxI11rNstskEtkvrc5QLhZQOukJJeNJk94SA2P7NrsyJHdN8r61t9/sUBVZUA442cNIW1DRpGPYY4a2gc1iOzs8gYW9R6p6JGvSdImG/6cHUvETiJ/1E3vnj4qH3YZtww6EGz12R/jfuL2SSQ+eiarZ25MhB4xt6Laek7DtrMTZNG4CL8qwpNHlcIBHj7kn2An7H7CibSAoGDAb+EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKmMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WZqAC/9MhzaIlsIPwUBz6/HLWqN1/oH+Tb3IK6Tft154tD/6J/XX9kp0wJsfKVh53ksJqzbfyd1RSzIap7OM5ejG+nrzvtutOj1l82qryXQxsbvkwtL24OR8pgIDRS9dYb3DM82VQy2lvZ9Qvf6uHNlQm3hqNgBIjxRpPlzIfSsyBw4ABQIVkgYAEQYACwArDRABAQ0CAAsMAgAAAOgqAAAAAAAAEAELAREPQhASAAsCAQorFAwPEw8oISgfIAIJKisiKBIQECkoBwYFDygeKBsaCQgqJx0oEhAQKSgEHA8jJBYSCAEVFxgZECYmJSzBIJszQdacgQIDAAAAJmQAASZkAQIZZAID6CoAAAAAAADPBgAAAAAAAEYAFBADCwAAAQkNAgADDAIAAADoAwAAAAAAAAP0NIJPcZr9hSIT6pDVuJOcbRK/6LTNqsuEbqKZDXrYfgVgWl5iWwRhY19dkmh5SwRhhBKoWpjF2AJWdmNKtd10oVa1ARee8ZKsxDUFPj88QBcEFjsYPUZ44JFRsIq/hqRW5K1MXfzQWSrJGK/c9uGPL+lhu51GBD9CPT4BLg==");
     final var skeleton = TransactionSkeleton.deserializeSkeleton(txData);
+    assertEquals(
+        "QhpF3DjC5U6YhAHjRKTU19b6StC1ZN5KKnw1YQFim4PsUKaqkZAtv9zWU24DY82Wfv84DhieEa4iGN9bH88TLZz",
+        skeleton.id()
+    );
 
     assertEquals("DmkhBgQnEMFRou2j5qYUvXvvv46pBwaCcbTXPAu5HYZP", skeleton.base58BlockHash());
 
@@ -233,6 +240,7 @@ final class TransactionSerializationTests {
     );
 
     var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    assertEquals(1, skeleton.numSignatures());
     assertFalse(skeleton.isVersioned());
     assertTrue(skeleton.isLegacy());
 
