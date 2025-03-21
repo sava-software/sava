@@ -45,10 +45,10 @@ public record TxReward(String pubKey,
 
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("commission", buf, offset, len)) {
-      if (ji.whatIsNext() == ValueType.NULL) {
-        ji.skip();
-      } else {
+      if (ji.whatIsNext() == ValueType.NUMBER) {
         builder.commission(ji.readInt());
+      } else {
+        ji.skip();
       }
     } else if (fieldEquals("pubkey", buf, offset, len)) {
       builder.pubKey(ji.readString());

@@ -1,7 +1,8 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,35 +18,12 @@ public record Block(long blockHeight,
                     List<String> signatures) {
 
   public static Block parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("blockHeight", buf, offset, len)) {
-      builder.blockHeight = ji.readLong();
-    } else if (fieldEquals("blockTime", buf, offset, len)) {
-      builder.blockTime = ji.readLong();
-    } else if (fieldEquals("blockhash", buf, offset, len)) {
-      builder.blockHash = ji.readString();
-    } else if (fieldEquals("previousBlockhash", buf, offset, len)) {
-      builder.previousBlockHash = ji.readString();
-    } else if (fieldEquals("parentSlot", buf, offset, len)) {
-      builder.parentSlot = ji.readLong();
-    } else if (fieldEquals("rewards", buf, offset, len)) {
-      builder.rewards = TxReward.parseRewards(ji);
-    } else if (fieldEquals("signatures", buf, offset, len)) {
-      final var signatures = new ArrayList<String>(2_048);
-      while (ji.readArray()) {
-        signatures.add(ji.readString());
-      }
-      builder.signatures = signatures;
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long blockHeight;
     private long blockTime;
@@ -55,7 +33,7 @@ public record Block(long blockHeight,
     private List<TxReward> rewards;
     private List<String> signatures;
 
-    private Builder() {
+    private Parser() {
     }
 
     private Block create() {
@@ -66,8 +44,42 @@ public record Block(long blockHeight,
           previousBlockHash,
           parentSlot,
           rewards,
-          signatures
+          signatures == null ? List.of() : signatures
       );
+    }
+
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("blockHeight", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          blockHeight = ji.readLong();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("blockTime", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          blockTime = ji.readLong();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("blockhash", buf, offset, len)) {
+        blockHash = ji.readString();
+      } else if (fieldEquals("previousBlockhash", buf, offset, len)) {
+        previousBlockHash = ji.readString();
+      } else if (fieldEquals("parentSlot", buf, offset, len)) {
+        parentSlot = ji.readLong();
+      } else if (fieldEquals("rewards", buf, offset, len)) {
+        rewards = TxReward.parseRewards(ji);
+      } else if (fieldEquals("signatures", buf, offset, len)) {
+        final var signatures = new ArrayList<String>(2_048);
+        while (ji.readArray()) {
+          signatures.add(ji.readString());
+        }
+        this.signatures = signatures;
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

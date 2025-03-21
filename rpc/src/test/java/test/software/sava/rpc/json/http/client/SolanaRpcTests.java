@@ -23,17 +23,18 @@ final class SolanaRpcTests {
     final var httpServerRecord = createServer();
 
     httpServerRecord.httpServer().createContext("/", request -> {
-      assertEquals("POST", request.getRequestMethod());
-      try (final var ji = JsonIterator.parse(request.getRequestBody().readAllBytes())) {
-        final var method = ji.skipUntil("method").readString();
-        final var responseMsg = switch (method) {
-          case "getHealth" -> """
-              {"jsonrpc":"2.0","error":{"code":-32005,"message":"Node is unhealthy","data":{"numSlotsBehind":null}},"id":1698251465713}""";
-          default -> "Unexpected method call: " + method;
-        };
-        writeResponse(request, responseMsg);
-      }
-    });
+          assertEquals("POST", request.getRequestMethod());
+          try (final var ji = JsonIterator.parse(request.getRequestBody().readAllBytes())) {
+            final var method = ji.skipUntil("method").readString();
+            final var responseMsg = switch (method) {
+              case "getHealth" -> """
+                  {"jsonrpc":"2.0","error":{"code":-32005,"message":"Node is unhealthy","data":{"numSlotsBehind":null}},"id":1698251465713}""";
+              default -> "Unexpected method call: " + method;
+            };
+            writeResponse(request, responseMsg);
+          }
+        }
+    );
 
     HTTP_SERVER = httpServerRecord.httpServer();
     final var httpClient = HttpClientTests.createClient();
@@ -64,7 +65,8 @@ final class SolanaRpcTests {
         response -> {
           assertEquals(200, response.statusCode());
           return false;
-        });
+        }
+    );
     var nodeHealth = rpcClient.getHealth().join();
     assertNull(nodeHealth);
 
