@@ -14,6 +14,7 @@ import software.sava.rpc.json.http.request.ContextBoolVal;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,6 +36,7 @@ import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
 import static java.util.Objects.requireNonNullElse;
 import static software.sava.core.rpc.Filter.MAX_MEM_COMP_LENGTH;
 import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
+import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
 final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
 
@@ -99,7 +101,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<byte[]>, Tx> TRANSACTION = applyResponseResult(Tx::parse);
   private static final Function<HttpResponse<byte[]>, Version> VERSION = applyResponseResult(Version::parse);
 
-  private final AtomicLong id;
+  final AtomicLong id;
   private final Commitment defaultCommitment;
   private final Function<HttpResponse<byte[]>, String> sendTxResponseParser;
   private final Function<HttpResponse<byte[]>, LatestBlockHash> latestBlockhashResponseParser;
@@ -145,10 +147,130 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                               final PublicKey account,
                                                               final BiFunction<PublicKey, byte[], T> factory) {
-    return sendPostRequest(applyResponseValue((ji, context) -> AccountInfo.parse(account, ji, context, factory)), format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getAccountInfo","params":["%s",{"commitment":"%s","encoding":"base64"}]}""",
-            id.incrementAndGet(), account.toBase58(), commitment.getValue()
-        )
+    return getAccountInfo(commitment, null, 0, 0, account, factory);
+  }
+
+  @Override
+  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final BigInteger minContextSlot,
+                                                               final PublicKey account) {
+    return getAccountInfo(defaultCommitment, minContextSlot, account, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final int length,
+                                                               final int offset,
+                                                               final PublicKey account) {
+    return getAccountInfo(defaultCommitment, length, offset, account, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
+                                                               final BigInteger minContextSlot,
+                                                               final PublicKey account) {
+    return getAccountInfo(commitment, minContextSlot, account, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
+                                                               final int length,
+                                                               final int offset,
+                                                               final PublicKey account) {
+    return getAccountInfo(commitment, length, offset, account, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final BigInteger minContextSlot,
+                                                               final int length,
+                                                               final int offset,
+                                                               final PublicKey account) {
+    return getAccountInfo(defaultCommitment, minContextSlot, length, offset, account, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
+                                                               final BigInteger minContextSlot,
+                                                               final int length,
+                                                               final int offset,
+                                                               final PublicKey account) {
+    return getAccountInfo(commitment, minContextSlot, length, offset, account, BYTES_IDENTITY);
+  }
+
+  @Override
+  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final BigInteger minContextSlot,
+                                                              final PublicKey account,
+                                                              final BiFunction<PublicKey, byte[], T> factory) {
+    return getAccountInfo(defaultCommitment, minContextSlot, account, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final int length,
+                                                              final int offset,
+                                                              final PublicKey account,
+                                                              final BiFunction<PublicKey, byte[], T> factory) {
+    return getAccountInfo(defaultCommitment, length, offset, account, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
+                                                              final BigInteger minContextSlot,
+                                                              final PublicKey account,
+                                                              final BiFunction<PublicKey, byte[], T> factory) {
+    return getAccountInfo(commitment, minContextSlot, 0, 0, account, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
+                                                              final int length,
+                                                              final int offset,
+                                                              final PublicKey account,
+                                                              final BiFunction<PublicKey, byte[], T> factory) {
+    return getAccountInfo(commitment, null, length, offset, account, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
+                                                              final BigInteger minContextSlot,
+                                                              final int length,
+                                                              final int offset,
+                                                              final PublicKey account,
+                                                              final BiFunction<PublicKey, byte[], T> factory) {
+    final var builder = new StringBuilder(256);
+    builder.append("""
+        {"jsonrpc":"2.0","id":""");
+    builder.append(id.incrementAndGet());
+
+    builder.append("""
+        ,"method":"getAccountInfo","params":[""");
+    builder.append('"');
+    builder.append(account.toBase58());
+    builder.append('"');
+
+    builder.append("""
+        ,{"encoding":"base64","commitment":\"""");
+    builder.append(commitment.getValue());
+    builder.append('"');
+
+    if (minContextSlot != null) {
+      builder.append("""
+          ,"minContextSlot":""");
+      builder.append(minContextSlot);
+    }
+
+    if (length != 0) {
+      builder.append("""
+          ,"dataSlice":{"length":""");
+      builder.append(length);
+      builder.append("""
+          ,"offset":""");
+      builder.append(offset);
+      builder.append('}');
+    }
+
+    builder.append("}]}");
+
+    return sendPostRequest(
+        applyResponseValue((ji, context) -> AccountInfo.parse(account, ji, context, factory)),
+        builder.toString()
     );
   }
 
@@ -576,12 +698,152 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                          final List<PublicKey> keys,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
-    final var joinedAccounts = keys.stream().map(PublicKey::toBase58).collect(Collectors.joining("\",\""));
-    return sendPostRequest(applyResponseValue((ji, context) -> AccountInfo.parseAccountsFromKeys(keys, ji, context, factory)),
-        format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getMultipleAccounts","params":[["%s"],{"commitment":"%s","encoding":"base64"}]}""",
-            id.incrementAndGet(), joinedAccounts, commitment.getValue()
-        )
+    return getMultipleAccounts(commitment, null, 0, 0, keys, factory);
+  }
+
+  @Override
+  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
+                                                                          final int offset,
+                                                                          final List<PublicKey> keys) {
+    return getMultipleAccounts(defaultCommitment, length, offset, keys, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
+                                                                          final List<PublicKey> keys) {
+    return getMultipleAccounts(defaultCommitment, minContextSlot, keys, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
+                                                                          final int length,
+                                                                          final int offset,
+                                                                          final List<PublicKey> keys) {
+    return getMultipleAccounts(defaultCommitment, minContextSlot, length, offset, keys, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
+                                                                          final BigInteger minContextSlot,
+                                                                          final List<PublicKey> keys) {
+    return getMultipleAccounts(commitment, minContextSlot, keys, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
+                                                                          final int length,
+                                                                          final int offset,
+                                                                          final List<PublicKey> keys) {
+    return getMultipleAccounts(commitment, length, offset, keys, BYTES_IDENTITY);
+  }
+
+  @Override
+  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
+                                                                          final BigInteger minContextSlot,
+                                                                          final int length,
+                                                                          final int offset,
+                                                                          final List<PublicKey> keys) {
+    return getMultipleAccounts(commitment, minContextSlot, length, offset, keys, BYTES_IDENTITY);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
+                                                                         final int offset,
+                                                                         final List<PublicKey> keys,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getMultipleAccounts(defaultCommitment, length, offset, keys, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
+                                                                         final List<PublicKey> keys,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getMultipleAccounts(defaultCommitment, minContextSlot, keys, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final List<PublicKey> keys,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getMultipleAccounts(defaultCommitment, minContextSlot, length, offset, keys, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final List<PublicKey> keys,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getMultipleAccounts(commitment, null, length, offset, keys, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
+                                                                         final BigInteger minContextSlot,
+                                                                         final List<PublicKey> keys,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getMultipleAccounts(commitment, minContextSlot, 0, 0, keys, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
+                                                                         final BigInteger minContextSlot,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final List<PublicKey> keys,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    if (keys.isEmpty()) {
+      throw new IllegalArgumentException("keys must not be empty");
+    }
+
+    final var builder = new StringBuilder(512);
+    builder.append("""
+        {"jsonrpc":"2.0","id":""");
+    builder.append(id.incrementAndGet());
+
+    builder.append("""
+        ,"method":"getMultipleAccounts","params":[[""");
+    final var iterator = keys.iterator();
+    for (PublicKey key; ; ) {
+      key = iterator.next();
+      builder.append('"');
+      builder.append(key.toBase58());
+      builder.append('"');
+      if (iterator.hasNext()) {
+        builder.append(',');
+      } else {
+        break;
+      }
+    }
+
+    builder.append("""
+        ],{"encoding":"base64","commitment":\"""");
+    builder.append(commitment.getValue());
+    builder.append('"');
+
+    if (minContextSlot != null) {
+      builder.append("""
+          ,"minContextSlot":""");
+      builder.append(minContextSlot);
+    }
+
+    if (length != 0) {
+      builder.append("""
+          ,"dataSlice":{"length":""");
+      builder.append(length);
+      builder.append("""
+          ,"offset":""");
+      builder.append(offset);
+      builder.append('}');
+    }
+
+    builder.append("}]}");
+
+    return sendPostRequest(
+        applyResponseValue((ji, context) -> AccountInfo.parseAccountsFromKeys(keys, ji, context, factory)),
+        builder.toString()
     );
   }
 
@@ -627,7 +889,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                                         final int length,
                                                                         final int offset,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getProgramAccounts(requestTimeout, programId, commitment, 0, filters, length, offset, factory);
+    return getProgramAccounts(requestTimeout, programId, commitment, null, filters, length, offset, factory);
   }
 
   @Override
@@ -635,6 +897,28 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                                         final PublicKey programId,
                                                                         final Commitment commitment,
                                                                         final long minContextSlot,
+                                                                        final List<Filter> filters,
+                                                                        final int length,
+                                                                        final int offset,
+                                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot == 0 ? null : new BigInteger(Long.toUnsignedString(minContextSlot)), filters, length, offset, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
+                                                                        final Commitment commitment,
+                                                                        final BigInteger minContextSlot,
+                                                                        final List<Filter> filters,
+                                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, 0, 0, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                        final PublicKey programId,
+                                                                        final Commitment commitment,
+                                                                        final BigInteger minContextSlot,
                                                                         final List<Filter> filters,
                                                                         final int length,
                                                                         final int offset,
@@ -655,10 +939,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     builder.append(commitment.getValue());
     builder.append('"');
 
-    if (minContextSlot != 0) {
+    if (minContextSlot != null) {
       builder.append("""
           ,"minContextSlot":""");
-      builder.append(Long.toUnsignedString(minContextSlot));
+      builder.append(minContextSlot);
     }
 
     if (length != 0) {

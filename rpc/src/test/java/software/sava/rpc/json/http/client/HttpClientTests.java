@@ -1,4 +1,4 @@
-package test.software.sava.rpc.json.http.client;
+package software.sava.rpc.json.http.client;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
