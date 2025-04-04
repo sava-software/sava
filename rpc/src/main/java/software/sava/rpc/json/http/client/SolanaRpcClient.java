@@ -180,6 +180,19 @@ public interface SolanaRpcClient {
                                     final long slot,
                                     final BlockTxDetails blockTxDetails);
 
+  default CompletableFuture<Block> getBlock(final long slot, final boolean rewards) {
+    return getBlock(slot, BlockTxDetails.none, rewards);
+  }
+
+  CompletableFuture<Block> getBlock(final long slot,
+                                    final BlockTxDetails blockTxDetails,
+                                    final boolean rewards);
+
+  CompletableFuture<Block> getBlock(final Commitment commitment,
+                                    final long slot,
+                                    final BlockTxDetails blockTxDetails,
+                                    final boolean rewards);
+
   CompletableFuture<BlockHeight> getBlockHeight();
 
   CompletableFuture<BlockHeight> getBlockHeight(final Commitment commitment);

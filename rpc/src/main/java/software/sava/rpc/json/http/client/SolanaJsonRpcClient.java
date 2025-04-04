@@ -302,9 +302,24 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   public CompletableFuture<Block> getBlock(final Commitment commitment,
                                            final long slot,
                                            final BlockTxDetails blockTxDetails) {
+    return getBlock(commitment, slot, blockTxDetails, true);
+  }
+
+  @Override
+  public CompletableFuture<Block> getBlock(final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final boolean rewards) {
+    return getBlock(this.defaultCommitment, slot, blockTxDetails, rewards);
+  }
+
+  @Override
+  public CompletableFuture<Block> getBlock(final Commitment commitment,
+                                           final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final boolean rewards) {
     return sendPostRequest(BLOCK, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"commitment":"%s","transactionDetails":"%s","rewards":true}]}"""
-            , id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails
+                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"commitment":"%s","transactionDetails":"%s","rewards":%b}]}""",
+            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards
         )
     );
   }
@@ -1628,7 +1643,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     );
   }
 
-  public static void main(String[] args) throws InterruptedException {
+  public static void main(String[] args) {
 //    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
     final var rpcEndpoint = SolanaNetwork.MAIN_NET.getEndpoint();
     try (final var httpClient = HttpClient.newHttpClient()) {
@@ -1636,10 +1651,19 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           rpcEndpoint,
           httpClient,
           response -> {
-            System.out.println(new String(response.body()));
+            final var json = new String(response.body());
+            System.out.println(json);
+//            try {
+//              Files.write(Path.of("get_block.json"), response.body(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+//            } catch (final IOException e) {
+//              throw new UncheckedIOException(e);
+//            }
             return true;
           }
       );
+
+      final var block = rpcClient.getBlock(79920000L, false).join();
+      System.out.println(block);
     }
   }
 }
