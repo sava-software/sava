@@ -15,7 +15,8 @@ public record Block(long blockHeight,
                     String previousBlockHash,
                     long parentSlot,
                     List<TxReward> rewards,
-                    List<String> signatures) {
+                    List<String> signatures,
+                    List<BlockTx> transactions) {
 
   public static Block parse(final JsonIterator ji) {
     final var parser = new Parser();
@@ -32,6 +33,7 @@ public record Block(long blockHeight,
     private long parentSlot;
     private List<TxReward> rewards;
     private List<String> signatures;
+    private List<BlockTx> transactions;
 
     private Parser() {
     }
@@ -44,7 +46,8 @@ public record Block(long blockHeight,
           previousBlockHash,
           parentSlot,
           rewards,
-          signatures == null ? List.of() : signatures
+          signatures == null ? List.of() : signatures,
+          transactions == null ? List.of() : transactions
       );
     }
 
@@ -76,6 +79,12 @@ public record Block(long blockHeight,
           signatures.add(ji.readString());
         }
         this.signatures = signatures;
+      } else if (fieldEquals("transactions", buf, offset, len)) {
+        final var transactions = new ArrayList<BlockTx>(2_048);
+        while (ji.readArray()) {
+          transactions.add(BlockTx.parse(ji));
+        }
+        this.transactions = transactions;
       } else {
         ji.skip();
       }

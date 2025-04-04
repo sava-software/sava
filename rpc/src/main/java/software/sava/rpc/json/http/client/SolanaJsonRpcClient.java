@@ -318,7 +318,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
     return sendPostRequest(BLOCK, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"commitment":"%s","transactionDetails":"%s","rewards":%b}]}""",
+                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b}]}""",
             id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards
         )
     );
@@ -1651,10 +1651,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           rpcEndpoint,
           httpClient,
           response -> {
-            final var json = new String(response.body());
-            System.out.println(json);
+//            final var json = new String(response.body());
+//            System.out.println(json);
 //            try {
-//              Files.write(Path.of("get_block.json"), response.body(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+//              Files.write(Path.of("get_block.data.json"), response.body(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 //            } catch (final IOException e) {
 //              throw new UncheckedIOException(e);
 //            }
@@ -1662,8 +1662,9 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           }
       );
 
-      final var block = rpcClient.getBlock(79920000L, false).join();
+      final var block = rpcClient.getBlock(79919998, BlockTxDetails.full, false).join();
       System.out.println(block);
+      System.out.println(block.transactions().size());
     }
   }
 }
