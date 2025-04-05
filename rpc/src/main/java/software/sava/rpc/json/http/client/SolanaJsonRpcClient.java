@@ -1651,8 +1651,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           rpcEndpoint,
           httpClient,
           response -> {
-//            final var json = new String(response.body());
-//            System.out.println(json);
+            final var json = new String(response.body());
+            System.out.println(json);
 //            try {
 //              Files.write(Path.of("get_block.data.json"), response.body(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 //            } catch (final IOException e) {
@@ -1662,9 +1662,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
           }
       );
 
-      final var block = rpcClient.getBlock(79919998, BlockTxDetails.full, false).join();
-      System.out.println(block);
-      System.out.println(block.transactions().size());
+      final var response = rpcClient.getSignaturesForAddress(PublicKey.fromBase58Encoded(""), 5).join();
+      System.out.println(response.size());
     }
   }
 }

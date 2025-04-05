@@ -1,13 +1,74 @@
 package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
+import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.Block;
 import software.sava.rpc.json.http.response.RewardType;
+import software.sava.rpc.json.http.response.TxSig;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.util.OptionalLong;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 final class ParseRpcResponseTests {
+
+  @Test
+  void testSignaturesForAddress() {
+    final var response = """
+        {
+          "jsonrpc": "2.0",
+          "result": [
+            {
+              "blockTime": null,
+              "confirmationStatus": "finalized",
+              "err": null,
+              "memo": null,
+              "signature": "576BepPoQS74PwoLiBzTUBoSqjhZe72S7KXgWPwokjm7TKxatp8jAerHsq6rnZ7dZQXUJ7WoLkuJZ2qAHoFTQL9U",
+              "slot": 325301549
+            },
+            {
+              "blockTime": 1740856237,
+              "confirmationStatus": "finalized",
+              "err": null,
+              "memo": null,
+              "signature": "4TgPCZVejaHc8bVHcNc4qeQPbBeyFtBGufymhnopwwU9ELNvM8mRa12D4yQ4SctParYLnDXP8htqQTu5yFPpkszv",
+              "slot": 323931131
+            },
+            {
+              "blockTime": 1737853408,
+              "confirmationStatus": "finalized",
+              "err": null,
+              "memo": null,
+              "signature": "4eQyc8UQsCGcxiFbdSVx9oxAdLYyyuyqzgbsg77MPgA4PDPKxzKN4tyyttjNp8GfVVjYrHYna54uddJ2ygbAonNu",
+              "slot": 316386176
+            }
+          ],
+          "id": 1743859978434
+        }
+        """;
+
+    final var ji = JsonIterator.parse(response).skipUntil("result");
+    final var signatures = TxSig.parseSignatures(ji);
+    assertEquals(3, signatures.size());
+
+    var signature = signatures.getFirst();
+    assertEquals(OptionalLong.empty(), signature.blockTime());
+    assertEquals(Commitment.FINALIZED, signature.confirmationStatus());
+    assertNull(signature.transactionError());
+    assertNull(signature.memo());
+    assertEquals("576BepPoQS74PwoLiBzTUBoSqjhZe72S7KXgWPwokjm7TKxatp8jAerHsq6rnZ7dZQXUJ7WoLkuJZ2qAHoFTQL9U", signature.signature());
+    assertEquals(325301549, signature.slot());
+
+    signature = signatures.getLast();
+    assertEquals(OptionalLong.of(1737853408), signature.blockTime());
+    assertEquals(Commitment.FINALIZED, signature.confirmationStatus());
+    assertNull(signature.transactionError());
+    assertNull(signature.memo());
+    assertEquals("4eQyc8UQsCGcxiFbdSVx9oxAdLYyyuyqzgbsg77MPgA4PDPKxzKN4tyyttjNp8GfVVjYrHYna54uddJ2ygbAonNu", signature.signature());
+    assertEquals(316386176, signature.slot());
+  }
 
   @Test
   void testParseOldBlock() {

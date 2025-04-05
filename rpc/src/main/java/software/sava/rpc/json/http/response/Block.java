@@ -45,7 +45,7 @@ public record Block(long blockHeight,
           blockHash,
           previousBlockHash,
           parentSlot,
-          rewards,
+          rewards == null ? List.of() : rewards,
           signatures == null ? List.of() : signatures,
           transactions == null ? List.of() : transactions
       );

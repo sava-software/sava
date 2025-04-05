@@ -50,7 +50,11 @@ public record Tx(int slot,
       if (fieldEquals("slot", buf, offset, len)) {
         this.slot = ji.readInt();
       } else if (fieldEquals("blockTime", buf, offset, len)) {
-        this.blockTime = ji.readLong();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          this.blockTime = ji.readLong();
+        } else {
+          ji.skip();
+        }
       } else if (fieldEquals("meta", buf, offset, len)) {
         this.meta = TxMeta.parse(ji);
       } else if (fieldEquals("transaction", buf, offset, len)) {

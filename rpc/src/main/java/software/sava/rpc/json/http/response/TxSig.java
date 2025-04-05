@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.response;
 import software.sava.rpc.json.http.request.Commitment;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +57,11 @@ public record TxSig(long slot,
       if (fieldEquals("slot", buf, offset, len)) {
         this.slot = ji.readLong();
       } else if (fieldEquals("blockTime", buf, offset, len)) {
-        this.blockTime = ji.readLong();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          this.blockTime = ji.readLong();
+        } else {
+          ji.skip();
+        }
       } else if (fieldEquals("confirmationStatus", buf, offset, len)) {
         this.confirmationStatus = ji.applyChars(Commitment.PARSER);
       } else if (fieldEquals("memo", buf, offset, len)) {
