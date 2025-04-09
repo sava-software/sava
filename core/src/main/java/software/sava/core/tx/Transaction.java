@@ -681,6 +681,10 @@ public interface Transaction {
 
   Transaction prependInstructions(final List<Instruction> instructions);
 
+  Transaction appendIx(final Instruction ix);
+
+  Transaction appendInstructions(final List<Instruction> instructions);
+
   Transaction replaceInstruction(final int index, final Instruction instruction);
 
   AccountMeta feePayer();

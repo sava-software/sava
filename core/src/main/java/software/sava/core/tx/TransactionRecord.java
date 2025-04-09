@@ -161,6 +161,30 @@ record TransactionRecord(AccountMeta feePayer,
   }
 
   @Override
+  public Transaction appendIx(final Instruction ix) {
+    final var ixArray = new Instruction[1 + instructions.size()];
+    int i = 0;
+    for (final var _ix : instructions) {
+      ixArray[i++] = _ix;
+    }
+    ixArray[instructions.size()] = ix;
+    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+  }
+
+  @Override
+  public Transaction appendInstructions(final List<Instruction> instructions) {
+    final var ixArray = new Instruction[instructions.size() + this.instructions.size()];
+    int i = 0;
+    for (final var ix : this.instructions) {
+      ixArray[i++] = ix;
+    }
+    for (final var ix : instructions) {
+      ixArray[i++] = ix;
+    }
+    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+  }
+
+  @Override
   public Transaction replaceInstruction(final int index, final Instruction instruction) {
     final var ixArray = instructions.toArray(Instruction[]::new);
     ixArray[index] = instruction;
