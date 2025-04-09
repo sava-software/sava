@@ -19,6 +19,7 @@ public interface SolanaAccounts {
       "Ed25519SigVerify111111111111111111111111111",
       "KeccakSecp256k11111111111111111111111111111",
       "ZkTokenProof1111111111111111111111111111111",
+      "ZkE1Gama1Proof11111111111111111111111111111",
       "So11111111111111111111111111111111111111112",
       "ComputeBudget111111111111111111111111111111",
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -55,6 +56,7 @@ public interface SolanaAccounts {
       final PublicKey systemEd25519Program,
       final PublicKey secp256k1Program,
       final PublicKey zKTokenProofProgram,
+      final PublicKey zkElGamalProofProgram,
       // Mint
       final PublicKey wrappedSolTokenMint,
       // Common
@@ -111,6 +113,9 @@ public interface SolanaAccounts {
         zKTokenProofProgram,
         createInvoked(zKTokenProofProgram),
         createRead(zKTokenProofProgram),
+        zkElGamalProofProgram,
+        createInvoked(zkElGamalProofProgram),
+        createRead(zkElGamalProofProgram),
         // Mint
         wrappedSolTokenMint,
         createRead(wrappedSolTokenMint),
@@ -181,6 +186,7 @@ public interface SolanaAccounts {
       final String systemEd25519Program,
       final String secp256k1Program,
       final String zKTokenProofProgram,
+      final String zkElGamalProofProgram,
       // Mint
       final String wrappedSolTokenMint,
       // Common
@@ -218,6 +224,7 @@ public interface SolanaAccounts {
         fromBase58Encoded(systemEd25519Program),
         fromBase58Encoded(secp256k1Program),
         fromBase58Encoded(zKTokenProofProgram),
+        fromBase58Encoded(zkElGamalProofProgram),
         // Mint
         fromBase58Encoded(wrappedSolTokenMint),
         fromBase58Encoded(computeBudgetProgram),
@@ -369,6 +376,12 @@ public interface SolanaAccounts {
   AccountMeta invokedZKTokenProofProgram();
 
   AccountMeta readZKTokenProofProgram();
+
+  PublicKey zkElGamalProofProgram();
+
+  AccountMeta invokedZkElGamalProofProgram();
+
+  AccountMeta readZkElGamalProofProgram();
 
   // Sysvar
 

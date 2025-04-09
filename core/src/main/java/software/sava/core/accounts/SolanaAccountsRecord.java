@@ -33,6 +33,9 @@ record SolanaAccountsRecord(
     PublicKey zKTokenProofProgram,
     AccountMeta invokedZKTokenProofProgram,
     AccountMeta readZKTokenProofProgram,
+    PublicKey zkElGamalProofProgram,
+    AccountMeta invokedZkElGamalProofProgram,
+    AccountMeta readZkElGamalProofProgram,
     // Mint
     PublicKey wrappedSolTokenMint,
     AccountMeta readWrappedSolTokenMint,
