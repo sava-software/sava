@@ -35,11 +35,6 @@ public record ConfidentialTransferFeeConfig(PublicKey authority,
   }
 
   @Override
-  public int l() {
-    return PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH + 1 + withheldAmount.length;
-  }
-
-  @Override
   public int write(final byte[] data, final int offset) {
     authority.write(data, offset);
     int i = offset + PUBLIC_KEY_LENGTH;
@@ -49,5 +44,10 @@ public record ConfidentialTransferFeeConfig(PublicKey authority,
     System.arraycopy(withheldAmount, 0, data, i, withheldAmount.length);
     i += withheldAmount.length;
     return i - offset;
+  }
+
+  @Override
+  public int l() {
+    return PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH + 1 + withheldAmount.length;
   }
 }

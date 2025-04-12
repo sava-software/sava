@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedCollection;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
@@ -253,15 +254,16 @@ public interface SolanaRpcClient {
 
   CompletableFuture<InflationRate> getInflationRate();
 
-  CompletableFuture<List<InflationReward>> getInflationReward(final List<PublicKey> keys);
+  CompletableFuture<List<InflationReward>> getInflationReward(final SequencedCollection<PublicKey> keys);
 
   CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
-                                                              final List<PublicKey> keys);
+                                                              final SequencedCollection<PublicKey> keys);
 
-  CompletableFuture<List<InflationReward>> getInflationReward(final List<PublicKey> keys, final long epoch);
+  CompletableFuture<List<InflationReward>> getInflationReward(final SequencedCollection<PublicKey> keys,
+                                                              final long epoch);
 
   CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
-                                                              final List<PublicKey> keys,
+                                                              final SequencedCollection<PublicKey> keys,
                                                               final long epoch);
 
   CompletableFuture<List<AccountLamports>> getLargestAccounts();
@@ -292,80 +294,80 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Long> getMinimumBalanceForRentExemption(final long accountLength);
 
-  <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final List<PublicKey> keys,
+  <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
-                                                                  final List<PublicKey> keys,
+                                                                  final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final List<PublicKey> keys) {
+  default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(keys, BYTES_IDENTITY);
   }
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
-                                                                           final List<PublicKey> keys) {
+                                                                           final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(commitment, keys, BYTES_IDENTITY);
   }
 
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
                                                                    final int offset,
-                                                                   final List<PublicKey> keys);
+                                                                   final SequencedCollection<PublicKey> keys);
 
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
-                                                                   final List<PublicKey> keys);
+                                                                   final SequencedCollection<PublicKey> keys);
 
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
-                                                                   final List<PublicKey> keys);
+                                                                   final SequencedCollection<PublicKey> keys);
 
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
-                                                                   final List<PublicKey> keys);
+                                                                   final SequencedCollection<PublicKey> keys);
 
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final int length,
                                                                    final int offset,
-                                                                   final List<PublicKey> keys);
+                                                                   final SequencedCollection<PublicKey> keys);
 
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
-                                                                   final List<PublicKey> keys);
+                                                                   final SequencedCollection<PublicKey> keys);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
                                                                   final int offset,
-                                                                  final List<PublicKey> keys,
+                                                                  final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
-                                                                  final List<PublicKey> keys,
+                                                                  final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final int length,
                                                                   final int offset,
-                                                                  final List<PublicKey> keys,
+                                                                  final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final int length,
                                                                   final int offset,
-                                                                  final List<PublicKey> keys,
+                                                                  final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
-                                                                  final List<PublicKey> keys,
+                                                                  final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final int length,
                                                                   final int offset,
-                                                                  final List<PublicKey> keys,
+                                                                  final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId) {
@@ -373,13 +375,13 @@ public interface SolanaRpcClient {
   }
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
-                                                                          final List<Filter> filters) {
+                                                                          final Collection<Filter> filters) {
     return getProgramAccounts(programId, filters, BYTES_IDENTITY);
   }
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final Commitment commitment,
-                                                                          final List<Filter> filters) {
+                                                                          final Collection<Filter> filters) {
     return getProgramAccounts(programId, commitment, filters, BYTES_IDENTITY);
   }
 
@@ -389,14 +391,14 @@ public interface SolanaRpcClient {
   }
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, filters, factory);
   }
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final Commitment commitment,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, filters, factory);
   }
@@ -407,26 +409,26 @@ public interface SolanaRpcClient {
 
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
-                                                                 final List<Filter> filters,
+                                                                 final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
-                                                                 final List<Filter> filters,
+                                                                 final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final long minContextSlot,
-                                                                 final List<Filter> filters,
+                                                                 final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
-                                                                 final List<Filter> filters,
+                                                                 final Collection<Filter> filters,
                                                                  final int length,
                                                                  final int offset,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
@@ -435,7 +437,7 @@ public interface SolanaRpcClient {
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final long minContextSlot,
-                                                                 final List<Filter> filters,
+                                                                 final Collection<Filter> filters,
                                                                  final int length,
                                                                  final int offset,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
@@ -444,14 +446,14 @@ public interface SolanaRpcClient {
                                                                           final PublicKey programId,
                                                                           final Commitment commitment,
                                                                           final long minContextSlot,
-                                                                          final List<Filter> filters) {
+                                                                          final Collection<Filter> filters) {
     return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, BYTES_IDENTITY);
   }
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
                                                                           final PublicKey programId,
                                                                           final Commitment commitment,
-                                                                          final List<Filter> filters,
+                                                                          final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(requestTimeout, programId, commitment, filters, length, offset, BYTES_IDENTITY);
@@ -461,7 +463,7 @@ public interface SolanaRpcClient {
                                                                           final PublicKey programId,
                                                                           final Commitment commitment,
                                                                           final long minContextSlot,
-                                                                          final List<Filter> filters,
+                                                                          final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, length, offset, BYTES_IDENTITY);
@@ -469,13 +471,13 @@ public interface SolanaRpcClient {
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final long minContextSlot,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, factory);
   }
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final int length,
                                                                          final int offset,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
@@ -484,7 +486,7 @@ public interface SolanaRpcClient {
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final long minContextSlot,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final int length,
                                                                          final int offset,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
@@ -493,12 +495,12 @@ public interface SolanaRpcClient {
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final long minContextSlot,
-                                                                          final List<Filter> filters) {
+                                                                          final Collection<Filter> filters) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, BYTES_IDENTITY);
   }
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
-                                                                          final List<Filter> filters,
+                                                                          final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), filters, length, offset, BYTES_IDENTITY);
@@ -506,7 +508,7 @@ public interface SolanaRpcClient {
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final long minContextSlot,
-                                                                          final List<Filter> filters,
+                                                                          final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, length, offset, BYTES_IDENTITY);
@@ -515,14 +517,14 @@ public interface SolanaRpcClient {
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final Commitment commitment,
                                                                          final long minContextSlot,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, factory);
   }
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final Commitment commitment,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final int length,
                                                                          final int offset,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
@@ -532,7 +534,7 @@ public interface SolanaRpcClient {
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final Commitment commitment,
                                                                          final long minContextSlot,
-                                                                         final List<Filter> filters,
+                                                                         final Collection<Filter> filters,
                                                                          final int length,
                                                                          final int offset,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
@@ -543,13 +545,13 @@ public interface SolanaRpcClient {
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final Commitment commitment,
                                                                           final long minContextSlot,
-                                                                          final List<Filter> filters) {
+                                                                          final Collection<Filter> filters) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, BYTES_IDENTITY);
   }
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final Commitment commitment,
-                                                                          final List<Filter> filters,
+                                                                          final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, filters, length, offset, BYTES_IDENTITY);
@@ -558,7 +560,7 @@ public interface SolanaRpcClient {
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final Commitment commitment,
                                                                           final long minContextSlot,
-                                                                          final List<Filter> filters,
+                                                                          final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, length, offset, BYTES_IDENTITY);
@@ -568,14 +570,14 @@ public interface SolanaRpcClient {
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final BigInteger minContextSlot,
-                                                                 final List<Filter> filters,
+                                                                 final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final BigInteger minContextSlot,
-                                                                 final List<Filter> filters,
+                                                                 final Collection<Filter> filters,
                                                                  final int length,
                                                                  final int offset,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
@@ -590,7 +592,10 @@ public interface SolanaRpcClient {
     return getRecentPrioritizationFees(null);
   }
 
+  @Deprecated
   CompletableFuture<List<PrioritizationFee>> getRecentPrioritizationFees(final Collection<PublicKey> writablePublicKeys);
+
+  CompletableFuture<List<PrioritizationFee>> getRecentPrioritizationFees(final SequencedCollection<PublicKey> writablePublicKeys);
 
   CompletableFuture<List<TxSig>> getSignaturesForAddress(final PublicKey address, final int limit);
 
@@ -616,18 +621,18 @@ public interface SolanaRpcClient {
                                                               final int limit,
                                                               final String untilTxSig);
 
-  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> signatures) {
+  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures) {
     return getSignatureStatuses(signatures, false);
   }
 
-  CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final List<String> signatures,
+  CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures,
                                                                 final boolean searchTransactionHistory);
 
-  default CompletableFuture<List<TxStatus>> getSigStatusList(final List<String> signatures) {
+  default CompletableFuture<List<TxStatus>> getSigStatusList(final SequencedCollection<String> signatures) {
     return getSigStatusList(signatures, false);
   }
 
-  CompletableFuture<List<TxStatus>> getSigStatusList(final List<String> signatures,
+  CompletableFuture<List<TxStatus>> getSigStatusList(final SequencedCollection<String> signatures,
                                                      final boolean searchTransactionHistory);
 
   CompletableFuture<Long> getSlot();
@@ -775,12 +780,12 @@ public interface SolanaRpcClient {
                                             final byte[] recentBlockHash);
 
   CompletableFuture<String> sendTransaction(final Transaction transaction,
-                                            final List<Signer> signers,
+                                            final SequencedCollection<Signer> signers,
                                             final byte[] recentBlockHash);
 
   CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
                                             final Transaction transaction,
-                                            final List<Signer> signers,
+                                            final SequencedCollection<Signer> signers,
                                             final byte[] recentBlockHash);
 
   default CompletableFuture<String> sendTransaction(final String base64SignedTx) {
@@ -847,12 +852,12 @@ public interface SolanaRpcClient {
 
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
                                                       final PublicKey signer,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
                                                       final Transaction transaction,
                                                       final PublicKey signer,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction);
 
@@ -867,30 +872,30 @@ public interface SolanaRpcClient {
 
   CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
                                                       final PublicKey signer,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
                                                       final String base64EncodedTx,
                                                       final PublicKey signer,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
-                                                      final List<PublicKey> signers,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> signers,
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
                                                       final Transaction transaction,
-                                                      final List<PublicKey> signers,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> signers,
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
-                                                      final List<PublicKey> signers,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> signers,
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
                                                       final String base64EncodedTx,
-                                                      final List<PublicKey> signers,
-                                                      final List<PublicKey> accounts);
+                                                      final SequencedCollection<PublicKey> signers,
+                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
                                                       final boolean replaceRecentBlockhash);

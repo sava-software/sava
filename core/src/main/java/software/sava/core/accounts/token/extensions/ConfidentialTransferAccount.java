@@ -3,71 +3,94 @@ package software.sava.core.accounts.token.extensions;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
 
-import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
+import static software.sava.core.zk.ElGamal.*;
 
 public record ConfidentialTransferAccount(boolean approved,
                                           PublicKey elgamalPubkey,
-                                          short pendingBalanceLo,
-                                          byte[] data) implements TokenExtension {
+                                          byte[] pendingBalanceLo,
+                                          byte[] pendingBalanceHi,
+                                          byte[] availableBalance,
+                                          byte[] decryptableAvailableBalance,
+                                          boolean allowConfidentialCredits,
+                                          boolean allowNonConfidentialCredits,
+                                          long pendingBalanceCreditCounter,
+                                          long maximumPendingBalanceCreditCounter,
+                                          long expectedPendingBalanceCreditCounter,
+                                          long actualPendingBalanceCreditCounter) implements TokenExtension {
 
-  public static ConfidentialTransferAccount read(final byte[] data, final int offset, final int to) {
+  /// Maximum bit length of any deposit or transfer amount
+  ///
+  /// Any deposit or transfer amount must be less than `2^48`
+  public static final long MAXIMUM_DEPOSIT_TRANSFER_AMOUNT = 65_535 + (1 << 16) * 4_294_967_295L;
+
+  /// Bit length of the low bits of pending balance plaintext
+  public static final int PENDING_BALANCE_LO_BIT_LENGTH = 16;
+
+  /// The default maximum pending balance credit counter.
+  public static final int DEFAULT_MAXIMUM_PENDING_BALANCE_CREDIT_COUNTER = 65_536;
+
+  public static final int BYTES = 1
+      + ELGAMAL_PUBKEY_LEN
+      + ELGAMAL_CIPHERTEXT_LEN
+      + ELGAMAL_CIPHERTEXT_LEN
+      + ELGAMAL_CIPHERTEXT_LEN
+      + AE_CIPHERTEXT_LEN
+      + 2
+      + Long.BYTES + Long.BYTES + Long.BYTES + Long.BYTES;
+
+  public static ConfidentialTransferAccount read(final byte[] data, final int offset) {
     if (data == null || data.length == 0) {
       return null;
     }
     final boolean approved = data[offset] == 1;
     int i = offset + 1;
     final var elgamalPubkey = PublicKey.readPubKey(data, i);
-    i += PUBLIC_KEY_LENGTH;
-    final short pendingBalanceLo = ByteUtil.getInt16LE(data, i);
-    final byte[] accountData = new byte[to - offset];
-    System.arraycopy(data, offset, accountData, 0, accountData.length);
+    i += ELGAMAL_PUBKEY_LEN;
+
+    final byte[] pendingBalanceLo = new byte[ELGAMAL_CIPHERTEXT_LEN];
+    System.arraycopy(data, i, pendingBalanceLo, 0, pendingBalanceLo.length);
+    i += pendingBalanceLo.length;
+
+    final byte[] pendingBalanceHi = new byte[ELGAMAL_CIPHERTEXT_LEN];
+    System.arraycopy(data, i, pendingBalanceHi, 0, pendingBalanceHi.length);
+    i += pendingBalanceHi.length;
+
+    final byte[] availableBalance = new byte[ELGAMAL_CIPHERTEXT_LEN];
+    System.arraycopy(data, i, availableBalance, 0, availableBalance.length);
+    i += availableBalance.length;
+
+    final byte[] decryptableAvailableBalance = new byte[AE_CIPHERTEXT_LEN];
+    System.arraycopy(data, i, decryptableAvailableBalance, 0, decryptableAvailableBalance.length);
+    i += decryptableAvailableBalance.length;
+
+    final boolean allowConfidentialCredits = data[i] == 1;
+    ++i;
+    final boolean allowNonConfidentialCredits = data[i] == 1;
+    ++i;
+
+    final long pendingBalanceCreditCounter = ByteUtil.getInt64LE(data, i);
+    i += Long.BYTES;
+    final long maximumPendingBalanceCreditCounter = ByteUtil.getInt64LE(data, i);
+    i += Long.BYTES;
+    final long expectedPendingBalanceCreditCounter = ByteUtil.getInt64LE(data, i);
+    i += Long.BYTES;
+    final long actualPendingBalanceCreditCounter = ByteUtil.getInt64LE(data, i);
+
     return new ConfidentialTransferAccount(
         approved,
         elgamalPubkey,
         pendingBalanceLo,
-        accountData
+        pendingBalanceHi,
+        availableBalance,
+        decryptableAvailableBalance,
+        allowConfidentialCredits,
+        allowNonConfidentialCredits,
+        pendingBalanceCreditCounter,
+        maximumPendingBalanceCreditCounter,
+        expectedPendingBalanceCreditCounter,
+        actualPendingBalanceCreditCounter
     );
   }
-//  pub approved: PodBool,
-//
-//  /// The public key associated with ElGamal encryption
-//  pub elgamal_pubkey: PodElGamalPubkey,
-//
-//  /// The low 16 bits of the pending balance (encrypted by `elgamal_pubkey`)
-//  pub pending_balance_lo: EncryptedBalance,
-//
-//  /// The high 48 bits of the pending balance (encrypted by `elgamal_pubkey`)
-//  pub pending_balance_hi: EncryptedBalance,
-//
-//  /// The available balance (encrypted by `encrypiton_pubkey`)
-//  pub available_balance: EncryptedBalance,
-//
-//  /// The decryptable available balance
-//  pub decryptable_available_balance: DecryptableBalance,
-//
-//  /// If `false`, the extended account rejects any incoming confidential
-//  /// transfers
-//  pub allow_confidential_credits: PodBool,
-//
-//  /// If `false`, the base account rejects any incoming transfers
-//  pub allow_non_confidential_credits: PodBool,
-//
-//  /// The total number of `Deposit` and `Transfer` instructions that have
-//  /// credited `pending_balance`
-//  pub pending_balance_credit_counter: PodU64,
-//
-//  /// The maximum number of `Deposit` and `Transfer` instructions that can
-//  /// credit `pending_balance` before the `ApplyPendingBalance`
-//  /// instruction is executed
-//  pub maximum_pending_balance_credit_counter: PodU64,
-//
-//  /// The `expected_pending_balance_credit_counter` value that was included in
-//  /// the last `ApplyPendingBalance` instruction
-//  pub expected_pending_balance_credit_counter: PodU64,
-//
-//  /// The actual `pending_balance_credit_counter` when the last
-//  /// `ApplyPendingBalance` instruction was executed
-//  pub actual_pending_balance_credit_counter: PodU64,
 
   @Override
   public ExtensionType extensionType() {
@@ -75,13 +98,38 @@ public record ConfidentialTransferAccount(boolean approved,
   }
 
   @Override
-  public int l() {
-    return this.data.length;
+  public int write(final byte[] data, final int offset) {
+    int i = offset;
+    data[i] = (byte) (approved ? 1 : 0);
+    ++i;
+
+    System.arraycopy(pendingBalanceLo, 0, data, i, pendingBalanceLo.length);
+    i += pendingBalanceLo.length;
+    System.arraycopy(pendingBalanceHi, 0, data, i, pendingBalanceHi.length);
+    i += pendingBalanceHi.length;
+    System.arraycopy(availableBalance, 0, data, i, availableBalance.length);
+    i += availableBalance.length;
+    System.arraycopy(decryptableAvailableBalance, 0, data, i, decryptableAvailableBalance.length);
+    i += decryptableAvailableBalance.length;
+
+    data[i] = (byte) (allowConfidentialCredits ? 1 : 0);
+    ++i;
+    data[i] = (byte) (allowNonConfidentialCredits ? 1 : 0);
+    ++i;
+
+    ByteUtil.putInt64LE(data, i, pendingBalanceCreditCounter);
+    i += Long.BYTES;
+    ByteUtil.putInt64LE(data, i, maximumPendingBalanceCreditCounter);
+    i += Long.BYTES;
+    ByteUtil.putInt64LE(data, i, expectedPendingBalanceCreditCounter);
+    i += Long.BYTES;
+    ByteUtil.putInt64LE(data, i, actualPendingBalanceCreditCounter);
+
+    return BYTES;
   }
 
   @Override
-  public int write(final byte[] data, final int offset) {
-    System.arraycopy(this.data, 0, data, offset, this.data.length);
-    return this.data.length;
+  public int l() {
+    return BYTES;
   }
 }

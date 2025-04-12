@@ -49,5 +49,13 @@ public enum ExtensionType {
   /// Mint contains a pointer to another account (or the same account) that holds group member configurations
   GroupMemberPointer,
   /// Mint contains token group member configurations
-  TokenGroupMember
+  TokenGroupMember,
+  /// Mint allowing the minting and burning of confidential tokens
+  ConfidentialMintBurn,
+  /// Tokens whose UI amount is scaled by a given amount
+  ScaledUiAmount,
+  /// Tokens where minting / burning / transferring can be paused
+  Pausable,
+  /// Indicates that the account belongs to a pausable mint
+  PausableAccount,
 }

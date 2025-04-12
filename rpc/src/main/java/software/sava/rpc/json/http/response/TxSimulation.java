@@ -9,6 +9,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
+import java.util.SequencedCollection;
 
 import static java.util.Objects.requireNonNullElse;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
@@ -26,7 +27,9 @@ public record TxSimulation(Context context,
                            PublicKey programId,
                            byte[] data) {
 
-  public static TxSimulation parse(final List<PublicKey> accounts, final JsonIterator ji, final Context context) {
+  public static TxSimulation parse(final SequencedCollection<PublicKey> accounts,
+                                   final JsonIterator ji,
+                                   final Context context) {
     final var parser = new Parser(context, accounts);
     ji.testObject(parser);
     return parser.create();
@@ -54,7 +57,7 @@ public record TxSimulation(Context context,
 
   private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
-    private final List<PublicKey> accountPubKeys;
+    private final SequencedCollection<PublicKey> accountPubKeys;
     private TransactionError error;
     private List<String> logs;
     private List<InnerInstructions> innerInstructions;
@@ -64,7 +67,7 @@ public record TxSimulation(Context context,
     private PublicKey programId;
     private byte[] data;
 
-    private Parser(final Context context, final List<PublicKey> accountPubKeys) {
+    private Parser(final Context context, final SequencedCollection<PublicKey> accountPubKeys) {
       super(context);
       this.accountPubKeys = accountPubKeys;
     }

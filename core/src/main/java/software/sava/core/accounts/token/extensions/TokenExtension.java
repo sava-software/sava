@@ -3,7 +3,34 @@ package software.sava.core.accounts.token.extensions;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
-public sealed interface TokenExtension extends Serializable permits ConfidentialTransferAccount, ConfidentialTransferFeeAmount, ConfidentialTransferFeeConfig, ConfidentialTransferMint, CpiGuard, DefaultAccountState, GroupMemberPointer, GroupPointer, ImmutableOwner, InterestBearingConfig, MemoTransfer, MetadataPointer, MintCloseAuthority, NonTransferable, NonTransferableAccount, PermanentDelegate, TokenGroup, TokenGroupMember, TokenMetadata, TransferFeeAmount, TransferFeeConfig, TransferHook, TransferHookAccount, Uninitialized {
+public sealed interface TokenExtension extends Serializable permits ConfidentialMintBurn,
+    ConfidentialTransferAccount,
+    ConfidentialTransferFeeAmount,
+    ConfidentialTransferFeeConfig,
+    ConfidentialTransferMint,
+    CpiGuard,
+    DefaultAccountState,
+    GroupMemberPointer,
+    GroupPointer,
+    ImmutableOwner,
+    InterestBearingConfig,
+    MemoTransfer,
+    MetadataPointer,
+    MintCloseAuthority,
+    NonTransferable,
+    NonTransferableAccount,
+    PausableAccount,
+    PausableConfig,
+    PermanentDelegate,
+    ScaledUiAmountConfig,
+    TokenGroup,
+    TokenGroupMember,
+    TokenMetadata,
+    TransferFeeAmount,
+    TransferFeeConfig,
+    TransferHook,
+    TransferHookAccount,
+    Uninitialized {
 
   ExtensionType extensionType();
 

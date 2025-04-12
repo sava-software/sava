@@ -17,19 +17,10 @@ public record Token2022(Mint mint,
 
   public static final BiFunction<PublicKey, byte[], Token2022> FACTORY = Token2022::read;
 
-  public static Token2022 read(final PublicKey address, final byte[] data) {
-    if (data == null || data.length == 0) {
-      return null;
-    }
-    final var mint = Mint.read(address, data);
-    int i = Mint.BYTES + PADDING_AFTER_MINT;
-    final var accountTypes = AccountType.values();
-    final int ordinal = data[i] & 0xFF;
-    final var accountType = ordinal < accountTypes.length ? accountTypes[ordinal] : null;
-    ++i;
+  static Map<ExtensionType, TokenExtension> parseExtensions(final byte[] data, final int offset) {
     final var extensions = new EnumMap<ExtensionType, TokenExtension>(ExtensionType.class);
     final var extensionTypes = ExtensionType.values();
-    while (i < data.length) {
+    for (int i = offset; i < data.length; ) {
       int extensionType = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
       int length = ByteUtil.getInt16LE(data, i);
@@ -41,7 +32,7 @@ public record Token2022(Mint mint,
         case TransferFeeAmount -> TransferFeeAmount.read(data, i);
         case MintCloseAuthority -> MintCloseAuthority.read(data, i);
         case ConfidentialTransferMint -> ConfidentialTransferMint.read(data, i);
-        case ConfidentialTransferAccount -> ConfidentialTransferAccount.read(data, i, i + length);
+        case ConfidentialTransferAccount -> ConfidentialTransferAccount.read(data, i);
         case DefaultAccountState -> DefaultAccountState.read(data, i);
         case ImmutableOwner -> ImmutableOwner.INSTANCE;
         case MemoTransfer -> MemoTransfer.read(data, i);
@@ -60,12 +51,34 @@ public record Token2022(Mint mint,
         case TokenGroup -> TokenGroup.INSTANCE;
         case GroupMemberPointer -> GroupMemberPointer.read(data, i);
         case TokenGroupMember -> TokenGroupMember.INSTANCE;
+        case ConfidentialMintBurn -> ConfidentialMintBurn.read(data, i);
+        case ScaledUiAmount -> ScaledUiAmountConfig.read(data, i);
+        case Pausable -> PausableConfig.read(data, i);
+        case PausableAccount -> PausableAccount.INSTANCE;
       };
       if (extensionData != null) {
         extensions.put(type, extensionData);
       }
       i += length;
     }
+    return extensions;
+  }
+
+  static AccountType parseAccountType(final byte[] data, final int offset) {
+    final var accountTypes = AccountType.values();
+    final int ordinal = data[offset] & 0xFF;
+    return ordinal < accountTypes.length ? accountTypes[ordinal] : null;
+  }
+
+  public static Token2022 read(final PublicKey address, final byte[] data) {
+    if (data == null || data.length == 0) {
+      return null;
+    }
+    final var mint = Mint.read(address, data);
+    int i = Mint.BYTES + PADDING_AFTER_MINT;
+    final var accountType = parseAccountType(data, i);
+    ++i;
+    final var extensions = parseExtensions(data, i);
     return new Token2022(mint, accountType, extensions);
   }
 

@@ -10,10 +10,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.BiFunction;
 
 import static software.sava.rpc.json.http.response.JsonUtil.parseEncodedData;
@@ -59,14 +56,16 @@ public record AccountInfo<T>(PublicKey pubKey,
     return ji.testObject(new Builder(context, publicKey), ACCOUNT_PARSER).create(factory);
   }
 
-  public static <T> List<AccountInfo<T>> parseAccountsFromKeys(final List<PublicKey> pubKeys,
+  public static <T> List<AccountInfo<T>> parseAccountsFromKeys(final SequencedCollection<PublicKey> pubKeys,
                                                                final JsonIterator ji,
                                                                final Context context,
                                                                final BiFunction<PublicKey, byte[], T> factory) {
     final var accounts = new ArrayList<AccountInfo<T>>(pubKeys.size());
-    for (int i = 0; ji.readArray(); ++i) {
+    final var iterator = pubKeys.iterator();
+    while (ji.readArray()) {
+      final var key = iterator.next();
       if (ji.whatIsNext() == ValueType.OBJECT) {
-        final var builder = new Builder(context, pubKeys.get(i));
+        final var builder = new Builder(context, key);
         ji.testObject(builder, ACCOUNT_PARSER);
         accounts.add(builder.create(factory));
       } else {

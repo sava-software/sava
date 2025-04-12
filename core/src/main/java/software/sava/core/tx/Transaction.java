@@ -566,7 +566,7 @@ public interface Transaction {
     return Base64.getEncoder().encodeToString(out);
   }
 
-  static void sign(final List<Signer> signers,
+  static void sign(final SequencedCollection<Signer> signers,
                    final byte[] out,
                    final int msgOffset,
                    final int msgLen,
@@ -576,7 +576,7 @@ public interface Transaction {
     }
   }
 
-  static void sign(final List<Signer> signers, final byte[] out) {
+  static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     final int numSigners = signers.size();
     out[0] = (byte) numSigners;
     final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
@@ -584,7 +584,7 @@ public interface Transaction {
     Transaction.sign(signers, out, sigLen, msgLen, 1);
   }
 
-  static String signAndBase64Encode(final List<Signer> signers, final byte[] out) {
+  static String signAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
     sign(signers, out);
     return Base64.getEncoder().encodeToString(out);
   }
@@ -620,29 +620,29 @@ public interface Transaction {
     return signAndBase64Encode(Base58.decode(recentBlockHash), signer);
   }
 
-  void sign(final List<Signer> signers);
+  void sign(final SequencedCollection<Signer> signers);
 
-  default String signAndBase64Encode(final List<Signer> signers) {
+  default String signAndBase64Encode(final SequencedCollection<Signer> signers) {
     sign(signers);
     return base64EncodeToString();
   }
 
-  default void sign(final byte[] recentBlockHash, final List<Signer> signers) {
+  default void sign(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     sign(signers);
   }
 
-  default void sign(final String recentBlockHash, final List<Signer> signers) {
+  default void sign(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     sign(signers);
   }
 
-  default String signAndBase64Encode(final byte[] recentBlockHash, final List<Signer> signers) {
+  default String signAndBase64Encode(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
     return base64EncodeToString();
   }
 
-  default String signAndBase64Encode(final String recentBlockHash, final List<Signer> signers) {
+  default String signAndBase64Encode(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
     return base64EncodeToString();
   }
@@ -679,11 +679,11 @@ public interface Transaction {
 
   Transaction prependInstructions(final Instruction ix1, final Instruction ix2);
 
-  Transaction prependInstructions(final List<Instruction> instructions);
+  Transaction prependInstructions(final SequencedCollection<Instruction> instructions);
 
   Transaction appendIx(final Instruction ix);
 
-  Transaction appendInstructions(final List<Instruction> instructions);
+  Transaction appendInstructions(final SequencedCollection<Instruction> instructions);
 
   Transaction replaceInstruction(final int index, final Instruction instruction);
 

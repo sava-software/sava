@@ -47,17 +47,24 @@ public record TokenMetadata(PublicKey updateAuthority,
 
     final int numExtras = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
-    final var entries = new Map.Entry[numExtras];
-    for (int m = 0, l; m < numExtras; ++m) {
-      l = ByteUtil.getInt32LE(data, i);
-      i += Integer.BYTES;
-      final var key = new String(data, i, l);
-      i += l;
-      l = ByteUtil.getInt32LE(data, i);
-      i += Integer.BYTES;
-      final var val = new String(data, i, l);
-      i += l;
-      entries[m] = Map.entry(key, val);
+
+    final Map<String, String> additionalMetadata;
+    if (numExtras == 0) {
+      additionalMetadata = Map.of();
+    } else {
+      final var entries = new Map.Entry[numExtras];
+      for (int m = 0, l; m < numExtras; ++m) {
+        l = ByteUtil.getInt32LE(data, i);
+        i += Integer.BYTES;
+        final var key = new String(data, i, l);
+        i += l;
+        l = ByteUtil.getInt32LE(data, i);
+        i += Integer.BYTES;
+        final var val = new String(data, i, l);
+        i += l;
+        entries[m] = Map.entry(key, val);
+      }
+      additionalMetadata = Map.ofEntries(entries);
     }
     return new TokenMetadata(
         updateAuthority,
@@ -65,7 +72,7 @@ public record TokenMetadata(PublicKey updateAuthority,
         name,
         symbol,
         uri,
-        Map.ofEntries(entries)
+        additionalMetadata
     );
   }
 

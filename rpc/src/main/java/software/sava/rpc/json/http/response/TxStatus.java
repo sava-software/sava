@@ -23,10 +23,15 @@ public record TxStatus(Context context,
         && confirmationStatus == null;
   }
 
-  public static Map<String, TxStatus> parse(final List<String> txIds, final JsonIterator ji, final Context context) {
+  public static Map<String, TxStatus> parse(final SequencedCollection<String> txIds,
+                                            final JsonIterator ji,
+                                            final Context context) {
     final var statuses = HashMap.<String, TxStatus>newHashMap(txIds.size());
+    final var iterator = txIds.iterator();
     TxStatus nil = null;
-    for (int i = 0; ji.readArray(); ++i) {
+    while (ji.readArray()) {
+      final var signature = iterator.next();
+
       final TxStatus sigStatus;
       if (ji.whatIsNext() == null) {
         ji.skip();
@@ -39,7 +44,8 @@ public record TxStatus(Context context,
         ji.testObject(parser);
         sigStatus = parser.create(context);
       }
-      statuses.put(txIds.get(i), sigStatus);
+
+      statuses.put(signature, sigStatus);
     }
     return statuses;
   }
