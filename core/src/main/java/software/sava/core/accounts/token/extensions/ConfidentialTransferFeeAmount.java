@@ -13,7 +13,7 @@ public record ConfidentialTransferFeeAmount(byte[] withheldAmount) implements To
 
   @Override
   public ExtensionType extensionType() {
-    return ExtensionType.ConfidentialTransferFeeConfig;
+    return ExtensionType.ConfidentialTransferFeeAmount;
   }
 
   @Override
