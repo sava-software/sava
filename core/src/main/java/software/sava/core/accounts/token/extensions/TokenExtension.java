@@ -3,34 +3,7 @@ package software.sava.core.accounts.token.extensions;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
-public sealed interface TokenExtension extends Serializable permits ConfidentialMintBurn,
-    ConfidentialTransferAccount,
-    ConfidentialTransferFeeAmount,
-    ConfidentialTransferFeeConfig,
-    ConfidentialTransferMint,
-    CpiGuard,
-    DefaultAccountState,
-    GroupMemberPointer,
-    GroupPointer,
-    ImmutableOwner,
-    InterestBearingConfig,
-    MemoTransfer,
-    MetadataPointer,
-    MintCloseAuthority,
-    NonTransferable,
-    NonTransferableAccount,
-    PausableAccount,
-    PausableConfig,
-    PermanentDelegate,
-    ScaledUiAmountConfig,
-    TokenGroup,
-    TokenGroupMember,
-    TokenMetadata,
-    TransferFeeAmount,
-    TransferFeeConfig,
-    TransferHook,
-    TransferHookAccount,
-    Uninitialized {
+public sealed interface TokenExtension extends Serializable permits AccountTokenExtension, MintTokenExtension {
 
   ExtensionType extensionType();
 
@@ -38,7 +11,7 @@ public sealed interface TokenExtension extends Serializable permits Confidential
     return extensionType().ordinal();
   }
 
-  static int write(final TokenExtension extension, final byte[] data, final int offset) {
+  static int write(TokenExtension extension, byte[] data, int offset) {
     ByteUtil.putInt16LE(data, offset, extension.ordinal());
     final int length = extension.write(data, offset + 4);
     ByteUtil.putInt16LE(data, offset + 2, length);

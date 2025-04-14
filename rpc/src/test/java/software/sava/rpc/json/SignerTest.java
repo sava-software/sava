@@ -1,7 +1,6 @@
-package test.software.sava.rpc.json;
+package software.sava.rpc.json;
 
 import org.junit.jupiter.api.Test;
-import software.sava.rpc.json.PrivateKeyEncoding;
 
 import java.nio.charset.StandardCharsets;
 

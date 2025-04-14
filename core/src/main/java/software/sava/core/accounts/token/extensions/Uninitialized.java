@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record Uninitialized() implements TokenExtension {
+public record Uninitialized() implements MintTokenExtension {
 
   public static final Uninitialized INSTANCE = new Uninitialized();
 

@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record TokenGroup() implements TokenExtension {
+public record TokenGroup() implements MintTokenExtension {
 
   public static final TokenGroup INSTANCE = new TokenGroup();
 

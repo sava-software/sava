@@ -5,7 +5,7 @@ import software.sava.core.accounts.PublicKey;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
-public record MetadataPointer(PublicKey authority, PublicKey metadataAddress) implements TokenExtension {
+public record MetadataPointer(PublicKey authority, PublicKey metadataAddress) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH;
 

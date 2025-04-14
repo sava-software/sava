@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record MemoTransfer(boolean requireIncomingTransferAmount) implements TokenExtension {
+public record MemoTransfer(boolean requireIncomingTransferAmount) implements AccountTokenExtension {
 
   public static final int BYTES = 1;
 

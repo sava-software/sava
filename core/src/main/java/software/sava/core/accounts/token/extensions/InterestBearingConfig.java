@@ -10,7 +10,7 @@ public record InterestBearingConfig(PublicKey rateAuthority,
                                     long unixTimestamp,
                                     int preUpdateAverageRate,
                                     long lastUpdateTimestamp,
-                                    int currentRate) implements TokenExtension {
+                                    int currentRate) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + Long.BYTES + Short.BYTES + Long.BYTES + Short.BYTES;
 

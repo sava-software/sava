@@ -9,7 +9,7 @@ import static software.sava.core.accounts.PublicKey.readPubKey;
 public record ScaledUiAmountConfig(PublicKey authority,
                                    double multiplier,
                                    long newMultiplierEffectiveTimestamp,
-                                   double newMultiplier) implements TokenExtension {
+                                   double newMultiplier) implements MintTokenExtension {
 
   public static final int BYTES = PublicKey.PUBLIC_KEY_LENGTH + Double.BYTES + Long.BYTES + Double.BYTES;
 

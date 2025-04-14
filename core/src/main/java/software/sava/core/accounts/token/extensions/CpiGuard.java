@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record CpiGuard(boolean lockCPI) implements TokenExtension {
+public record CpiGuard(boolean lockCPI) implements AccountTokenExtension {
 
   public static final int BYTES = 1;
 

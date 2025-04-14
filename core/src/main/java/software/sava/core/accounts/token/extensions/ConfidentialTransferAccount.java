@@ -16,7 +16,7 @@ public record ConfidentialTransferAccount(boolean approved,
                                           long pendingBalanceCreditCounter,
                                           long maximumPendingBalanceCreditCounter,
                                           long expectedPendingBalanceCreditCounter,
-                                          long actualPendingBalanceCreditCounter) implements TokenExtension {
+                                          long actualPendingBalanceCreditCounter) implements AccountTokenExtension {
 
   /// Maximum bit length of any deposit or transfer amount
   ///

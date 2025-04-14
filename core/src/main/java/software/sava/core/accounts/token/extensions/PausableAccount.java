@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record PausableAccount() implements TokenExtension {
+public record PausableAccount() implements AccountTokenExtension {
 
   public static final PausableAccount INSTANCE = new PausableAccount();
 

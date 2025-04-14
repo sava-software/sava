@@ -2,7 +2,7 @@ package software.sava.core.accounts.token.extensions;
 
 import software.sava.core.encoding.ByteUtil;
 
-public record TransferFeeAmount(long withHeldAmount) implements TokenExtension {
+public record TransferFeeAmount(long withHeldAmount) implements MintTokenExtension {
 
   public static final int BYTES = Long.BYTES;
 

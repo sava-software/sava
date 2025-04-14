@@ -157,8 +157,6 @@ final class SolanaRpcTests {
   }
 
   private static void validateMultipleAccounts(final List<AccountInfo<byte[]>> accounts) {
-    assertEquals(2, accounts.size());
-
     var accountInfo = accounts.getFirst();
     assertEquals("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r", accountInfo.pubKey().toBase58());
 
@@ -172,7 +170,7 @@ final class SolanaRpcTests {
     final var rpcClient = createClient();
 
     rpcClient.id.set(testId);
-    var accounts = rpcClient.getMultipleAccounts(
+    var accounts = rpcClient.getAccounts(
         Commitment.CONFIRMED,
         BigInteger.valueOf(1000),
         32, 88,
@@ -182,6 +180,7 @@ final class SolanaRpcTests {
         )
     ).join();
 
+    assertEquals(2, accounts.size());
     validateMultipleAccounts(accounts);
     var accountInfo = accounts.getFirst();
     byte[] data = accountInfo.data();
@@ -193,23 +192,15 @@ final class SolanaRpcTests {
     assertEquals(32, data.length);
     assertEquals("So11111111111111111111111111111111111111112", PublicKey.readPubKey(data).toBase58());
 
-    accounts = rpcClient.getMultipleAccounts(
+    accounts = rpcClient.getAccounts(
         List.of(
             PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r"),
             PublicKey.fromBase58Encoded("5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6")
         )
     ).join();
 
-    validateMultipleAccounts(accounts);
-    accountInfo = accounts.getFirst();
-    data = accountInfo.data();
-    assertEquals(904, data.length);
-    assertEquals("cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij", PublicKey.readPubKey(data, 88).toString());
-
-    accountInfo = accounts.getLast();
-    data = accountInfo.data();
-    assertEquals(904, data.length);
-    assertEquals("So11111111111111111111111111111111111111112", PublicKey.readPubKey(data, 88).toBase58());
+    assertEquals(2, accounts.size());
+    validateCompleteMultipleAccounts(accounts);
 
     accounts = rpcClient.getMultipleAccounts(
         Commitment.FINALIZED,
@@ -220,9 +211,29 @@ final class SolanaRpcTests {
         )
     ).join();
 
+    assertEquals(2, accounts.size());
+    validateCompleteMultipleAccounts(accounts);
+
+    rpcClient.id.decrementAndGet();
+    accounts = rpcClient.getAccounts(
+        Commitment.FINALIZED,
+        List.of(
+            PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r"),
+            PublicKey.NONE,
+            PublicKey.fromBase58Encoded("5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6")
+        )
+    ).join();
+
+    assertEquals(3, accounts.size());
+    assertNull(accounts.get(1));
+    validateCompleteMultipleAccounts(accounts);
+  }
+
+  private void validateCompleteMultipleAccounts(final List<AccountInfo<byte[]>> accounts) {
     validateMultipleAccounts(accounts);
-    accountInfo = accounts.getFirst();
-    data = accountInfo.data();
+
+    var accountInfo = accounts.getFirst();
+    byte[] data = accountInfo.data();
     assertEquals(904, data.length);
     assertEquals("cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij", PublicKey.readPubKey(data, 88).toString());
 

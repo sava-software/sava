@@ -7,7 +7,7 @@ import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 public record ConfidentialTransferFeeConfig(PublicKey authority,
                                             PublicKey withdrawWithheldAuthorityElgamalPubkey,
                                             boolean harvestToMintEnabled,
-                                            byte[] withheldAmount) implements TokenExtension {
+                                            byte[] withheldAmount) implements MintTokenExtension {
 
   public static ConfidentialTransferFeeConfig read(final byte[] data, final int offset, final int to) {
     if (data == null || data.length == 0) {

@@ -14,7 +14,7 @@ public record TokenMetadata(PublicKey updateAuthority,
                             String name,
                             String symbol,
                             String uri,
-                            Map<String, String> additionalMetadata) implements TokenExtension {
+                            Map<String, String> additionalMetadata) implements MintTokenExtension {
 
   @SuppressWarnings("unchecked")
   public static TokenMetadata read(final byte[] data, final int offset) {

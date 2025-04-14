@@ -8,7 +8,7 @@ import static software.sava.core.accounts.PublicKey.readPubKey;
 
 public record ConfidentialTransferMint(PublicKey authority,
                                        boolean autoApproveNewAccounts,
-                                       PublicKey auditorElGamalKey) implements TokenExtension {
+                                       PublicKey auditorElGamalKey) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH + 1;
 

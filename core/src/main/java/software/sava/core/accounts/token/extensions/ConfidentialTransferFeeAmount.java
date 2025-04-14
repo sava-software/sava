@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record ConfidentialTransferFeeAmount(byte[] withheldAmount) implements TokenExtension {
+public record ConfidentialTransferFeeAmount(byte[] withheldAmount) implements MintTokenExtension {
 
   public static ConfidentialTransferFeeAmount read(final byte[] data, final int offset, final int to) {
     if (data == null || data.length == 0) {

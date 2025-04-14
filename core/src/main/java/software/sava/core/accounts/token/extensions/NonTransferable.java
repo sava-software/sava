@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record NonTransferable() implements TokenExtension {
+public record NonTransferable() implements MintTokenExtension {
 
   public static final NonTransferable INSTANCE = new NonTransferable();
 

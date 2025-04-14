@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record TransferHookAccount(boolean transferring) implements TokenExtension {
+public record TransferHookAccount(boolean transferring) implements AccountTokenExtension {
 
   public static final int BYTES = 1;
 

@@ -294,81 +294,175 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Long> getMinimumBalanceForRentExemption(final long accountLength);
 
+  /// In the case an account does not exist, the matching entry at the expected index is skipped instead of placing a null.
+  /// This can lead to fragile code handling such cases, as such it is recommended to use [SolanaRpcClient#getAccounts] instead.
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  @Deprecated(forRemoval = false)
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(keys, BYTES_IDENTITY);
   }
 
+  @Deprecated(forRemoval = false)
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                            final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(commitment, keys, BYTES_IDENTITY);
   }
 
+  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
+                                                          final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final SequencedCollection<PublicKey> keys) {
+    return getAccounts(keys, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
+                                                                   final SequencedCollection<PublicKey> keys) {
+    return getAccounts(commitment, keys, BYTES_IDENTITY);
+  }
+
+  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final int length,
+                                                           final int offset,
+                                                           final SequencedCollection<PublicKey> keys);
+
+  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
+                                                           final SequencedCollection<PublicKey> keys);
+
+  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
+                                                           final int length,
+                                                           final int offset,
+                                                           final SequencedCollection<PublicKey> keys);
+
+  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
+                                                           final BigInteger minContextSlot,
+                                                           final SequencedCollection<PublicKey> keys);
+
+  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
+                                                           final int length,
+                                                           final int offset,
+                                                           final SequencedCollection<PublicKey> keys);
+
+  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
+                                                           final BigInteger minContextSlot,
+                                                           final int length,
+                                                           final int offset,
+                                                           final SequencedCollection<PublicKey> keys);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final int length,
+                                                          final int offset,
+                                                          final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
+                                                          final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
+                                                          final int length,
+                                                          final int offset,
+                                                          final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
+                                                          final int length,
+                                                          final int offset,
+                                                          final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
+                                                          final BigInteger minContextSlot,
+                                                          final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
+
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
+                                                          final BigInteger minContextSlot,
+                                                          final int length,
+                                                          final int offset,
+                                                          final SequencedCollection<PublicKey> keys,
+                                                          final BiFunction<PublicKey, byte[], T> factory);
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId) {
     return getProgramAccounts(programId, BYTES_IDENTITY);
@@ -592,7 +686,7 @@ public interface SolanaRpcClient {
     return getRecentPrioritizationFees(null);
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   CompletableFuture<List<PrioritizationFee>> getRecentPrioritizationFees(final Collection<PublicKey> writablePublicKeys);
 
   CompletableFuture<List<PrioritizationFee>> getRecentPrioritizationFees(final SequencedCollection<PublicKey> writablePublicKeys);
@@ -710,35 +804,39 @@ public interface SolanaRpcClient {
     return getTransaction(commitment, txSignature, maxSupportedTransactionVersion, RpcEncoding.base64.name());
   }
 
-  @Deprecated()
+  /// Given that Sava provides parsers for not only transactions but instruction data as well,
+  /// there is no need to rely on the RPC servers ability to pre-parse data.
+  ///
+  /// In the future support for compressed base64 responses may be supported if it can meaningfully improve latency.
+  @Deprecated(forRemoval = true)
   default CompletableFuture<Tx> getTransaction(final String txSignature, final String encoding) {
     return getTransaction(txSignature, 0, encoding);
   }
 
-  @Deprecated()
+  @Deprecated(forRemoval = true)
   default CompletableFuture<Tx> getTransaction(final String txSignature, final RpcEncoding encoding) {
     return getTransaction(txSignature, 0, encoding.name());
   }
 
-  @Deprecated()
+  @Deprecated(forRemoval = true)
   CompletableFuture<Tx> getTransaction(final String txSignature,
                                        final int maxSupportedTransactionVersion,
                                        final String encoding);
 
-  @Deprecated()
+  @Deprecated(forRemoval = true)
   default CompletableFuture<Tx> getTransaction(final String txSignature,
                                                final int maxSupportedTransactionVersion,
                                                final RpcEncoding encoding) {
     return getTransaction(txSignature, maxSupportedTransactionVersion, encoding.name());
   }
 
-  @Deprecated()
+  @Deprecated(forRemoval = true)
   CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                        final String txSignature,
                                        final int maxSupportedTransactionVersion,
                                        final String encoding);
 
-  @Deprecated()
+  @Deprecated(forRemoval = true)
   default CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                                final String txSignature,
                                                final int maxSupportedTransactionVersion,

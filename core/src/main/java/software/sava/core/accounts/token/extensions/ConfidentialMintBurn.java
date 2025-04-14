@@ -7,7 +7,7 @@ import static software.sava.core.zk.ElGamal.*;
 public record ConfidentialMintBurn(byte[] confidentialSupply,
                                    byte[] decryptableSupply,
                                    PublicKey supplyElGamalPubKey,
-                                   byte[] pendingBurn) implements TokenExtension {
+                                   byte[] pendingBurn) implements MintTokenExtension {
 
   public static final int BYTES = ELGAMAL_CIPHERTEXT_LEN + AE_CIPHERTEXT_LEN + ELGAMAL_PUBKEY_LEN + ELGAMAL_CIPHERTEXT_LEN;
 

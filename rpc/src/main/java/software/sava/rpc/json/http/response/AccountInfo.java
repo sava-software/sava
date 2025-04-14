@@ -75,6 +75,26 @@ public record AccountInfo<T>(PublicKey pubKey,
     return accounts;
   }
 
+  public static <T> List<AccountInfo<T>> parseAccountsFromKeysWithNulls(final SequencedCollection<PublicKey> pubKeys,
+                                                                        final JsonIterator ji,
+                                                                        final Context context,
+                                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    final var accounts = new ArrayList<AccountInfo<T>>(pubKeys.size());
+    final var iterator = pubKeys.iterator();
+    while (ji.readArray()) {
+      final var key = iterator.next();
+      if (ji.whatIsNext() == ValueType.OBJECT) {
+        final var builder = new Builder(context, key);
+        ji.testObject(builder, ACCOUNT_PARSER);
+        accounts.add(builder.create(factory));
+      } else {
+        ji.skip();
+        accounts.add(null);
+      }
+    }
+    return accounts;
+  }
+
   public static <T> AccountInfo<T> parseAccount(final JsonIterator ji,
                                                 final Context context,
                                                 final BiFunction<PublicKey, byte[], T> factory) {

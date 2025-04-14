@@ -1,6 +1,6 @@
 package software.sava.core.accounts.token.extensions;
 
-public record DefaultAccountState(int state) implements TokenExtension {
+public record DefaultAccountState(int state) implements MintTokenExtension {
 
   public static final int BYTES = 1;
 

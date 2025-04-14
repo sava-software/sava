@@ -10,7 +10,7 @@ public record TransferFeeConfig(PublicKey transferFeeConfigAuthority,
                                 PublicKey withdrawWithheldAuthority,
                                 long withheldAmount,
                                 TransferFee olderTransferFee,
-                                TransferFee newerTransferFee) implements TokenExtension {
+                                TransferFee newerTransferFee) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH
       + PUBLIC_KEY_LENGTH

@@ -1,4 +1,4 @@
-package test.software.sava.rpc.json.http.client;
+package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
