@@ -294,8 +294,12 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Long> getMinimumBalanceForRentExemption(final long accountLength);
 
-  /// In the case an account does not exist, the matching entry at the expected index is skipped instead of placing a null.
-  /// This can lead to fragile code handling such cases, as such it is recommended to use [SolanaRpcClient#getAccounts] instead.
+  /// In the case an account does not exist, the matching entry at the expected index is skipped
+  /// instead of placing a null entry into the List.
+  ///
+  /// This behavior does not match the response of the Solana RPC API one to one.
+  ///
+  /// It is recommended to use [SolanaRpcClient#getAccounts] instead.
   @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
@@ -805,7 +809,7 @@ public interface SolanaRpcClient {
   }
 
   /// Given that Sava provides parsers for not only transactions but instruction data as well,
-  /// there is no need to rely on the RPC servers ability to pre-parse data.
+  /// there is no need to rely on the RPC servers' ability to pre-parse data.
   ///
   /// In the future support for compressed base64 responses may be supported if it can meaningfully improve latency.
   @Deprecated(forRemoval = true)

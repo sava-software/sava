@@ -7,7 +7,9 @@ import software.sava.core.serial.Serializable;
 import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.time.Instant;
-import java.util.*;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -98,16 +100,6 @@ public interface Borsh extends Serializable {
     final var result = new String[len];
     readArray(result, data, offset + Integer.BYTES);
     return result;
-  }
-
-  public static void main(final String[] args) {
-    final byte[] data = Base64.getDecoder().decode("""
-        yDjlfHGaIBq6gRpnZBt32lE4YD0We8vG4clAjfrj6qqWg4Y8i5F9KgMAAABVAAAAWWVzLCBtZW93IGZyb250cyB0aGUgMjgwTSBKVVAgYW5kIGxvY2tzIGluIHVudGlsIDIwMzAgaW4gcmV0dXJuIGZvciBhIDIyME0gSlVQIGJvbnVzLmoAAABObywgdGhlIDI4ME0gSlVQIGNvbWVzIGZyb20gdGhlIHRlYW0ncyBzdHJhdGVnaWMgcmVzZXJ2ZSBhbmQgbWVvd+KAmXMgSlVQIHVubG9ja3MgaW4gSnVuZSAyMDI2IGFzIHBsYW5uZWQuBwAAAEFic3RhaW4=
-        """.stripTrailing());
-
-    final int offset = 40;
-    final var optionDescriptions = Borsh.readStringVector(data, offset);
-    System.out.println(Arrays.toString(optionDescriptions));
   }
 
   static String[][] readMultiDimensionStringVector(final byte[] data, int offset) {

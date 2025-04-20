@@ -1,14 +1,8 @@
-buildscript {
-  repositories {
-    maven { url = 'https://plugins.gradle.org/m2/' }
-  }
-  dependencies {
-    // https://plugins.gradle.org/plugin/org.beryx.jlink
-    classpath "org.beryx:badass-jlink-plugin:+"
-  }
+plugins {
+  alias(libs.plugins.jlink)
 }
 
-apply plugin: 'org.beryx.jlink'
+apply(plugin: 'org.beryx.jlink')
 
 dependencies {
   implementation libs.json.iterator

@@ -300,14 +300,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     /// The default behavior is to [#close()] this WebSocket.
     ///
-    /// This behaviour can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
+    /// This behavior can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
     Builder onClose(final OnClose onClose);
 
     BiConsumer<SolanaRpcWebsocket, Throwable> onError();
 
     /// The default behavior is to [#close()] this WebSocket.
     ///
-    /// This behaviour can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
+    /// This behavior can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
     Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError);
   }
 }
