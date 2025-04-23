@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: gradle/actions/wrapper-validation@v3
+      - uses: gradle/actions/wrapper-validation@v4
 
       - uses: oracle-actions/setup-java@v1
         if: ${{ vars.GRADLE_JAVA_VERSION != vars.JAVA_VERSION }}

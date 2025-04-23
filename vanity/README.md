@@ -41,9 +41,10 @@ gpr.token=GITHUB_TOKEN
 - screen=0
 - [nt | numThreads]=
 - [nk | numKeys]=1
+- [kf | keyFormat]="base64KeyPair"
 - [cf | checkFound]=131072
 - [ld | logDelay]="5S"
-- [o | outDir]='.keys'
+- [o  | outDir]='.keys'
 - [sv | sigVerify]=false
 
 #### Prefix

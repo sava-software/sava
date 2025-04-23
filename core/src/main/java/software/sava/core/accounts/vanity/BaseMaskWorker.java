@@ -3,6 +3,7 @@ package software.sava.core.accounts.vanity;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.crypto.Hash;
+import software.sava.core.encoding.Base58;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -25,6 +26,7 @@ abstract class BaseMaskWorker implements AddressWorker {
 
   private final Path keyPath;
   private final SecureRandom secureRandom;
+  private final PrivateKeyEncoding privateKeyEncoding;
   private final boolean sigVerify;
   private final Subsequence beginsWith;
   private final long find;
@@ -41,6 +43,7 @@ abstract class BaseMaskWorker implements AddressWorker {
 
   protected BaseMaskWorker(final Path keyPath,
                            final SecureRandom secureRandom,
+                           final PrivateKeyEncoding privateKeyEncoding,
                            final boolean sigVerify,
                            final Subsequence beginsWith,
                            final long find,
@@ -50,6 +53,7 @@ abstract class BaseMaskWorker implements AddressWorker {
                            final int checkFound) {
     this.keyPath = keyPath;
     this.secureRandom = secureRandom;
+    this.privateKeyEncoding = privateKeyEncoding;
     this.sigVerify = sigVerify;
     this.beginsWith = beginsWith;
     this.find = find;
@@ -130,17 +134,37 @@ abstract class BaseMaskWorker implements AddressWorker {
 
       if (keyPath != null) {
         try {
+          final var formattedKey = switch (privateKeyEncoding) {
+            case jsonKeyPairArray -> {
+              final var json = new StringBuilder("[");
+              for (int i = 0; ; ) {
+                json.append(Byte.toUnsignedInt(keyPair[i]));
+                if (++i == keyPair.length) {
+                  break;
+                } else {
+                  json.append(',');
+                }
+              }
+              json.append(']');
+              yield json.toString();
+            }
+            case base64PrivateKey -> '"' + Base64.getEncoder().encodeToString(privateKey) + '"';
+            case base64KeyPair -> '"' + Base64.getEncoder().encodeToString(keyPair) + '"';
+            case base58PrivateKey -> '"' + Base58.encode(privateKey) + '"';
+            case base58KeyPair -> '"' + Base58.encode(keyPair) + '"';
+          };
           Files.writeString(
               keyPath.resolve(publicKey.toBase58() + ".json"),
               String.format(
                   """
                       {
                         "pubKey": "%s",
-                        "encoding": "base64KeyPair",
-                        "secret": "%s"
+                        "encoding": "%s",
+                        "secret": %s
                       }""",
                   publicKey,
-                  Base64.getEncoder().encodeToString(keyPair)
+                  privateKeyEncoding,
+                  formattedKey
               ),
               StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
           );

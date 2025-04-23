@@ -1,5 +1,6 @@
 package software.sava.vanity;
 
+import software.sava.core.accounts.vanity.PrivateKeyEncoding;
 import software.sava.core.accounts.vanity.Result;
 import software.sava.core.accounts.vanity.Subsequence;
 import software.sava.core.accounts.vanity.VanityAddressGenerator;
@@ -88,8 +89,10 @@ public final class Entrypoint {
       final int findNumKeys = intProp(moduleName, "numKeys", 1);
       final int checkFound = intProp(moduleName, "checkFound", 131_072);
       final boolean sigVerify = boolProp(moduleName, "sigVerify", false);
+      final var privateKeyEncoding = PrivateKeyEncoding.valueOf(System.getProperty(moduleName + ".keyFormat", "base64KeyPair"));
       final var generator = VanityAddressGenerator.createGenerator(
           keyPath,
+          privateKeyEncoding,
           sigVerify,
           executor,
           numThreads,

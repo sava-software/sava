@@ -12,6 +12,7 @@ public interface VanityAddressGenerator {
 
   static VanityAddressGenerator createGenerator(final Path keyPath,
                                                 final SecureRandomFactory secureRandomFactory,
+                                                final PrivateKeyEncoding privateKeyEncoding,
                                                 final boolean sigVerify,
                                                 final ExecutorService executor,
                                                 final int numThreads,
@@ -32,6 +33,7 @@ public interface VanityAddressGenerator {
               ? new BeginsWithMaskWorker(
               keyPath,
               secureRandom,
+              privateKeyEncoding,
               sigVerify,
               beginsWith,
               findKeys,
@@ -43,6 +45,7 @@ public interface VanityAddressGenerator {
               : new MaskWorker(
               keyPath,
               secureRandom,
+              privateKeyEncoding,
               sigVerify,
               beginsWith,
               endsWith,
@@ -62,6 +65,7 @@ public interface VanityAddressGenerator {
   }
 
   static VanityAddressGenerator createGenerator(final Path keyPath,
+                                                final PrivateKeyEncoding privateKeyEncoding,
                                                 final boolean sigVerify,
                                                 final ExecutorService executor,
                                                 final int numThreads,
@@ -72,6 +76,7 @@ public interface VanityAddressGenerator {
     return createGenerator(
         keyPath,
         SecureRandomFactory.DEFAULT,
+        privateKeyEncoding,
         sigVerify,
         executor,
         numThreads,
