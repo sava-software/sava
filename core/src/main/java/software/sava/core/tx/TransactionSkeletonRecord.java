@@ -215,6 +215,19 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
+  public AccountMeta[] parseAccounts(final List<PublicKey> writableLoaded, final List<PublicKey> readonlyLoaded) {
+    final var accounts = new AccountMeta[numAccounts];
+    int a = parseVersionedIncludedAccounts(accounts);
+    for (final var writeable : writableLoaded) {
+      accounts[a++] = createWrite(writeable);
+    }
+    for (final var readable : readonlyLoaded) {
+      accounts[a++] = createRead(readable);
+    }
+    return accounts;
+  }
+
+  @Override
   public Instruction[] parseInstructions(final AccountMeta[] accounts) {
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, accountIndex; i < numInstructions; ++i) {

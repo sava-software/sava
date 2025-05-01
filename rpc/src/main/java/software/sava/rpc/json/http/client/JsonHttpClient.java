@@ -71,7 +71,7 @@ public abstract class JsonHttpClient {
 
   // GET methods
 
-  private HttpRequest.Builder newRequest(final URI endpoint, final Duration requestTimeout) {
+  protected final HttpRequest.Builder newRequest(final URI endpoint, final Duration requestTimeout) {
     return extendRequest.apply(newJsonRequest(endpoint, requestTimeout));
   }
 

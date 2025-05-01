@@ -198,6 +198,8 @@ public interface TransactionSkeleton {
     return parseAccounts(lookupTableMap);
   }
 
+  AccountMeta[] parseAccounts(final List<PublicKey> writableLoaded, final List<PublicKey> readonlyLoaded);
+
   PublicKey feePayer();
 
   AccountMeta[] parseSignerAccounts();
