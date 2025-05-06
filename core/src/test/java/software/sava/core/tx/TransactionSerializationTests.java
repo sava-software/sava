@@ -419,9 +419,9 @@ final class TransactionSerializationTests {
 
     assertArrayEquals(
         skeleton.lookupTableAccounts(),
-        tables.stream().map(AddressLookupTable::address).toArray(PublicKey[]::new
-        )
+        tables.stream().map(AddressLookupTable::address).toArray(PublicKey[]::new)
     );
+
     final var writeableLoaded = List.of(
         "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF",
         "d4A2prbA2whesmvHaL88BH6Ewn5N4bTSU2Ze8P6Bc4Q",

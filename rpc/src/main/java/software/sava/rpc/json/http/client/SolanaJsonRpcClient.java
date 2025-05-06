@@ -559,15 +559,18 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     return getInflationReward(defaultCommitment, keys);
   }
 
+  private String joinKeys(final SequencedCollection<PublicKey> keys) {
+    return keys == null || keys.isEmpty() ? "[]" : keys.stream()
+        .map(PublicKey::toBase58)
+        .collect(Collectors.joining("\",\"", "[\"", "\"]"));
+  }
+
   @Override
   public CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
                                                                      final SequencedCollection<PublicKey> keys) {
-    final var joined = keys.isEmpty() ? "[]" : keys.stream()
-        .map(PublicKey::toBase58)
-        .collect(Collectors.joining("\",\"", "[\"", "\"]"));
     return sendPostRequest(INFLATION_REWARDS, format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s"}]}""",
-            id.incrementAndGet(), joined, commitment.getValue()
+            id.incrementAndGet(), joinKeys(keys), commitment.getValue()
         )
     );
   }
@@ -575,19 +578,16 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   @Override
   public CompletableFuture<List<InflationReward>> getInflationReward(final SequencedCollection<PublicKey> keys,
                                                                      final long epoch) {
-    return getInflationReward(defaultCommitment, List.of(), epoch);
+    return getInflationReward(defaultCommitment, keys, epoch);
   }
 
   @Override
   public CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
                                                                      final SequencedCollection<PublicKey> keys,
                                                                      final long epoch) {
-    final var joined = keys.isEmpty() ? "[]" : keys.stream()
-        .map(PublicKey::toBase58)
-        .collect(Collectors.joining("\",\"", "[\"", "\"]"));
     return sendPostRequest(INFLATION_REWARDS, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s",{"epoch":%d}}]}""",
-            id.incrementAndGet(), joined, commitment.getValue(), epoch
+                {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s","epoch":%d}]}""",
+            id.incrementAndGet(), joinKeys(keys), commitment.getValue(), epoch
         )
     );
   }
@@ -1801,12 +1801,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
             return true;
           }
       );
-
-      final var response = rpcClient.getAccountInfo(
-          PublicKey.fromBase58Encoded(""),
-          TokenAccount.FACTORY
-      ).join();
-      System.out.println(response.data());
     }
   }
 }

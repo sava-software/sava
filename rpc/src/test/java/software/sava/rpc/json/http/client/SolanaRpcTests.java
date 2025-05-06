@@ -99,6 +99,24 @@ final class SolanaRpcTests {
                   yield null;
                 }
               }
+              case 301 -> {
+                if (requestString.equals("""
+                    {"jsonrpc":"2.0","id":301,"method":"getInflationReward","params":[["BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g"],{"commitment":"confirmed"}]}""")) {
+                  yield """
+                      {"jsonrpc":"2.0","result":[{"amount":1854511658,"commission":5,"effectiveSlot":338256000,"epoch":782,"postBalance":2178854057}],"id":1746563243745}""";
+                } else {
+                  yield null;
+                }
+              }
+              case 302 -> {
+                if (requestString.equals("""
+                    {"jsonrpc":"2.0","id":302,"method":"getInflationReward","params":[["BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g"],{"commitment":"confirmed","epoch":781}]}""")) {
+                  yield """
+                      {"jsonrpc":"2.0","result":[{"amount":1940761929,"commission":5,"effectiveSlot":337824000,"epoch":781,"postBalance":1967836329}],"id":1746563243746}""";
+                } else {
+                  yield null;
+                }
+              }
               default -> "Unexpected json rpc id: " + id;
             };
 
@@ -127,6 +145,37 @@ final class SolanaRpcTests {
 
   private static SolanaJsonRpcClient createClient() {
     return createClient(null);
+  }
+
+  @Test
+  void getInflationReward() {
+    final int testId = 300;
+    final var rpcClient = createClient();
+    rpcClient.id.set(testId);
+
+    var inflationRewards = rpcClient.getInflationReward(List.of(
+            PublicKey.fromBase58Encoded("BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g")
+        )
+    ).join();
+    assertEquals(1, inflationRewards.size());
+    var inflationReward = inflationRewards.getFirst();
+    assertEquals(1854511658, inflationReward.amount());
+    assertEquals(5, inflationReward.commission());
+    assertEquals(338256000, inflationReward.effectiveSlot());
+    assertEquals(782, inflationReward.epoch());
+    assertEquals(2178854057L, inflationReward.postBalance());
+
+    inflationRewards = rpcClient.getInflationReward(List.of(
+            PublicKey.fromBase58Encoded("BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g")
+        ), inflationRewards.getFirst().epoch() - 1
+    ).join();
+    assertEquals(1, inflationRewards.size());
+    inflationReward = inflationRewards.getFirst();
+    assertEquals(1940761929, inflationReward.amount());
+    assertEquals(5, inflationReward.commission());
+    assertEquals(337824000, inflationReward.effectiveSlot());
+    assertEquals(781, inflationReward.epoch());
+    assertEquals(1967836329L, inflationReward.postBalance());
   }
 
   @Test
@@ -202,6 +251,7 @@ final class SolanaRpcTests {
     assertEquals(2, accounts.size());
     validateCompleteMultipleAccounts(accounts);
 
+    //noinspection deprecation
     accounts = rpcClient.getMultipleAccounts(
         Commitment.FINALIZED,
         List.of(
