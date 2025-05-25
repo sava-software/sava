@@ -20,9 +20,7 @@ record SubsequenceRecord(String subsequence,
     if (findChars.length == 1) {
       numMasks = base.length;
     } else {
-      for (final int _ : base) {
-        numMasks += countMasks(findChars, 1);
-      }
+      numMasks += (base.length * countMasks(findChars, 1));
     }
 
     final long[] masks = new long[numMasks];
@@ -45,11 +43,7 @@ record SubsequenceRecord(String subsequence,
     if (nextDepth == findChars.length) {
       return findChars[depth].length;
     } else {
-      int numMasks = 0;
-      for (final int _ : findChars[depth]) {
-        numMasks += countMasks(findChars, nextDepth);
-      }
-      return numMasks;
+      return (findChars[depth].length * countMasks(findChars, nextDepth));
     }
   }
 

@@ -318,7 +318,7 @@ final class SolanaRpcTests {
     var nodeHealth = rpcClient.getHealth().join();
     assertNull(nodeHealth);
 
-    rpcClient = createClient(_ -> true);
+    rpcClient = createClient(r -> true);
     rpcClient.id.set(0);
     nodeHealth = rpcClient.getHealth().join();
     validateNodeHealth(nodeHealth);
