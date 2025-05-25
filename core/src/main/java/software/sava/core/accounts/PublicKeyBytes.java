@@ -111,7 +111,7 @@ final class PublicKeyBytes implements PublicKey {
     if (o instanceof PublicKeyBytes _publicKey) {
       return Arrays.equals(this.publicKey, _publicKey.publicKey);
     } else {
-      return o.equals(this);
+      return o != null && o.equals(this);
     }
   }
 }
