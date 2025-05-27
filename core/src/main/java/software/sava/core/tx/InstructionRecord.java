@@ -152,7 +152,7 @@ record InstructionRecord(AccountMeta programId,
 
   @Override
   public byte[] copyData() {
-    final byte[] data = new byte[this.data.length];
+    final byte[] data = new byte[len];
     System.arraycopy(this.data, offset, data, 0, len);
     return data;
   }
@@ -173,7 +173,7 @@ record InstructionRecord(AccountMeta programId,
   public String toString() {
     final var accountsJson = accounts != null && !accounts.isEmpty()
         ? accounts.stream()
-        .map(AccountMeta::toString)
+        .map(accountMeta -> accountMeta == null ? "?" : accountMeta.toString())
         .collect(Collectors.joining(",", "[", "]"))
         .indent(4).stripTrailing()
         : "[]";
