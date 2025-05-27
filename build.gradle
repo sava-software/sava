@@ -26,7 +26,7 @@ subprojects {
 
   repositories {
     maven {
-      url = "https://maven.pkg.github.com/comodal/json-iterator"
+      url = "https://maven.pkg.github.com/sava-software/json-iterator"
       credentials {
         username = GPR_USER
         password = GPR_TOKEN
