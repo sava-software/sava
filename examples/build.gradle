@@ -1,5 +1,5 @@
 dependencies {
-  implementation libs.json.iterator
+  implementation libs.sava.json.iterator
   implementation project(':core')
   implementation project(':rpc')
 }

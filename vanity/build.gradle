@@ -5,7 +5,7 @@ plugins {
 apply(plugin: 'org.beryx.jlink')
 
 dependencies {
-  implementation libs.json.iterator
+  implementation libs.sava.json.iterator
   implementation project(':core')
 }
 
