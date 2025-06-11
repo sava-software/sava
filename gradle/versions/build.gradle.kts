@@ -8,3 +8,7 @@ dependencies.constraints {
     }
   }
 }
+
+dependencies.constraints {
+  api("org.junit.jupiter:junit-jupiter-api:${libs.junit.jupiter.get().version}")
+}
