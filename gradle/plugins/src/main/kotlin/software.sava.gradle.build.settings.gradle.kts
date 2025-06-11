@@ -1,15 +1,10 @@
 plugins {
   id("software.sava.gradle.report.develocity")
   id("software.sava.gradle.base.repositories")
+  id("org.gradlex.java-module-dependencies")
 }
 
-@Suppress("UnstableApiUsage")
-gradle.lifecycle.beforeProject {
-  if (path != ":") {
-    group = "software.sava"
-    apply(plugin = "software.sava.gradle.java-module")
-  }
-}
+includeBuild(".")
 
 include(":aggregation")
 project(":aggregation").projectDir = file("gradle/aggregation")
