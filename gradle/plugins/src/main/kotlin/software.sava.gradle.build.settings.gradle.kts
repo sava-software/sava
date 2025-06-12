@@ -1,4 +1,5 @@
 plugins {
+  id("software.sava.gradle.report.develocity")
   id("software.sava.gradle.base.repositories")
 }
 
