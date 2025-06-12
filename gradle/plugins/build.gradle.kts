@@ -1,11 +1,11 @@
 plugins {
-    `kotlin-dsl`
+  `kotlin-dsl`
 }
 
 repositories {
-    gradlePluginPortal()
+  gradlePluginPortal()
 }
 
 dependencies {
-
+  implementation("com.github.iherasymenko.jlink:jlink-plugin:0.7")
 }

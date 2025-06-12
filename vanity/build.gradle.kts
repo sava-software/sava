@@ -1,5 +1,5 @@
 plugins {
-  alias(libs.plugins.jlink)
+  id("software.sava.gradle.feature.jlink")
 }
 
 dependencies {
@@ -7,15 +7,8 @@ dependencies {
   implementation(project(":sava-core"))
 }
 
-afterEvaluate {
-  jlink {
-    imageName = project.name
-    options.addAll(listOf(
-        "--bind-services",
-        "--no-man-pages",
-        "--vm=server",
-        "--ignore-signing-information"
-    ))
-    enableCds()
-  }
+jlinkApplication {
+  applicationName = "vanity"
+  mainClass = "software.sava.vanity.Entrypoint"
+  mainModule = "software.sava.vanity"
 }
