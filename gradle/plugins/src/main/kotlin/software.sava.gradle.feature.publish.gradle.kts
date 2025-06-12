@@ -19,6 +19,12 @@ java {
 val vcs = "https://github.com/sava-software/sava"
 
 publishing {
+  publications.withType<MavenPublication>().configureEach {
+    versionMapping {
+      allVariants { fromResolutionResult() }
+    }
+  }
+
   publications.register<MavenPublication>("mavenJava") {
     from(components["java"])
 
