@@ -20,7 +20,6 @@ hs_err_pid*
 *.secret
 .DS_Store
 out/
-gradle.properties
 ignore
 .keys
 keys
