@@ -1,3 +1,4 @@
+// NOTE: This file is not necessary when BOM is published
 dependencies.constraints {
   val libs = versionCatalogs.named("libs")
   val catalogEntries = libs.libraryAliases.map { libs.findLibrary(it).get().get() }
@@ -9,6 +10,7 @@ dependencies.constraints {
   }
 }
 
+// Temporarily until 'org.junit.jupiter:junit-jupiter-api' is in catalog (and/or BOM)
 dependencies.constraints {
   api("org.junit.jupiter:junit-jupiter-api:${libs.junit.jupiter.get().version}")
 }
