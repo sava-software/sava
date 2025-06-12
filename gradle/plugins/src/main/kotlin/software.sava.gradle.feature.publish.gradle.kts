@@ -1,22 +1,31 @@
 plugins {
   id("java")
   id("maven-publish")
-  // id("signing")
+  id("signing")
 }
 
 val gprUser =
   providers.gradleProperty("gpr.user.write").orElse(providers.environmentVariable("GITHUB_ACTOR")).orElse("")
 val gprToken =
   providers.gradleProperty("gpr.token.write").orElse(providers.environmentVariable("GITHUB_TOKEN")).orElse("")
+val signingKey =
+  providers.environmentVariable("SIGNING_KEY").orNull
+val signingPassphrase =
+  providers.environmentVariable("SIGNING_PASSPHRASE").orNull
+val publishSigningEnabled =
+  providers.gradleProperty("sign").getOrElse("false").toBoolean()
 
 java {
   withJavadocJar()
   withSourcesJar()
 }
 
-//  signing {
-//    sign publishing.publications.mavenJava
-//  }
+signing {
+  sign(publishing.publications)
+  useInMemoryPgpKeys(signingKey, signingPassphrase)
+}
+
+tasks.withType<Sign>().configureEach { enabled = publishSigningEnabled }
 
 val vcs = "https://github.com/sava-software/sava"
 
