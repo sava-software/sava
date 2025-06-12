@@ -4,8 +4,10 @@ plugins {
   // id("signing")
 }
 
-val gprUser = providers.gradleProperty("gpr.user.write").orElse(providers.systemProperty("GITHUB_ACTOR")).orElse("")
-val gprToken = providers.gradleProperty("gpr.token.write").orElse(providers.systemProperty("GITHUB_TOKEN")).orElse("")
+val gprUser =
+  providers.gradleProperty("gpr.user.write").orElse(providers.environmentVariable("GITHUB_ACTOR")).orElse("")
+val gprToken =
+  providers.gradleProperty("gpr.token.write").orElse(providers.environmentVariable("GITHUB_TOKEN")).orElse("")
 
 java {
   withJavadocJar()
