@@ -19,11 +19,3 @@ javaModules {
   }
   versions("gradle/versions")
 }
-
-dependencyResolutionManagement {
-  versionCatalogs {
-    register("libs") {
-      from("software.sava:solana-version-catalog:0.9.0")
-    }
-  }
-}

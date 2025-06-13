@@ -2,9 +2,12 @@ plugins {
   id("org.gradlex.jvm-dependency-conflict-resolution")
 }
 
-// NOTE: This may refer directly to published BOM and 'gradle/versions' can be removed
+@Suppress("UnstableApiUsage")
+val bomVersion = providers.fileContents(isolated.rootProject.projectDirectory
+  .file("gradle/solana-version-catalog-version.txt")).asText.get().trim()
+
 jvmDependencyConflicts {
   consistentResolution {
-    platform(":versions")
+    platform("software.sava:solana-version-catalog:$bomVersion")
   }
 }
