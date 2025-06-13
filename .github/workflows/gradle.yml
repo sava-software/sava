@@ -33,13 +33,12 @@ jobs:
           
           # Fallback to default if no version found in branch name
           if [ -z "$JAVA_VERSION" ]; then
+            echo "No Java version found in branch name, using default: ${{ vars.JAVA_VERSION }}"
             echo "java-version=${{ vars.JAVA_VERSION }}" >> $GITHUB_OUTPUT
-            echo "No Java version found in branch name, using default: $JAVA_VERSION"
           else
             echo "Extracted Java version from branch: $JAVA_VERSION"
             echo "java-version=$JAVA_VERSION" >> $GITHUB_OUTPUT
           fi
-
 
       - uses: oracle-actions/setup-java@v1
         if: ${{ vars.GRADLE_JAVA_VERSION != steps.java-version.outputs.java-version }}
