@@ -14,9 +14,9 @@ tasks.test {
   }
 }
 
-// addition 'requires' for the test code
-testModuleInfo {
-  requires("org.junit.jupiter.api")
-  requires("jdk.httpserver")
-  runtimeOnly("org.junit.jupiter.engine")
+// remove automatically added compile time dependencies for strict dependency analysis
+configurations.testImplementation {
+  withDependencies {
+    removeIf { it.group == "org.junit.jupiter" && it.name == "junit-jupiter" }
+  }
 }
