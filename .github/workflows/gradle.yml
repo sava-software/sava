@@ -33,8 +33,8 @@ jobs:
           
           # Fallback to default if no version found in branch name
           if [ -z "$JAVA_VERSION" ]; then
-            echo "No Java version found in branch name, using default: $JAVA_VERSION"
             JAVA_VERSION="${{ vars.JAVA_VERSION }}"
+            echo "No Java version found in branch name, using default: $JAVA_VERSION"
           else
             echo "Extracted Java version from branch: $JAVA_VERSION"
           fi
