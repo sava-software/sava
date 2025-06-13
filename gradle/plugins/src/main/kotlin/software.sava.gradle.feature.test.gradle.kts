@@ -2,10 +2,11 @@ import org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
 
 plugins {
   id("java")
+  id("org.gradlex.java-module-dependencies")
+  id("org.gradlex.java-module-testing")
 }
 
 tasks.test {
-  useJUnitPlatform()
   testLogging {
     events("passed", "skipped", "failed", "standardOut", "standardError")
     exceptionFormat = FULL
@@ -13,15 +14,9 @@ tasks.test {
   }
 }
 
-dependencies {
-  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-}
-
-// access catalog for junit version
-// https://github.com/gradle/gradle/issues/15383
+// remove automatically added compile time dependencies for strict dependency analysis
 configurations.testImplementation {
   withDependencies {
-    val libs = the<VersionCatalogsExtension>().named("libs")
-    add(libs.findLibrary("junit-jupiter").get().get())
+    removeIf { it.group == "org.junit.jupiter" && it.name == "junit-jupiter" }
   }
 }

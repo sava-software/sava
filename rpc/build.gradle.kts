@@ -1,4 +1,5 @@
-dependencies {
-  implementation(libs.sava.json.iterator)
-  implementation(project(":sava-core"))
+testModuleInfo {
+  requires("jdk.httpserver")
+  requires("org.junit.jupiter.api")
+  runtimeOnly("org.junit.jupiter.engine")
 }
