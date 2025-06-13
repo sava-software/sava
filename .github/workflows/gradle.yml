@@ -29,7 +29,8 @@ jobs:
           echo "Branch name: $BRANCH_NAME"
           
           # Extract Java version from branch name (e.g., java-21, java-17, java-11)
-          JAVA_VERSION=$(echo "$BRANCH_NAME" | grep -oE '^java-([0-9]+)' | grep -oE '[0-9]+')
+          JAVA_VERSION=$(echo "$BRANCH_NAME" | grep -oE 'java-([0-9]+)' | grep -oE '[0-9]+')
+          echo "$JAVA_VERSION"
           
           # Fallback to default if no version found in branch name
           if [ -z "$JAVA_VERSION" ]; then
