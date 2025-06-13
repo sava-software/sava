@@ -10,3 +10,6 @@ gradle.lifecycle.beforeProject {
     apply(plugin = "software.sava.gradle.java-module")
   }
 }
+
+include(":aggregation")
+project(":aggregation").projectDir = file("gradle/aggregation")
