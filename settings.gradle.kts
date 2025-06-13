@@ -19,7 +19,7 @@ project(":sava-vanity").projectDir = file("vanity")
 dependencyResolutionManagement {
   versionCatalogs {
     register("libs") {
-      from("software.sava:solana-version-catalog:0.8.11")
+      from("software.sava:solana-version-catalog:0.9.0")
     }
   }
 }
