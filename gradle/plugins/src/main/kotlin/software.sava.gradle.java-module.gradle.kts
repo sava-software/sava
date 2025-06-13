@@ -6,4 +6,5 @@ plugins {
   id("software.sava.gradle.feature.test")
   id("software.sava.gradle.feature.javadoc")
   id("software.sava.gradle.feature.publish")
+  id("software.sava.gradle.check.dependencies")
 }
