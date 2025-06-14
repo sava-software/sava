@@ -7,7 +7,7 @@ dependencyResolutionManagement {
   @Suppress("UnstableApiUsage")
   repositories {
     maven {
-      url = uri("https://maven.pkg.github.com/sava-software/json-iterator")
+      url = uri("https://maven.pkg.github.com/sava-software/solana-version-catalog")
       credentials {
         username = gprUser.get()
         password = gprToken.get()
