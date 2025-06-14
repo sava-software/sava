@@ -3,5 +3,7 @@ plugins {
 }
 
 tasks.withType<Javadoc>().configureEach {
-  (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
+  val standardOption = options as StandardJavadocDocletOptions
+  standardOption.addStringOption("Xdoclint:none", "-quiet")
+  standardOption.addBooleanOption("html5", true)
 }

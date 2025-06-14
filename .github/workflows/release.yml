@@ -58,7 +58,7 @@ jobs:
       - run: printf "org.gradle.java.home=%s" "$JAVA_HOME" > gradle.properties
         if: ${{ vars.GRADLE_JAVA_VERSION == steps.java-version.outputs.java-version }}
 
-      - name: Github Packages
+      - name: Publish Packages
         run: |
           printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
           java --version
