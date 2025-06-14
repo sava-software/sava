@@ -62,7 +62,7 @@ jobs:
         run: |
           printf "\norg.gradle.java.installations.paths=%s" "$JAVA_HOME" >> gradle.properties
           java --version
-          ./gradlew --stacktrace -Psign=true -PjavaVersion=${{ steps.java-version.outputs.java-version }} -Pversion=${{ github.ref_name }} check :core:publish :rpc:publish publishAggregationToCentralPortal
+          ./gradlew --stacktrace -Psign=true -PjavaVersion=${{ steps.java-version.outputs.java-version }} -Pversion=${{ github.ref_name }} check :sava-core:publish :sava-rpc:publish publishAggregationToCentralPortal
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_PUBLISH_PK: ${{ secrets.GPG_PUBLISH_PK }}
