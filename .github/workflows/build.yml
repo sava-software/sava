@@ -1,0 +1,13 @@
+name: Gradle Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    types: [ opened, synchronize ]
+
+jobs:
+  build:
+    uses: sava-software/sava-build/.github/workflows/build.yml@main
+    secrets: inherit

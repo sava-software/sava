@@ -1,0 +1,16 @@
+name: Publish Release
+
+on:
+  create:
+    tags:
+      - '\d+\.\d+\.\d+'
+
+jobs:
+  publish:
+    uses: sava-software/sava-build/.github/workflows/publish.yml@main
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+    with:
+      projects: "sava-core,sava-rpc"

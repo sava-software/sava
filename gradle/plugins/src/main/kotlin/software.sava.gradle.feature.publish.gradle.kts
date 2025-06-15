@@ -10,9 +10,9 @@ val gprUser =
 val gprToken =
   providers.gradleProperty("gpr.token.write").orElse(providers.environmentVariable("GITHUB_TOKEN")).orElse("")
 val signingKey =
-  providers.environmentVariable("GPG_PUBLISH_PK").orNull
+  providers.environmentVariable("GPG_PUBLISH_SECRET").orNull
 val signingPassphrase =
-  providers.environmentVariable("GPG_PUBLISH_PF").orNull
+  providers.environmentVariable("GPG_PUBLISH_PHRASE").orNull
 val publishSigningEnabled =
   providers.gradleProperty("sign").getOrElse("false").toBoolean()
 
