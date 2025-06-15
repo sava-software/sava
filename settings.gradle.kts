@@ -11,11 +11,6 @@ javaModules {
   directory(".") {
     group = "software.sava"
     plugin("software.sava.gradle.java-module")
-
-    module("core") { artifact = "sava-core" }
-    module("examples") { artifact = "sava-examples" }
-    module("rpc") { artifact = "sava-rpc" }
-    module("vanity") { artifact = "sava-vanity" }
   }
   versions("gradle/versions")
 }
