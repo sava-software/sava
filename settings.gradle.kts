@@ -12,5 +12,4 @@ javaModules {
     group = "software.sava"
     plugin("software.sava.gradle.java-module")
   }
-  versions("gradle/versions")
 }

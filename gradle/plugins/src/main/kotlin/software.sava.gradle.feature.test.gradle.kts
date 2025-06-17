@@ -20,3 +20,7 @@ configurations.testImplementation {
     removeIf { it.group == "org.junit.jupiter" && it.name == "junit-jupiter" }
   }
 }
+
+configurations.testCompileOnly {
+  extendsFrom(configurations.compileOnly.get())
+}
