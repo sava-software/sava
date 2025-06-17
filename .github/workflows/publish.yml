@@ -12,5 +12,3 @@ jobs:
     permissions:
       contents: read
       packages: write
-    with:
-      projects: "sava-core,sava-rpc"
