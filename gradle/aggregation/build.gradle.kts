@@ -1,5 +1,5 @@
 plugins {
-  id("software.sava.gradle.feature.publish-maven-central")
+  id("software.sava.build.feature.publish-maven-central")
 }
 
 dependencies {
