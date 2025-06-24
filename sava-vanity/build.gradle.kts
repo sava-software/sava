@@ -1,5 +1,5 @@
 plugins {
-  id("software.sava.gradle.feature.jlink")
+  id("software.sava.build.feature.jlink")
 }
 
 jlinkApplication {
