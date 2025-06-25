@@ -36,6 +36,10 @@ final class TransactionSerializationTests {
 
     tx.sign(signerA);
     tx.sign(signerB);
+    keyPairBytes = Signer.generatePrivateKeyPairBytes();
+    final var signerC = Signer.createFromKeyPair(keyPairBytes);
+    final var _tx = tx;
+    assertThrows(IllegalArgumentException.class, () -> _tx.sign(signerC));
 
     var data = tx.serialized();
     int messageOffset = ((TransactionRecord) tx).messageOffset();
