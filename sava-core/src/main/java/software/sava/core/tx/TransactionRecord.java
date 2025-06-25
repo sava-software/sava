@@ -7,9 +7,11 @@ import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.SequencedCollection;
 
+import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 
 record TransactionRecord(AccountMeta feePayer,
@@ -19,6 +21,7 @@ record TransactionRecord(AccountMeta feePayer,
                          byte[] data,
                          int numSigners,
                          int messageOffset,
+                         int accountsOffset,
                          int recentBlockHashIndex) implements Transaction {
 
   static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
@@ -69,11 +72,25 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public void sign(final Signer signer) {
-    if (this.numSigners != 1) {
-      throw new IllegalArgumentException(String.format("Expected %d signers.", this.numSigners));
+    if (numSigners > 1) {
+      final byte[] pubKey = signer.publicKey().toByteArray();
+      for (int from = accountsOffset, i = 0; i < numSigners; ++i, from += PUBLIC_KEY_LENGTH) {
+        if (Arrays.equals(pubKey, 0, PUBLIC_KEY_LENGTH, data, from, from + PUBLIC_KEY_LENGTH)) {
+          Transaction.sign(
+              signer,
+              this.data,
+              this.messageOffset,
+              this.data.length - this.messageOffset,
+              1 + (i * SIGNATURE_LENGTH)
+          );
+          return;
+        }
+      }
+      throw new IllegalArgumentException("Failed to find index for signer " + signer.publicKey());
+    } else {
+      this.data[0] = 1;
+      Transaction.sign(signer, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);
     }
-    this.data[0] = 1;
-    Transaction.sign(signer, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);
   }
 
   @Override
@@ -95,6 +112,18 @@ record TransactionRecord(AccountMeta feePayer,
     }
     this.data[0] = (byte) numSigners;
     Transaction.sign(signers, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);
+  }
+
+  @Override
+  public void sign(final Collection<Signer> signers) {
+    final int numSigners = signers.size();
+    if (numSigners != this.numSigners) {
+      throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners, numSigners));
+    }
+    this.data[0] = (byte) numSigners;
+    for (final var signer : signers) {
+      sign(signer);
+    }
   }
 
   @Override

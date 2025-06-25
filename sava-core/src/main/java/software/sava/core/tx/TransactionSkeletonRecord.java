@@ -372,6 +372,7 @@ record TransactionSkeletonRecord(byte[] data,
         data,
         numSignatures,
         messageOffset,
+        accountsOffset,
         recentBlockHashIndex
     );
   }
@@ -387,6 +388,7 @@ record TransactionSkeletonRecord(byte[] data,
         data,
         numSignatures,
         messageOffset,
+        accountsOffset,
         recentBlockHashIndex
     );
   }
@@ -402,6 +404,7 @@ record TransactionSkeletonRecord(byte[] data,
         data,
         numSignatures,
         messageOffset,
+        accountsOffset,
         recentBlockHashIndex
     );
   }

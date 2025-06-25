@@ -2,6 +2,8 @@ package software.sava.core.tx;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.Signer;
+import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
@@ -15,6 +17,60 @@ import static software.sava.core.accounts.meta.AccountMeta.*;
 import static software.sava.core.programs.Discriminator.toDiscriminator;
 
 final class TransactionSerializationTests {
+
+  @Test
+  void testTxSigning() {
+    var keyPairBytes = Signer.generatePrivateKeyPairBytes();
+    final var signerA = Signer.createFromKeyPair(keyPairBytes);
+    keyPairBytes = Signer.generatePrivateKeyPairBytes();
+    final var signerB = Signer.createFromKeyPair(keyPairBytes);
+    assertNotEquals(signerA.publicKey(), signerB.publicKey());
+
+    var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[0]
+    );
+    var tx = Transaction.createTx(signerA.publicKey(), ix);
+    assertEquals(2, tx.numSigners());
+
+    tx.sign(signerA);
+    tx.sign(signerB);
+
+    var data = tx.serialized();
+    int messageOffset = ((TransactionRecord) tx).messageOffset();
+    int from = 1;
+    int to = from + Transaction.SIGNATURE_LENGTH;
+    assertTrue(signerA.publicKey().verifySignature(
+        data, messageOffset, data.length - messageOffset,
+        Arrays.copyOfRange(data, from, to)
+    ));
+    from = to;
+    to += Transaction.SIGNATURE_LENGTH;
+    assertTrue(signerB.publicKey().verifySignature(
+        data, messageOffset, data.length - messageOffset,
+        Arrays.copyOfRange(data, from, to)
+    ));
+
+    ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWrite(signerB.publicKey())),
+        new byte[0]
+    );
+    tx = Transaction.createTx(signerA.publicKey(), ix);
+    assertEquals(1, tx.numSigners());
+
+    tx.sign(signerA);
+
+    data = tx.serialized();
+    messageOffset = ((TransactionRecord) tx).messageOffset();
+    from = 1;
+    to = from + Transaction.SIGNATURE_LENGTH;
+    assertTrue(signerA.publicKey().verifySignature(
+        data, messageOffset, data.length - messageOffset,
+        Arrays.copyOfRange(data, from, to)
+    ));
+  }
 
   @Test
   void testVariableLengthIxLength() {

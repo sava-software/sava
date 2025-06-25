@@ -248,6 +248,7 @@ public interface Transaction {
     ++i;
 
     i += CompactU16Encoding.encodeLength(out, i, numAccounts);
+    final int accountsOffset = i;
     for (final var accountMeta : sortedAccounts) {
       i += accountMeta.publicKey().write(out, i);
     }
@@ -260,7 +261,17 @@ public interface Transaction {
       i = instruction.serialize(out, i, accountIndexLookupTable);
     }
 
-    return new TransactionRecord(feePayer, instructions, null, NO_TABLES, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
+    return new TransactionRecord(
+        feePayer,
+        instructions,
+        null,
+        NO_TABLES,
+        out,
+        numRequiredSignatures,
+        sigLen,
+        accountsOffset,
+        recentBlockHashIndex
+    );
   }
 
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
@@ -359,6 +370,7 @@ public interface Transaction {
     ++i;
 
     i += CompactU16Encoding.encodeLength(out, i, numIncludedAccounts);
+    final int accountsOffset = i;
     for (int a = 0; a < numIncludedAccounts; ++a) {
       i += sortedAccounts[a].publicKey().write(out, i);
     }
@@ -384,7 +396,17 @@ public interface Transaction {
       out[i] = lookupTable.indexOfOrThrow(sortedAccounts[a].publicKey());
     }
 
-    return new TransactionRecord(feePayer, instructions, lookupTable, NO_TABLES, out, numRequiredSignatures, sigLen, recentBlockHashIndex);
+    return new TransactionRecord(
+        feePayer,
+        instructions,
+        lookupTable,
+        NO_TABLES,
+        out,
+        numRequiredSignatures,
+        sigLen,
+        accountsOffset,
+        recentBlockHashIndex
+    );
   }
 
   static Transaction createTx(final AccountMeta feePayer,
@@ -505,6 +527,7 @@ public interface Transaction {
 
     // Accounts
     i += CompactU16Encoding.encodeLength(out, i, numIncludedAccounts);
+    final int accountsOffset = i;
     for (int a = 0; a < numIncludedAccounts; ++a) {
       i += sortedAccounts[a].publicKey().write(out, i);
     }
@@ -532,6 +555,7 @@ public interface Transaction {
         out,
         numRequiredSignatures,
         sigLen,
+        accountsOffset,
         recentBlockHashIndex
     );
   }
@@ -619,6 +643,8 @@ public interface Transaction {
   default String signAndBase64Encode(final String recentBlockHash, final Signer signer) {
     return signAndBase64Encode(Base58.decode(recentBlockHash), signer);
   }
+
+  void sign(final Collection<Signer> signers);
 
   void sign(final SequencedCollection<Signer> signers);
 
