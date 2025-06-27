@@ -2,7 +2,7 @@
 
 set -e
 
-simpleProjectName="vanity"
+simpleProjectName="sava-vanity"
 readonly simpleProjectName
 moduleName="software.sava.vanity"
 readonly moduleName
@@ -134,7 +134,7 @@ do
   fi
 done
 
-javaExe="$(pwd)/$simpleProjectName/build/images/$simpleProjectName/bin/java"
+javaExe="$(pwd)/$simpleProjectName/build/images/vanity/bin/java"
 readonly javaExe
 
 jvmArgs="$jvmArgs -D$moduleName.sigVerify=$sigVerify -D$moduleName.outDir=$outDir -D$moduleName.numThreads=$numThreads -D$moduleName.numKeys=$numKeys -D$moduleName.keyFormat=$keyFormat -D$moduleName.checkFound=$checkFound -D$moduleName.logDelay=$logDelay -D$moduleName.prefix=$prefix -D$moduleName.pCaseSensitive=$pCaseSensitive -D$moduleName.p1337Numbers=$p1337Numbers -D$moduleName.p1337Letters=$p1337Letters -D$moduleName.suffix=$suffix -D$moduleName.sCaseSensitive=$sCaseSensitive -D$moduleName.s1337Numbers=$s1337Numbers -D$moduleName.s1337Letters=$s1337Letters -m $moduleName/$mainClass"

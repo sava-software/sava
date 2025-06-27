@@ -6,4 +6,6 @@ jlinkApplication {
   applicationName = "vanity"
   mainClass = "software.sava.vanity.Entrypoint"
   mainModule = "software.sava.vanity"
+  noManPages = true
+  vm = "server"
 }
