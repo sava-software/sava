@@ -12,6 +12,13 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public final class JsonRpcException extends RuntimeException {
 
+  // https://www.jsonrpc.org/specification#error_object
+  public static final int INVALID_REQUEST = -32_600;
+  public static final int METHOD_NOT_FOUND = -32_601;
+  public static final int INVALID_PARAMS = -32_602;
+  public static final int INTERNAL_ERROR = -32_603;
+  public static final int PARSE_ERROR = -32_700;
+
   private final OptionalLong retryAfterSeconds;
   private final long code;
   private final RpcCustomError customError;

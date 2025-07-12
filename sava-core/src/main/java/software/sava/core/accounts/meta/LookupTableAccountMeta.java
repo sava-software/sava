@@ -59,5 +59,7 @@ public interface LookupTableAccountMeta {
 
   void reset();
 
+  int numIndexed();
+
   int serialize(final byte[] out, int i);
 }

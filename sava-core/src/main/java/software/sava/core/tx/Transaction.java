@@ -347,13 +347,14 @@ public interface Transaction {
       accountIndexLookupTable.put(sortedAccounts[a].publicKey(), a);
     }
 
+    final int numTableIndexedAccounts = numLookupReads + numLookupWrites;
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
         + VERSIONED_MSG_HEADER_LENGTH
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + (1 + BASE_LOOKUP_TABLE_LEN + numLookupWrites + numLookupReads);
+        + (numTableIndexedAccounts > 0 ? (1 + BASE_LOOKUP_TABLE_LEN + numTableIndexedAccounts) : 1);
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
@@ -384,29 +385,43 @@ public interface Transaction {
     }
 
     // Address Lookup Table
-    i += CompactU16Encoding.encodeLength(out, i, 1);
-    i += lookupTable.address().write(out, i);
-    i += CompactU16Encoding.encodeLength(out, i, numLookupWrites);
-    int a = numIncludedAccounts;
-    for (final int to = numIncludedAccounts + numLookupWrites; a < to; ++a, ++i) {
-      out[i] = lookupTable.indexOfOrThrow(sortedAccounts[a].publicKey());
+    if (numTableIndexedAccounts > 0) {
+      i += CompactU16Encoding.encodeLength(out, i, 1);
+      i += lookupTable.address().write(out, i);
+      i += CompactU16Encoding.encodeLength(out, i, numLookupWrites);
+      int a = numIncludedAccounts;
+      for (final int to = numIncludedAccounts + numLookupWrites; a < to; ++a, ++i) {
+        out[i] = lookupTable.indexOfOrThrow(sortedAccounts[a].publicKey());
+      }
+      i += CompactU16Encoding.encodeLength(out, i, numLookupReads);
+      for (; a < numAccounts; ++a, ++i) {
+        out[i] = lookupTable.indexOfOrThrow(sortedAccounts[a].publicKey());
+      }
+      return new TransactionRecord(
+          feePayer,
+          instructions,
+          lookupTable,
+          NO_TABLES,
+          out,
+          numRequiredSignatures,
+          sigLen,
+          accountsOffset,
+          recentBlockHashIndex
+      );
+    } else {
+      CompactU16Encoding.encodeLength(out, i, 0);
+      return new TransactionRecord(
+          feePayer,
+          instructions,
+          null,
+          NO_TABLES,
+          out,
+          numRequiredSignatures,
+          sigLen,
+          accountsOffset,
+          recentBlockHashIndex
+      );
     }
-    i += CompactU16Encoding.encodeLength(out, i, numLookupReads);
-    for (; a < numAccounts; ++a, ++i) {
-      out[i] = lookupTable.indexOfOrThrow(sortedAccounts[a].publicKey());
-    }
-
-    return new TransactionRecord(
-        feePayer,
-        instructions,
-        lookupTable,
-        NO_TABLES,
-        out,
-        numRequiredSignatures,
-        sigLen,
-        accountsOffset,
-        recentBlockHashIndex
-    );
   }
 
   static Transaction createTx(final AccountMeta feePayer,
@@ -502,6 +517,12 @@ public interface Transaction {
     for (final var tableAccountMeta : tableAccountMetas) {
       tai = tableAccountMeta.indexReads(accountIndexLookupTable, tai);
     }
+    int numTablesWithIndexedAccounts = 0;
+    for (final var tableAccountMeta : tableAccountMetas) {
+      if (tableAccountMeta.numIndexed() > 0) {
+        ++numTablesWithIndexedAccounts;
+      }
+    }
 
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
@@ -509,7 +530,7 @@ public interface Transaction {
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + (1 + (numLookupTables * BASE_LOOKUP_TABLE_LEN) + (numAccounts - numIncludedAccounts));
+        + (1 + (numTablesWithIndexedAccounts * BASE_LOOKUP_TABLE_LEN) + (numAccounts - numIncludedAccounts));
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
@@ -542,22 +563,43 @@ public interface Transaction {
     }
 
     // Address Lookup Tables
-    i += CompactU16Encoding.encodeLength(out, i, numLookupTables);
-    for (final var tableAccountMeta : tableAccountMetas) {
-      i = tableAccountMeta.serialize(out, i);
+    i += CompactU16Encoding.encodeLength(out, i, numTablesWithIndexedAccounts);
+    if (numLookupTables == numTablesWithIndexedAccounts) {
+      for (final var tableAccountMeta : tableAccountMetas) {
+        i = tableAccountMeta.serialize(out, i);
+      }
+      return new TransactionRecord(
+          feePayer,
+          instructions,
+          null,
+          tableAccountMetas,
+          out,
+          numRequiredSignatures,
+          sigLen,
+          accountsOffset,
+          recentBlockHashIndex
+      );
+    } else {
+      final var usedTables = new LookupTableAccountMeta[numTablesWithIndexedAccounts];
+      int t = 0;
+      for (final var tableAccountMeta : tableAccountMetas) {
+        if (tableAccountMeta.numIndexed() > 0) {
+          i = tableAccountMeta.serialize(out, i);
+          usedTables[t++] = tableAccountMeta;
+        }
+      }
+      return new TransactionRecord(
+          feePayer,
+          instructions,
+          null,
+          usedTables,
+          out,
+          numRequiredSignatures,
+          sigLen,
+          accountsOffset,
+          recentBlockHashIndex
+      );
     }
-
-    return new TransactionRecord(
-        feePayer,
-        instructions,
-        null,
-        tableAccountMetas,
-        out,
-        numRequiredSignatures,
-        sigLen,
-        accountsOffset,
-        recentBlockHashIndex
-    );
   }
 
   static void setBlockHash(final byte[] data, final byte[] recentBlockHash) {

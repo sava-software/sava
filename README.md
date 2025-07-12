@@ -21,9 +21,9 @@ request.
 [Generate a classic token](https://github.com/settings/tokens) with the `read:packages` scope needed to access
 dependencies hosted on GitHub Package Repository.
 
-Add the following properties to `$HOME/.gradle/gradle.properties`.
+#### ~/.gradle/gradle.properties
 
-```gradle.properties
+```properties
 savaGithubPackagesUsername=GITHUB_USERNAME
 savaGithubPackagesPassword=GITHUB_TOKEN
 ```

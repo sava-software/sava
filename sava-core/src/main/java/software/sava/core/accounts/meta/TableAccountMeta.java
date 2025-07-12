@@ -86,6 +86,11 @@ final class TableAccountMeta implements LookupTableAccountMeta {
   }
 
   @Override
+  public int numIndexed() {
+    return numReads + numWrites;
+  }
+
+  @Override
   public int serialize(final byte[] out, int i) {
     i += lookupTable.address().write(out, i);
     i += CompactU16Encoding.encodeLength(out, i, numWrites);
