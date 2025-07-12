@@ -2,6 +2,8 @@ package software.sava.core.encoding;
 
 import java.lang.invoke.VarHandle;
 import java.math.BigInteger;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
@@ -160,6 +162,26 @@ public final class ByteUtil {
 
   public static byte[] reverse(final byte[] bytes) {
     return reverse(bytes, bytes.length);
+  }
+
+  public static byte[] fixedLength(final byte[] bytes, final int length) {
+    if (bytes.length < length) {
+      final byte[] fixedBytes = new byte[length];
+      System.arraycopy(bytes, 0, fixedBytes, 0, bytes.length);
+      return fixedBytes;
+    } else if (bytes.length == length) {
+      return bytes;
+    } else {
+      throw new IllegalArgumentException(String.format("Must be <= %s bytes", length));
+    }
+  }
+
+  public static byte[] fixedLength(final String val, final int length, final Charset charset) {
+    return fixedLength(val.getBytes(charset), length);
+  }
+
+  public static byte[] fixedLength(final String val, final int length) {
+    return fixedLength(val, length, StandardCharsets.UTF_8);
   }
 
   private ByteUtil() {
