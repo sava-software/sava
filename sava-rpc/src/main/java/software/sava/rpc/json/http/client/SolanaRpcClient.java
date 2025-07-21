@@ -177,9 +177,11 @@ public interface SolanaRpcClient {
     return getBlock(commitment, slot, BlockTxDetails.none);
   }
 
-  CompletableFuture<Block> getBlock(final Commitment commitment,
-                                    final long slot,
-                                    final BlockTxDetails blockTxDetails);
+  default CompletableFuture<Block> getBlock(final Commitment commitment,
+                                            final long slot,
+                                            final BlockTxDetails blockTxDetails) {
+    return getBlock(commitment, slot, blockTxDetails, true);
+  }
 
   default CompletableFuture<Block> getBlock(final long slot, final boolean rewards) {
     return getBlock(slot, BlockTxDetails.none, rewards);
@@ -192,6 +194,42 @@ public interface SolanaRpcClient {
   CompletableFuture<Block> getBlock(final Commitment commitment,
                                     final long slot,
                                     final BlockTxDetails blockTxDetails,
+                                    final boolean rewards);
+
+  CompletableFuture<Block> getBlock(final long slot, final int maxSupportedTransactionVersion);
+
+  default CompletableFuture<Block> getBlock(final Commitment commitment,
+                                            final long slot,
+                                            final int maxSupportedTransactionVersion) {
+    return getBlock(commitment, slot, BlockTxDetails.none, maxSupportedTransactionVersion);
+  }
+
+  default CompletableFuture<Block> getBlock(final long slot,
+                                            final int maxSupportedTransactionVersion,
+                                            final boolean rewards) {
+    return getBlock(slot, BlockTxDetails.none, maxSupportedTransactionVersion, rewards);
+  }
+
+  CompletableFuture<Block> getBlock(final long slot,
+                                    final BlockTxDetails blockTxDetails,
+                                    final int maxSupportedTransactionVersion);
+
+  default CompletableFuture<Block> getBlock(final Commitment commitment,
+                                            final long slot,
+                                            final BlockTxDetails blockTxDetails,
+                                            final int maxSupportedTransactionVersion) {
+    return getBlock(commitment, slot, blockTxDetails, maxSupportedTransactionVersion, true);
+  }
+
+  CompletableFuture<Block> getBlock(final long slot,
+                                    final BlockTxDetails blockTxDetails,
+                                    final int maxSupportedTransactionVersion,
+                                    final boolean rewards);
+
+  CompletableFuture<Block> getBlock(final Commitment commitment,
+                                    final long slot,
+                                    final BlockTxDetails blockTxDetails,
+                                    final int maxSupportedTransactionVersion,
                                     final boolean rewards);
 
   CompletableFuture<BlockHeight> getBlockHeight();

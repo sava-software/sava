@@ -299,13 +299,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<Block> getBlock(final Commitment commitment,
-                                           final long slot,
-                                           final BlockTxDetails blockTxDetails) {
-    return getBlock(commitment, slot, blockTxDetails, true);
-  }
-
-  @Override
   public CompletableFuture<Block> getBlock(final long slot,
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
@@ -320,6 +313,39 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     return sendPostRequest(BLOCK, format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b}]}""",
             id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards
+        )
+    );
+  }
+
+  @Override
+  public CompletableFuture<Block> getBlock(final long slot, final int maxSupportedTransactionVersion) {
+    return getBlock(this.defaultCommitment, slot, maxSupportedTransactionVersion);
+  }
+
+  @Override
+  public CompletableFuture<Block> getBlock(final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final int maxSupportedTransactionVersion) {
+    return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion);
+  }
+
+  @Override
+  public CompletableFuture<Block> getBlock(final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final int maxSupportedTransactionVersion,
+                                           final boolean rewards) {
+    return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion, rewards);
+  }
+
+  @Override
+  public CompletableFuture<Block> getBlock(final Commitment commitment,
+                                           final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final int maxSupportedTransactionVersion,
+                                           final boolean rewards) {
+    return sendPostRequest(BLOCK, format("""
+                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","maxSupportedTransactionVersion":%d,"rewards":%b}]}""",
+            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, maxSupportedTransactionVersion, rewards
         )
     );
   }
@@ -1784,15 +1810,14 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   public static void main(String[] args) {
-//    final var rpcEndpoint = URI.create("https://mainnet.helius-rpc.com/?api-key=");
-    final var rpcEndpoint = SolanaNetwork.MAIN_NET.getEndpoint();
+    final var rpcEndpoint = args.length > 0 ? URI.create(args[0]) : SolanaNetwork.MAIN_NET.getEndpoint();
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
           rpcEndpoint,
           httpClient,
           response -> {
-            final var json = new String(response.body());
-            System.out.println(json);
+//            final var json = new String(response.body());
+//            System.out.println(json);
 //            try {
 //              Files.write(Path.of("get_block.data.json"), response.body(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 //            } catch (final IOException e) {

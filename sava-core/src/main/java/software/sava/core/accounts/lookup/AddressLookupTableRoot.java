@@ -1,8 +1,18 @@
 package software.sava.core.accounts.lookup;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.encoding.ByteUtil;
+import software.sava.core.rpc.Filter;
 
 abstract class AddressLookupTableRoot implements AddressLookupTable {
+
+  static final Filter ACTIVE_FILTER;
+
+  static {
+    final byte[] notDeActivated = new byte[Long.BYTES];
+    ByteUtil.putInt64LE(notDeActivated, 0, -1);
+    ACTIVE_FILTER = Filter.createMemCompFilter(AddressLookupTable.DEACTIVATION_SLOT_OFFSET, notDeActivated);
+  }
 
   protected final PublicKey address;
   protected final byte[] data;

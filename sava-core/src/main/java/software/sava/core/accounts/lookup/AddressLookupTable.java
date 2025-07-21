@@ -3,6 +3,7 @@ package software.sava.core.accounts.lookup;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.sysvar.Clock;
 import software.sava.core.encoding.ByteUtil;
+import software.sava.core.rpc.Filter;
 
 import java.util.HashMap;
 import java.util.Set;
@@ -22,6 +23,14 @@ public interface AddressLookupTable {
   int LAST_EXTENDED_SLOT_START_INDEX_OFFSET = AddressLookupTable.LAST_EXTENDED_OFFSET + Long.BYTES;
   int AUTHORITY_OPTION_OFFSET = AddressLookupTable.LAST_EXTENDED_SLOT_START_INDEX_OFFSET + 1;
   int AUTHORITY_OFFSET = AddressLookupTable.AUTHORITY_OPTION_OFFSET + 1;
+
+  static Filter activeFilter() {
+    return AddressLookupTableRoot.ACTIVE_FILTER;
+  }
+
+  static Filter authorityFilter(final PublicKey authority) {
+    return Filter.createMemCompFilter(AUTHORITY_OFFSET, authority);
+  }
 
   BiFunction<PublicKey, byte[], AddressLookupTable> FACTORY = AddressLookupTable::read;
 
