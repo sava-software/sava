@@ -1811,8 +1811,10 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
   public static void main(String[] args) {
     final var rpcEndpoint = args.length > 0 ? URI.create(args[0]) : SolanaNetwork.MAIN_NET.getEndpoint();
+    final var devNet = SolanaNetwork.DEV_NET.getEndpoint();
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var rpcClient = SolanaRpcClient.createClient(
+//          devNet,
           rpcEndpoint,
           httpClient,
           response -> {
