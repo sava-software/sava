@@ -8,7 +8,6 @@ import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
-import software.sava.rpc.json.http.request.RpcEncoding;
 import software.sava.rpc.json.http.response.*;
 
 import java.math.BigInteger;
@@ -338,91 +337,75 @@ public interface SolanaRpcClient {
   /// This behavior does not match the response of the Solana RPC API one to one.
   ///
   /// It is recommended to use [SolanaRpcClient#getAccounts] instead.
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  @Deprecated(forRemoval = false)
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(keys, BYTES_IDENTITY);
   }
 
-  @Deprecated(forRemoval = false)
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                            final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(commitment, keys, BYTES_IDENTITY);
   }
 
-  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  @Deprecated(forRemoval = false)
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  @Deprecated(forRemoval = false)
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final int length,
@@ -728,9 +711,6 @@ public interface SolanaRpcClient {
     return getRecentPrioritizationFees(null);
   }
 
-  @Deprecated(forRemoval = true)
-  CompletableFuture<List<PrioritizationFee>> getRecentPrioritizationFees(final Collection<PublicKey> writablePublicKeys);
-
   CompletableFuture<List<PrioritizationFee>> getRecentPrioritizationFees(final SequencedCollection<PublicKey> writablePublicKeys);
 
   CompletableFuture<List<TxSig>> getSignaturesForAddress(final PublicKey address, final int limit);
@@ -833,58 +813,16 @@ public interface SolanaRpcClient {
   CompletableFuture<Tx> getTransaction(final String txSignature);
 
   default CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
-    return getTransaction(commitment, txSignature, 0, RpcEncoding.base64.name());
+    return getTransaction(commitment, 0, txSignature);
   }
 
   default CompletableFuture<Tx> getTransaction(final int maxSupportedTransactionVersion, final String txSignature) {
-    return getTransaction(txSignature, maxSupportedTransactionVersion, RpcEncoding.base64.name());
+    return getTransaction(defaultCommitment(), maxSupportedTransactionVersion, txSignature);
   }
 
-  default CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                               final int maxSupportedTransactionVersion,
-                                               final String txSignature) {
-    return getTransaction(commitment, txSignature, maxSupportedTransactionVersion, RpcEncoding.base64.name());
-  }
-
-  /// Given that Sava provides parsers for not only transactions but instruction data as well,
-  /// there is no need to rely on the RPC servers' ability to pre-parse data.
-  ///
-  /// In the future support for compressed base64 responses may be supported if it can meaningfully improve latency.
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Tx> getTransaction(final String txSignature, final String encoding) {
-    return getTransaction(txSignature, 0, encoding);
-  }
-
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Tx> getTransaction(final String txSignature, final RpcEncoding encoding) {
-    return getTransaction(txSignature, 0, encoding.name());
-  }
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<Tx> getTransaction(final String txSignature,
-                                       final int maxSupportedTransactionVersion,
-                                       final String encoding);
-
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Tx> getTransaction(final String txSignature,
-                                               final int maxSupportedTransactionVersion,
-                                               final RpcEncoding encoding) {
-    return getTransaction(txSignature, maxSupportedTransactionVersion, encoding.name());
-  }
-
-  @Deprecated(forRemoval = true)
   CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                       final String txSignature,
                                        final int maxSupportedTransactionVersion,
-                                       final String encoding);
-
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                               final String txSignature,
-                                               final int maxSupportedTransactionVersion,
-                                               final RpcEncoding encoding) {
-    return getTransaction(commitment, txSignature, maxSupportedTransactionVersion, encoding.name());
-  }
+                                       final String txSignature);
 
   CompletableFuture<Long> getTransactionCount();
 

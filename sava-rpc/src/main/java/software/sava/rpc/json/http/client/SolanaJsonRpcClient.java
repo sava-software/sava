@@ -1178,11 +1178,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<List<PrioritizationFee>> getRecentPrioritizationFees(final Collection<PublicKey> writablePublicKeys) {
-    return recentPrioritizationFees(writablePublicKeys);
-  }
-
-  @Override
   public CompletableFuture<List<TxSig>> getSignaturesForAddress(final PublicKey address, final int limit) {
     return getSignaturesForAddress(defaultCommitment, address, limit);
   }
@@ -1443,17 +1438,9 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   }
 
   @Override
-  public CompletableFuture<Tx> getTransaction(final String txSignature,
-                                              final int maxSupportedTransactionVersion,
-                                              final String encoding) {
-    return getTransaction(defaultCommitment, txSignature, maxSupportedTransactionVersion, encoding);
-  }
-
-  @Override
   public CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                              final String txSignature,
                                               final int maxSupportedTransactionVersion,
-                                              final String encoding) {
+                                              final String txSignature) {
     final var maxVersionParam = maxSupportedTransactionVersion < 0
         ? ""
         : String.format("\"maxSupportedTransactionVersion\":%d,", maxSupportedTransactionVersion);
