@@ -7,7 +7,6 @@ import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.PublicKeyEncoding;
-import software.sava.rpc.json.http.SolanaNetwork;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
@@ -1770,51 +1769,5 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
             id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue()
         )
     );
-  }
-
-  private static void logSimulationResult(final TxSimulation simulationResult) {
-    System.out.format("""
-            
-            Simulation Result:
-              program: %s
-              CU consumed: %d
-              error: %s
-              blockhash: %s
-              inner instructions:
-              %s
-              logs:
-              %s
-            
-            """,
-        simulationResult.programId(),
-        simulationResult.unitsConsumed().orElse(-1),
-        simulationResult.error(),
-        simulationResult.replacementBlockHash(),
-        simulationResult.innerInstructions().stream().map(InnerInstructions::toString)
-            .collect(Collectors.joining("\n    * ", "  * ", "")),
-        simulationResult.logs().stream().collect(Collectors.joining("\n    * ", "  * ", ""))
-    );
-  }
-
-  public static void main(String[] args) {
-    final var rpcEndpoint = args.length > 0 ? URI.create(args[0]) : SolanaNetwork.MAIN_NET.getEndpoint();
-    final var devNet = SolanaNetwork.DEV_NET.getEndpoint();
-    try (final var httpClient = HttpClient.newHttpClient()) {
-      final var rpcClient = SolanaRpcClient.createClient(
-//          devNet,
-          rpcEndpoint,
-          httpClient,
-          response -> {
-//            final var json = new String(response.body());
-//            System.out.println(json);
-//            try {
-//              Files.write(Path.of("get_block.data.json"), response.body(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-//            } catch (final IOException e) {
-//              throw new UncheckedIOException(e);
-//            }
-            return true;
-          }
-      );
-    }
   }
 }
