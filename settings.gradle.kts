@@ -10,7 +10,7 @@ pluginManagement {
 }
 
 plugins {
-  id("software.sava.build") version "0.1.32"
+  id("software.sava.build") version "0.1.33"
 }
 
 rootProject.name = "sava"
