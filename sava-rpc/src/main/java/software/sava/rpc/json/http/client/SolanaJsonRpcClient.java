@@ -66,7 +66,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   };
   private static final Function<HttpResponse<byte[]>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyResponseResult(ji -> {
     final var schedule = new HashMap<PublicKey, long[]>();
-    for (PublicKey validator; (validator = PublicKeyEncoding.parseBase58Encoded(ji)) != null; ) {
+    for (PublicKey validator; (validator = PublicKeyEncoding.parseObjectFieldBase58Encoded(ji)) != null; ) {
       schedule.put(validator, PARSE_LONG_ARRAY.apply(ji));
     }
     return schedule;
