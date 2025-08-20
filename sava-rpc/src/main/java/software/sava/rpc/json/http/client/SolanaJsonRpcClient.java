@@ -12,6 +12,7 @@ import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.math.BigInteger;
 import java.net.URI;
@@ -58,6 +59,9 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<byte[]>, InflationGovernor> INFLATION_GOVERNOR = applyResponseResult(InflationGovernor::parse);
   private static final Function<HttpResponse<byte[]>, InflationRate> INFLATION_RATE = applyResponseResult(InflationRate::parse);
   private static final Function<JsonIterator, long[]> PARSE_LONG_ARRAY = ji -> {
+    if (ji.whatIsNext() == ValueType.NULL) {
+      return new long[0];
+    }
     final var longs = new ArrayList<Long>();
     while (ji.readArray()) {
       longs.add(ji.readLong());
@@ -65,11 +69,15 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     return longs.stream().mapToLong(Long::longValue).toArray();
   };
   private static final Function<HttpResponse<byte[]>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyResponseResult(ji -> {
-    final var schedule = new HashMap<PublicKey, long[]>();
-    for (PublicKey validator; (validator = PublicKeyEncoding.parseObjectFieldBase58Encoded(ji)) != null; ) {
-      schedule.put(validator, PARSE_LONG_ARRAY.apply(ji));
+    if (ji.whatIsNext() == ValueType.NULL) {
+      return Map.of();
+    } else {
+      final var schedule = new HashMap<PublicKey, long[]>();
+      for (PublicKey validator; (validator = PublicKeyEncoding.parseObjectFieldBase58Encoded(ji)) != null; ) {
+        schedule.put(validator, PARSE_LONG_ARRAY.apply(ji));
+      }
+      return schedule;
     }
-    return schedule;
   });
   private static final Function<HttpResponse<byte[]>, List<AccountInfo<TokenAccount>>> TOKEN_ACCOUNTS_PARSER =
       applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, TokenAccount.FACTORY));
