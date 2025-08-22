@@ -68,7 +68,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     }
     return longs.stream().mapToLong(Long::longValue).toArray();
   };
-  private static final Function<HttpResponse<byte[]>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyResponseResult(ji -> {
+
+  static final Function<JsonIterator, Map<PublicKey, long[]>> KEY_LONG_ARRAY_MAP_PARSER = ji -> {
     if (ji.whatIsNext() == ValueType.NULL) {
       return Map.of();
     } else {
@@ -78,7 +79,8 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
       }
       return schedule;
     }
-  });
+  };
+  private static final Function<HttpResponse<byte[]>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyResponseResult(KEY_LONG_ARRAY_MAP_PARSER);
   private static final Function<HttpResponse<byte[]>, List<AccountInfo<TokenAccount>>> TOKEN_ACCOUNTS_PARSER =
       applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, TokenAccount.FACTORY));
   private static final Function<HttpResponse<byte[]>, List<AccountLamports>> TOP_LAMPORT_ACCOUNTS = applyResponseValue(AccountLamports::parseAccounts);

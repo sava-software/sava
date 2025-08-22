@@ -688,7 +688,6 @@ final class ParseTransactionErrorTests {
 
     assertEquals(1, statusMap.size());
     final var status = statusMap.get(sig);
-    assertNotNull(status);
     assertEquals(FINALIZED, status.confirmationStatus());
     assertTrue(status.confirmations().isEmpty());
     assertEquals(303578335L, status.slot());
