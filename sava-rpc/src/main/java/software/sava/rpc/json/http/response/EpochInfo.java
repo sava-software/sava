@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -13,29 +13,12 @@ public record EpochInfo(long absoluteSlot,
                         long transactionCount) {
 
   public static EpochInfo parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("absoluteSlot", buf, offset, len)) {
-      builder.absoluteSlot(ji.readLong());
-    } else if (fieldEquals("blockHeight", buf, offset, len)) {
-      builder.blockHeight(ji.readLong());
-    } else if (fieldEquals("epoch", buf, offset, len)) {
-      builder.epoch(ji.readLong());
-    } else if (fieldEquals("slotIndex", buf, offset, len)) {
-      builder.slotIndex(ji.readInt());
-    } else if (fieldEquals("slotsInEpoch", buf, offset, len)) {
-      builder.slotsInEpoch(ji.readInt());
-    } else if (fieldEquals("transactionCount", buf, offset, len)) {
-      builder.transactionCount(ji.readLong());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long absoluteSlot;
     private long blockHeight;
@@ -44,36 +27,31 @@ public record EpochInfo(long absoluteSlot,
     private int slotsInEpoch;
     private long transactionCount;
 
-    private Builder() {
-
+    private Parser() {
     }
 
     private EpochInfo create() {
       return new EpochInfo(absoluteSlot, blockHeight, epoch, slotIndex, slotsInEpoch, transactionCount);
     }
 
-    private void absoluteSlot(final long absoluteSlot) {
-      this.absoluteSlot = absoluteSlot;
-    }
-
-    private void blockHeight(final long blockHeight) {
-      this.blockHeight = blockHeight;
-    }
-
-    private void epoch(final long epoch) {
-      this.epoch = epoch;
-    }
-
-    private void slotIndex(final int slotIndex) {
-      this.slotIndex = slotIndex;
-    }
-
-    private void slotsInEpoch(final int slotsInEpoch) {
-      this.slotsInEpoch = slotsInEpoch;
-    }
-
-    private void transactionCount(final long transactionCount) {
-      this.transactionCount = transactionCount;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("absoluteSlot", buf, offset, len)) {
+        absoluteSlot = ji.readLong();
+      } else if (fieldEquals("blockHeight", buf, offset, len)) {
+        blockHeight = ji.readLong();
+      } else if (fieldEquals("epoch", buf, offset, len)) {
+        epoch = ji.readLong();
+      } else if (fieldEquals("slotIndex", buf, offset, len)) {
+        slotIndex = ji.readInt();
+      } else if (fieldEquals("slotsInEpoch", buf, offset, len)) {
+        slotsInEpoch = ji.readInt();
+      } else if (fieldEquals("transactionCount", buf, offset, len)) {
+        transactionCount = ji.readLong();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

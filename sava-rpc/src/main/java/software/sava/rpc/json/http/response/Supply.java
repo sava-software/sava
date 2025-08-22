@@ -1,6 +1,8 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import software.sava.core.accounts.PublicKey;
+import software.sava.rpc.json.PublicKeyEncoding;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
@@ -12,64 +14,60 @@ public record Supply(Context context,
                      long total,
                      long circulating,
                      long nonCirculating,
-                     List<String> nonCirculatingAccounts) {
+                     List<PublicKey> nonCirculatingAccountKeys) {
 
-  public static Supply parse(final JsonIterator ji, final Context context) {
-    return ji.testObject(new Builder(context), PARSER).create();
+  @Deprecated
+  public List<String> nonCirculatingAccounts() {
+    return nonCirculatingAccountKeys.stream()
+        .map(PublicKey::toBase58)
+        .toList();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("total", buf, offset, len)) {
-      builder.total(ji.readLong());
-    } else if (fieldEquals("circulating", buf, offset, len)) {
-      builder.circulating(ji.readLong());
-    } else if (fieldEquals("nonCirculating", buf, offset, len)) {
-      builder.nonCirculating(ji.readLong());
-    } else if (fieldEquals("nonCirculatingAccounts", buf, offset, len)) {
-      if (ji.readArray()) {
-        final var accounts = new ArrayList<String>();
-        do {
-          accounts.add(ji.readString());
-        } while (ji.readArray());
-        builder.nonCirculatingAccounts(accounts);
-      } else {
-        builder.nonCirculatingAccounts(List.of());
-      }
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
+  public static Supply parse(final JsonIterator ji, final Context context) {
+    final var parser = new Parser(context);
+    ji.testObject(parser);
+    return parser.create();
+  }
 
-  private static final class Builder extends RootBuilder {
+  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
     private long total;
     private long circulating;
     private long nonCirculating;
-    private List<String> nonCirculatingAccounts;
+    private List<PublicKey> nonCirculatingAccounts;
 
-    private Builder(final Context context) {
+    private Parser(final Context context) {
       super(context);
     }
 
     private Supply create() {
-      return new Supply(context, total, circulating, nonCirculating, nonCirculatingAccounts == null ? List.of() : nonCirculatingAccounts);
+      return new Supply(context, total, circulating, nonCirculating,
+          nonCirculatingAccounts == null ? List.of() : nonCirculatingAccounts
+      );
     }
 
-    private void total(final long total) {
-      this.total = total;
-    }
-
-    private void circulating(final long circulating) {
-      this.circulating = circulating;
-    }
-
-    private void nonCirculating(final long nonCirculating) {
-      this.nonCirculating = nonCirculating;
-    }
-
-    private void nonCirculatingAccounts(final List<String> nonCirculatingAccounts) {
-      this.nonCirculatingAccounts = nonCirculatingAccounts;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("total", buf, offset, len)) {
+        total = ji.readLong();
+      } else if (fieldEquals("circulating", buf, offset, len)) {
+        circulating = ji.readLong();
+      } else if (fieldEquals("nonCirculating", buf, offset, len)) {
+        nonCirculating = ji.readLong();
+      } else if (fieldEquals("nonCirculatingAccounts", buf, offset, len)) {
+        if (ji.readArray()) {
+          final var accounts = new ArrayList<PublicKey>();
+          do {
+            accounts.add(PublicKeyEncoding.parseBase58Encoded(ji));
+          } while (ji.readArray());
+          nonCirculatingAccounts = accounts;
+        } else {
+          nonCirculatingAccounts = List.of();
+        }
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

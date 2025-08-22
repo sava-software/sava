@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
@@ -12,42 +12,42 @@ public record PrioritizationFee(long slot, long prioritizationFee) {
 
   public static List<PrioritizationFee> parse(final JsonIterator ji) {
     final var samples = new ArrayList<PrioritizationFee>(150);
+    final var parser = new Parser();
     while (ji.readArray()) {
-      final var sample = ji.testObject(new Builder(), PARSER).create();
-      samples.add(sample);
+      ji.testObject(parser);
+      samples.add(parser.create());
+      parser.reset();
     }
     return samples;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("slot", buf, offset, len)) {
-      builder.slot(ji.readLong());
-    } else if (fieldEquals("prioritizationFee", buf, offset, len)) {
-      builder.prioritizationFee(ji.readLong());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long slot;
     private long prioritizationFee;
 
-    private Builder() {
+    private Parser() {
     }
 
     private PrioritizationFee create() {
       return new PrioritizationFee(slot, prioritizationFee);
     }
 
-    private void slot(final long slot) {
-      this.slot = slot;
+    private void reset() {
+      slot = 0L;
+      prioritizationFee = 0L;
     }
 
-    private void prioritizationFee(final long prioritizationFee) {
-      this.prioritizationFee = prioritizationFee;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("slot", buf, offset, len)) {
+        slot = ji.readLong();
+      } else if (fieldEquals("prioritizationFee", buf, offset, len)) {
+        prioritizationFee = ji.readLong();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

@@ -24,7 +24,6 @@ public record ReplacementBlockHash(String blockhash, long lastValidBlockHeight) 
     private String blockhash;
     private long lastValidBlockHeight;
 
-
     private ReplacementBlockHash create() {
       return new ReplacementBlockHash(blockhash, lastValidBlockHeight);
     }

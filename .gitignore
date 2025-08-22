@@ -26,3 +26,4 @@ ignore
 keys
 Integ.*
 integ.*
+/*.json

@@ -1,6 +1,8 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import software.sava.core.accounts.PublicKey;
+import software.sava.rpc.json.PublicKeyEncoding;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
@@ -8,33 +10,30 @@ import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record AccountLamports(Context context, String address, long lamports) {
+public record AccountLamports(Context context, PublicKey addressKey, long lamports) {
+
+  @Deprecated
+  public String address() {
+    return addressKey.toString();
+  }
 
   public static List<AccountLamports> parseAccounts(final JsonIterator ji, final Context context) {
     final var accounts = new ArrayList<AccountLamports>();
+    final var parser = new Parser(context);
     while (ji.readArray()) {
-      accounts.add(ji.testObject(new Builder(context), PARSER).create());
+      ji.testObject(parser);
+      accounts.add(parser.create());
+      parser.reset();
     }
     return accounts;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("lamports", buf, offset, len)) {
-      builder.lamports(ji.readLong());
-    } else if (fieldEquals("address", buf, offset, len)) {
-      builder.address(ji.readString());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder extends RootBuilder {
+  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
     private long lamports;
-    private String address;
+    private PublicKey address;
 
-    private Builder(final Context context) {
+    private Parser(final Context context) {
       super(context);
     }
 
@@ -42,12 +41,21 @@ public record AccountLamports(Context context, String address, long lamports) {
       return new AccountLamports(context, address, lamports);
     }
 
-    private void lamports(final long lamports) {
-      this.lamports = lamports;
+    private void reset() {
+      lamports = 0;
+      address = null;
     }
 
-    private void address(final String address) {
-      this.address = address;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("lamports", buf, offset, len)) {
+        lamports = ji.readLong();
+      } else if (fieldEquals("address", buf, offset, len)) {
+        address = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

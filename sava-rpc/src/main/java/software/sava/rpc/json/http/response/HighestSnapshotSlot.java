@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -8,30 +8,33 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 public record HighestSnapshotSlot(long full, long incremental) {
 
   public static HighestSnapshotSlot parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("full", buf, offset, len)) {
-      builder.full = ji.readLong();
-    } else if (fieldEquals("incremental", buf, offset, len)) {
-      builder.incremental = ji.readLong();
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long full;
     private long incremental;
 
-    private Builder() {
+    private Parser() {
     }
 
     private HighestSnapshotSlot create() {
       return new HighestSnapshotSlot(full, incremental);
+    }
+
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("full", buf, offset, len)) {
+        full = ji.readLong();
+      } else if (fieldEquals("incremental", buf, offset, len)) {
+        incremental = ji.readLong();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

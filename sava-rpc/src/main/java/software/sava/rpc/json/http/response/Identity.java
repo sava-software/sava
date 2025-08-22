@@ -1,34 +1,44 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import software.sava.core.accounts.PublicKey;
+import software.sava.rpc.json.PublicKeyEncoding;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record Identity(String identity) {
+public record Identity(PublicKey identityKey) {
 
-  public static Identity parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+  @Deprecated
+  public String identity() {
+    return identityKey.toString();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("identity", buf, offset, len)) {
-      builder.identity = ji.readString();
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
+  public static Identity parse(final JsonIterator ji) {
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
+  }
 
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
-    private String identity;
+    private PublicKey identity;
 
-    private Builder() {
+    private Parser() {
     }
 
     private Identity create() {
       return new Identity(identity);
+    }
+
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("identity", buf, offset, len)) {
+        identity = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

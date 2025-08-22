@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -12,27 +12,12 @@ public record EpochSchedule(long firstNormalEpoch,
                             boolean warmup) {
 
   public static EpochSchedule parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("firstNormalEpoch", buf, offset, len)) {
-      builder.firstNormalEpoch(ji.readLong());
-    } else if (fieldEquals("firstNormalSlot", buf, offset, len)) {
-      builder.firstNormalSlot(ji.readLong());
-    } else if (fieldEquals("leaderScheduleSlotOffset", buf, offset, len)) {
-      builder.leaderScheduleSlotOffset(ji.readLong());
-    } else if (fieldEquals("slotsPerEpoch", buf, offset, len)) {
-      builder.slotsPerEpoch(ji.readInt());
-    } else if (fieldEquals("warmup", buf, offset, len)) {
-      builder.warmup(ji.readBoolean());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long firstNormalEpoch;
     private long firstNormalSlot;
@@ -40,31 +25,29 @@ public record EpochSchedule(long firstNormalEpoch,
     private int slotsPerEpoch;
     private boolean warmup;
 
-    private Builder() {
+    private Parser() {
     }
 
     private EpochSchedule create() {
       return new EpochSchedule(firstNormalEpoch, firstNormalSlot, leaderScheduleSlotOffset, slotsPerEpoch, warmup);
     }
 
-    private void firstNormalEpoch(final long firstNormalEpoch) {
-      this.firstNormalEpoch = firstNormalEpoch;
-    }
-
-    private void firstNormalSlot(final long firstNormalSlot) {
-      this.firstNormalSlot = firstNormalSlot;
-    }
-
-    private void leaderScheduleSlotOffset(final long leaderScheduleSlotOffset) {
-      this.leaderScheduleSlotOffset = leaderScheduleSlotOffset;
-    }
-
-    private void slotsPerEpoch(final int slotsPerEpoch) {
-      this.slotsPerEpoch = slotsPerEpoch;
-    }
-
-    private void warmup(final boolean warmup) {
-      this.warmup = warmup;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("firstNormalEpoch", buf, offset, len)) {
+        firstNormalEpoch = ji.readLong();
+      } else if (fieldEquals("firstNormalSlot", buf, offset, len)) {
+        firstNormalSlot = ji.readLong();
+      } else if (fieldEquals("leaderScheduleSlotOffset", buf, offset, len)) {
+        leaderScheduleSlotOffset = ji.readLong();
+      } else if (fieldEquals("slotsPerEpoch", buf, offset, len)) {
+        slotsPerEpoch = ji.readInt();
+      } else if (fieldEquals("warmup", buf, offset, len)) {
+        warmup = ji.readBoolean();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }
