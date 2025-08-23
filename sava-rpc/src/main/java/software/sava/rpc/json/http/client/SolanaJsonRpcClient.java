@@ -1,6 +1,5 @@
 package software.sava.rpc.json.http.client;
 
-
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.token.TokenAccount;
@@ -31,6 +30,7 @@ import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static java.lang.System.Logger.Level.DEBUG;
 import static java.net.http.HttpRequest.BodyPublishers.ofString;
 import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
 import static java.util.Objects.requireNonNullElse;
@@ -39,6 +39,8 @@ import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
 final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
+
+  private static final System.Logger logger = System.getLogger(SolanaJsonRpcClient.class.getName());
 
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
   static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
@@ -1156,6 +1158,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     }
 
     final var body = builder.toString();
+    logger.log(DEBUG, body);
     final var request = newRequest("POST", ofString(body))
         .timeout(requireNonNullElse(requestTimeout, this.requestTimeout))
         .build();

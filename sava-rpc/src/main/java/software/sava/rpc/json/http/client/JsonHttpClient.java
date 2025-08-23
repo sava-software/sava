@@ -13,10 +13,13 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
+import static java.lang.System.Logger.Level.DEBUG;
 import static java.net.http.HttpRequest.BodyPublishers.ofString;
 import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
 
 public abstract class JsonHttpClient {
+
+  private static final System.Logger logger = System.getLogger(JsonHttpClient.class.getName());
 
   protected final URI endpoint;
   protected final HttpClient httpClient;
@@ -42,14 +45,6 @@ public abstract class JsonHttpClient {
     this(endpoint, httpClient, requestTimeout, null, null);
   }
 
-  public final URI endpoint() {
-    return this.endpoint;
-  }
-
-  public final HttpClient httpClient() {
-    return this.httpClient;
-  }
-
   protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final Function<JsonIterator, R> adapter) {
     return new JsonResponseController<>(adapter);
   }
@@ -58,15 +53,23 @@ public abstract class JsonHttpClient {
     return new KeepJsonResponseController<>(adapter);
   }
 
-  protected <R> Function<HttpResponse<byte[]>, R> wrapParser(final Function<HttpResponse<byte[]>, R> parser) {
-    return applyResponse == null ? parser : response -> applyResponse.test(response) ? parser.apply(response) : null;
-  }
-
   private static HttpRequest.Builder newJsonRequest(final URI endpoint, final Duration requestTimeout) {
     return HttpRequest
         .newBuilder(endpoint)
         .header("Content-Type", "application/json")
         .timeout(requestTimeout);
+  }
+
+  public final URI endpoint() {
+    return this.endpoint;
+  }
+
+  public final HttpClient httpClient() {
+    return this.httpClient;
+  }
+
+  protected <R> Function<HttpResponse<byte[]>, R> wrapParser(final Function<HttpResponse<byte[]>, R> parser) {
+    return applyResponse == null ? parser : response -> applyResponse.test(response) ? parser.apply(response) : null;
   }
 
   // GET methods
@@ -135,6 +138,7 @@ public abstract class JsonHttpClient {
   }
 
   protected final HttpRequest newPostRequest(final URI endpoint, final Duration requestTimeout, final String body) {
+    logger.log(DEBUG, body);
     return newRequest(endpoint, requestTimeout, "POST", ofString(body)).build();
   }
 
@@ -142,7 +146,6 @@ public abstract class JsonHttpClient {
                                                            final Function<HttpResponse<byte[]>, R> parser,
                                                            final Duration requestTimeout,
                                                            final String body) {
-//    System.out.println(body);
     return httpClient
         .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofByteArray())
         .thenApply(wrapParser(parser));
@@ -156,7 +159,6 @@ public abstract class JsonHttpClient {
 
   protected final <R> CompletableFuture<R> sendPostRequest(final Function<HttpResponse<byte[]>, R> parser,
                                                            final String body) {
-    // System.out.println(body);
     return sendPostRequest(parser, requestTimeout, body);
   }
 
@@ -184,7 +186,6 @@ public abstract class JsonHttpClient {
                                                                  final Function<HttpResponse<byte[]>, R> parser,
                                                                  final Duration requestTimeout,
                                                                  final String body) {
-//    System.out.println(body);
     return httpClient
         .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofByteArray())
         .thenApply(parser);
@@ -198,7 +199,6 @@ public abstract class JsonHttpClient {
 
   protected final <R> CompletableFuture<R> sendPostRequestNoWrap(final Function<HttpResponse<byte[]>, R> parser,
                                                                  final String body) {
-    // System.out.println(body);
     return sendPostRequestNoWrap(parser, requestTimeout, body);
   }
 
@@ -227,7 +227,6 @@ public abstract class JsonHttpClient {
                                                                     final Function<HttpResponse<H>, R> parser,
                                                                     final Duration requestTimeout,
                                                                     final String body) {
-//    System.out.println(body);
     return httpClient
         .sendAsync(newPostRequest(endpoint, requestTimeout, body), bodyHandler)
         .thenApply(parser);
@@ -243,7 +242,6 @@ public abstract class JsonHttpClient {
   protected final <H, R> CompletableFuture<R> sendPostRequestNoWrap(final HttpResponse.BodyHandler<H> bodyHandler,
                                                                     final Function<HttpResponse<H>, R> parser,
                                                                     final String body) {
-    // System.out.println(body);
     return sendPostRequestNoWrap(bodyHandler, parser, requestTimeout, body);
   }
 

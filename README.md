@@ -28,10 +28,31 @@ for example usage.
 * If you feel there is already enough response test coverage, you can skip it by only providing the expected request
   JSON.
   * See [ParseRpcResponseTests](sava-rpc/src/test/java/software/sava/rpc/json/http/client/ParseRpcResponseTests.java)
-    for additional existing response parsing tests.
+    for additional response parsing tests.
 * If the response JSON is large, add it to the [resource](sava-rpc/src/test/resources/rpc_response_data) directory as a
   JSON file.
   * If the JSON file is larger than 1MB, apply zip compression to it.
+  * If it is large because it is a collection of items, consider trimming the list down to two or more items.
+
+#### Logging the Request and Response JSON
+
+For capturing the request body use a debugger or enable logging by using or creating
+a [logging.properties](logging.properties) file and pass it to the VM via
+`-Djava.util.logging.config.file=logging.properties`.
+
+For capturing the response body hook into the RPC client like so: 
+
+```java
+var rpcClient = SolanaRpcClient.createClient(
+    rpcEndpoint,
+    httpClient,
+    response -> {
+      final var json = new String(response.body());
+      System.out.println(json); // Write to file if large.
+      return true;
+    }
+);
+```
 
 ## Build
 
