@@ -40,12 +40,13 @@ abstract class RpcRequestTests implements HttpHandler {
   private static final byte[] NO_RESPONSE = "{}".getBytes();
 
   // Skip the JSON RPC message id as it changes per request.
-  private static final int VERSION_PREFIX_LENGTH = "{\"jsonrpc\":\"2.0\",\"id\":".length() + 2;
-  private static final String SKIP_TO_METHOD = """
-      "method":""";
+  private static final int VERSION_PREFIX_LENGTH = """
+      {"jsonrpc":"2.0","id":""".length() + 2;
 
   private static String stripJsonRpcPrefix(final String request) {
-    return request.substring(request.indexOf(SKIP_TO_METHOD, VERSION_PREFIX_LENGTH));
+    return request.substring(request.indexOf("""
+        "method":""", VERSION_PREFIX_LENGTH
+    ));
   }
 
   private record TestRequest(int invalidRequestCode, String expectedRequest, String response) {

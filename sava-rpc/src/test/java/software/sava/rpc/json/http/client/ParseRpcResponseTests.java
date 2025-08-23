@@ -22,28 +22,34 @@ final class ParseRpcResponseTests {
 
   private static final ClassLoader CLASS_LOADER = ParseRpcResponseTests.class.getClassLoader();
 
-  private static JsonIterator readJsonFile(final String fileName) {
+  static byte[] readFileBytes(final String fileName) {
     final var resource = CLASS_LOADER.getResource("rpc_response_data/" + fileName);
     if (resource == null) {
       fail("Test resource not found: " + fileName);
     }
     try (final var in = resource.openStream()) {
-      final byte[] bytes;
       if (fileName.endsWith(".zip")) {
         try (final var zin = new ZipInputStream(in)) {
           final var entry = zin.getNextEntry();
           if (entry == null) {
             fail("Zip resource has no entries: " + fileName);
           }
-          bytes = zin.readAllBytes();
+          return zin.readAllBytes();
         }
       } else {
-        bytes = in.readAllBytes();
+        return in.readAllBytes();
       }
-      return JsonIterator.parse(bytes).skipUntil("result");
     } catch (final IOException e) {
       throw new UncheckedIOException(e);
     }
+  }
+
+  static String readFileString(final String fileName) {
+    return new String(readFileBytes(fileName));
+  }
+
+  static JsonIterator readJsonFile(final String fileName) {
+    return JsonIterator.parse(readFileBytes(fileName)).skipUntil("result");
   }
 
   @Test
