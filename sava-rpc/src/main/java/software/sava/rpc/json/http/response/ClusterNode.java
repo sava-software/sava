@@ -32,11 +32,10 @@ public record ClusterNode(String gossip,
 
   public static List<ClusterNode> parse(final JsonIterator ji) {
     final var nodes = new ArrayList<ClusterNode>();
-    final var parser = new Parser();
     while (ji.readArray()) {
+      final var parser = new Parser();
       ji.testObject(parser);
       nodes.add(parser.create());
-      parser.reset();
     }
     return nodes;
   }
@@ -63,23 +62,6 @@ public record ClusterNode(String gossip,
 
     private ClusterNode create() {
       return new ClusterNode(gossip, pubKey, rpc, pubsub, serveRepair, tpu, tpuForwards, tpuForwardsQuic, tpuQuic, tpuVote, tvu, version, featureSet, shredVersion);
-    }
-
-    private void reset() {
-      gossip = null;
-      pubKey = null;
-      rpc = null;
-      pubsub = null;
-      serveRepair = null;
-      tpu = null;
-      tpuForwards = null;
-      tpuForwardsQuic = null;
-      tpuQuic = null;
-      tpuVote = null;
-      tvu = null;
-      version = null;
-      featureSet = 0L;
-      shredVersion = 0;
     }
 
     @Override

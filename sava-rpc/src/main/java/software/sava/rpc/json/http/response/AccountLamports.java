@@ -19,11 +19,10 @@ public record AccountLamports(Context context, PublicKey addressKey, long lampor
 
   public static List<AccountLamports> parseAccounts(final JsonIterator ji, final Context context) {
     final var accounts = new ArrayList<AccountLamports>();
-    final var parser = new Parser(context);
     while (ji.readArray()) {
+      final var parser = new Parser(context);
       ji.testObject(parser);
       accounts.add(parser.create());
-      parser.reset();
     }
     return accounts;
   }
@@ -40,12 +39,7 @@ public record AccountLamports(Context context, PublicKey addressKey, long lampor
     private AccountLamports create() {
       return new AccountLamports(context, address, lamports);
     }
-
-    private void reset() {
-      lamports = 0;
-      address = null;
-    }
-
+    
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("lamports", buf, offset, len)) {

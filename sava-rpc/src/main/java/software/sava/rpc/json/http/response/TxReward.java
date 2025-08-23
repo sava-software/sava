@@ -32,11 +32,8 @@ public record TxReward(PublicKey publicKey,
 
   public static List<TxReward> parseRewards(final JsonIterator ji) {
     final var rewards = new ArrayList<TxReward>();
-    final var parser = new Parser();
     while (ji.readArray()) {
-      ji.testObject(parser);
-      rewards.add(parser.create());
-      parser.reset();
+      rewards.add(parse(ji));
     }
     return rewards;
   }
@@ -70,15 +67,7 @@ public record TxReward(PublicKey publicKey,
     private TxReward create() {
       return new TxReward(pubKey, lamports, postBalance, rewardType, commission);
     }
-
-    private void reset() {
-      pubKey = null;
-      lamports = 0L;
-      postBalance = 0L;
-      rewardType = null;
-      commission = 0;
-    }
-
+    
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("commission", buf, offset, len)) {

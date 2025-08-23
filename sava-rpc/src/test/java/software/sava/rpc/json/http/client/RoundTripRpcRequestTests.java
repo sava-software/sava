@@ -27,7 +27,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(0, nodeHealth.numSlotsBehind());
     assertEquals("Node is unhealthy", nodeHealth.message());
 
-    // Test skipping response handling.
+    // Skip response handling.
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getHealth"}""");
     assertNull(rpcClient.getHealth().join());

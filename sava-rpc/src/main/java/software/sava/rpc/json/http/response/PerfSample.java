@@ -16,11 +16,10 @@ public record PerfSample(long slot,
 
   public static List<PerfSample> parse(final JsonIterator ji) {
     final var samples = new ArrayList<PerfSample>(720);
-    final var parser = new Parser();
     while (ji.readArray()) {
+      final var parser = new Parser();
       ji.testObject(parser);
       samples.add(parser.create());
-      parser.reset();
     }
     return samples;
   }
@@ -38,14 +37,6 @@ public record PerfSample(long slot,
 
     private PerfSample create() {
       return new PerfSample(slot, numSlots, numTransactions, numNonVoteTransaction, samplePeriodSecs);
-    }
-
-    private void reset() {
-      slot = 0L;
-      numSlots = 0L;
-      numTransactions = 0L;
-      numNonVoteTransaction = 0L;
-      samplePeriodSecs = 0;
     }
 
     @Override

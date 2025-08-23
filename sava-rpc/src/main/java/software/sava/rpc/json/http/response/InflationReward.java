@@ -16,11 +16,10 @@ public record InflationReward(long amount,
 
   public static List<InflationReward> parse(final JsonIterator ji) {
     final var rewards = new ArrayList<InflationReward>();
-    final var parser = new Parser();
     while (ji.readArray()) {
+      final var parser = new Parser();
       ji.testObject(parser);
       rewards.add(parser.create());
-      parser.reset();
     }
     return rewards;
   }
@@ -39,15 +38,7 @@ public record InflationReward(long amount,
     private InflationReward create() {
       return new InflationReward(amount, effectiveSlot, epoch, postBalance, commission);
     }
-
-    private void reset() {
-      amount = 0L;
-      effectiveSlot = 0L;
-      epoch = 0L;
-      postBalance = 0L;
-      commission = 0;
-    }
-
+    
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("amount", buf, offset, len)) {

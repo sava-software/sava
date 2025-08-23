@@ -12,11 +12,10 @@ public record PrioritizationFee(long slot, long prioritizationFee) {
 
   public static List<PrioritizationFee> parse(final JsonIterator ji) {
     final var samples = new ArrayList<PrioritizationFee>(150);
-    final var parser = new Parser();
     while (ji.readArray()) {
+      final var parser = new Parser();
       ji.testObject(parser);
       samples.add(parser.create());
-      parser.reset();
     }
     return samples;
   }
@@ -31,11 +30,6 @@ public record PrioritizationFee(long slot, long prioritizationFee) {
 
     private PrioritizationFee create() {
       return new PrioritizationFee(slot, prioritizationFee);
-    }
-
-    private void reset() {
-      slot = 0L;
-      prioritizationFee = 0L;
     }
 
     @Override

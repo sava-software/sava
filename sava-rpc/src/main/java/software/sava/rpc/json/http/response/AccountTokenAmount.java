@@ -24,11 +24,10 @@ public record AccountTokenAmount(Context context,
 
   public static List<AccountTokenAmount> parse(final JsonIterator ji, final Context context) {
     final var accounts = new ArrayList<AccountTokenAmount>();
-    final var parser = new Parser(context);
     while (ji.readArray()) {
+      final var parser = new Parser(context);
       ji.testObject(parser);
       accounts.add(parser.create());
-      parser.reset();
     }
     return accounts;
   }
@@ -45,12 +44,6 @@ public record AccountTokenAmount(Context context,
 
     private AccountTokenAmount create() {
       return new AccountTokenAmount(context, address, amount, decimals);
-    }
-
-    private void reset() {
-      address = null;
-      amount = null;
-      decimals = 0;
     }
 
     @Override

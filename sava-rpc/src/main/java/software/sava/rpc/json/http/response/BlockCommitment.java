@@ -31,13 +31,13 @@ public record BlockCommitment(long[] commitment, long totalStake) {
       if (fieldEquals("commitment", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.ARRAY) {
           commitment = new long[32];
-          for (int i = 0; ji.readArray(); ) {
-            commitment[i] = ji.readLong();
-            if (++i > commitment.length) {
+          for (int i = 0; ji.readArray(); ++i) {
+            if (i >= commitment.length) {
               final var commitment = new long[this.commitment.length << 1];
               System.arraycopy(this.commitment, 0, commitment, 0, this.commitment.length);
               this.commitment = commitment;
             }
+            commitment[i] = ji.readLong();
           }
         } else {
           ji.skip();
