@@ -2,6 +2,7 @@ package software.sava.core.accounts.lookup;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.SolanaAccounts;
 
 import java.util.Base64;
 
@@ -17,7 +18,7 @@ final class AddressLookupTableTests {
     assertEquals(60, alt.lastExtendedSlotStartIndex());
     assertNull(alt.authority());
     assertEquals(74, alt.numAccounts());
-    assertEquals(0, alt.indexOf(PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")));
+    assertEquals(0, alt.indexOf(SolanaAccounts.MAIN_NET.tokenProgram()));
     assertEquals(42, alt.indexOf(PublicKey.fromBase58Encoded("GTq8bjCKaPXYgcSV2mj5iqEdAHgvaZbTz8HYcUatYQTg")));
     assertEquals(73, alt.indexOf(PublicKey.fromBase58Encoded("CWUjm2fFPLsRtmPRDQgeFB9uwg5N4A2KFStAYj1oMkk7")));
   }

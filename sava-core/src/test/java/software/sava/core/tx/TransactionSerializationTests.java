@@ -355,9 +355,9 @@ final class TransactionSerializationTests {
     assertEquals(createInvoked(fromBase58Encoded("ComputeBudget111111111111111111111111111111")), instructions[0].programId());
     assertEquals(createInvoked(fromBase58Encoded("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")), instructions[1].programId());
     assertEquals(createInvoked(fromBase58Encoded("11111111111111111111111111111111")), instructions[2].programId());
-    assertEquals(createInvoked(fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")), instructions[3].programId());
+    assertEquals(createInvoked(SolanaAccounts.MAIN_NET.tokenProgram()), instructions[3].programId());
     assertEquals(createInvoked(fromBase58Encoded("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4")), instructions[4].programId());
-    assertEquals(createInvoked(fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")), instructions[5].programId());
+    assertEquals(createInvoked(SolanaAccounts.MAIN_NET.tokenProgram()), instructions[5].programId());
     assertEquals(createInvoked(fromBase58Encoded("11111111111111111111111111111111")), instructions[6].programId());
   }
 

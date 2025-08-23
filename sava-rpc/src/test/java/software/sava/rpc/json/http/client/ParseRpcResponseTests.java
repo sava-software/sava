@@ -2,6 +2,8 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.SolanaAccounts;
+import software.sava.core.accounts.token.TokenAccount;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
@@ -698,6 +700,91 @@ final class ParseRpcResponseTests {
     final var version = Version.parse(ji);
     assertEquals(3640012085L, version.featureSet());
     assertEquals("2.3.7", version.version());
+  }
+
+  @Test
+  void getProgramAccounts() {
+    final var ji = readJsonFile("getProgramAccounts.json");
+
+    ji.skipUntil("context");
+    final var context = Context.parse(ji);
+    assertEquals(361843021L, context.slot());
+    assertEquals("2.2.7", context.apiVersion());
+
+    ji.skipUntil("value");
+    final var accounts = AccountInfo.parseAccounts(ji, context, AccountInfo.BYTES_IDENTITY);
+
+    assertEquals(35, accounts.size());
+
+    final var first = accounts.getFirst();
+    assertEquals(PublicKey.fromBase58Encoded("5EhqyiKivRyyhK4wHALghpXUEPSAbV6DRFuNzfpTHbv"), first.pubKey());
+    assertFalse(first.executable());
+    assertEquals(57962880L, first.lamports());
+    assertEquals(PublicKey.fromBase58Encoded("GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc"), first.owner());
+    assertEquals(new BigInteger("18446744073709551615"), first.rentEpoch());
+    assertEquals(8200, first.space());
+    assertEquals(first.space(), first.data().length);
+
+    final var last = accounts.getLast();
+    assertEquals(PublicKey.fromBase58Encoded("GpTDuQvx5XjEELJvJi3sdgz9XEQoWpF3tQpwYBGjmUDx"), last.pubKey());
+    assertFalse(last.executable());
+    assertEquals(8073600L, last.lamports());
+    assertEquals(PublicKey.fromBase58Encoded("GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc"), last.owner());
+    assertEquals(new BigInteger("18446744073709551615"), last.rentEpoch());
+    assertEquals(1032, last.space());
+    assertEquals(last.space(), last.data().length);
+  }
+
+  @Test
+  void getTokenAccountsForProgramByOwner() {
+    final var ji = readJsonFile("getTokenAccountsForProgramByOwner.json");
+
+    ji.skipUntil("context");
+    final var context = Context.parse(ji);
+    assertEquals(361868999L, context.slot());
+    assertEquals("2.2.7", context.apiVersion());
+
+    ji.skipUntil("value");
+    final var accounts = AccountInfo.parseAccounts(ji, context, TokenAccount.FACTORY);
+
+    assertEquals(32, accounts.size());
+
+    final var owner = PublicKey.fromBase58Encoded("5q4WfFbcUggHhsvga263fvqwYhsBpAHkkfkdbY82S5J1");
+    final var tokenProgram = SolanaAccounts.MAIN_NET.tokenProgram();
+
+    final var first = accounts.getFirst();
+    assertEquals(PublicKey.fromBase58Encoded("GN7rkD3UU3HfPDGMBizKoyGfc8m2bCiehsA4G35aYta"), first.pubKey());
+    assertFalse(first.executable());
+    assertEquals(2039280L, first.lamports());
+    assertEquals(tokenProgram, first.owner());
+    assertEquals(new BigInteger("18446744073709551615"), first.rentEpoch());
+    assertEquals(TokenAccount.BYTES, first.space());
+    var tokenAccount = first.data();
+    assertEquals(first.pubKey(), tokenAccount.address());
+    assertEquals(owner, tokenAccount.owner());
+
+    final var last = accounts.getLast();
+    assertEquals(PublicKey.fromBase58Encoded("Hy4mw83FxH36z2ehLTaCEuUdNmw3gZ4Ts5vvK5pAJ9RC"), last.pubKey());
+    assertFalse(last.executable());
+    assertEquals(2039280L, last.lamports());
+    assertEquals(tokenProgram, last.owner());
+    assertEquals(new BigInteger("18446744073709551615"), last.rentEpoch());
+    assertEquals(TokenAccount.BYTES, last.space());
+    tokenAccount = last.data();
+    assertEquals(last.pubKey(), tokenAccount.address());
+    assertEquals(owner, tokenAccount.owner());
+  }
+
+  @Test
+  void getSlotLeaders() {
+    final var ji = JsonIterator.parse("""
+        {"jsonrpc":"2.0","result":["Awes4Tr6TX8JDzEhCZY2QVNimT6iD1zWHzf1vNyGvpLM","FNKgX9dYUhYQFRTM9bkeKoRpsyEtZGNMxbdQLDzfqB8a","FNKgX9dYUhYQFRTM9bkeKoRpsyEtZGNMxbdQLDzfqB8a","FNKgX9dYUhYQFRTM9bkeKoRpsyEtZGNMxbdQLDzfqB8a","FNKgX9dYUhYQFRTM9bkeKoRpsyEtZGNMxbdQLDzfqB8a"],"id":1755880388920}
+        """);
+    ji.skipUntil("result");
+    final var leaders = SolanaJsonRpcClient.PUBLIC_KEY_LIST_PARSER.apply(ji);
+    assertEquals(5, leaders.size());
+    assertEquals(PublicKey.fromBase58Encoded("Awes4Tr6TX8JDzEhCZY2QVNimT6iD1zWHzf1vNyGvpLM"), leaders.getFirst());
+    assertEquals(PublicKey.fromBase58Encoded("FNKgX9dYUhYQFRTM9bkeKoRpsyEtZGNMxbdQLDzfqB8a"), leaders.getLast());
   }
 
   @Test

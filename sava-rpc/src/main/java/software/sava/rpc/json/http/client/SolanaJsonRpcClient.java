@@ -91,13 +91,14 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<byte[]>, ContextBoolVal> CONTEXT_BOOL_VAL = applyResponseValue(ContextBoolVal::parse);
   private static final Function<HttpResponse<byte[]>, String> STRING = applyResponseResult(JsonIterator::readString);
   private static final Function<HttpResponse<byte[]>, PublicKey> PUBLIC_KEY = applyResponseResult(PublicKeyEncoding::parseBase58Encoded);
-  private static final Function<HttpResponse<byte[]>, List<PublicKey>> PUBLIC_KEY_LIST = applyResponseResult(ji -> {
+  static final Function<JsonIterator, List<PublicKey>> PUBLIC_KEY_LIST_PARSER = ji -> {
     final var strings = new ArrayList<PublicKey>();
     while (ji.readArray()) {
       strings.add(parseBase58Encoded(ji));
     }
     return strings;
-  });
+  };
+  private static final Function<HttpResponse<byte[]>, List<PublicKey>> PUBLIC_KEY_LIST = applyResponseResult(PUBLIC_KEY_LIST_PARSER);
   private static final Function<HttpResponse<byte[]>, long[]> LONG_ARRAY = applyResponseResult(PARSE_LONG_ARRAY);
   private static final Function<HttpResponse<byte[]>, List<PerfSample>> PERF_SAMPLE = applyResponseResult(PerfSample::parse);
   private static final Function<HttpResponse<byte[]>, List<PrioritizationFee>> PRIORITIZATION_FEE = applyResponseResult(PrioritizationFee::parse);
