@@ -25,8 +25,8 @@ See [RoundTripRpcRequestTests](sava-rpc/src/test/java/software/sava/rpc/json/htt
 for example usage.
 
 * If you plan to add several tests, create a new class to avoid merge conflicts.
-* If you feel there is already enough response test coverage, you can skip it by only providing the expected request
-  JSON.
+* If you feel there is already enough response test coverage, you can [skip it by only providing the expected request
+  JSON.](https://github.com/sava-software/sava/blob/55e41207d932708affd05be54168f6bfb6105ec6/sava-rpc/src/test/java/software/sava/rpc/json/http/client/RoundTripRpcRequestTests.java#L30)
   * See [ParseRpcResponseTests](sava-rpc/src/test/java/software/sava/rpc/json/http/client/ParseRpcResponseTests.java)
     for additional response parsing tests.
 * If the response JSON is large, add it to the [resource](sava-rpc/src/test/resources/rpc_response_data) directory as a
