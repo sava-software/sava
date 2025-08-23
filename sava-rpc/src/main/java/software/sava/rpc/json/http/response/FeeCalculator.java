@@ -1,38 +1,38 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
+@Deprecated(forRemoval = true)
 public record FeeCalculator(int lamportsPerSignature) {
 
   public static FeeCalculator parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
-  private static final ContextFieldBufferPredicate<FeeCalculator.Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("lamportsPerSignature", buf, offset, len)) {
-      builder.lamportsPerSignature(ji.readInt());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private int lamportsPerSignature;
 
-    private Builder() {
+    private Parser() {
     }
 
     private FeeCalculator create() {
       return new FeeCalculator(lamportsPerSignature);
     }
 
-    private void lamportsPerSignature(final int lamportsPerSignature) {
-      this.lamportsPerSignature = lamportsPerSignature;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("lamportsPerSignature", buf, offset, len)) {
+        lamportsPerSignature = ji.readInt();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

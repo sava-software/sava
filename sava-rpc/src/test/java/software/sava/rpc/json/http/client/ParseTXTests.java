@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.response.Tx;
 import systems.comodal.jsoniter.JsonIterator;
 
@@ -404,11 +405,13 @@ final class ParseTXTests {
     final var preTokenBalances = meta.preTokenBalances();
     assertEquals(3, preTokenBalances.size());
 
+    final var tokenProgram = SolanaAccounts.MAIN_NET.tokenProgram();
+
     var tokenBalance = preTokenBalances.getFirst();
     assertEquals(2, tokenBalance.accountIndex());
     assertEquals(PublicKey.fromBase58Encoded("BUZFom1YPnAZVYSccbpddBmFYmHcS4Xtc3JQG5cFpump"), tokenBalance.mint());
     assertEquals(PublicKey.fromBase58Encoded("Emajgzqt9QKyfXARSxdkKmzhnXZDw2KENm6wB7XB4XBW"), tokenBalance.owner());
-    assertEquals(PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), tokenBalance.programId());
+    assertEquals(tokenProgram, tokenBalance.programId());
     assertEquals(new BigInteger("0"), tokenBalance.amount());
     assertEquals(6, tokenBalance.decimals());
 
@@ -416,7 +419,7 @@ final class ParseTXTests {
     assertEquals(12, tokenBalance.accountIndex());
     assertEquals(PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112"), tokenBalance.mint());
     assertEquals(PublicKey.fromBase58Encoded("5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"), tokenBalance.owner());
-    assertEquals(PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), tokenBalance.programId());
+    assertEquals(tokenProgram, tokenBalance.programId());
     assertEquals(new BigInteger("677376788560"), tokenBalance.amount());
     assertEquals(9, tokenBalance.decimals());
 
@@ -427,7 +430,7 @@ final class ParseTXTests {
     assertEquals(2, tokenBalance.accountIndex());
     assertEquals(PublicKey.fromBase58Encoded("BUZFom1YPnAZVYSccbpddBmFYmHcS4Xtc3JQG5cFpump"), tokenBalance.mint());
     assertEquals(PublicKey.fromBase58Encoded("Emajgzqt9QKyfXARSxdkKmzhnXZDw2KENm6wB7XB4XBW"), tokenBalance.owner());
-    assertEquals(PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), tokenBalance.programId());
+    assertEquals(tokenProgram, tokenBalance.programId());
     assertEquals(new BigInteger("27504297755"), tokenBalance.amount());
     assertEquals(6, tokenBalance.decimals());
 
@@ -435,7 +438,7 @@ final class ParseTXTests {
     assertEquals(12, tokenBalance.accountIndex());
     assertEquals(PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112"), tokenBalance.mint());
     assertEquals(PublicKey.fromBase58Encoded("5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"), tokenBalance.owner());
-    assertEquals(PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), tokenBalance.programId());
+    assertEquals(tokenProgram, tokenBalance.programId());
     assertEquals(new BigInteger("677876788560"), tokenBalance.amount());
     assertEquals(9, tokenBalance.decimals());
   }

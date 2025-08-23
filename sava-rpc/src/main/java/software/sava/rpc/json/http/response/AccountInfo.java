@@ -6,6 +6,7 @@ import software.sava.core.util.DecimalIntegerAmount;
 import software.sava.core.util.LamportDecimal;
 import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
@@ -53,7 +54,9 @@ public record AccountInfo<T>(PublicKey pubKey,
                                          final JsonIterator ji,
                                          final Context context,
                                          final BiFunction<PublicKey, byte[], T> factory) {
-    return ji.testObject(new Builder(context, publicKey), ACCOUNT_PARSER).create(factory);
+    final var parser = new Parser(context, publicKey);
+    ji.testObject(parser);
+    return parser.create(factory);
   }
 
   public static <T> List<AccountInfo<T>> parseAccountsFromKeys(final SequencedCollection<PublicKey> pubKeys,
@@ -65,9 +68,9 @@ public record AccountInfo<T>(PublicKey pubKey,
     while (ji.readArray()) {
       final var key = iterator.next();
       if (ji.whatIsNext() == ValueType.OBJECT) {
-        final var builder = new Builder(context, key);
-        ji.testObject(builder, ACCOUNT_PARSER);
-        accounts.add(builder.create(factory));
+        final var parser = new Parser(context, key);
+        ji.testObject(parser);
+        accounts.add(parser.create(factory));
       } else {
         ji.skip();
       }
@@ -84,9 +87,9 @@ public record AccountInfo<T>(PublicKey pubKey,
     while (ji.readArray()) {
       final var key = iterator.next();
       if (ji.whatIsNext() == ValueType.OBJECT) {
-        final var builder = new Builder(context, key);
-        ji.testObject(builder, ACCOUNT_PARSER);
-        accounts.add(builder.create(factory));
+        final var parser = new Parser(context, key);
+        ji.testObject(parser);
+        accounts.add(parser.create(factory));
       } else {
         ji.skip();
         accounts.add(null);
@@ -98,8 +101,8 @@ public record AccountInfo<T>(PublicKey pubKey,
   public static <T> AccountInfo<T> parseAccount(final JsonIterator ji,
                                                 final Context context,
                                                 final BiFunction<PublicKey, byte[], T> factory) {
-    final var builder = new Builder(context);
-    return ji.testObject(builder, PARSER).create(factory);
+    final var parser = new Parser(context);
+    return ji.testObject(parser, PARSER).create(factory);
   }
 
   public static <T> List<AccountInfo<T>> parseAccounts(final JsonIterator ji,
@@ -107,45 +110,25 @@ public record AccountInfo<T>(PublicKey pubKey,
                                                        final BiFunction<PublicKey, byte[], T> factory) {
     final var accounts = new ArrayList<AccountInfo<T>>();
     while (ji.readArray()) {
-      final var builder = new Builder(context);
-      ji.testObject(builder, PARSER);
-      accounts.add(builder.create(factory));
+      final var parser = new Parser(context);
+      ji.testObject(parser, PARSER);
+      accounts.add(parser.create(factory));
     }
     return accounts;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> ACCOUNT_PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("data", buf, offset, len)) {
-      final var next = ji.whatIsNext();
-      builder.data = parseEncodedData(ji, next);
-    } else if (fieldEquals("executable", buf, offset, len)) {
-      builder.executable = ji.readBoolean();
-    } else if (fieldEquals("lamports", buf, offset, len)) {
-      builder.lamports = ji.readLong();
-    } else if (fieldEquals("owner", buf, offset, len)) {
-      builder.owner = PublicKeyEncoding.parseBase58Encoded(ji);
-    } else if (fieldEquals("rentEpoch", buf, offset, len)) {
-      builder.rentEpoch = ji.readBigInteger();
-    } else if (fieldEquals("space", buf, offset, len)) {
-      builder.space = ji.readInt();
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
+  private static final ContextFieldBufferPredicate<Parser> PARSER = (parser, buf, offset, len, ji) -> {
     if (fieldEquals("account", buf, offset, len)) {
-      ji.testObject(builder, ACCOUNT_PARSER);
+      ji.testObject(parser);
     } else if (fieldEquals("pubkey", buf, offset, len)) {
-      builder.pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
+      parser.pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
     } else {
       ji.skip();
     }
     return true;
   };
 
-  private static final class Builder extends RootBuilder {
+  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
     private PublicKey pubKey;
     private boolean executable;
@@ -155,17 +138,38 @@ public record AccountInfo<T>(PublicKey pubKey,
     private int space;
     private byte[] data;
 
-    private Builder(final Context context) {
+    private Parser(final Context context) {
       super(context);
     }
 
-    private Builder(final Context context, final PublicKey pubKey) {
+    private Parser(final Context context, final PublicKey pubKey) {
       super(context);
       this.pubKey = pubKey;
     }
 
     private <T> AccountInfo<T> create(final BiFunction<PublicKey, byte[], T> factory) {
       return new AccountInfo<>(pubKey, context, executable, lamports, owner, rentEpoch, space, factory.apply(pubKey, data));
+    }
+
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("data", buf, offset, len)) {
+        final var next = ji.whatIsNext();
+        data = parseEncodedData(ji, next);
+      } else if (fieldEquals("executable", buf, offset, len)) {
+        executable = ji.readBoolean();
+      } else if (fieldEquals("lamports", buf, offset, len)) {
+        lamports = ji.readLong();
+      } else if (fieldEquals("owner", buf, offset, len)) {
+        owner = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else if (fieldEquals("rentEpoch", buf, offset, len)) {
+        rentEpoch = ji.readBigInteger();
+      } else if (fieldEquals("space", buf, offset, len)) {
+        space = ji.readInt();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

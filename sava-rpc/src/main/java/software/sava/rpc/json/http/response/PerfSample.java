@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
@@ -17,30 +17,14 @@ public record PerfSample(long slot,
   public static List<PerfSample> parse(final JsonIterator ji) {
     final var samples = new ArrayList<PerfSample>(720);
     while (ji.readArray()) {
-      final var sample = ji.testObject(new Builder(), PARSER).create();
-      samples.add(sample);
+      final var parser = new Parser();
+      ji.testObject(parser);
+      samples.add(parser.create());
     }
     return samples;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("slot", buf, offset, len)) {
-      builder.slot(ji.readLong());
-    } else if (fieldEquals("numSlots", buf, offset, len)) {
-      builder.numSlots(ji.readLong());
-    } else if (fieldEquals("numTransactions", buf, offset, len)) {
-      builder.numTransactions(ji.readLong());
-    } else if (fieldEquals("numNonVoteTransaction", buf, offset, len)) {
-      builder.numNonVoteTransaction(ji.readLong());
-    } else if (fieldEquals("samplePeriodSecs", buf, offset, len)) {
-      builder.samplePeriodSecs(ji.readInt());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long slot;
     private long numSlots;
@@ -48,31 +32,29 @@ public record PerfSample(long slot,
     private long numNonVoteTransaction;
     private int samplePeriodSecs;
 
-    private Builder() {
+    private Parser() {
     }
 
     private PerfSample create() {
       return new PerfSample(slot, numSlots, numTransactions, numNonVoteTransaction, samplePeriodSecs);
     }
 
-    private void slot(final long slot) {
-      this.slot = slot;
-    }
-
-    private void numSlots(final long numSlots) {
-      this.numSlots = numSlots;
-    }
-
-    private void numTransactions(final long numTransactions) {
-      this.numTransactions = numTransactions;
-    }
-
-    private void numNonVoteTransaction(final long numNonVoteTransaction) {
-      this.numNonVoteTransaction = numNonVoteTransaction;
-    }
-
-    private void samplePeriodSecs(final int samplePeriodSecs) {
-      this.samplePeriodSecs = samplePeriodSecs;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("slot", buf, offset, len)) {
+        slot = ji.readLong();
+      } else if (fieldEquals("numSlots", buf, offset, len)) {
+        numSlots = ji.readLong();
+      } else if (fieldEquals("numTransactions", buf, offset, len)) {
+        numTransactions = ji.readLong();
+      } else if (fieldEquals("numNonVoteTransactions", buf, offset, len) || fieldEquals("numNonVoteTransaction", buf, offset, len)) {
+        numNonVoteTransaction = ji.readLong();
+      } else if (fieldEquals("samplePeriodSecs", buf, offset, len)) {
+        samplePeriodSecs = ji.readInt();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
@@ -11,7 +11,9 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 public record TxInnerInstruction(int index, List<TxInstruction> instructions) {
 
   public static TxInnerInstruction parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
   public static List<TxInnerInstruction> parseInstructions(final JsonIterator ji) {
@@ -22,23 +24,12 @@ public record TxInnerInstruction(int index, List<TxInstruction> instructions) {
     return instructions;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("index", buf, offset, len)) {
-      builder.index(ji.readInt());
-    } else if (fieldEquals("instructions", buf, offset, len)) {
-      builder.instructions(TxInstruction.parseInstructions(ji));
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private int index;
     private List<TxInstruction> instructions;
 
-    private Builder() {
+    private Parser() {
       super();
     }
 
@@ -46,12 +37,16 @@ public record TxInnerInstruction(int index, List<TxInstruction> instructions) {
       return new TxInnerInstruction(index, instructions);
     }
 
-    private void index(final int index) {
-      this.index = index;
-    }
-
-    private void instructions(final List<TxInstruction> instructions) {
-      this.instructions = instructions;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("index", buf, offset, len)) {
+        index = ji.readInt();
+      } else if (fieldEquals("instructions", buf, offset, len)) {
+        instructions = TxInstruction.parseInstructions(ji);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

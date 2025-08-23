@@ -30,7 +30,6 @@ public record InnerInstructions(int index, List<InnerIx> instructions) {
     private int index;
     private List<InnerIx> instructions;
 
-
     private InnerInstructions create() {
       return new InnerInstructions(index, instructions);
     }

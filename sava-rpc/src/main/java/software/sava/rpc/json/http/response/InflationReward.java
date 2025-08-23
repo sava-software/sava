@@ -1,8 +1,7 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,34 +17,14 @@ public record InflationReward(long amount,
   public static List<InflationReward> parse(final JsonIterator ji) {
     final var rewards = new ArrayList<InflationReward>();
     while (ji.readArray()) {
-      if (ji.whatIsNext() == ValueType.OBJECT) {
-        final var voteAccount = ji.testObject(new Builder(), PARSER).create();
-        rewards.add(voteAccount);
-      } else {
-        ji.skip();
-      }
+      final var parser = new Parser();
+      ji.testObject(parser);
+      rewards.add(parser.create());
     }
     return rewards;
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("amount", buf, offset, len)) {
-      builder.amount = ji.readLong();
-    } else if (fieldEquals("effectiveSlot", buf, offset, len)) {
-      builder.effectiveSlot = ji.readLong();
-    } else if (fieldEquals("epoch", buf, offset, len)) {
-      builder.epoch = ji.readLong();
-    } else if (fieldEquals("postBalance", buf, offset, len)) {
-      builder.postBalance = ji.readLong();
-    } else if (fieldEquals("commission", buf, offset, len)) {
-      builder.commission = ji.readInt();
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder {
+  private static final class Parser implements FieldBufferPredicate {
 
     private long amount;
     private long effectiveSlot;
@@ -53,12 +32,29 @@ public record InflationReward(long amount,
     private long postBalance;
     private int commission;
 
-    private Builder() {
-
+    private Parser() {
     }
 
     private InflationReward create() {
       return new InflationReward(amount, effectiveSlot, epoch, postBalance, commission);
+    }
+    
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("amount", buf, offset, len)) {
+        amount = ji.readLong();
+      } else if (fieldEquals("effectiveSlot", buf, offset, len)) {
+        effectiveSlot = ji.readLong();
+      } else if (fieldEquals("epoch", buf, offset, len)) {
+        epoch = ji.readLong();
+      } else if (fieldEquals("postBalance", buf, offset, len)) {
+        postBalance = ji.readLong();
+      } else if (fieldEquals("commission", buf, offset, len)) {
+        commission = ji.readInt();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

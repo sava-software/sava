@@ -1,7 +1,9 @@
 package software.sava.rpc.json.http.response;
 
+import software.sava.core.accounts.PublicKey;
+import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.CharBufferFunction;
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
@@ -11,14 +13,21 @@ import java.util.List;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 import static systems.comodal.jsoniter.JsonIterator.fieldEqualsIgnoreCase;
 
-public record TxReward(String pubKey,
+public record TxReward(PublicKey publicKey,
                        long lamports,
                        long postBalance,
                        RewardType rewardType,
                        int commission) {
 
+  @Deprecated
+  public String pubKey() {
+    return publicKey.toString();
+  }
+
   public static TxReward parse(final JsonIterator ji) {
-    return ji.testObject(new Builder(), PARSER).create();
+    final var parser = new Parser();
+    ji.testObject(parser);
+    return parser.create();
   }
 
   public static List<TxReward> parseRewards(final JsonIterator ji) {
@@ -43,60 +52,42 @@ public record TxReward(String pubKey,
     }
   };
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("commission", buf, offset, len)) {
-      if (ji.whatIsNext() == ValueType.NUMBER) {
-        builder.commission(ji.readInt());
-      } else {
-        ji.skip();
-      }
-    } else if (fieldEquals("pubkey", buf, offset, len)) {
-      builder.pubKey(ji.readString());
-    } else if (fieldEquals("rewardType", buf, offset, len)) {
-      builder.rewardType(ji.applyChars(REWARD_TYPE_PARSER));
-    } else if (fieldEquals("lamports", buf, offset, len)) {
-      builder.lamports(ji.readLong());
-    } else if (fieldEquals("postBalance", buf, offset, len)) {
-      builder.postBalance(ji.readLong());
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
+  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
-  private static final class Builder {
-
-    private String pubKey;
+    private PublicKey pubKey;
     private long lamports;
     private long postBalance;
     private RewardType rewardType;
     private int commission;
 
-    private Builder() {
+    private Parser() {
+      super(null);
     }
 
     private TxReward create() {
       return new TxReward(pubKey, lamports, postBalance, rewardType, commission);
     }
-
-    private void commission(final int commission) {
-      this.commission = commission;
-    }
-
-    private void pubKey(final String pubKey) {
-      this.pubKey = pubKey;
-    }
-
-    private void rewardType(final RewardType rewardType) {
-      this.rewardType = rewardType;
-    }
-
-    private void lamports(final long lamports) {
-      this.lamports = lamports;
-    }
-
-    private void postBalance(final long postBalance) {
-      this.postBalance = postBalance;
+    
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("commission", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          commission = ji.readInt();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("pubkey", buf, offset, len)) {
+        pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else if (fieldEquals("rewardType", buf, offset, len)) {
+        rewardType = ji.applyChars(REWARD_TYPE_PARSER);
+      } else if (fieldEquals("lamports", buf, offset, len)) {
+        lamports = ji.readLong();
+      } else if (fieldEquals("postBalance", buf, offset, len)) {
+        postBalance = ji.readLong();
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }

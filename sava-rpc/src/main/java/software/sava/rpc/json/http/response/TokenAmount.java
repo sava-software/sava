@@ -1,7 +1,7 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.util.DecimalIntegerAmount;
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.math.BigInteger;
@@ -11,26 +11,17 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 public record TokenAmount(Context context, BigInteger amount, int decimals) implements DecimalIntegerAmount {
 
   public static TokenAmount parse(final JsonIterator ji, final Context context) {
-    return ji.testObject(new Builder(context), PARSER).create();
+    final var parser = new Parser(context);
+    ji.testObject(parser);
+    return parser.create();
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("amount", buf, offset, len)) {
-      builder.amount = ji.readBigInteger();
-    } else if (fieldEquals("decimals", buf, offset, len)) {
-      builder.decimals = ji.readInt();
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder extends RootBuilder {
+  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
     private BigInteger amount;
     private int decimals;
 
-    private Builder(final Context context) {
+    private Parser(final Context context) {
       super(context);
     }
 
@@ -38,5 +29,16 @@ public record TokenAmount(Context context, BigInteger amount, int decimals) impl
       return new TokenAmount(context, amount, decimals);
     }
 
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("amount", buf, offset, len)) {
+        amount = ji.readBigInteger();
+      } else if (fieldEquals("decimals", buf, offset, len)) {
+        decimals = ji.readInt();
+      } else {
+        ji.skip();
+      }
+      return true;
+    }
   }
 }

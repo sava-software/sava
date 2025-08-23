@@ -11,6 +11,7 @@ import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
+@Deprecated(forRemoval = true)
 public record ParsedAccountData(PublicKey program,
                                 int space,
                                 boolean isNative,

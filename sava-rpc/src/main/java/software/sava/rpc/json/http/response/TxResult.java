@@ -1,6 +1,6 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
+import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -16,24 +16,19 @@ public record TxResult(Context context, String value, TransactionError error) {
       case STRING -> new TxResult(context, ji.readString(), null);
       case NUMBER -> new TxResult(context, ji.readNumberAsString(), null);
       case BOOLEAN -> new TxResult(context, ji.readBoolean() ? "true" : "false", null);
-      case OBJECT -> ji.testObject(new Builder(context), PARSER).create();
+      case OBJECT -> {
+        final var parser = new Parser(context);
+        ji.testObject(parser);
+        yield parser.create();
+      }
     };
   }
 
-  private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
-    if (fieldEquals("err", buf, offset, len)) {
-      builder.error(TransactionError.parseError(ji));
-    } else {
-      ji.skip();
-    }
-    return true;
-  };
-
-  private static final class Builder extends RootBuilder {
+  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
 
     private TransactionError error;
 
-    private Builder(final Context context) {
+    private Parser(final Context context) {
       super(context);
     }
 
@@ -41,8 +36,14 @@ public record TxResult(Context context, String value, TransactionError error) {
       return new TxResult(context, null, error);
     }
 
-    private void error(final TransactionError error) {
-      this.error = error;
+    @Override
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("err", buf, offset, len)) {
+        error = TransactionError.parseError(ji);
+      } else {
+        ji.skip();
+      }
+      return true;
     }
   }
 }
