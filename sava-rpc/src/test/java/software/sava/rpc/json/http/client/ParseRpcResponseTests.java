@@ -223,7 +223,7 @@ final class ParseRpcResponseTests {
 
   @Test
   void getClusterNodes() {
-    final var ji = readJsonFile("getClusterNodes.json");
+    final var ji = readJsonFile("getClusterNodes.json.zip");
     final var nodes = ClusterNode.parse(ji);
     assertEquals(6455, nodes.size());
     final var first = nodes.getFirst();
