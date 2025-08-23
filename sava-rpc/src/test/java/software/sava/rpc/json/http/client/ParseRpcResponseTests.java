@@ -164,12 +164,10 @@ final class ParseRpcResponseTests {
         """
     ).skipUntil("result");
     final var bc = BlockCommitment.parse(ji);
-    final long[] commitment = bc.commitment();
-    assertEquals(32, commitment.length);
-    for (int i = 0; i < 31; i++) {
-      assertEquals(0L, commitment[i]);
-    }
-    assertEquals(404893464137748549L, commitment[31]);
+    assertArrayEquals(
+        new long[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 404893464137748549L},
+        bc.commitment()
+    );
     assertEquals(405146599541901117L, bc.totalStake());
   }
 
