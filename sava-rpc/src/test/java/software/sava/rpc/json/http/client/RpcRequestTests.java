@@ -126,11 +126,10 @@ abstract class RpcRequestTests implements HttpHandler {
           }
         } else {
           final var msg = String.format("""
-                  {
-                   "msg": "Expected request body does not match the actual. Note: The JSON RPC "id" does not matter."
-                   "expected": "%s",
-                   "actual":   "%s"
-                  }""",
+                  Expected request body does not match the actual. Note: The JSON RPC "id" does not matter.
+                   - expected: %s
+                   - actual:   %s
+                  """,
               expectedRequest, requestBody
           );
           logger.log(ERROR, msg);

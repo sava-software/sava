@@ -48,12 +48,9 @@ void getHealth() {
 ```
 
 ```text
-  Aug 24, 2025 7:48:47 AM software.sava.rpc.json.http.client.RpcRequestTests handle
-  SEVERE: {
-   "msg": "Expected request body does not match the actual. Note: The JSON RPC "id" does not matter."
-   "expected": "{}",
-   "actual":   "{"jsonrpc":"2.0","id":123,"method":"getHealth"}"
-  }
+SEVERE: Expected request body does not match the actual. Note: The JSON RPC "id" does not matter.
+ - expected: {}
+ - actual:   {"jsonrpc":"2.0","id":123,"method":"getHealth"}
 ```
 
 * Or, enable logging by using a [logging.properties](logging.properties) file and pass it to the VM via:
