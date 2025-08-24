@@ -73,6 +73,11 @@ var rpcClient = SolanaRpcClient.createClient(
 );
 ```
 
+#### Validation
+
+Reference the [official Solana RPC documentation](https://solana.com/docs/rpc/http) to verify that the expected
+parameters are passed in the request, and if applicable, all the desired response data is parsed correctly.
+
 ## Build
 
 [Generate a classic token](https://github.com/settings/tokens) with the `read:packages` scope needed to access
