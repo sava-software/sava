@@ -53,7 +53,8 @@ SEVERE: Expected request body does not match the actual. Note: The JSON RPC "id"
  - actual:   {"jsonrpc":"2.0","id":123,"method":"getHealth"}
 ```
 
-* Or, enable logging by using a [logging.properties](logging.properties) file and pass it to the VM via:
+* Or, enable debug logging by using a [logging.properties](logging.properties) file and pass it to the VM via:
+
 ``` 
 -Djava.util.logging.config.file=logging.properties
 ```
