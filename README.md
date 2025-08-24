@@ -34,13 +34,31 @@ for example usage.
   * If the JSON file is larger than 1MB, apply zip compression to it.
   * If it is large because it is a collection of items, consider trimming the list down to two or more items.
 
-#### Logging the Request and Response JSON
+#### Capture Request JSON
 
-For capturing the request body use a debugger or enable logging by using or creating
-a [logging.properties](logging.properties) file and pass it to the VM via
-`-Djava.util.logging.config.file=logging.properties`.
+* Start a test with the desired call, the test will fail with the difference between the expected and actual requests.
 
-For capturing the response body hook into the RPC client like so: 
+```java
+@Test
+void getHealth() {
+  registerRequest("{}");
+  rpcClient.getHealth().join();
+}
+```
+
+```text
+  Aug 24, 2025 7:48:47 AM software.sava.rpc.json.http.client.RpcRequestTests handle
+  SEVERE: {
+   "msg": "Expected request body does not match the actual. Note: The JSON RPC "id" does not matter."
+   "expected": "{}",
+   "actual":   "{"jsonrpc":"2.0","id":123,"method":"getHealth"}"
+  }
+```
+
+* Or, enable logging by using a [logging.properties](logging.properties) file and pass it to the VM via
+  `-Djava.util.logging.config.file=logging.properties`.
+
+#### Capture Response JSON
 
 ```java
 var rpcClient = SolanaRpcClient.createClient(
@@ -48,7 +66,7 @@ var rpcClient = SolanaRpcClient.createClient(
     httpClient,
     response -> {
       final var json = new String(response.body());
-      System.out.println(json); // Write to file if large.
+      System.out.println(json); // Write to a file if large.
       return true;
     }
 );

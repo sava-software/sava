@@ -275,10 +275,9 @@ final class ParseRpcResponseTests {
 
   @Test
   void getEpochSchedule() {
-    final var ji = JsonIterator.parse(
+    final var ji = JsonIterator.parse("""
+        {"jsonrpc":"2.0","result":{"firstNormalEpoch":0,"firstNormalSlot":0,"leaderScheduleSlotOffset":432000,"slotsPerEpoch":432000,"warmup":false},"id":1755826897171}
         """
-            {"jsonrpc":"2.0","result":{"firstNormalEpoch":0,"firstNormalSlot":0,"leaderScheduleSlotOffset":432000,"slotsPerEpoch":432000,"warmup":false},"id":1755826897171}
-            """
     );
     ji.skipUntil("result");
     final var schedule = EpochSchedule.parse(ji);
