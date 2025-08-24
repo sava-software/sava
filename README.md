@@ -39,6 +39,7 @@ for example usage.
 * Start a test with the desired call, the test will fail with the difference between the expected and actual requests.
 
 ```java
+
 @Test
 void getHealth() {
   registerRequest("{}");
@@ -55,8 +56,10 @@ void getHealth() {
   }
 ```
 
-* Or, enable logging by using a [logging.properties](logging.properties) file and pass it to the VM via
-  `-Djava.util.logging.config.file=logging.properties`.
+* Or, enable logging by using a [logging.properties](logging.properties) file and pass it to the VM via:
+``` 
+-Djava.util.logging.config.file=logging.properties
+```
 
 #### Capture Response JSON
 
