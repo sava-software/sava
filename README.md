@@ -25,22 +25,41 @@ See [RoundTripRpcRequestTests](sava-rpc/src/test/java/software/sava/rpc/json/htt
 for example usage.
 
 * If you plan to add several tests, create a new class to avoid merge conflicts.
-* If you feel there is already enough response test coverage, you can skip it by only providing the expected request
-  JSON.
+* If you feel there is already enough response test coverage, you can [skip it by only providing the expected request
+  JSON.](https://github.com/sava-software/sava/blob/55e41207d932708affd05be54168f6bfb6105ec6/sava-rpc/src/test/java/software/sava/rpc/json/http/client/RoundTripRpcRequestTests.java#L30)
   * See [ParseRpcResponseTests](sava-rpc/src/test/java/software/sava/rpc/json/http/client/ParseRpcResponseTests.java)
     for additional response parsing tests.
 * If the response JSON is large, add it to the [resource](sava-rpc/src/test/resources/rpc_response_data) directory as a
   JSON file.
   * If the JSON file is larger than 1MB, apply zip compression to it.
-  * If it is large because it is a collection of items, consider trimming the list down to two or more items.
+  * If it is large because it is a collection of items, consider trimming the list down to at least two items.
 
-#### Logging the Request and Response JSON
+#### Capture Request JSON
 
-For capturing the request body use a debugger or enable logging by using or creating
-a [logging.properties](logging.properties) file and pass it to the VM via
-`-Djava.util.logging.config.file=logging.properties`.
+* Start a test with the desired call, the test will fail with the difference between the expected and actual requests.
 
-For capturing the response body hook into the RPC client like so: 
+```java
+
+@Test
+void getHealth() {
+  registerRequest("{}");
+  rpcClient.getHealth().join();
+}
+```
+
+```text
+SEVERE: Expected request body does not match the actual. Note: The JSON RPC "id" does not matter.
+ - expected: {}
+ - actual:   {"jsonrpc":"2.0","id":123,"method":"getHealth"}
+```
+
+* Or, enable debug logging by using a [logging.properties](logging.properties) file and pass it to the VM via:
+
+``` 
+-Djava.util.logging.config.file=logging.properties
+```
+
+#### Capture Response JSON
 
 ```java
 var rpcClient = SolanaRpcClient.createClient(
@@ -48,11 +67,16 @@ var rpcClient = SolanaRpcClient.createClient(
     httpClient,
     response -> {
       final var json = new String(response.body());
-      System.out.println(json); // Write to file if large.
+      System.out.println(json); // Write to a file if large.
       return true;
     }
 );
 ```
+
+#### Validation
+
+Reference the [official Solana RPC documentation](https://solana.com/docs/rpc/http) to verify that the expected
+parameters are passed in the request, and if applicable, all the desired response data is parsed correctly.
 
 ## Build
 

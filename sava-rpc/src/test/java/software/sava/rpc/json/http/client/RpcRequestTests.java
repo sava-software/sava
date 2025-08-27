@@ -22,6 +22,7 @@ import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static java.lang.System.Logger.Level.ERROR;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -33,6 +34,7 @@ abstract class RpcRequestTests implements HttpHandler {
     System.setProperty("com.sun.net.httpserver.HttpServerProvider", "sun.net.httpserver.DefaultHttpServerProvider");
   }
 
+  private static final System.Logger logger = System.getLogger(RpcRequestTests.class.getName());
   private static final ExecutorService HTTP_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
   private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().executor(HTTP_EXECUTOR).build();
 
@@ -44,16 +46,10 @@ abstract class RpcRequestTests implements HttpHandler {
       {"jsonrpc":"2.0","id":""".length() + 2;
 
   private static String stripJsonRpcPrefix(final String request) {
-    return request.substring(request.indexOf("""
+    final int offset = request.indexOf("""
         "method":""", VERSION_PREFIX_LENGTH
-    ));
-  }
-
-  private record TestRequest(int invalidRequestCode, String expectedRequest, String response) {
-
-    static TestRequest create(final int invalidRequestCode, final String expectedRequest, final String response) {
-      return new TestRequest(invalidRequestCode, expectedRequest, response);
-    }
+    );
+    return offset < 0 ? request : request.substring(offset);
   }
 
   private final Queue<TestRequest> expectedRequestQueue;
@@ -110,17 +106,18 @@ abstract class RpcRequestTests implements HttpHandler {
   @Override
   public final void handle(final HttpExchange exchange) throws IOException {
     assertEquals("POST", exchange.getRequestMethod());
-    final var requestString = stripJsonRpcPrefix(new String(exchange.getRequestBody().readAllBytes()));
+    final var requestBody = new String(exchange.getRequestBody().readAllBytes());
+    final var strippedRequestBody = stripJsonRpcPrefix(requestBody);
     final var testRequest = expectedRequestQueue.poll();
     if (testRequest == null) {
       writeResponse(400, exchange, "Expected request queue is empty.");
     } else {
       final var expectedRequest = testRequest.expectedRequest();
       if (expectedRequest == null) {
-        writeResponse(400, exchange, "Expected request must not be null.");
+        writeResponse(400, exchange, "Registered expected request must not be null.");
       } else {
-        final var stripId = stripJsonRpcPrefix(expectedRequest);
-        if (Objects.equals(stripId, requestString)) {
+        final var strippedExpectedRequest = stripJsonRpcPrefix(expectedRequest);
+        if (strippedExpectedRequest.equals(strippedRequestBody)) {
           final var response = testRequest.response();
           if (response != null) {
             writeResponse(exchange, response);
@@ -128,17 +125,33 @@ abstract class RpcRequestTests implements HttpHandler {
             writeResponse(exchange, NO_RESPONSE);
           }
         } else {
-          writeResponse(testRequest.invalidRequestCode(), exchange, requestString);
+          final var msg = String.format("""
+                  Expected request body does not match the actual. Note: The JSON RPC "id" does not matter.
+                   - expected: %s
+                   - actual:   %s
+                  """,
+              expectedRequest, requestBody
+          );
+          logger.log(ERROR, msg);
+          writeResponse(testRequest.invalidRequestCode(), exchange, msg);
         }
       }
     }
+  }
+
+  private record TestRequest(int invalidRequestCode, String expectedRequest, String response) {
+
   }
 
   protected final void registerRequest(final int invalidRequestCode,
                                        final String expectedRequest,
                                        final String response,
                                        final int numInstances) {
-    final var testRequest = new TestRequest(invalidRequestCode, expectedRequest, response);
+    final var testRequest = new TestRequest(
+        invalidRequestCode,
+        Objects.requireNonNull(expectedRequest),
+        response
+    );
     for (int i = 0; i < numInstances; i++) {
       expectedRequestQueue.add(testRequest);
     }

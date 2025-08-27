@@ -34,16 +34,15 @@ public abstract class JsonRpcHttpClient extends JsonHttpClient {
   }
 
   static JsonIterator createJsonIterator(final HttpResponse<byte[]> httpResponse) {
-    // System.out.println(new String(httpResponse.body()));
-    final var ji = JsonIterator.parse(httpResponse.body());
+    final byte[] body = httpResponse.body();
+    final var ji = JsonIterator.parse(body);
     final int responseCode = httpResponse.statusCode();
     final boolean isJsonObject = ji.whatIsNext() == ValueType.OBJECT;
     if (responseCode < 200 || responseCode >= 300 || !isJsonObject || ji.skipUntil("result") == null) {
-      // System.out.println(new String(httpResponse.body()));
       if (!isJsonObject) {
-        throw throwUncheckedIOException(httpResponse, new String(httpResponse.body()));
+        throw throwUncheckedIOException(httpResponse, new String(body));
       } else if (ji.reset(0).skipUntil("error") == null) {
-        throw throwUncheckedIOException(httpResponse, new String(httpResponse.body()));
+        throw throwUncheckedIOException(httpResponse, new String(body));
       } else {
         final var retryAfter = httpResponse.headers().firstValueAsLong("retry-after");
         throw JsonRpcException.parseException(ji, retryAfter);
