@@ -20,7 +20,8 @@ public record JsonResponseController<R>(Function<JsonIterator, R> parser) implem
   static void logBody(final HttpResponse<?> httpResponse, final String body, final RuntimeException ex) {
     log.log(ERROR,
         String.format("Failed to parse [httpCode:%d], [body=%s]", httpResponse.statusCode(), body),
-        ex);
+        ex
+    );
   }
 
   static RuntimeException throwUncheckedIOException(final HttpResponse<?> httpResponse, final String body) {

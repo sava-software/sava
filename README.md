@@ -32,7 +32,7 @@ for example usage.
 * If the response JSON is large, add it to the [resource](sava-rpc/src/test/resources/rpc_response_data) directory as a
   JSON file.
   * If the JSON file is larger than 1MB, apply zip compression to it.
-  * If it is large because it is a collection of items, consider trimming the list down to two or more items.
+  * If it is large because it is a collection of items, consider trimming the list down to at least two items.
 
 #### Capture Request JSON
 
