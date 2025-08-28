@@ -121,7 +121,7 @@ public abstract class JsonHttpClient {
     }
   }
 
-  static byte[] readBody(final HttpResponse<?> response) {
+  protected static byte[] readBody(final HttpResponse<?> response) {
     if (response instanceof ReadHttpResponse<?> readHttpResponse) {
       return readHttpResponse.readBody();
     } else {

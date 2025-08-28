@@ -1,6 +1,5 @@
 package software.sava.rpc.json.http.client;
 
-import software.sava.rpc.json.http.response.Context;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.URI;
@@ -27,26 +26,21 @@ public abstract class JsonRpcHttpClient extends JsonHttpClient {
     super(endpoint, httpClient, requestTimeout);
   }
 
-  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseValue(final BiFunction<JsonIterator, Context, R> adapter) {
-    return new JsonRpcValueResponseParser<>(adapter);
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(final Function<JsonIterator, R> parser) {
+    return new JsonRpcResultResponseParser<>(parser);
   }
 
-  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(final Function<JsonIterator, R> adapter) {
-    return new JsonRpcResultResponseParser<>(adapter);
-  }
-
-  @Deprecated
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseValue(final BiFunction<JsonIterator, Context, R> adapter) {
-    return new JsonRpcBytesValueParseController<>(adapter);
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(final JsonRpcResponseParser<R> parser) {
+    return new FullContextJsonRpcResponseParser<>(parser);
   }
 
   @Deprecated
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final Function<JsonIterator, R> adapter) {
-    return new JsonRpcBytesResultParseController<>(adapter);
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final Function<JsonIterator, R> parser) {
+    return new JsonRpcBytesResultParseController<>(parser);
   }
 
   @Deprecated
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final BiFunction<HttpResponse<byte[]>, JsonIterator, R> adapter) {
-    return new JsonRpcBytesResponseController<>(adapter);
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final BiFunction<HttpResponse<byte[]>, JsonIterator, R> parser) {
+    return new JsonRpcBytesResponseController<>(parser);
   }
 }

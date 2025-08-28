@@ -126,6 +126,15 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     this.sendTxResponseParser = wrapResponseParser(SEND_TX_RESPONSE_PARSER);
   }
 
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseValue(final BiFunction<JsonIterator, Context, R> parser) {
+    return new JsonRpcValueResponseParser<>(parser);
+  }
+
+  @Deprecated
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseValue(final BiFunction<JsonIterator, Context, R> parser) {
+    return new JsonRpcBytesValueParseController<>(parser);
+  }
+
   @Override
   public Commitment defaultCommitment() {
     return defaultCommitment;
