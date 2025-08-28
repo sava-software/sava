@@ -1,9 +1,7 @@
 package software.sava.rpc.json.http.client;
 
 import software.sava.rpc.json.http.response.Context;
-import software.sava.rpc.json.http.response.JsonRpcException;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.io.*;
 import java.net.URI;
@@ -11,16 +9,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.OptionalLong;
 import java.util.function.*;
 import java.util.zip.GZIPInputStream;
 
-import static java.lang.System.Logger.Level.ERROR;
-import static software.sava.rpc.json.http.client.JsonResponseController.throwUncheckedIOException;
-
 public abstract class JsonRpcHttpClient extends JsonHttpClient {
-
-  private static final System.Logger logger = System.getLogger(JsonRpcHttpClient.class.getName());
 
   public JsonRpcHttpClient(final URI endpoint,
                            final HttpClient httpClient,
@@ -102,42 +94,11 @@ public abstract class JsonRpcHttpClient extends JsonHttpClient {
     }
   }
 
-  private static RuntimeException parseExceptionChecked(final byte[] body,
-                                                        final JsonIterator ji,
-                                                        final OptionalLong retryAfterSeconds) {
-    try {
-      return JsonRpcException.parseException(ji, retryAfterSeconds);
-    } catch (final RuntimeException ex) {
-      logger.log(ERROR, "Failed to parse JSON-RPC exception: " + new String(body), ex);
-      throw ex;
-    }
-  }
-
-  static JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
-    final var ji = JsonIterator.parse(body);
-    final int responseCode = httpResponse.statusCode();
-    final boolean isJsonObject = ji.whatIsNext() == ValueType.OBJECT;
-    if (responseCode < 200 || responseCode >= 300 || !isJsonObject || ji.skipUntil("result") == null) {
-      if (!isJsonObject) {
-        throw throwUncheckedIOException(httpResponse, new String(body));
-      } else if (ji.reset(0).skipUntil("error") == null) {
-        throw throwUncheckedIOException(httpResponse, new String(body));
-      } else {
-        final var retryAfter = httpResponse.headers().firstValueAsLong("retry-after");
-        throw parseExceptionChecked(body, ji, retryAfter);
-      }
-    } else {
-      return ji;
-    }
-  }
-
-  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseValue(
-      final BiFunction<JsonIterator, Context, R> adapter) {
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseValue(final BiFunction<JsonIterator, Context, R> adapter) {
     return new JsonRpcValueResponseParser<>(adapter);
   }
 
-  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(
-      final Function<JsonIterator, R> adapter) {
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(final Function<JsonIterator, R> adapter) {
     return new JsonRpcResultResponseParser<>(adapter);
   }
 

@@ -14,7 +14,7 @@ final class JsonRpcBytesResultParseController<R> extends BaseJsonRpcResponseCont
   }
 
   @Override
-  protected final R parseResponse(final HttpResponse<byte[]> httpResponse, final byte[] body, final JsonIterator ji) {
+  protected R parseResponse(final HttpResponse<?> httpResponse, final byte[] body, final JsonIterator ji) {
     return parser.apply(ji);
   }
 }

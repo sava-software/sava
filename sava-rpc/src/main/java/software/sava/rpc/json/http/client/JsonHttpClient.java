@@ -48,13 +48,21 @@ public abstract class JsonHttpClient {
   }
 
   @Deprecated
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final Function<JsonIterator, R> adapter) {
-    return new JsonResponseController<>(adapter);
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final Function<JsonIterator, R> parser) {
+    return new JsonBytesResponseController<>(parser);
   }
 
   @Deprecated
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final BiFunction<byte[], JsonIterator, R> adapter) {
-    return new KeepJsonResponseController<>(adapter);
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final BiFunction<byte[], JsonIterator, R> parser) {
+    return new KeepJsonResponseController<>(parser);
+  }
+
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponse(final Function<JsonIterator, R> parser) {
+    return new GenericJsonResponseParser<>(parser);
+  }
+
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponse(final BiFunction<byte[], JsonIterator, R> parser) {
+    return new GenericJsonBytesResponseParser<>(parser);
   }
 
   private static HttpRequest.Builder newJsonRequest(final URI endpoint, final Duration requestTimeout) {

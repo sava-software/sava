@@ -6,7 +6,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import java.net.http.HttpResponse;
 import java.util.function.BiFunction;
 
-final class JsonRpcValueResponseParser<R> extends BaseJsonRpcResponseParser<R> {
+final class JsonRpcValueResponseParser<R> extends BaseGenericJsonRpcResponseParser<R> {
 
   private final BiFunction<JsonIterator, Context, R> parser;
 

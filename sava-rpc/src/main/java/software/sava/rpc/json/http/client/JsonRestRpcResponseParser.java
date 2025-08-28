@@ -5,9 +5,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import java.net.http.HttpResponse;
 import java.util.function.Function;
 
-import static software.sava.rpc.json.http.client.JsonResponseController.throwUncheckedIOException;
-
-final class JsonRestRpcResponseParser<R> extends BaseJsonResponseParser<R> {
+final class JsonRestRpcResponseParser<R> extends BaseJsonResponseController<R> implements Function<HttpResponse<?>, R> {
 
   private final Function<JsonIterator, R> parser;
 
@@ -21,11 +19,7 @@ final class JsonRestRpcResponseParser<R> extends BaseJsonResponseParser<R> {
   }
 
   @Override
-  protected JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
-    final int responseCode = httpResponse.statusCode();
-    if (responseCode < 200 || responseCode >= 300) {
-      throw throwUncheckedIOException(httpResponse, new String(body));
-    }
-    return JsonIterator.parse(body);
+  public R apply(final HttpResponse<?> httpResponse) {
+    return super.applyResponse(httpResponse);
   }
 }
