@@ -7,23 +7,27 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.*;
 
 public abstract class JsonRpcHttpClient extends JsonHttpClient {
 
-  public JsonRpcHttpClient(final URI endpoint,
-                           final HttpClient httpClient,
-                           final Duration requestTimeout,
-                           final UnaryOperator<HttpRequest.Builder> extendRequest,
-                           @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
-                           final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
+  protected final AtomicLong id;
+
+  protected JsonRpcHttpClient(final URI endpoint,
+                              final HttpClient httpClient,
+                              final Duration requestTimeout,
+                              final UnaryOperator<HttpRequest.Builder> extendRequest,
+                              @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
+                              final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
     super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, testResponse);
+    this.id = new AtomicLong(System.currentTimeMillis());
   }
 
-  public JsonRpcHttpClient(final URI endpoint,
-                           final HttpClient httpClient,
-                           final Duration requestTimeout) {
-    super(endpoint, httpClient, requestTimeout);
+  protected JsonRpcHttpClient(final URI endpoint,
+                              final HttpClient httpClient,
+                              final Duration requestTimeout) {
+    this(endpoint, httpClient, requestTimeout, null, null, null);
   }
 
   protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(final Function<JsonIterator, R> parser) {

@@ -22,7 +22,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.*;
 import java.util.stream.Collectors;
 
@@ -32,14 +31,10 @@ import static software.sava.core.rpc.Filter.MAX_MEM_COMP_LENGTH;
 import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
-final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
+final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements SolanaRpcClient {
 
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
   static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
-
-  private static <R> Function<HttpResponse<?>, R> applyGenericResponseValue(final BiFunction<JsonIterator, Context, R> parser) {
-    return new JsonRpcValueResponseParser<>(parser);
-  }
 
   private static final Function<HttpResponse<?>, LatestBlockHash> LATEST_BLOCK_HASH = applyGenericResponseValue(LatestBlockHash::parse);
   private static final Function<HttpResponse<?>, Lamports> CONTEXT_LONG_VAL = applyGenericResponseValue(Lamports::parse);
@@ -109,8 +104,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   private static final Function<HttpResponse<?>, Tx> TRANSACTION = applyGenericResponseResult(Tx::parse);
   private static final Function<HttpResponse<?>, Version> VERSION = applyGenericResponseResult(Version::parse);
 
-  private final AtomicLong id;
-  private final Commitment defaultCommitment;
   private final Function<HttpResponse<?>, String> sendTxResponseParser;
   private final Function<HttpResponse<?>, LatestBlockHash> latestBlockhashResponseParser;
 
@@ -121,16 +114,9 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                       @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
                       final BiPredicate<HttpResponse<?>, byte[]> testResponse,
                       final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, testResponse);
-    this.id = new AtomicLong(System.currentTimeMillis());
-    this.defaultCommitment = defaultCommitment;
+    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, testResponse, defaultCommitment);
     this.latestBlockhashResponseParser = wrapResponseParser(LATEST_BLOCK_HASH);
     this.sendTxResponseParser = wrapResponseParser(SEND_TX_RESPONSE_PARSER);
-  }
-
-  @Override
-  public Commitment defaultCommitment() {
-    return defaultCommitment;
   }
 
   @Override
