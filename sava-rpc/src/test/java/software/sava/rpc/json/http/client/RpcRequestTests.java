@@ -69,11 +69,12 @@ abstract class RpcRequestTests implements HttpHandler {
 
     final var serverAddress = httpServer.getAddress();
     final var endpoint = URI.create(String.format("http://[%s]:%d", serverAddress.getHostString(), serverAddress.getPort()));
-    rpcClient = SolanaRpcClient.createClient(
-        endpoint,
-        HTTP_CLIENT,
-        response -> !Arrays.equals(response.body(), NO_RESPONSE)
-    );
+
+    rpcClient = SolanaRpcClient.build()
+        .httpClient(HTTP_CLIENT)
+        .endpoint(endpoint)
+        .testResponse((response, body) -> !Arrays.equals(body, NO_RESPONSE))
+        .createClient();
 
     httpServer.createContext("/", this);
   }

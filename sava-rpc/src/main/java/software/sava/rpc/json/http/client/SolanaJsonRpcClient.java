@@ -23,16 +23,10 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
+import java.util.function.*;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
-import static java.lang.System.Logger.Level.DEBUG;
-import static java.net.http.HttpRequest.BodyPublishers.ofString;
-import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
 import static java.util.Objects.requireNonNullElse;
 import static software.sava.core.rpc.Filter.MAX_MEM_COMP_LENGTH;
 import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
@@ -45,21 +39,21 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
   static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
 
-  private static final Function<HttpResponse<byte[]>, LatestBlockHash> LATEST_BLOCK_HASH = applyResponseValue(LatestBlockHash::parse);
-  private static final Function<HttpResponse<byte[]>, Lamports> CONTEXT_LONG_VAL = applyResponseValue(Lamports::parse);
-  private static final Function<HttpResponse<byte[]>, Block> BLOCK = applyResponseResult(Block::parse);
-  private static final Function<HttpResponse<byte[]>, BlockHeight> BLOCK_HEIGHT = applyResponseResult(BlockHeight::parse);
-  private static final Function<HttpResponse<byte[]>, BlockProduction> BLOCK_PRODUCTION = applyResponseValue(BlockProduction::parse);
-  private static final Function<HttpResponse<byte[]>, BlockCommitment> BLOCK_COMMITMENT = applyResponseResult(BlockCommitment::parse);
-  private static final Function<HttpResponse<byte[]>, List<ClusterNode>> CLUSTER_NODES = applyResponseResult(ClusterNode::parse);
-  private static final Function<HttpResponse<byte[]>, EpochInfo> EPOCH_INFO = applyResponseResult(EpochInfo::parse);
-  private static final Function<HttpResponse<byte[]>, EpochSchedule> EPOCH_SCHEDULE = applyResponseResult(EpochSchedule::parse);
-  private static final Function<HttpResponse<byte[]>, FeeForMessage> FEE_FOR_MESSAGE = applyResponseValue(FeeForMessage::parse);
-  private static final Function<HttpResponse<byte[]>, HighestSnapshotSlot> HIGHEST_SNAPSHOT_SLOT = applyResponseResult(HighestSnapshotSlot::parse);
-  private static final Function<HttpResponse<byte[]>, Identity> IDENTITY = applyResponseResult(Identity::parse);
-  private static final Function<HttpResponse<byte[]>, NodeHealth> NODE_HEALTH = applyResponse(NodeHealth::parse);
-  private static final Function<HttpResponse<byte[]>, InflationGovernor> INFLATION_GOVERNOR = applyResponseResult(InflationGovernor::parse);
-  private static final Function<HttpResponse<byte[]>, InflationRate> INFLATION_RATE = applyResponseResult(InflationRate::parse);
+  private static final Function<HttpResponse<?>, LatestBlockHash> LATEST_BLOCK_HASH = applyGenericResponseValue(LatestBlockHash::parse);
+  private static final Function<HttpResponse<?>, Lamports> CONTEXT_LONG_VAL = applyGenericResponseValue(Lamports::parse);
+  private static final Function<HttpResponse<?>, Block> BLOCK = applyGenericResponseResult(Block::parse);
+  private static final Function<HttpResponse<?>, BlockHeight> BLOCK_HEIGHT = applyGenericResponseResult(BlockHeight::parse);
+  private static final Function<HttpResponse<?>, BlockProduction> BLOCK_PRODUCTION = applyGenericResponseValue(BlockProduction::parse);
+  private static final Function<HttpResponse<?>, BlockCommitment> BLOCK_COMMITMENT = applyGenericResponseResult(BlockCommitment::parse);
+  private static final Function<HttpResponse<?>, List<ClusterNode>> CLUSTER_NODES = applyGenericResponseResult(ClusterNode::parse);
+  private static final Function<HttpResponse<?>, EpochInfo> EPOCH_INFO = applyGenericResponseResult(EpochInfo::parse);
+  private static final Function<HttpResponse<?>, EpochSchedule> EPOCH_SCHEDULE = applyGenericResponseResult(EpochSchedule::parse);
+  private static final Function<HttpResponse<?>, FeeForMessage> FEE_FOR_MESSAGE = applyGenericResponseValue(FeeForMessage::parse);
+  private static final Function<HttpResponse<?>, HighestSnapshotSlot> HIGHEST_SNAPSHOT_SLOT = applyGenericResponseResult(HighestSnapshotSlot::parse);
+  private static final Function<HttpResponse<?>, Identity> IDENTITY = applyGenericResponseResult(Identity::parse);
+  private static final Function<HttpResponse<?>, NodeHealth> NODE_HEALTH = new JsonRestRpcResponseParser<>(NodeHealth::parse);
+  private static final Function<HttpResponse<?>, InflationGovernor> INFLATION_GOVERNOR = applyGenericResponseResult(InflationGovernor::parse);
+  private static final Function<HttpResponse<?>, InflationRate> INFLATION_RATE = applyGenericResponseResult(InflationRate::parse);
   private static final Function<JsonIterator, long[]> PARSE_LONG_ARRAY = ji -> {
     if (ji.whatIsNext() == ValueType.NULL) {
       return new long[0];
@@ -82,17 +76,17 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
       return schedule;
     }
   };
-  private static final Function<HttpResponse<byte[]>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyResponseResult(KEY_LONG_ARRAY_MAP_PARSER);
-  private static final Function<HttpResponse<byte[]>, List<AccountInfo<TokenAccount>>> TOKEN_ACCOUNTS_PARSER =
-      applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, TokenAccount.FACTORY));
-  private static final Function<HttpResponse<byte[]>, List<AccountLamports>> TOP_LAMPORT_ACCOUNTS = applyResponseValue(AccountLamports::parseAccounts);
-  private static final Function<HttpResponse<byte[]>, List<InflationReward>> INFLATION_REWARDS = applyResponseResult(InflationReward::parse);
-  private static final Function<HttpResponse<byte[]>, VoteAccounts> VOTE_ACCOUNTS = applyResponseResult(VoteAccounts::parse);
-  private static final Function<HttpResponse<byte[]>, Long> LONG_VAL = applyResponseResult(JsonIterator::readLong);
-  private static final Function<HttpResponse<byte[]>, Instant> INSTANT = applyResponseResult(ji -> Instant.ofEpochSecond(ji.readLong()));
-  private static final Function<HttpResponse<byte[]>, ContextBoolVal> CONTEXT_BOOL_VAL = applyResponseValue(ContextBoolVal::parse);
-  private static final Function<HttpResponse<byte[]>, String> STRING = applyResponseResult(JsonIterator::readString);
-  private static final Function<HttpResponse<byte[]>, PublicKey> PUBLIC_KEY = applyResponseResult(PublicKeyEncoding::parseBase58Encoded);
+  private static final Function<HttpResponse<?>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyGenericResponseResult(KEY_LONG_ARRAY_MAP_PARSER);
+  private static final Function<HttpResponse<?>, List<AccountInfo<TokenAccount>>> TOKEN_ACCOUNTS_PARSER =
+      applyGenericResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, TokenAccount.FACTORY));
+  private static final Function<HttpResponse<?>, List<AccountLamports>> TOP_LAMPORT_ACCOUNTS = applyGenericResponseValue(AccountLamports::parseAccounts);
+  private static final Function<HttpResponse<?>, List<InflationReward>> INFLATION_REWARDS = applyGenericResponseResult(InflationReward::parse);
+  private static final Function<HttpResponse<?>, VoteAccounts> VOTE_ACCOUNTS = applyGenericResponseResult(VoteAccounts::parse);
+  private static final Function<HttpResponse<?>, Long> LONG_VAL = applyGenericResponseResult(JsonIterator::readLong);
+  private static final Function<HttpResponse<?>, Instant> INSTANT = applyGenericResponseResult(ji -> Instant.ofEpochSecond(ji.readLong()));
+  private static final Function<HttpResponse<?>, ContextBoolVal> CONTEXT_BOOL_VAL = applyGenericResponseValue(ContextBoolVal::parse);
+  private static final Function<HttpResponse<?>, String> STRING = applyGenericResponseResult(JsonIterator::readString);
+  private static final Function<HttpResponse<?>, PublicKey> PUBLIC_KEY = applyGenericResponseResult(PublicKeyEncoding::parseBase58Encoded);
   static final Function<JsonIterator, List<PublicKey>> PUBLIC_KEY_LIST_PARSER = ji -> {
     final var strings = new ArrayList<PublicKey>();
     while (ji.readArray()) {
@@ -100,35 +94,36 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     }
     return strings;
   };
-  private static final Function<HttpResponse<byte[]>, List<PublicKey>> PUBLIC_KEY_LIST = applyResponseResult(PUBLIC_KEY_LIST_PARSER);
-  private static final Function<HttpResponse<byte[]>, long[]> LONG_ARRAY = applyResponseResult(PARSE_LONG_ARRAY);
-  private static final Function<HttpResponse<byte[]>, List<PerfSample>> PERF_SAMPLE = applyResponseResult(PerfSample::parse);
-  private static final Function<HttpResponse<byte[]>, List<PrioritizationFee>> PRIORITIZATION_FEE = applyResponseResult(PrioritizationFee::parse);
-  private static final Function<HttpResponse<byte[]>, List<TxSig>> TX_SIGNATURES = applyResponseResult(TxSig::parseSignatures);
-  private static final Function<HttpResponse<byte[]>, List<TxStatus>> SIG_STATUS_LIST = applyResponseValue(TxStatus::parseList);
-  private static final Function<HttpResponse<byte[]>, Supply> SUPPLY = applyResponseValue(Supply::parse);
-  private static final Function<HttpResponse<byte[]>, TokenAmount> TOKEN_AMOUNT = applyResponseValue(TokenAmount::parse);
-  private static final Function<HttpResponse<byte[]>, String> SEND_TX_RESPONSE_PARSER = applyResponseResult(JsonIterator::readString);
-  private static final Function<HttpResponse<byte[]>, List<AccountTokenAmount>> ACCOUNT_TOKEN_AMOUNT = applyResponseValue(AccountTokenAmount::parse);
-  private static final Function<HttpResponse<byte[]>, Tx> TRANSACTION = applyResponseResult(Tx::parse);
-  private static final Function<HttpResponse<byte[]>, Version> VERSION = applyResponseResult(Version::parse);
+  private static final Function<HttpResponse<?>, List<PublicKey>> PUBLIC_KEY_LIST = applyGenericResponseResult(PUBLIC_KEY_LIST_PARSER);
+  private static final Function<HttpResponse<?>, long[]> LONG_ARRAY = applyGenericResponseResult(PARSE_LONG_ARRAY);
+  private static final Function<HttpResponse<?>, List<PerfSample>> PERF_SAMPLE = applyGenericResponseResult(PerfSample::parse);
+  private static final Function<HttpResponse<?>, List<PrioritizationFee>> PRIORITIZATION_FEE = applyGenericResponseResult(PrioritizationFee::parse);
+  private static final Function<HttpResponse<?>, List<TxSig>> TX_SIGNATURES = applyGenericResponseResult(TxSig::parseSignatures);
+  private static final Function<HttpResponse<?>, List<TxStatus>> SIG_STATUS_LIST = applyGenericResponseValue(TxStatus::parseList);
+  private static final Function<HttpResponse<?>, Supply> SUPPLY = applyGenericResponseValue(Supply::parse);
+  private static final Function<HttpResponse<?>, TokenAmount> TOKEN_AMOUNT = applyGenericResponseValue(TokenAmount::parse);
+  private static final Function<HttpResponse<?>, String> SEND_TX_RESPONSE_PARSER = applyGenericResponseResult(JsonIterator::readString);
+  private static final Function<HttpResponse<?>, List<AccountTokenAmount>> ACCOUNT_TOKEN_AMOUNT = applyGenericResponseValue(AccountTokenAmount::parse);
+  private static final Function<HttpResponse<?>, Tx> TRANSACTION = applyGenericResponseResult(Tx::parse);
+  private static final Function<HttpResponse<?>, Version> VERSION = applyGenericResponseResult(Version::parse);
 
-  final AtomicLong id;
+  private final AtomicLong id;
   private final Commitment defaultCommitment;
-  private final Function<HttpResponse<byte[]>, String> sendTxResponseParser;
-  private final Function<HttpResponse<byte[]>, LatestBlockHash> latestBlockhashResponseParser;
+  private final Function<HttpResponse<?>, String> sendTxResponseParser;
+  private final Function<HttpResponse<?>, LatestBlockHash> latestBlockhashResponseParser;
 
   SolanaJsonRpcClient(final URI endpoint,
                       final HttpClient httpClient,
                       final Duration requestTimeout,
                       final UnaryOperator<HttpRequest.Builder> extendRequest,
-                      final Predicate<HttpResponse<byte[]>> applyResponse,
+                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
+                      final BiPredicate<HttpResponse<?>, byte[]> testResponse,
                       final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse);
+    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, testResponse);
     this.id = new AtomicLong(System.currentTimeMillis());
     this.defaultCommitment = defaultCommitment;
-    this.latestBlockhashResponseParser = wrapParser(LATEST_BLOCK_HASH);
-    this.sendTxResponseParser = wrapParser(SEND_TX_RESPONSE_PARSER);
+    this.latestBlockhashResponseParser = wrapResponseParser(LATEST_BLOCK_HASH);
+    this.sendTxResponseParser = wrapResponseParser(SEND_TX_RESPONSE_PARSER);
   }
 
   @Override
@@ -281,7 +276,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     builder.append("}]}");
 
     return sendPostRequest(
-        applyResponseValue((ji, context) -> AccountInfo.parse(account, ji, context, factory)),
+        applyGenericResponseValue((ji, context) -> AccountInfo.parse(account, ji, context, factory)),
         builder.toString()
     );
   }
@@ -907,7 +902,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
 
     builder.append("}]}");
 
-    return sendPostRequest(applyResponseValue(adapter), builder.toString());
+    return sendPostRequest(applyGenericResponseValue(adapter), builder.toString());
   }
 
   @Override
@@ -1158,13 +1153,11 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     }
 
     final var body = builder.toString();
-    logger.log(DEBUG, body);
-    final var request = newRequest("POST", ofString(body))
-        .timeout(requireNonNullElse(requestTimeout, this.requestTimeout))
-        .build();
-    return httpClient
-        .sendAsync(request, ofByteArray())
-        .thenApply(wrapParser(applyResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory))));
+    return sendPostRequest(
+        applyGenericResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory)),
+        requireNonNullElse(requestTimeout, this.requestTimeout),
+        body
+    );
   }
 
   @Override
@@ -1256,7 +1249,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
   public CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures,
                                                                        final boolean searchTransactionHistory) {
     return sendPostRequest(
-        applyResponseValue((ji, context) -> TxStatus.parse(signatures, ji, context)),
+        applyGenericResponseValue((ji, context) -> TxStatus.parse(signatures, ji, context)),
         sigStatusBody(signatures, searchTransactionHistory)
     );
   }
@@ -1684,7 +1677,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     final var joinedAccounts = returnAccounts.stream()
         .map(PublicKey::toBase58)
         .collect(Collectors.joining("\",\"", ",\"accounts\":{\"addresses\":[\"", "\"],\"encoding\":\"jsonParsed\"}"));
-    return sendPostRequest(applyResponseValue((ji, context) -> TxSimulation.parse(returnAccounts, ji, context)), format("""
+    return sendPostRequest(applyGenericResponseValue((ji, context) -> TxSimulation.parse(returnAccounts, ji, context)), format("""
                 {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"commitment":"%s"%s}]}""",
             id.incrementAndGet(), base64EncodedTx, commitment.getValue(), joinedAccounts
         )
@@ -1778,7 +1771,7 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
                                                              final String base64EncodedTx,
                                                              final boolean replaceRecentBlockhash,
                                                              final boolean innerInstructions) {
-    return sendPostRequest(applyResponseValue((ji, context) -> TxSimulation.parse(List.of(), ji, context)), format("""
+    return sendPostRequest(applyGenericResponseValue((ji, context) -> TxSimulation.parse(List.of(), ji, context)), format("""
                 {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"innerInstructions":%b,"commitment":"%s"}]}""",
             id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue()
         )

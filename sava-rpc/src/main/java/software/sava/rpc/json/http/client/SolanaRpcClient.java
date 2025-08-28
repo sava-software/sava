@@ -38,25 +38,29 @@ public interface SolanaRpcClient {
   int MAX_GET_SIGNATURES = 1_000;
   int MAX_SIG_STATUS = 256;
 
+  static SolanaRpcClientBuilder build() {
+    return new SolanaRpcClientBuilder();
+  }
+
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final Duration requestTimeout,
                                       final UnaryOperator<HttpRequest.Builder> extendRequest,
-                                      final Predicate<HttpResponse<byte[]>> applyResponse,
+                                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
                                       final Commitment defaultCommitment) {
-    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, defaultCommitment);
+    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, null, defaultCommitment);
   }
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final UnaryOperator<HttpRequest.Builder> extendRequest,
-                                      final Predicate<HttpResponse<byte[]>> applyResponse) {
+                                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse) {
     return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, extendRequest, applyResponse, CONFIRMED);
   }
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
-                                      final Predicate<HttpResponse<byte[]>> applyResponse) {
+                                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse) {
     return createClient(endpoint, httpClient, null, applyResponse);
   }
 
