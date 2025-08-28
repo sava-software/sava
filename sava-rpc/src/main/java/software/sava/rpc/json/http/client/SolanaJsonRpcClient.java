@@ -34,10 +34,12 @@ import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
 final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcClient {
 
-  private static final System.Logger logger = System.getLogger(SolanaJsonRpcClient.class.getName());
-
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
   static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
+
+  private static <R> Function<HttpResponse<?>, R> applyGenericResponseValue(final BiFunction<JsonIterator, Context, R> parser) {
+    return new JsonRpcValueResponseParser<>(parser);
+  }
 
   private static final Function<HttpResponse<?>, LatestBlockHash> LATEST_BLOCK_HASH = applyGenericResponseValue(LatestBlockHash::parse);
   private static final Function<HttpResponse<?>, Lamports> CONTEXT_LONG_VAL = applyGenericResponseValue(Lamports::parse);
@@ -124,15 +126,6 @@ final class SolanaJsonRpcClient extends JsonRpcHttpClient implements SolanaRpcCl
     this.defaultCommitment = defaultCommitment;
     this.latestBlockhashResponseParser = wrapResponseParser(LATEST_BLOCK_HASH);
     this.sendTxResponseParser = wrapResponseParser(SEND_TX_RESPONSE_PARSER);
-  }
-
-  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseValue(final BiFunction<JsonIterator, Context, R> parser) {
-    return new JsonRpcValueResponseParser<>(parser);
-  }
-
-  @Deprecated
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseValue(final BiFunction<JsonIterator, Context, R> parser) {
-    return new JsonRpcBytesValueParseController<>(parser);
   }
 
   @Override
