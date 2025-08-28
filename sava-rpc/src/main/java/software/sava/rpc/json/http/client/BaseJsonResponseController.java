@@ -31,7 +31,7 @@ abstract class BaseJsonResponseController<R> {
   protected abstract R parseResponse(final HttpResponse<?> httpResponse, final byte[] body, final JsonIterator ji);
 
   public final R applyResponse(final HttpResponse<?> httpResponse) {
-    final byte[] body = JsonRpcHttpClient.readBody(httpResponse);
+    final byte[] body = JsonHttpClient.readBody(httpResponse);
     final var ji = checkResponse(httpResponse, body);
     if (ji == null) {
       return null;
