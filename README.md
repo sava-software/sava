@@ -62,15 +62,11 @@ SEVERE: Expected request body does not match the actual. Note: The JSON RPC "id"
 #### Capture Response JSON
 
 ```java
-var rpcClient = SolanaRpcClient.createClient(
-    rpcEndpoint,
-    httpClient,
-    response -> {
-      final var json = new String(response.body());
-      System.out.println(json); // Write to a file if large.
-      return true;
-    }
-);
+var rpcClient = SolanaRpcClient.build().testResponse((_, body) -> {
+  final var json = new String(body);
+  System.out.println(json); // Write to a file if large.
+  return true;
+}).createClient();
 ```
 
 #### Validation

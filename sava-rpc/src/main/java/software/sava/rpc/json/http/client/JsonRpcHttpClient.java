@@ -1,66 +1,50 @@
 package software.sava.rpc.json.http.client;
 
-import software.sava.rpc.json.http.response.Context;
-import software.sava.rpc.json.http.response.JsonRpcException;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
-
-import static software.sava.rpc.json.http.client.JsonResponseController.throwUncheckedIOException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.*;
 
 public abstract class JsonRpcHttpClient extends JsonHttpClient {
 
-  public JsonRpcHttpClient(final URI endpoint,
-                           final HttpClient httpClient,
-                           final Duration requestTimeout,
-                           final UnaryOperator<HttpRequest.Builder> extendRequest,
-                           final Predicate<HttpResponse<byte[]>> applyResponse) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse);
+  protected final AtomicLong id;
+
+  protected JsonRpcHttpClient(final URI endpoint,
+                              final HttpClient httpClient,
+                              final Duration requestTimeout,
+                              final UnaryOperator<HttpRequest.Builder> extendRequest,
+                              @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
+                              final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
+    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, testResponse);
+    this.id = new AtomicLong(System.currentTimeMillis());
   }
 
-  public JsonRpcHttpClient(final URI endpoint,
-                           final HttpClient httpClient,
-                           final Duration requestTimeout) {
-    super(endpoint, httpClient, requestTimeout, null, null);
+  protected JsonRpcHttpClient(final URI endpoint,
+                              final HttpClient httpClient,
+                              final Duration requestTimeout) {
+    this(endpoint, httpClient, requestTimeout, null, null, null);
   }
 
-  static JsonIterator createJsonIterator(final HttpResponse<byte[]> httpResponse) {
-    final byte[] body = httpResponse.body();
-    final var ji = JsonIterator.parse(body);
-    final int responseCode = httpResponse.statusCode();
-    final boolean isJsonObject = ji.whatIsNext() == ValueType.OBJECT;
-    if (responseCode < 200 || responseCode >= 300 || !isJsonObject || ji.skipUntil("result") == null) {
-      if (!isJsonObject) {
-        throw throwUncheckedIOException(httpResponse, new String(body));
-      } else if (ji.reset(0).skipUntil("error") == null) {
-        throw throwUncheckedIOException(httpResponse, new String(body));
-      } else {
-        final var retryAfter = httpResponse.headers().firstValueAsLong("retry-after");
-        throw JsonRpcException.parseException(ji, retryAfter);
-      }
-    } else {
-      return ji;
-    }
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(final Function<JsonIterator, R> parser) {
+    return new JsonRpcResultResponseParser<>(parser);
   }
 
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseValue(final BiFunction<JsonIterator, Context, R> adapter) {
-    return new JsonRpcValueParseController<>(adapter);
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponseResult(final JsonRpcResponseParser<R> parser) {
+    return new FullContextJsonRpcResponseParser<>(parser);
   }
 
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final Function<JsonIterator, R> adapter) {
-    return new JsonRpcResultParseController<>(adapter);
+  @Deprecated
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final Function<JsonIterator, R> parser) {
+    return new JsonRpcBytesResultParseController<>(parser);
   }
 
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final BiFunction<HttpResponse<byte[]>, JsonIterator, R> adapter) {
-    return new JsonRpcResponseResultParseController<>(adapter);
+  @Deprecated
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final BiFunction<HttpResponse<byte[]>, JsonIterator, R> parser) {
+    return new JsonRpcBytesResponseController<>(parser);
   }
 }

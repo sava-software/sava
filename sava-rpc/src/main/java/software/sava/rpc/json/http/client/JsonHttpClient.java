@@ -2,20 +2,19 @@ package software.sava.rpc.json.http.client;
 
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.io.*;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
+import java.util.function.*;
+import java.util.zip.GZIPInputStream;
 
 import static java.lang.System.Logger.Level.DEBUG;
 import static java.net.http.HttpRequest.BodyPublishers.ofString;
-import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
+import static java.net.http.HttpResponse.BodyHandlers.ofInputStream;
 
 public abstract class JsonHttpClient {
 
@@ -25,32 +24,46 @@ public abstract class JsonHttpClient {
   protected final HttpClient httpClient;
   protected final Duration requestTimeout;
   protected final UnaryOperator<HttpRequest.Builder> extendRequest;
+  @Deprecated
   protected final Predicate<HttpResponse<byte[]>> applyResponse;
+  protected final BiPredicate<HttpResponse<?>, byte[]> testResponse;
 
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout,
                            final UnaryOperator<HttpRequest.Builder> extendRequest,
-                           final Predicate<HttpResponse<byte[]>> applyResponse) {
+                           @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
+                           final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
     this.endpoint = endpoint;
     this.httpClient = httpClient;
     this.requestTimeout = requestTimeout;
     this.extendRequest = extendRequest == null ? UnaryOperator.identity() : extendRequest;
     this.applyResponse = applyResponse;
+    this.testResponse = testResponse;
   }
 
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout) {
-    this(endpoint, httpClient, requestTimeout, null, null);
+    this(endpoint, httpClient, requestTimeout, null, null, null);
   }
 
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final Function<JsonIterator, R> adapter) {
-    return new JsonResponseController<>(adapter);
+  @Deprecated
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final Function<JsonIterator, R> parser) {
+    return new JsonBytesResponseController<>(parser);
   }
 
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final BiFunction<byte[], JsonIterator, R> adapter) {
-    return new KeepJsonResponseController<>(adapter);
+  @Deprecated
+  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final BiFunction<byte[], JsonIterator, R> parser) {
+    return new KeepJsonResponseController<>(parser);
+  }
+
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponse(final Function<JsonIterator, R> parser) {
+    return new GenericJsonResponseParser<>(parser);
+  }
+
+  protected static <R> Function<HttpResponse<?>, R> applyGenericResponse(final BiFunction<byte[], JsonIterator, R> parser) {
+    return new GenericJsonBytesResponseParser<>(parser);
   }
 
   private static HttpRequest.Builder newJsonRequest(final URI endpoint, final Duration requestTimeout) {
@@ -58,6 +71,71 @@ public abstract class JsonHttpClient {
         .newBuilder(endpoint)
         .header("Content-Type", "application/json")
         .timeout(requestTimeout);
+  }
+
+  private static boolean isGzipEncoded(final HttpResponse<?> response) {
+    for (final var header : response.headers().allValues("content-encoding")) {
+      if (header.equalsIgnoreCase("gzip")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static byte[] readBytes(final HttpResponse<?> response, final byte[] body) {
+    if (body == null || body.length == 0) {
+      return body;
+    }
+    if (JsonHttpClient.isGzipEncoded(response)) {
+      try (final var gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(body), body.length);
+           final var byteArrayOutputStream = new ByteArrayOutputStream(body.length << 2)) {
+        gzipInputStream.transferTo(byteArrayOutputStream);
+        return byteArrayOutputStream.toByteArray();
+      } catch (final IOException e) {
+        throw new UncheckedIOException(e);
+      }
+    } else {
+      return body;
+    }
+  }
+
+  private static byte[] readInputStream(final HttpResponse<?> response, final InputStream inputStream) {
+    if (inputStream == null) {
+      return null;
+    }
+    try {
+      if (JsonHttpClient.isGzipEncoded(response)) {
+        final int bufferSize = (int) response.headers()
+            .firstValueAsLong("Content-Length")
+            .orElse(4_096); // TODO: raise issue that the Solana RPC server does not provide this response header.
+        try (final var gzipInputStream = new GZIPInputStream(inputStream, bufferSize);
+             final var byteArrayOutputStream = new ByteArrayOutputStream(bufferSize << 2)) {
+          gzipInputStream.transferTo(byteArrayOutputStream);
+          return byteArrayOutputStream.toByteArray();
+        }
+      } else {
+        return inputStream.readAllBytes();
+      }
+    } catch (final IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  protected static byte[] readBody(final HttpResponse<?> response) {
+    if (response instanceof ReadHttpResponse<?> readHttpResponse) {
+      return readHttpResponse.readBody();
+    } else {
+      final var body = response.body();
+      if (body instanceof byte[] bytes) {
+        return JsonHttpClient.readBytes(response, bytes);
+      } else if (body instanceof InputStream inputStream) {
+        return JsonHttpClient.readInputStream(response, inputStream);
+      } else if (body != null) {
+        throw new IllegalArgumentException("Unsupported response body type: " + body.getClass());
+      } else {
+        return null;
+      }
+    }
   }
 
   public final URI endpoint() {
@@ -68,8 +146,10 @@ public abstract class JsonHttpClient {
     return this.httpClient;
   }
 
+  @Deprecated
   protected <R> Function<HttpResponse<byte[]>, R> wrapParser(final Function<HttpResponse<byte[]>, R> parser) {
-    return applyResponse == null ? parser : response -> applyResponse.test(response) ? parser.apply(response) : null;
+    return applyResponse == null ? parser : response ->
+        applyResponse.test(response) ? parser.apply(response) : null;
   }
 
   // GET methods
@@ -142,83 +222,106 @@ public abstract class JsonHttpClient {
     return newRequest(endpoint, requestTimeout, "POST", ofString(body)).build();
   }
 
+  protected <R> Function<HttpResponse<?>, R> wrapResponseParser(final Function<HttpResponse<?>, R> parser) {
+    if (testResponse == null) {
+      if (applyResponse == null) {
+        return parser;
+      } else {
+        return response -> {
+          final byte[] body = readBody(response);
+          final var disguisedResponse = new DisguisedHttpResponse(response, body);
+          return applyResponse.test(disguisedResponse)
+              ? parser.apply(new ReadHttpResponse<>(response, body))
+              : null;
+        };
+      }
+    } else {
+      return response -> {
+        final byte[] body = readBody(response);
+        return testResponse.test(response, body)
+            ? parser.apply(new ReadHttpResponse<>(response, body))
+            : null;
+      };
+    }
+  }
+
   protected final <R> CompletableFuture<R> sendPostRequest(final URI endpoint,
-                                                           final Function<HttpResponse<byte[]>, R> parser,
+                                                           final Function<HttpResponse<?>, R> parser,
                                                            final Duration requestTimeout,
                                                            final String body) {
     return httpClient
-        .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofByteArray())
-        .thenApply(wrapParser(parser));
+        .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofInputStream())
+        .thenApply(wrapResponseParser(parser));
   }
 
-  protected final <R> CompletableFuture<R> sendPostRequest(final Function<HttpResponse<byte[]>, R> parser,
+  protected final <R> CompletableFuture<R> sendPostRequest(final Function<HttpResponse<?>, R> parser,
                                                            final Duration requestTimeout,
                                                            final String body) {
     return sendPostRequest(endpoint, parser, requestTimeout, body);
   }
 
-  protected final <R> CompletableFuture<R> sendPostRequest(final Function<HttpResponse<byte[]>, R> parser,
+  protected final <R> CompletableFuture<R> sendPostRequest(final Function<HttpResponse<?>, R> parser,
                                                            final String body) {
     return sendPostRequest(parser, requestTimeout, body);
   }
 
   protected final <R> CompletableFuture<R> sendPostRequest(final URI endpoint,
-                                                           final Function<HttpResponse<byte[]>, R> parser,
+                                                           final Function<HttpResponse<?>, R> parser,
                                                            final String body) {
     return sendPostRequest(endpoint, parser, requestTimeout, body);
   }
 
-  protected final <R> CompletableFuture<R> sendGetRequest(final Function<HttpResponse<byte[]>, R> parser,
+  protected final <R> CompletableFuture<R> sendGetRequest(final Function<HttpResponse<?>, R> parser,
                                                           final String path) {
     return httpClient
-        .sendAsync(newRequest(path).build(), ofByteArray())
-        .thenApply(wrapParser(parser));
+        .sendAsync(newRequest(path).build(), ofInputStream())
+        .thenApply(wrapResponseParser(parser));
   }
 
   protected final <R> CompletableFuture<R> sendGetRequest(final URI endpoint,
-                                                          final Function<HttpResponse<byte[]>, R> parser) {
+                                                          final Function<HttpResponse<?>, R> parser) {
     return httpClient
-        .sendAsync(newRequest(endpoint).build(), ofByteArray())
-        .thenApply(wrapParser(parser));
+        .sendAsync(newRequest(endpoint).build(), ofInputStream())
+        .thenApply(wrapResponseParser(parser));
   }
 
   protected final <R> CompletableFuture<R> sendPostRequestNoWrap(final URI endpoint,
-                                                                 final Function<HttpResponse<byte[]>, R> parser,
+                                                                 final Function<HttpResponse<?>, R> parser,
                                                                  final Duration requestTimeout,
                                                                  final String body) {
     return httpClient
-        .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofByteArray())
+        .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofInputStream())
         .thenApply(parser);
   }
 
-  protected final <R> CompletableFuture<R> sendPostRequestNoWrap(final Function<HttpResponse<byte[]>, R> parser,
+  protected final <R> CompletableFuture<R> sendPostRequestNoWrap(final Function<HttpResponse<?>, R> parser,
                                                                  final Duration requestTimeout,
                                                                  final String body) {
     return sendPostRequestNoWrap(endpoint, parser, requestTimeout, body);
   }
 
-  protected final <R> CompletableFuture<R> sendPostRequestNoWrap(final Function<HttpResponse<byte[]>, R> parser,
+  protected final <R> CompletableFuture<R> sendPostRequestNoWrap(final Function<HttpResponse<?>, R> parser,
                                                                  final String body) {
     return sendPostRequestNoWrap(parser, requestTimeout, body);
   }
 
   protected final <R> CompletableFuture<R> sendPostRequestNoWrap(final URI endpoint,
-                                                                 final Function<HttpResponse<byte[]>, R> parser,
+                                                                 final Function<HttpResponse<?>, R> parser,
                                                                  final String body) {
     return sendPostRequestNoWrap(endpoint, parser, requestTimeout, body);
   }
 
-  protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final Function<HttpResponse<byte[]>, R> parser,
+  protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final Function<HttpResponse<?>, R> parser,
                                                                 final String path) {
     return httpClient
-        .sendAsync(newRequest(path).build(), ofByteArray())
+        .sendAsync(newRequest(path).build(), ofInputStream())
         .thenApply(parser);
   }
 
   protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final URI endpoint,
-                                                                final Function<HttpResponse<byte[]>, R> parser) {
+                                                                final Function<HttpResponse<?>, R> parser) {
     return httpClient
-        .sendAsync(newRequest(endpoint).build(), ofByteArray())
+        .sendAsync(newRequest(endpoint).build(), ofInputStream())
         .thenApply(parser);
   }
 

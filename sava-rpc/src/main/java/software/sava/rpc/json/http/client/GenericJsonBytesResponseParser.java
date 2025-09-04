@@ -4,13 +4,19 @@ import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.http.HttpResponse;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
-final class KeepJsonResponseController<B, R> extends JsonResponseController<B, R> {
+final class GenericJsonBytesResponseParser<R> extends BaseJsonResponseController<R> implements Function<HttpResponse<?>, R> {
 
   private final BiFunction<byte[], JsonIterator, R> parser;
 
-  KeepJsonResponseController(final BiFunction<byte[], JsonIterator, R> parser) {
+  GenericJsonBytesResponseParser(final BiFunction<byte[], JsonIterator, R> parser) {
     this.parser = parser;
+  }
+
+  @Override
+  public R apply(final HttpResponse<?> httpResponse) {
+    return super.applyResponse(httpResponse);
   }
 
   @Override
