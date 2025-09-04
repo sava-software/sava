@@ -9,9 +9,28 @@ import java.util.function.Predicate;
 public interface Discriminator extends Predicate<Instruction> {
 
   int NATIVE_DISCRIMINATOR_LENGTH = Integer.BYTES;
+  int ANCHOR_DISCRIMINATOR_LENGTH = 8;
 
   static Discriminator createDiscriminator(final byte[] discriminator) {
     return new DiscriminatorRecord(discriminator);
+  }
+
+  static Discriminator createDiscriminator(final byte[] data, final int offset, final int length) {
+    final byte[] discriminator = new byte[length];
+    System.arraycopy(data, offset, discriminator, 0, length);
+    return createDiscriminator(discriminator);
+  }
+
+  static Discriminator createDiscriminator(final byte[] data, final int length) {
+    return createDiscriminator(data, 0, length);
+  }
+
+  static Discriminator createAnchorDiscriminator(final byte[] data, final int offset) {
+    return createDiscriminator(data, offset, ANCHOR_DISCRIMINATOR_LENGTH);
+  }
+
+  static Discriminator createAnchorDiscriminator(final byte[] data) {
+    return createAnchorDiscriminator(data, 0);
   }
 
   static Discriminator toDiscriminator(final int... val) {
@@ -35,27 +54,18 @@ public interface Discriminator extends Predicate<Instruction> {
 
   byte[] data();
 
-  default int write(final byte[] bytes) {
-    return write(bytes, 0);
+  default int length() {
+    return data().length;
   }
 
-  default int[] toIntArray() {
+  default int write(final byte[] bytes, final int offset) {
     final byte[] data = data();
-    final int[] d = new int[data.length];
-    for (int i = 0; i < d.length; ++i) {
-      d[i] = data[i] & 0xff;
-    }
-    return d;
-  }
-
-  default int write(final byte[] bytes, final int i) {
-    final byte[] data = data();
-    System.arraycopy(data, 0, bytes, i, data.length);
+    System.arraycopy(data, 0, bytes, offset, data.length);
     return data.length;
   }
 
-  default int length() {
-    return data().length;
+  default int write(final byte[] bytes) {
+    return write(bytes, 0);
   }
 
   default boolean equals(final byte[] data, final int offset) {
@@ -70,5 +80,14 @@ public interface Discriminator extends Predicate<Instruction> {
   @Override
   default boolean test(final Instruction ix) {
     return equals(ix.data(), ix.offset());
+  }
+
+  default int[] toIntArray() {
+    final byte[] data = data();
+    final int[] d = new int[data.length];
+    for (int i = 0; i < d.length; ++i) {
+      d[i] = data[i] & 0xff;
+    }
+    return d;
   }
 }
