@@ -135,6 +135,25 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  private static IllegalArgumentException invalidArrayLength(final Object type,
+                                                             final int expectedLength,
+                                                             final int actualLength) {
+    return new IllegalArgumentException(String.format(
+        "%s.length must be %d, not %d.",
+        type.getClass().getSimpleName(), expectedLength, actualLength
+    ));
+  }
+
+  static int writeArrayChecked(final String[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final String[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -148,6 +167,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final String[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final String[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int writeVector(final String[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -155,6 +200,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final String[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final String[][] array, final byte[] data, final int offset) {
@@ -232,6 +285,16 @@ public interface Borsh extends Serializable {
     return array.length;
   }
 
+  static int writeArrayChecked(final byte[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final byte[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -265,6 +328,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final byte[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final byte[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int writeVector(final byte[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -272,6 +361,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final byte[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final byte[][] array, final byte[] data, final int offset) {
@@ -393,6 +490,16 @@ public interface Borsh extends Serializable {
     return array.length;
   }
 
+  static int writeArrayChecked(final boolean[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final boolean[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -406,6 +513,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final boolean[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final boolean[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int writeVector(final boolean[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -413,6 +546,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final boolean[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final boolean[][] array, final byte[] data, final int offset) {
@@ -530,9 +671,45 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final short[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final short[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
+  }
+
+  static int writeArrayChecked(final short[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final short[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
   }
 
   static int writeArray(final short[][] array, final byte[] data, final int offset) {
@@ -550,6 +727,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final short[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final short[][] array, final byte[] data, final int offset) {
@@ -660,6 +845,16 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final int[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final int[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -673,6 +868,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final int[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final int[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int writeVector(final int[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -680,6 +901,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final int[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final int[][] array, final byte[] data, final int offset) {
@@ -797,6 +1026,16 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final long[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final long[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -810,6 +1049,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final long[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final long[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int writeVector(final long[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -817,6 +1082,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final long[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final long[][] array, final byte[] data, final int offset) {
@@ -923,6 +1196,16 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final float[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final float[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -936,6 +1219,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final float[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final float[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int writeVector(final float[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -943,6 +1252,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final float[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final float[][] array, final byte[] data, final int offset) {
@@ -1049,6 +1366,16 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final double[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final double[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -1062,6 +1389,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final double[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final double[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int writeVector(final double[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -1069,6 +1422,14 @@ public interface Borsh extends Serializable {
       i += writeVector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int writeVectorArrayChecked(final double[][] array,
+                                     final int fixedLength,
+                                     final byte[] data,
+                                     final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int writeVectorArray(final double[][] array, final byte[] data, final int offset) {
@@ -1177,6 +1538,16 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int write128ArrayChecked(final BigInteger[] array,
+                                  final int fixedLength,
+                                  final byte[] data,
+                                  final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return write128Array(array, data, offset);
+  }
+
   static int write128Vector(final BigInteger[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + write128Array(array, data, offset + Integer.BYTES);
@@ -1190,6 +1561,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int write128ArrayChecked(final BigInteger[][] array,
+                                  final int fixedLength,
+                                  final byte[] data,
+                                  final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += write128ArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write128ArrayChecked(final BigInteger[][] array,
+                                  final int firstDimensionLength,
+                                  final int secondDimensionLength,
+                                  final byte[] data,
+                                  final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += write128ArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int write128Vector(final BigInteger[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -1197,6 +1594,14 @@ public interface Borsh extends Serializable {
       i += write128Vector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int write128VectorArrayChecked(final BigInteger[][] array,
+                                        final int fixedLength,
+                                        final byte[] data,
+                                        final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + write128ArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int write128VectorArray(final BigInteger[][] array, final byte[] data, final int offset) {
@@ -1305,6 +1710,16 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int write256ArrayChecked(final BigInteger[] array,
+                                  final int fixedLength,
+                                  final byte[] data,
+                                  final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return write256Array(array, data, offset);
+  }
+
   static int write256Vector(final BigInteger[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + write256Array(array, data, offset + Integer.BYTES);
@@ -1318,6 +1733,32 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int write256ArrayChecked(final BigInteger[][] array,
+                                  final int fixedLength,
+                                  final byte[] data,
+                                  final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += write256ArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int write256ArrayChecked(final BigInteger[][] array,
+                                  final int firstDimensionLength,
+                                  final int secondDimensionLength,
+                                  final byte[] data,
+                                  final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += write256ArrayChecked(a, secondDimensionLength, data, i);
+    }
+    return i - offset;
+  }
+
   static int write256Vector(final BigInteger[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -1325,6 +1766,14 @@ public interface Borsh extends Serializable {
       i += write256Vector(a, data, i);
     }
     return i - offset;
+  }
+
+  static int write256VectorArrayChecked(final BigInteger[][] array,
+                                        final int fixedLength,
+                                        final byte[] data,
+                                        final int offset) {
+    ByteUtil.putInt32LE(data, offset, array.length);
+    return Integer.BYTES + write256ArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
   static int write256VectorArray(final BigInteger[][] array, final byte[] data, final int offset) {
@@ -1430,6 +1879,16 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  static int writeArrayChecked(final PublicKey[] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != fixedLength) {
+      throw invalidArrayLength(array, fixedLength, array.length);
+    }
+    return writeArray(array, data, offset);
+  }
+
   static int writeVector(final PublicKey[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
@@ -1439,6 +1898,32 @@ public interface Borsh extends Serializable {
     int i = offset;
     for (final var a : array) {
       i += writeArray(a, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final PublicKey[][] array,
+                               final int fixedLength,
+                               final byte[] data,
+                               final int offset) {
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, fixedLength, data, i);
+    }
+    return i - offset;
+  }
+
+  static int writeArrayChecked(final PublicKey[][] array,
+                               final int firstDimensionLength,
+                               final int secondDimensionLength,
+                               final byte[] data,
+                               final int offset) {
+    if (array.length != firstDimensionLength) {
+      throw invalidArrayLength(array, firstDimensionLength, array.length);
+    }
+    int i = offset;
+    for (final var a : array) {
+      i += writeArrayChecked(a, secondDimensionLength, data, i);
     }
     return i - offset;
   }
