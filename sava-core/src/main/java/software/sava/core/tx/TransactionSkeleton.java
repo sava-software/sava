@@ -229,7 +229,7 @@ public interface TransactionSkeleton {
   Instruction[] parseInstructionsWithoutAccounts();
 
   /**
-   * If this is a versioned transaction accounts which are indexed into a lookup table will be null.
+   * If this is a versioned transaction, accounts which are indexed into a lookup table will be null.
    * Signing accounts and program accounts will always be included.
    */
   Instruction[] parseInstructionsWithoutTableAccounts();

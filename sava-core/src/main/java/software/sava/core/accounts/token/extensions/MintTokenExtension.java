@@ -22,10 +22,4 @@ public sealed interface MintTokenExtension extends TokenExtension permits
     TransferFeeConfig,
     TransferHook,
     Uninitialized {
-
-  @Override
-  default int ordinal() {
-    return extensionType().ordinal();
-  }
-
 }

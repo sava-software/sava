@@ -11,7 +11,7 @@ public sealed interface TokenExtension extends Serializable permits AccountToken
     return extensionType().ordinal();
   }
 
-  static int write(TokenExtension extension, byte[] data, int offset) {
+  static int write(final TokenExtension extension, final byte[] data, final int offset) {
     ByteUtil.putInt16LE(data, offset, extension.ordinal());
     final int length = extension.write(data, offset + 4);
     ByteUtil.putInt16LE(data, offset + 2, length);
