@@ -26,6 +26,14 @@ public record TxMeta(TransactionError error,
     return parser.create();
   }
 
+  static List<Long> parseLamportBalances(final JsonIterator ji) {
+    final var balances = new ArrayList<Long>();
+    while (ji.readArray()) {
+      balances.add(ji.readLong());
+    }
+    return balances;
+  }
+
   private static final class Parser implements FieldBufferPredicate {
 
     private TransactionError error;
@@ -68,17 +76,9 @@ public record TxMeta(TransactionError error,
       } else if (fieldEquals("fee", buf, offset, len)) {
         this.fee = ji.readLong();
       } else if (fieldEquals("preBalances", buf, offset, len)) {
-        final var balances = new ArrayList<Long>();
-        while (ji.readArray()) {
-          balances.add(ji.readLong());
-        }
-        this.preBalances = balances;
+        this.preBalances = parseLamportBalances(ji);
       } else if (fieldEquals("postBalances", buf, offset, len)) {
-        final var balances = new ArrayList<Long>();
-        while (ji.readArray()) {
-          balances.add(ji.readLong());
-        }
-        this.postBalances = balances;
+        this.postBalances = parseLamportBalances(ji);
       } else if (fieldEquals("preTokenBalances", buf, offset, len)) {
         this.preTokenBalances = TokenBalance.parseBalances(ji);
       } else if (fieldEquals("postTokenBalances", buf, offset, len)) {

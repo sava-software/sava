@@ -1,13 +1,21 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.encoding.Base58;
 import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record InnerIx(String program, PublicKey programId, int stackHeight) {
+public record InnerIx(@Deprecated String program, // Part of JSON parsed response which is not supported.
+                      PublicKey programId,
+                      int stackHeight,
+                      List<PublicKey> accounts,
+                      byte[] data) {
 
   static InnerIx parseIX(final JsonIterator ji) {
     final var parser = new Parser();
@@ -20,10 +28,13 @@ public record InnerIx(String program, PublicKey programId, int stackHeight) {
     private String program;
     private PublicKey programId;
     private int stackHeight;
-
+    private List<PublicKey> accounts;
+    private byte[] data;
 
     private InnerIx create() {
-      return new InnerIx(program, programId, stackHeight);
+      return new InnerIx(
+          program, programId, stackHeight, accounts, data
+      );
     }
 
     @Override
@@ -34,6 +45,14 @@ public record InnerIx(String program, PublicKey programId, int stackHeight) {
         programId = PublicKeyEncoding.parseBase58Encoded(ji);
       } else if (fieldEquals("stackHeight", buf, offset, len)) {
         stackHeight = ji.readInt();
+      } else if (fieldEquals("accounts", buf, offset, len)) {
+        final var accounts = new ArrayList<PublicKey>();
+        while (ji.readArray()) {
+          accounts.add(PublicKeyEncoding.parseBase58Encoded(ji));
+        }
+        this.accounts = List.copyOf(accounts);
+      } else if (fieldEquals("data", buf, offset, len)) {
+        data = Base58.decode(ji.readString());
       } else {
         ji.skip();
       }

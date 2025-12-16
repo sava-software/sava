@@ -12,7 +12,7 @@ pluginManagement {
       .orElse(providers.environmentVariable("ORG_GRADLE_PROJECT_savaGithubPackagesPassword"))
       .orElse(providers.environmentVariable("GITHUB_TOKEN"))
       .orNull
-    if (gprUser != null && gprToken != null) {
+    if (!gprUser.isNullOrBlank() && !gprToken.isNullOrBlank()) {
       maven {
         url = uri("https://maven.pkg.github.com/sava-software/sava-build")
         credentials {
@@ -26,7 +26,7 @@ pluginManagement {
 }
 
 plugins {
-  id("software.sava.build") version "21.3.2"
+  id("software.sava.build") version "21.3.3"
 }
 
 javaModules {

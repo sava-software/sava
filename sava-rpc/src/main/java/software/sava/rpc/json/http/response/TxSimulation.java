@@ -12,18 +12,24 @@ import java.util.OptionalInt;
 import java.util.SequencedCollection;
 
 import static java.util.Objects.requireNonNullElse;
-import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
-import static software.sava.rpc.json.http.response.AccountInfo.parseAccountsFromKeys;
+import static software.sava.rpc.json.http.response.AccountInfo.*;
 import static software.sava.rpc.json.http.response.JsonUtil.parseEncodedData;
+import static software.sava.rpc.json.http.response.TxMeta.parseLamportBalances;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record TxSimulation(Context context,
                            TransactionError error,
+                           int loadedAccountsDataSize,
                            List<String> logs,
+                           List<Long> preBalances,
+                           List<Long> postBalances,
+                           List<TokenBalance> preTokenBalances,
+                           List<TokenBalance> postTokenBalances,
                            List<AccountInfo<byte[]>> accounts,
                            List<InnerInstructions> innerInstructions,
                            ReplacementBlockHash replacementBlockHash,
                            OptionalInt unitsConsumed,
+                           // return data
                            PublicKey programId,
                            byte[] data) {
 
@@ -51,7 +57,7 @@ public record TxSimulation(Context context,
   };
 
   private static final OptionalInt NO_BUDGET = OptionalInt.empty();
-  static final List<String> NO_LOGS = List.of();
+  static final List<String> NO_LOGS = java.util.List.of();
   static final List<AccountInfo<byte[]>> NO_ACCOUNTS = List.of();
   static final List<InnerInstructions> NO_INNER_INSTRUCTIONS = List.of();
 
@@ -59,7 +65,12 @@ public record TxSimulation(Context context,
 
     private final SequencedCollection<PublicKey> accountPubKeys;
     private TransactionError error;
+    private int loadedAccountsDataSize;
     private List<String> logs;
+    private List<Long> preBalances;
+    private List<Long> postBalances;
+    private List<TokenBalance> preTokenBalances;
+    private List<TokenBalance> postTokenBalances;
     private List<InnerInstructions> innerInstructions;
     private List<AccountInfo<byte[]>> accounts;
     private ReplacementBlockHash replacementBlockHash;
@@ -76,7 +87,12 @@ public record TxSimulation(Context context,
       return new TxSimulation(
           context,
           error,
+          loadedAccountsDataSize,
           logs == null || logs.isEmpty() ? NO_LOGS : logs,
+          preBalances,
+          postBalances,
+          preTokenBalances,
+          postTokenBalances,
           accounts == null || accounts.isEmpty() ? NO_ACCOUNTS : accounts,
           requireNonNullElse(innerInstructions, NO_INNER_INSTRUCTIONS),
           replacementBlockHash,
@@ -90,17 +106,27 @@ public record TxSimulation(Context context,
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("err", buf, offset, len)) {
         error = TransactionError.parseError(ji);
+      } else if (fieldEquals("loadedAccountsDataSize", buf, offset, len)) {
+        loadedAccountsDataSize = ji.readInt();
+      } else if (fieldEquals("accounts", buf, offset, len)) {
+        if (accountPubKeys == null || accountPubKeys.isEmpty()) {
+          ji.skip();
+        } else {
+          accounts = parseAccountsFromKeysWithNulls(accountPubKeys, ji, context, BYTES_IDENTITY);
+        }
       } else if (fieldEquals("logs", buf, offset, len)) {
         this.logs = new ArrayList<>();
         while (ji.readArray()) {
           logs.add(ji.readString());
         }
-      } else if (fieldEquals("accounts", buf, offset, len)) {
-        if (accountPubKeys == null || accountPubKeys.isEmpty()) {
-          ji.skip();
-        } else {
-          accounts = parseAccountsFromKeys(accountPubKeys, ji, context, BYTES_IDENTITY);
-        }
+      } else if (fieldEquals("preBalances", buf, offset, len)) {
+        this.preBalances = parseLamportBalances(ji);
+      } else if (fieldEquals("postBalances", buf, offset, len)) {
+        this.postBalances = parseLamportBalances(ji);
+      } else if (fieldEquals("preTokenBalances", buf, offset, len)) {
+        this.preTokenBalances = TokenBalance.parseBalances(ji);
+      } else if (fieldEquals("postTokenBalances", buf, offset, len)) {
+        this.postTokenBalances = TokenBalance.parseBalances(ji);
       } else if (fieldEquals("unitsConsumed", buf, offset, len)) {
         unitsConsumed = ji.readInt();
       } else if (fieldEquals("returnData", buf, offset, len)) {
