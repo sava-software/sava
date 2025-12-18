@@ -2,12 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Calendar Versioning](https://calver.org/) (YY.MINOR.PATCH).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [25.1.1] - 2024-12-18
+## [25.1.1]
 
 ### Changed
 
@@ -91,16 +90,3 @@ and this project adheres to [Calendar Versioning](https://calver.org/) (YY.MINOR
 ### Changed
 
 - Prefer a new parser for each element
-
-[Unreleased]: https://github.com/sava-software/sava/compare/25.1.1...HEAD
-[25.1.1]: https://github.com/sava-software/sava/compare/25.1.0...25.1.1
-[25.1.0]: https://github.com/sava-software/sava/compare/25.0.2...25.1.0
-[25.0.2]: https://github.com/sava-software/sava/compare/25.0.1...25.0.2
-[25.0.1]: https://github.com/sava-software/sava/compare/25.0.0...25.0.1
-[25.0.0]: https://github.com/sava-software/sava/compare/24.23.3...25.0.0
-[24.23.3]: https://github.com/sava-software/sava/compare/24.23.2...24.23.3
-[24.23.2]: https://github.com/sava-software/sava/compare/24.23.1...24.23.2
-[24.23.1]: https://github.com/sava-software/sava/compare/24.22.1...24.23.1
-[24.22.1]: https://github.com/sava-software/sava/compare/24.22.0...24.22.1
-[24.22.0]: https://github.com/sava-software/sava/compare/24.21.5...24.22.0
-[24.21.5]: https://github.com/sava-software/sava/releases/tag/24.21.5
