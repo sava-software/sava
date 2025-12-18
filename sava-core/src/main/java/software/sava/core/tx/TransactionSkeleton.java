@@ -178,6 +178,10 @@ public interface TransactionSkeleton {
 
   String base58BlockHash();
 
+  int numInstructions();
+
+  int instructionsOffset();
+
   int numIncludedAccounts();
 
   int numAccounts();
