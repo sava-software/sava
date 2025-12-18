@@ -20,17 +20,17 @@ import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
 import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 
-record TransactionSkeletonRecord(byte[] data,
-                                 int version,
-                                 int messageOffset,
-                                 int numSignatures,
-                                 int numReadonlySignedAccounts,
-                                 int numReadonlyUnsignedAccounts,
-                                 int numIncludedAccounts, int accountsOffset,
-                                 int recentBlockHashIndex,
-                                 int numInstructions, int instructionsOffset, int[] invokedIndexes,
-                                 int lookupTablesOffset, PublicKey[] lookupTableAccounts,
-                                 int numAccounts) implements TransactionSkeleton {
+public record TransactionSkeletonRecord(byte[] data,
+                                        int version,
+                                        int messageOffset,
+                                        int numSignatures,
+                                        int numReadonlySignedAccounts,
+                                        int numReadonlyUnsignedAccounts,
+                                        int numIncludedAccounts, int accountsOffset,
+                                        int recentBlockHashIndex,
+                                        int numInstructions, int instructionsOffset, int[] invokedIndexes,
+                                        int lookupTablesOffset, PublicKey[] lookupTableAccounts,
+                                        int numAccounts) implements TransactionSkeleton {
 
   static final int[] LEGACY_INVOKED_INDEXES = new int[0];
   static final PublicKey[] NO_TABLES = new PublicKey[0];
