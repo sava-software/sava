@@ -29,6 +29,8 @@ plugins {
   id("software.sava.build") version "21.3.3"
 }
 
+apply(plugin = "software.sava.build.feature-jdk-provisioning")
+
 javaModules {
   directory(".") {
     group = "software.sava"
