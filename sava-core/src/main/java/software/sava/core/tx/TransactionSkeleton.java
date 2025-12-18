@@ -172,8 +172,6 @@ public interface TransactionSkeleton {
 
   int numReadonlyUnsignedAccounts();
 
-  int accountsOffset();
-
   int recentBlockHashIndex();
 
   byte[] blockHash();
@@ -183,10 +181,6 @@ public interface TransactionSkeleton {
   int numInstructions();
 
   int instructionsOffset();
-
-  int[] invokedIndexes();
-
-  int lookupTablesOffset();
 
   int numIncludedAccounts();
 
