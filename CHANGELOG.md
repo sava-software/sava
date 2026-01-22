@@ -4,7 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [25.1.3]
+
+### Added
+
+- Partial support for base64+zstd encoding in `getProgramAccounts`
+- Foojay Gradle toolchain for JDK provisioning support
+
+### Changed
+
+- Use `withInvokeExactBehavior` when reading primitives via VarHandles to avoid boxing
+- Zero singleton for `InflationReward`
+- Avoid String construction when parsing encoded binary data from JSON
 
 ## [25.1.2]
 
