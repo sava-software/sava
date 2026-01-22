@@ -9,6 +9,7 @@ import software.sava.rpc.json.PublicKeyEncoding;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
+import software.sava.rpc.json.http.request.RpcEncoding;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
@@ -27,7 +28,6 @@ import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNullElse;
-import static software.sava.core.rpc.Filter.MAX_MEM_COMP_LENGTH;
 import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
@@ -1090,60 +1090,26 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                         final int length,
                                                                         final int offset,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    final int numFilters = filters == null ? 0 : filters.size();
-    final var builder = new StringBuilder(256 + (numFilters * MAX_MEM_COMP_LENGTH));
+    final var request = new ProgramAccountsRequestRecord<>(
+        requestTimeout,
+        programId,
+        commitment,
+        minContextSlot,
+        filters,
+        length, offset,
+        RpcEncoding.base64,
+        factory
+    );
+    return getProgramAccounts(request);
+  }
 
-    builder.append("""
-        {"jsonrpc":"2.0","id":""");
-    builder.append(id.incrementAndGet());
-
-    builder.append("""
-        ,"method":"getProgramAccounts","params":[\"""");
-    builder.append(programId.toBase58());
-
-    builder.append("""
-        ",{"withContext":true,"encoding":"base64","commitment":\"""");
-    builder.append(commitment.getValue());
-    builder.append('"');
-
-    if (minContextSlot != null) {
-      builder.append("""
-          ,"minContextSlot":""");
-      builder.append(minContextSlot);
-    }
-
-    if (length != 0) {
-      builder.append("""
-          ,"dataSlice":{"length":""");
-      builder.append(length);
-      builder.append("""
-          ,"offset":""");
-      builder.append(offset);
-      builder.append('}');
-    }
-
-    if (numFilters == 0) {
-      builder.append("}]}");
-    } else {
-      builder.append("""
-          ,"filters":[""");
-      final var iterator = filters.iterator();
-      for (Filter filter; ; ) {
-        filter = iterator.next();
-        builder.append(filter.toJson());
-        if (iterator.hasNext()) {
-          builder.append(',');
-        } else {
-          break;
-        }
-      }
-      builder.append("]}]}");
-    }
-
-    final var body = builder.toString();
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final ProgramAccountsRequest<T> request) {
+    final var body = request.toJson(id.incrementAndGet(), this.defaultCommitment);
+    final var responseFactory = request.factory();
     return sendPostRequest(
-        applyGenericResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory)),
-        requireNonNullElse(requestTimeout, this.requestTimeout),
+        applyGenericResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, responseFactory)),
+        requireNonNullElse(request.requestTimeout(), PROGRAM_ACCOUNTS_TIMEOUT),
         body
     );
   }

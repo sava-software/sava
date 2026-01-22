@@ -705,6 +705,8 @@ public interface SolanaRpcClient {
                                                                  final int offset,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
+  <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final ProgramAccountsRequest<T> request);
+
   CompletableFuture<List<PerfSample>> getRecentPerformanceSamples(final int limit);
 
   default CompletableFuture<List<PerfSample>> getRecentPerformanceSamples() {
