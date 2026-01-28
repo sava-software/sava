@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.ws;
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.request.Commitment;
 
+import java.math.BigInteger;
 import java.util.function.Consumer;
 
 public interface Subscription<T> extends Consumer<T>, Runnable {
@@ -45,7 +46,7 @@ public interface Subscription<T> extends Consumer<T>, Runnable {
 
   void setLastAttempt(long lastAttempt);
 
-  long subId();
+  BigInteger subId();
 
-  void setSubId(long subId);
+  void setSubId(final BigInteger subId);
 }

@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.ws;
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.request.Commitment;
 
+import java.math.BigInteger;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -16,7 +17,7 @@ class RootSubscription<T> implements Subscription<T> {
   protected final Consumer<T> consumer;
   protected final Consumer<Subscription<T>> onSub;
   protected volatile long lastAttempt;
-  protected volatile long subId;
+  protected volatile BigInteger subId;
 
   RootSubscription(final Commitment commitment,
                    final Channel channel,
@@ -31,7 +32,7 @@ class RootSubscription<T> implements Subscription<T> {
     this.msgId = msgId;
     this.msg = msg;
     this.onSub = onSub;
-    this.subId = Long.MIN_VALUE;
+    this.subId = null;
     this.consumer = consumer;
   }
 
@@ -76,12 +77,12 @@ class RootSubscription<T> implements Subscription<T> {
   }
 
   @Override
-  public final long subId() {
+  public final BigInteger subId() {
     return subId;
   }
 
   @Override
-  public final void setSubId(final long subId) {
+  public final void setSubId(final BigInteger subId) {
     this.subId = subId;
   }
 
