@@ -1,12 +1,13 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.encoding.Base58;
+import software.sava.rpc.json.http.request.RpcEncoding;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
-import java.util.Base64;
-
 public final class JsonUtil {
+
+  private static final System.Logger logger = System.getLogger(JsonUtil.class.getName());
 
   public static byte[] parseEncodedData(final JsonIterator ji) {
     final var next = ji.whatIsNext();
@@ -15,29 +16,30 @@ public final class JsonUtil {
 
   public static byte[] parseEncodedData(final JsonIterator ji, final ValueType next) {
     if (next == ValueType.ARRAY) {
-      final var data = ji.openArray().readString();
-      if (data == null || data.isBlank()) {
+      if (ji.openArray().readNull()) {
         ji.skipRestOfArray();
         return new byte[0];
-      } else if (ji.readArray()) {
-        final var encoding = ji.readString();
-        final byte[] decodedData;
-        if (encoding.equalsIgnoreCase("base64")) {
-          decodedData = Base64.getDecoder().decode(data);
-        } else if (encoding.equalsIgnoreCase("base58")) {
-          decodedData = Base58.decode(data);
-        } else {
-          decodedData = new byte[0];
-        }
-        ji.skipRestOfArray();
+      }
+      final int mark = ji.mark();
+      ji.skip();
+      if (ji.readArray()) {
+        final var encoding = RpcEncoding.parseEncoding(ji);
+        final int mark2 = ji.mark();
+        ji.reset(mark);
+        final byte[] decodedData = switch (encoding) {
+          case base58 -> Base58.decode(ji.readString());
+          case base64, base64_zstd -> ji.decodeBase64String();
+          case null -> new byte[0];
+        };
+        ji.reset(mark2).skipRestOfArray();
         return decodedData;
       } else {
-        return Base64.getDecoder().decode(data);
+        return ji.decodeBase64String();
       }
     } else if (next == ValueType.STRING) {
       return ji.decodeBase64String();
     } else {
-      System.out.println("Unhandled parsed data: " + ji.currentBuffer());
+      logger.log(System.Logger.Level.WARNING, "Unsupported {0} encoded data {1}", next, ji.currentBuffer());
       ji.skip();
       return new byte[0];
     }

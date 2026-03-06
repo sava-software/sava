@@ -43,4 +43,9 @@ record DiscriminatorRecord(byte[] data) implements Discriminator {
   public int hashCode() {
     return Arrays.hashCode(data);
   }
+
+  @Override
+  public String toString() {
+    return "DiscriminatorRecord{" + "data=" + Arrays.toString(toIntArray()) + '}';
+  }
 }

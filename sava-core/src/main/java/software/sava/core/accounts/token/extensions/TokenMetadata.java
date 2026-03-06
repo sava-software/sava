@@ -9,6 +9,7 @@ import java.util.Map;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+// https://github.com/solana-program/token-metadata/tree/main/interface#optional-state
 public record TokenMetadata(PublicKey updateAuthority,
                             PublicKey mint,
                             String name,

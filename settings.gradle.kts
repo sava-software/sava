@@ -1,3 +1,5 @@
+rootProject.name = "sava"
+
 pluginManagement {
   repositories {
     gradlePluginPortal()
@@ -10,10 +12,8 @@ pluginManagement {
 }
 
 plugins {
-  id("software.sava.build") version "0.1.36"
+  id("software.sava.build") version "21.3.6"
 }
-
-rootProject.name = "sava"
 
 javaModules {
   directory(".") {

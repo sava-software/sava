@@ -1,9 +1,9 @@
 name: Publish Release
 
 on:
-  create:
+  push:
     tags:
-      - '\d+\.\d+\.\d+'
+      - '[0-9]*.[0-9]*.[0-9]*'
 
 jobs:
   publish:

@@ -14,12 +14,18 @@ public record InflationReward(long amount,
                               long postBalance,
                               int commission) {
 
+  private static final InflationReward ZERO = new InflationReward(0, 0, 0, 0, 0);
+
   public static List<InflationReward> parse(final JsonIterator ji) {
     final var rewards = new ArrayList<InflationReward>();
     while (ji.readArray()) {
-      final var parser = new Parser();
-      ji.testObject(parser);
-      rewards.add(parser.create());
+      if (ji.readNull()) {
+        rewards.add(ZERO);
+      } else {
+        final var parser = new Parser();
+        ji.testObject(parser);
+        rewards.add(parser.create());
+      }
     }
     return rewards;
   }
@@ -38,7 +44,7 @@ public record InflationReward(long amount,
     private InflationReward create() {
       return new InflationReward(amount, effectiveSlot, epoch, postBalance, commission);
     }
-    
+
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("amount", buf, offset, len)) {

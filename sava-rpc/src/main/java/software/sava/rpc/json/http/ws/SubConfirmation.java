@@ -5,11 +5,12 @@ import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
+import java.math.BigInteger;
 import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-record SubConfirmation(long subId, long msgId, JsonRpcException jsonRpcException) {
+record SubConfirmation(BigInteger subId, long msgId, JsonRpcException jsonRpcException) {
 
   public static SubConfirmation parse(final JsonIterator ji) {
     return ji.testObject(new Builder(), PARSER).create();
@@ -18,10 +19,10 @@ record SubConfirmation(long subId, long msgId, JsonRpcException jsonRpcException
   private static final ContextFieldBufferPredicate<Builder> PARSER = (builder, buf, offset, len, ji) -> {
     if (fieldEquals("result", buf, offset, len)) {
       if (ji.whatIsNext() == ValueType.BOOLEAN) {
-        builder.subId = Long.MIN_VALUE;
+        builder.subId = null;
         ji.skip();
       } else {
-        builder.subId = ji.readLong();
+        builder.subId = ji.readBigInteger();
       }
     } else if (fieldEquals("id", buf, offset, len)) {
       builder.msgId = ji.readLong();
@@ -35,7 +36,7 @@ record SubConfirmation(long subId, long msgId, JsonRpcException jsonRpcException
 
   private static final class Builder {
 
-    private long subId;
+    private BigInteger subId;
     private long msgId;
     private JsonRpcException jsonRpcException;
 

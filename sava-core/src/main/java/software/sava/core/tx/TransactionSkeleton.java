@@ -178,6 +178,10 @@ public interface TransactionSkeleton {
 
   String base58BlockHash();
 
+  int numInstructions();
+
+  int instructionsOffset();
+
   int numIncludedAccounts();
 
   int numAccounts();
@@ -229,7 +233,7 @@ public interface TransactionSkeleton {
   Instruction[] parseInstructionsWithoutAccounts();
 
   /**
-   * If this is a versioned transaction accounts which are indexed into a lookup table will be null.
+   * If this is a versioned transaction, accounts which are indexed into a lookup table will be null.
    * Signing accounts and program accounts will always be included.
    */
   Instruction[] parseInstructionsWithoutTableAccounts();
