@@ -6,7 +6,11 @@ import systems.comodal.jsoniter.ValueType;
 
 import java.util.Base64;
 
+import static java.lang.System.Logger.Level.*;
+
 public final class JsonUtil {
+
+  private static final System.Logger log = System.getLogger(JsonUtil.class.getName());
 
   public static byte[] parseEncodedData(final JsonIterator ji) {
     final var next = ji.whatIsNext();
@@ -37,7 +41,7 @@ public final class JsonUtil {
     } else if (next == ValueType.STRING) {
       return ji.decodeBase64String();
     } else {
-      System.out.println("Unhandled parsed data: " + ji.currentBuffer());
+      log.log(WARNING, "Unhandled parsed data: " + ji.currentBuffer());
       ji.skip();
       return new byte[0];
     }
