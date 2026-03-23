@@ -7,7 +7,10 @@ import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.Properties;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
@@ -75,6 +78,44 @@ public enum PrivateKeyEncoding {
       }
       default -> throw new IllegalStateException("Must be a JSON object or private key pair array.");
     };
+  }
+
+  public Signer parseSecret(final String secret) {
+    return switch (this) {
+      case jsonKeyPairArray -> fromJsonArray(secret.getBytes(StandardCharsets.US_ASCII));
+      case base64PrivateKey -> Signer.createFromPrivateKey(Base64.getDecoder().decode(secret));
+      case base64KeyPair -> Signer.createFromKeyPair(Base64.getDecoder().decode(secret));
+      case base58PrivateKey -> Signer.createFromPrivateKey(Base58.decode(secret));
+      case base58KeyPair -> Signer.createFromKeyPair(Base58.decode(secret));
+    };
+  }
+
+  public static Signer fromProperties(final String prefix, final Properties properties) {
+    final var resolvedPrefix = prefix == null || prefix.isBlank()
+        ? ""
+        : prefix.endsWith(".") ? prefix : prefix + ".";
+    final var encodingValue = properties.getProperty(resolvedPrefix + "encoding");
+    if (encodingValue == null || encodingValue.isBlank()) {
+      throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + "encoding");
+    }
+    final var encoding = PrivateKeyEncoding.valueOf(encodingValue.strip());
+    final var secret = properties.getProperty(resolvedPrefix + "secret");
+    if (secret == null || secret.isBlank()) {
+      throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + "secret");
+    }
+    final var signer = encoding.parseSecret(secret.strip());
+    final var pubKeyValue = properties.getProperty(resolvedPrefix + "pubKey");
+    if (pubKeyValue != null && !pubKeyValue.isBlank()) {
+      final var publicKey = PublicKey.fromBase58Encoded(pubKeyValue.strip());
+      if (!publicKey.equals(signer.publicKey())) {
+        throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
+      }
+    }
+    return signer;
+  }
+
+  public static Signer fromProperties(final Properties properties) {
+    return fromProperties(null, properties);
   }
 
   private static final class Parser implements FieldBufferPredicate {
