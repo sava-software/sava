@@ -58,4 +58,6 @@ public enum ExtensionType {
   Pausable,
   /// Indicates that the account belongs to a pausable mint
   PausableAccount,
+  /// Tokens from this mint require permissioned burn
+  PermissionedBurn,
 }

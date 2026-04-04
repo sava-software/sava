@@ -26,3 +26,4 @@ keys
 Integ.*
 integ.*
 /*.json
+/symlinks/

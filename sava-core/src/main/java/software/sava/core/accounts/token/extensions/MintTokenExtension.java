@@ -13,6 +13,7 @@ public sealed interface MintTokenExtension extends TokenExtension permits
     MintCloseAuthority,
     NonTransferable,
     PausableConfig,
+    PermissionedBurnConfig,
     PermanentDelegate,
     ScaledUiAmountConfig,
     TokenGroup,

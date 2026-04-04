@@ -21,9 +21,15 @@ public record Token2022(Mint mint,
     final var extensions = new EnumMap<ExtensionType, TokenExtension>(ExtensionType.class);
     final var extensionTypes = ExtensionType.values();
     for (int i = offset; i < data.length; ) {
-      int extensionType = ByteUtil.getInt16LE(data, i);
+      final int extensionType = ByteUtil.getInt16LE(data, i);
+      if (extensionType >= extensionTypes.length) {
+        throw new IllegalStateException("Unsupported Token 2022 extension ordinal " + extensionType);
+      }
+      if (extensionType == 0) {
+        return Map.of(ExtensionType.Uninitialized, Uninitialized.INSTANCE);
+      }
       i += Short.BYTES;
-      int length = ByteUtil.getInt16LE(data, i);
+      final int length = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
       final var type = extensionTypes[extensionType];
       final var extensionData = switch (type) {
@@ -55,6 +61,7 @@ public record Token2022(Mint mint,
         case ScaledUiAmount -> ScaledUiAmountConfig.read(data, i);
         case Pausable -> PausableConfig.read(data, i);
         case PausableAccount -> PausableAccount.INSTANCE;
+        case PermissionedBurn -> PermissionedBurnConfig.read(data, i);
       };
       if (extensionData != null) {
         extensions.put(type, extensionData);
