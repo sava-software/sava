@@ -1,6 +1,6 @@
 # Helius Balance Reporter
 
-> **Docker is required.** The Java jlink binary is compiled within a Docker container and then can be run.
+> **Docker is required to compile and run this project.**
 
 ## Setup
 
