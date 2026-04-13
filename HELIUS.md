@@ -1,5 +1,10 @@
 # Helius Balance Reporter
 
+Utility to fetch either the entire SOL balance history or simply the delta between the first and last balance for a
+given account.
+
+This utility is possible because of the paginated Helius getTransactionsForAddress API endpoint.
+
 > **Docker is required to compile and run this project.**
 
 ## Setup
