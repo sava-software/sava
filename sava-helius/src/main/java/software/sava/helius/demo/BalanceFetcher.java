@@ -121,6 +121,13 @@ final class BalanceFetcher {
         .createRequest();
     final var ascFuture = heliusClient.getTransactionsForAddress(ascRequest);
 
+    long descSlot = descResponse.slot();
+    if (tokenAccounts == TokenAccounts.none) {
+      final long descTxSlot = descResponse.data().getLast().slot();
+      if (descSlot == descTxSlot) {
+        --descSlot; // Skip beginning of block if not tracking token accounts.
+      }
+    }
     final var descRequest = TransactionsForAddressRequest.build(account)
         .paginationToken(descResponse.paginationToken())
         .limit(100)
@@ -131,8 +138,8 @@ final class BalanceFetcher {
         .createRequest();
     final var descFuture = heliusClient.getTransactionsForAddress(descRequest);
 
-    final long middleSlot = (ascResponse.slot() + descResponse.slot()) >>> 1;
-    if (ascResponse.slot() == middleSlot || descResponse.slot() == middleSlot) {
+    final long middleSlot = (ascResponse.slot() + descSlot) >>> 1;
+    if (ascResponse.slot() == middleSlot || descSlot == middleSlot) {
       final var future = ascFuture.thenCombine(
           descFuture,
           (_ascResponse, _descResponse) -> combineFutures(heliusClient, account, tokenAccounts, queue, _ascResponse, _descResponse)
