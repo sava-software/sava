@@ -51,11 +51,7 @@ public final class Entrypoint {
             "SOL Balance Report [account=%s] [fetchDuration=%sms] [numTxs=%d] [delta=%s]%n",
             account, NANOSECONDS.toMillis(durationNanos), stampedBalances.size(), balanceReport.delta().toPlainString()
         );
-        if (firstLastOnly) {
-          System.out.format(
-              ""
-          );
-        } else {
+        if (!firstLastOnly) {
           final var csv = new StringBuilder(stampedBalances.size() * 128);
           csv.append("slot,epochMillis,index,lamports");
           if (trackWrappedSol) {

@@ -75,14 +75,8 @@ final class BalanceFetcher {
     final long earliestDescSlot = earliestDescTx.slot();
 
     final List<StampedBalance> balanceHistory;
-    if (latestAscSlot > earliestDescSlot) {
+    if (latestAscSlot >= earliestDescSlot) {
       balanceHistory = joinBalanceRecords(account, ascData, descData);
-    } else if (latestAscSlot == earliestDescSlot) {
-      if (latestAscTx.transactionIndex() < earliestDescTx.transactionIndex()) {
-        balanceHistory = null;
-      } else {
-        balanceHistory = joinBalanceRecords(account, ascData, descData);
-      }
     } else {
       final long middleSlot = (earliestDescSlot + latestAscSlot) >>> 1;
 
@@ -190,9 +184,7 @@ final class BalanceFetcher {
     final var earliestDescTx = descData.getLast();
     final long earliestDescSlot = earliestDescTx.slot();
 
-    if (latestAscSlot == earliestDescSlot) {
-      throw new UnsupportedOperationException("Not implemented yet");
-    } else if (latestAscSlot < earliestDescSlot) {
+    if (latestAscSlot < earliestDescSlot) {
       createTasks(
           heliusClient,
           account,

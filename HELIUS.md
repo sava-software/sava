@@ -50,6 +50,12 @@ The balance report CSV will be written to the current working directory.
 
 ## Assumptions
 
+* There is no rate-limiting, if the account has a large number of transactions, it will most likely exceed the rate of a
+  developer plan when fetching all transactions.
+* There is no IO exception handling.
+* When fetching all transactions, if in the final intersecting block/slot not all transactions have been
+  fetched, there can be missing data points within a single block/slot. There will still be a data point for the
+  conclusion of the block.
 * If the account has multiple transactions in its first block of existence, only the first transaction in
   the block is considered towards its initial balance.
 * Native/Rent lamports in the wrapped SOL token account are NOT included in the reported balance. The assumption is
