@@ -87,6 +87,8 @@ public interface SolanaRpcClient {
 
   Commitment defaultCommitment();
 
+  Duration defaultRequestTimeout();
+
   CompletableFuture<NodeHealth> getHealth();
 
   CompletableFuture<FeeForMessage> getFeeForMessage(final String base64Msg);

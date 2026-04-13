@@ -42,6 +42,10 @@ public abstract class JsonHttpClient {
     this.testResponse = testResponse;
   }
 
+  public Duration defaultRequestTimeout() {
+    return requestTimeout;
+  }
+
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout) {
@@ -149,7 +153,7 @@ public abstract class JsonHttpClient {
   @Deprecated
   protected <R> Function<HttpResponse<byte[]>, R> wrapParser(final Function<HttpResponse<byte[]>, R> parser) {
     return applyResponse == null ? parser : response ->
-        applyResponse.test(response) ? parser.apply(response) : null;
+                                            applyResponse.test(response) ? parser.apply(response) : null;
   }
 
   // GET methods

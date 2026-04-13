@@ -61,6 +61,19 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
+  public int accountIndex(final byte[] pubKeyBytes) {
+    for (int i = 0, o = accountsOffset; i < numAccounts; ++i, o += PUBLIC_KEY_LENGTH) {
+      if (Arrays.equals(
+          pubKeyBytes, 0, PUBLIC_KEY_LENGTH,
+          data, o, o + PUBLIC_KEY_LENGTH
+      )) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  @Override
   public PublicKey feePayer() {
     return readPubKey(data, accountsOffset);
   }

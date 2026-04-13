@@ -27,3 +27,4 @@ Integ.*
 integ.*
 /*.json
 /symlinks/
+*.json

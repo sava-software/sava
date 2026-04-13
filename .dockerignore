@@ -1,0 +1,12 @@
+*
+
+!sava-core/
+!sava-rpc/
+!sava-helius/
+!settings.gradle.kts
+!gradle.properties
+!gradle/
+!.gradle/
+!gradlew
+
+!.dockerignore

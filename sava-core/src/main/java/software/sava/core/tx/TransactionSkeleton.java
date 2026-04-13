@@ -192,6 +192,12 @@ public interface TransactionSkeleton {
 
   PublicKey[] lookupTableAccounts();
 
+  int accountIndex(final byte[] pubKeyBytes);
+
+  default int accountIndex(final PublicKey account) {
+    return accountIndex(account.toByteArray());
+  }
+
   AccountMeta[] parseAccounts();
 
   AccountMeta[] parseAccounts(final Map<PublicKey, AddressLookupTable> lookupTables);
