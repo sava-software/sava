@@ -1,6 +1,14 @@
 # Helius Balance Reporter
 
-> **Docker is required to build and run the following commands.**
+> **Docker is required.** The Java jlink binary is compiled within a Docker container and then can be run.
+
+## Setup
+
+```bash
+git clone https://github.com/sava-software/sava.git
+cd sava
+git checkout helius
+```
 
 ## Usage
 
