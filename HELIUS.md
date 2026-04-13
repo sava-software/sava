@@ -54,4 +54,4 @@ The balance report CSV will be written to the current working directory.
   the block is considered towards its initial balance.
 * Native/Rent lamports in the wrapped SOL token account are NOT included in the reported balance. The assumption is
   that sync native is always called when wrapping SOL.
-* Probably more assumptions.
+* More assumptions and unhandled corner cases.

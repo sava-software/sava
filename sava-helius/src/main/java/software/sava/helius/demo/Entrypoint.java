@@ -83,7 +83,7 @@ public final class Entrypoint {
                 csvString,
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING
             );
-            System.out.println("Report saved to " + outputPath);
+            System.out.println("Report saved to " + outputPath.getFileName());
           } catch (final IOException e) {
             throw new UncheckedIOException(e);
           }

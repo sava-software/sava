@@ -23,8 +23,8 @@ record BalanceReport(List<StampedBalance> balances,
       } else {
         final var lastBalance = balances.getLast();
         final var lastTimestamp = Instant.ofEpochSecond(lastBalance.epochMillis());
-        final var lamportDelta = new BigDecimal(Long.toUnsignedString(lastBalance.lamports()))
-            .subtract(new BigDecimal(Long.toUnsignedString(firstBalance.lamports())));
+        final var lamportDelta = new BigDecimal(Long.toUnsignedString(lastBalance.totalLamports()))
+            .subtract(new BigDecimal(Long.toUnsignedString(firstBalance.totalLamports())));
         final var delta = LamportDecimal.toBigDecimal(lamportDelta).stripTrailingZeros();
         return new BalanceReport(balances, firstTimestamp, lastTimestamp, delta);
       }

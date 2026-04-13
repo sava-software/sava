@@ -12,6 +12,10 @@ record StampedBalance(long slot,
                       long lamports,
                       long wrappedLamports) implements Comparable<StampedBalance> {
 
+  long totalLamports() {
+    return Math.max(lamports, 0) + Math.max(wrappedLamports, 0);
+  }
+
   static StampedBalance createBalance(final PublicKey account, final PublicKey wrappedSolMint, final TxFull tx) {
     final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.data());
     final int accountIndex = skeleton.accountIndex(account.toByteArray());
