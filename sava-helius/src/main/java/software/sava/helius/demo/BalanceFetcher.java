@@ -78,16 +78,13 @@ final class BalanceFetcher {
     if (latestAscSlot >= earliestDescSlot) {
       balanceHistory = joinBalanceRecords(account, ascData, descData);
     } else {
-      final long middleSlot = (earliestDescSlot + latestAscSlot) >>> 1;
-
       final var taskQueue = new ConcurrentLinkedDeque<CompletableFuture<? extends List<StampedBalance>>>();
       createTasks(
           heliusClient,
           account,
           tokenAccounts,
-          ascResponse.paginationToken(),
-          descResponse.paginationToken(),
-          middleSlot,
+          ascResponse,
+          descResponse,
           taskQueue
       );
 
@@ -111,12 +108,11 @@ final class BalanceFetcher {
   static void createTasks(final HeliusRpc heliusClient,
                           final PublicKey account,
                           final TokenAccounts tokenAccounts,
-                          final String asc,
-                          final String desc,
-                          final long middleSlot,
+                          final PagedResponse<List<TxFull>> ascResponse,
+                          final PagedResponse<List<TxFull>> descResponse,
                           final Queue<CompletableFuture<? extends List<StampedBalance>>> queue) {
     final var ascRequest = TransactionsForAddressRequest.build(account)
-        .paginationToken(asc)
+        .paginationToken(ascResponse.paginationToken())
         .limit(100)
         .status(Status.succeeded)
         .tokenAccounts(tokenAccounts)
@@ -125,29 +121,8 @@ final class BalanceFetcher {
         .createRequest();
     final var ascFuture = heliusClient.getTransactionsForAddress(ascRequest);
 
-    final var middlePaginationToken = middleSlot + ":0";
-    final var middleDescRequest = TransactionsForAddressRequest.build(account)
-        .paginationToken(middlePaginationToken)
-        .limit(100)
-        .status(Status.succeeded)
-        .tokenAccounts(tokenAccounts)
-        .sortOrder(SortOrder.desc)
-        .commitment(Commitment.CONFIRMED)
-        .createRequest();
-    final var middleDescFuture = heliusClient.getTransactionsForAddress(middleDescRequest);
-
-    final var middleAscRequest = TransactionsForAddressRequest.build(account)
-        .paginationToken(middlePaginationToken)
-        .limit(100)
-        .status(Status.succeeded)
-        .tokenAccounts(tokenAccounts)
-        .sortOrder(SortOrder.asc)
-        .commitment(Commitment.CONFIRMED)
-        .createRequest();
-    final var middleAscFuture = heliusClient.getTransactionsForAddress(middleAscRequest);
-
     final var descRequest = TransactionsForAddressRequest.build(account)
-        .paginationToken(desc)
+        .paginationToken(descResponse.paginationToken())
         .limit(100)
         .status(Status.succeeded)
         .tokenAccounts(tokenAccounts)
@@ -156,18 +131,48 @@ final class BalanceFetcher {
         .createRequest();
     final var descFuture = heliusClient.getTransactionsForAddress(descRequest);
 
-    final var beforeFuture = ascFuture.thenCombine(
-        middleDescFuture,
-        (ascResponse, descResponse) -> combineFutures(heliusClient, account, tokenAccounts, queue, ascResponse, descResponse)
-    );
+    final long middleSlot = (ascResponse.slot() + descResponse.slot()) >>> 1;
+    if (ascResponse.slot() == middleSlot || descResponse.slot() == middleSlot) {
+      final var future = ascFuture.thenCombine(
+          descFuture,
+          (_ascResponse, _descResponse) -> combineFutures(heliusClient, account, tokenAccounts, queue, _ascResponse, _descResponse)
+      );
+      queue.add(future);
+    } else {
+      final var middlePaginationToken = middleSlot + ":0";
+      final var middleDescRequest = TransactionsForAddressRequest.build(account)
+          .paginationToken(middlePaginationToken)
+          .limit(100)
+          .status(Status.succeeded)
+          .tokenAccounts(tokenAccounts)
+          .sortOrder(SortOrder.desc)
+          .commitment(Commitment.CONFIRMED)
+          .createRequest();
+      final var middleDescFuture = heliusClient.getTransactionsForAddress(middleDescRequest);
 
-    final var afterFuture = middleAscFuture.thenCombine(
-        descFuture,
-        (ascResponse, descResponse) -> combineFutures(heliusClient, account, tokenAccounts, queue, ascResponse, descResponse)
-    );
+      final var middleAscRequest = TransactionsForAddressRequest.build(account)
+          .paginationToken(middlePaginationToken)
+          .limit(100)
+          .status(Status.succeeded)
+          .tokenAccounts(tokenAccounts)
+          .sortOrder(SortOrder.asc)
+          .commitment(Commitment.CONFIRMED)
+          .createRequest();
+      final var middleAscFuture = heliusClient.getTransactionsForAddress(middleAscRequest);
 
-    queue.add(beforeFuture);
-    queue.add(afterFuture);
+      final var beforeFuture = ascFuture.thenCombine(
+          middleDescFuture,
+          (_ascResponse, _descResponse) -> combineFutures(heliusClient, account, tokenAccounts, queue, _ascResponse, _descResponse)
+      );
+
+      final var afterFuture = middleAscFuture.thenCombine(
+          descFuture,
+          (_ascResponse, _descResponse) -> combineFutures(heliusClient, account, tokenAccounts, queue, _ascResponse, _descResponse)
+      );
+
+      queue.add(beforeFuture);
+      queue.add(afterFuture);
+    }
   }
 
   private static List<StampedBalance> combineFutures(final HeliusRpc heliusClient,
@@ -189,9 +194,8 @@ final class BalanceFetcher {
           heliusClient,
           account,
           tokenAccounts,
-          ascResponse.paginationToken(),
-          descResponse.paginationToken(),
-          (earliestDescSlot + latestAscSlot) >>> 1,
+          ascResponse,
+          descResponse,
           queue
       );
     }
