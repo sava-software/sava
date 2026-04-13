@@ -5,9 +5,9 @@ given account.
 
 This utility is possible because of the paginated Helius getTransactionsForAddress API endpoint.
 
-> **Docker is required to compile and run this project.**
-
 ## Setup
+
+> **Docker is required to compile and run this project.**
 
 ```bash
 git clone https://github.com/sava-software/sava.git
