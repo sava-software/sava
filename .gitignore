@@ -25,6 +25,5 @@ ignore
 keys
 Integ.*
 integ.*
-/*.json
 /symlinks/
 /.junie/
