@@ -58,7 +58,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// See [java.net.http.WebSocket.Builder#buildAsync(URI,WebSocket.Listener)] for potential exceptions.
   ///
   /// This may be used to re-connect the underlying WebSocket if this has not been [closed][#close()].
-  /// The connection attempt will be delayed by [Timings#reConnectDelay] if a previous attempt as already been made.
+  /// [Timings#reConnectDelay()] will delay the connection attempt if a previous attempt has already been made.
   CompletableFuture<?> connect();
 
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);
@@ -234,7 +234,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   boolean slotUnsubscribe();
 
-  /// Once closed this WebSocket is no longer usable.
+  /// Once closed, this WebSocket is no longer usable.
   @Override
   void close();
 
@@ -309,5 +309,13 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     ///
     /// This behavior can be changed to instead attempt to [re-connect][#connect()] the underlying WebSocket and re-use this instance.
     Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError);
+
+    BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError();
+
+    Builder onSendTextError(final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError);
+
+    BiConsumer<SolanaRpcWebsocket, Throwable> onPingError();
+
+    Builder onPingError(final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError);
   }
 }

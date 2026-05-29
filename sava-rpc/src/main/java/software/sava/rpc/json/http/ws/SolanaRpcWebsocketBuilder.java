@@ -21,6 +21,8 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   private Consumer<SolanaRpcWebsocket> onOpen;
   private SolanaRpcWebsocket.OnClose onClose;
   private BiConsumer<SolanaRpcWebsocket, Throwable> onError;
+  private BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError;
+  private BiConsumer<SolanaRpcWebsocket, Throwable> onPingError;
 
   SolanaRpcWebsocketBuilder() {
   }
@@ -33,7 +35,9 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
         new Timings(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay),
         onOpen,
         onClose,
-        onError
+        onError,
+        onSendTextError,
+        onPingError
     );
   }
 
@@ -144,6 +148,28 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   @Override
   public SolanaRpcWebsocket.Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
     this.onError = onError;
+    return this;
+  }
+
+  @Override
+  public BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError() {
+    return onSendTextError;
+  }
+
+  @Override
+  public SolanaRpcWebsocket.Builder onSendTextError(final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError) {
+    this.onSendTextError = onSendTextError;
+    return this;
+  }
+
+  @Override
+  public BiConsumer<SolanaRpcWebsocket, Throwable> onPingError() {
+    return onPingError;
+  }
+
+  @Override
+  public SolanaRpcWebsocket.Builder onPingError(final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
+    this.onPingError = onPingError;
     return this;
   }
 }

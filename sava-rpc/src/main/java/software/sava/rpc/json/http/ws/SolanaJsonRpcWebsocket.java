@@ -44,6 +44,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Consumer<SolanaRpcWebsocket> onOpen;
   private final OnClose onClose;
   private final BiConsumer<SolanaRpcWebsocket, Throwable> onError;
+  private final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError;
+  private final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError;
   private final AtomicLong msgId;
   private final Map<Long, Subscription<?>> pendingSubscriptions;
   private final Map<BigInteger, String> pendingUnSubscriptions;
@@ -71,7 +73,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final Timings timings,
                          final Consumer<SolanaRpcWebsocket> onOpen,
                          final OnClose onClose,
-                         final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
     this.endpoint = endpoint;
     this.solanaAccounts = solanaAccounts;
     this.defaultCommitment = defaultCommitment;
@@ -80,6 +84,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.onOpen = onOpen;
     this.onClose = onClose;
     this.onError = onError;
+    this.onSendTextError = onSendTextError;
+    this.onPingError = onPingError;
     this.msgId = new AtomicLong(1);
     this.lastWrite = new AtomicLong(0);
     this.pendingSubscriptions = new ConcurrentSkipListMap<>();
@@ -154,9 +160,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       for (; ; ) {
         lock.lock();
         try {
-          for (long remaining = sleepNanos; ; ) {
+          for (long remaining = sleepNanos; this.pendingSubscriptions.isEmpty(); ) {
             remaining = newSubscription.awaitNanos(remaining);
-            if (remaining <= 0 || !this.pendingSubscriptions.isEmpty()) {
+            if (remaining <= 0) {
               break;
             }
           }
@@ -232,7 +238,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final long msgId = this.msgId.incrementAndGet();
     final var msg = createSubscriptionMsg(msgId, channel, params);
     final var sub = Subscription.createSubscription(commitment, channel, key, msgId, msg, onSub, consumer);
-    final var duplicate = subs.computeIfAbsent(sub.key(), k -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
+    final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
       lock.lock();
@@ -257,7 +263,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final long msgId = this.msgId.incrementAndGet();
     final var msg = createSubscriptionMsg(msgId, channel, params);
     final var sub = Subscription.createAccountSubscription(commitment, channel, publicKey, msgId, msg, onSub, consumer);
-    final var duplicate = subs.computeIfAbsent(sub.key(), k -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
+    final var duplicate = subs.computeIfAbsent(sub.key(), _ -> new EnumMap<>(Commitment.class)).putIfAbsent(commitment, sub);
     if (duplicate == null) {
       this.pendingSubscriptions.put(msgId, sub);
       lock.lock();
@@ -309,7 +315,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       if (sub == null) {
         return removeDanglingSub(key, channel, commitment);
       } else {
-        subs.compute(key, (k, v) -> v == null || v.isEmpty() ? null : v);
+        subs.compute(key, (_, v) -> v == null || v.isEmpty() ? null : v);
         this.queueUnsubscribe(sub);
         return true;
       }
@@ -563,7 +569,18 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   private CompletableFuture<WebSocket> sendText(final WebSocket webSocket, final String msg) {
     final var future = webSocket.sendText(msg, true);
-    log.log(DEBUG, msg);
+    log.log(DEBUG, "Writing text {0}", msg);
+    future.whenComplete((_, ex) -> {
+      if (ex != null) {
+        if (onSendTextError == null) {
+          log.log(WARNING, String.format("Failed to sendText '%s' to %s.", msg, this.endpoint.getHost()), ex);
+        } else {
+          onSendTextError.accept(this, ex);
+        }
+      } else {
+        log.log(DEBUG, "Sent text {0}", msg);
+      }
+    });
     return future;
   }
 
@@ -798,6 +815,27 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
   }
 
+  private void sendPing(final WebSocket webSocket) {
+    final long now = System.currentTimeMillis();
+    final long millisSinceLastWrite = now - this.lastWrite.get();
+    if (millisSinceLastWrite > this.timings.pingDelay()) {
+      final long previousWrite = this.lastWrite.getAndSet(now);
+      final var pingMsg = String.valueOf(now);
+      webSocket.sendPing(ByteBuffer.wrap(pingMsg.getBytes(ISO_8859_1))).whenComplete(((_, throwable) -> {
+        if (throwable != null) {
+          this.lastWrite.compareAndSet(now, previousWrite);
+          if (this.onPingError == null) {
+            log.log(WARNING, String.format("Failed to ping %d to %s.", now, this.endpoint.getHost()), throwable);
+          } else {
+            this.onPingError.accept(this, throwable);
+          }
+        } else {
+          log.log(DEBUG, "{0} to {1}.\n", pingMsg, endpoint.getHost());
+        }
+      }));
+    }
+  }
+
   private boolean noPendingUnSubscriptions(final WebSocket webSocket) {
     int numUnSubs = 0;
     final var iterator = this.pendingUnSubscriptions.entrySet().iterator();
@@ -821,23 +859,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     lockAndHandlePendingSubscriptions(webSocket);
     log.log(DEBUG, () -> new String(message.array()));
     return null;
-  }
-
-  private void sendPing(final WebSocket webSocket) {
-    final long now = System.currentTimeMillis();
-    final long millisSinceLastWrite = now - this.lastWrite.get();
-    if (millisSinceLastWrite > this.timings.pingDelay()) {
-      final long previousWrite = this.lastWrite.getAndSet(now);
-      final var pingMsg = String.valueOf(now);
-      webSocket.sendPing(ByteBuffer.wrap(pingMsg.getBytes(ISO_8859_1))).whenComplete(((ws, throwable) -> {
-        if (throwable != null) {
-          this.lastWrite.compareAndSet(now, previousWrite);
-          log.log(WARNING, String.format("Failed to ping %d to %s.", now, this.endpoint.getHost()), throwable);
-        } else {
-          log.log(DEBUG, "{0} to {1}.\n", pingMsg, endpoint.getHost());
-        }
-      }));
-    }
   }
 
   @Override

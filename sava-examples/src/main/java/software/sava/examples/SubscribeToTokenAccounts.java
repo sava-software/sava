@@ -13,7 +13,7 @@ import java.util.List;
 
 public final class SubscribeToTokenAccounts {
 
-  public static void main(final String[] args) throws InterruptedException {
+  static void main() throws InterruptedException {
     final var solanaAccounts = SolanaAccounts.MAIN_NET;
     final var tokenProgram = solanaAccounts.tokenProgram();
     final var tokenOwner = PublicKey.fromBase58Encoded("");
@@ -32,6 +32,14 @@ public final class SubscribeToTokenAccounts {
             ws.close();
             throwable.printStackTrace(System.err);
           })
+          .onPingError((ws, throwable) -> {
+            ws.close();
+            throwable.printStackTrace(System.err);
+          })
+          .onSendTextError((ws, throwable) -> {
+            ws.close();
+            throwable.printStackTrace(System.err);
+          })
           .create();
 
       webSocket.programSubscribe(
@@ -43,7 +51,8 @@ public final class SubscribeToTokenAccounts {
           accountInfo -> {
             final var tokenAccount = TokenAccount.read(accountInfo.pubKey(), accountInfo.data());
             System.out.println(tokenAccount);
-          });
+          }
+      );
 
       webSocket.connect().join();
 

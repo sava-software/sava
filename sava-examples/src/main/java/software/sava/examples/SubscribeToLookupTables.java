@@ -10,16 +10,18 @@ import java.net.http.HttpClient;
 
 public final class SubscribeToLookupTables {
 
-  public static void main(final String[] args) throws InterruptedException {
+  static void main() throws InterruptedException {
     try (final var httpClient = HttpClient.newHttpClient()) {
 
       final var webSocket = SolanaRpcWebsocket.build()
           .uri(SolanaNetwork.MAIN_NET.getWebSocketEndpoint())
           .webSocketBuilder(httpClient)
           .commitment(Commitment.CONFIRMED)
-          .onOpen(ws -> System.out.println("Websocket connected"))
-          .onClose((ws, statusCode, reason) -> System.out.format("%d: %s%n", statusCode, reason))
-          .onError((ws, throwable) -> throwable.printStackTrace())
+          .onOpen(_ -> System.out.println("Websocket connected"))
+          .onClose((_, statusCode, reason) -> System.out.format("%d: %s%n", statusCode, reason))
+          .onError((_, throwable) -> throwable.printStackTrace())
+          .onSendTextError((_, throwable) -> throwable.printStackTrace())
+          .onPingError((_, throwable) -> throwable.printStackTrace())
           .create();
 
       webSocket.programSubscribe(
@@ -31,7 +33,7 @@ public final class SubscribeToLookupTables {
           }
       );
 
-      webSocket.connect();
+      webSocket.connect().join();
 
       Thread.sleep(Integer.MAX_VALUE);
     }
