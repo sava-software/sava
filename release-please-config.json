@@ -2,25 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "simple",
   "include-v-in-tag": false,
-  "include-component-in-tag": true,
+  "include-component-in-tag": false,
   "versioning": "always-bump-patch",
   "separate-pull-requests": false,
   "packages": {
-    "sava-core": {
-      "package-name": "sava-core"
-    },
-    "sava-rpc": {
-      "package-name": "sava-rpc"
+    ".": {
+      "package-name": "sava"
     }
-  },
-  "plugins": [
-    {
-      "type": "linked-versions",
-      "groupName": "sava",
-      "components": [
-        "sava-core",
-        "sava-rpc"
-      ]
-    }
-  ]
+  }
 }
