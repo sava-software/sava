@@ -4,7 +4,6 @@
   "include-v-in-tag": false,
   "include-component-in-tag": false,
   "versioning": "always-bump-patch",
-  "separate-pull-requests": false,
   "packages": {
     ".": {
       "package-name": "sava"
