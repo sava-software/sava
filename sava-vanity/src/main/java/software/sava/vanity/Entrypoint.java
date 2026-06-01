@@ -89,7 +89,10 @@ public final class Entrypoint {
       final int findNumKeys = intProp(moduleName, "numKeys", 1);
       final int checkFound = intProp(moduleName, "checkFound", 131_072);
       final boolean sigVerify = boolProp(moduleName, "sigVerify", false);
-      final var privateKeyEncoding = PrivateKeyEncoding.valueOf(System.getProperty(moduleName + ".keyFormat", "base64KeyPair"));
+      final var keyFormat = System.getProperty(moduleName + ".keyFormat");
+      final var privateKeyEncoding = keyFormat == null || keyFormat.isBlank()
+          ? PrivateKeyEncoding.base64KeyPair
+          : PrivateKeyEncoding.valueOf(keyFormat);
       final var generator = VanityAddressGenerator.createGenerator(
           keyPath,
           privateKeyEncoding,

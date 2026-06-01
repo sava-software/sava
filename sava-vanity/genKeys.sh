@@ -23,7 +23,7 @@ s1337Letters=
 
 numThreads=
 numKeys=
-keyFormat=
+keyFormat="base64KeyPair"
 checkFound=
 logDelay=
 outDir=

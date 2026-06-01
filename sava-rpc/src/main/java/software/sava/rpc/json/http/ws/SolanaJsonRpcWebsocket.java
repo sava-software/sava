@@ -90,10 +90,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.lastWrite = new AtomicLong(0);
     this.pendingSubscriptions = new ConcurrentSkipListMap<>();
     this.pendingUnSubscriptions = new ConcurrentSkipListMap<>();
-    this.accountSubs = new ConcurrentSkipListMap<>();
-    this.txLogSubs = new ConcurrentSkipListMap<>();
-    this.signatureSubs = new ConcurrentSkipListMap<>();
-    this.programSubs = new ConcurrentSkipListMap<>();
+    this.accountSubs = new ConcurrentHashMap<>();
+    this.txLogSubs = new ConcurrentHashMap<>();
+    this.signatureSubs = new ConcurrentHashMap<>();
+    this.programSubs = new ConcurrentHashMap<>();
     this.slotSub = new AtomicReference<>();
     this.subscriptionsBySubId = new ConcurrentSkipListMap<>();
     this.exceptionSubs = HashSet.newHashSet(1);
