@@ -1,5 +1,6 @@
 package software.sava.vanity;
 
+import software.sava.core.accounts.vanity.KeyFileFormat;
 import software.sava.core.accounts.vanity.PrivateKeyEncoding;
 import software.sava.core.accounts.vanity.Result;
 import software.sava.core.accounts.vanity.Subsequence;
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -68,9 +70,67 @@ public final class Entrypoint {
     }
   }
 
+  private static final String PASSWORD_ENV_VAR = "SAVA_VANITY_ENCRYPT_PASSWORD";
+
+  private static char[] readPassword(final String moduleName) {
+    final var val = System.getProperty(moduleName + ".encrypt");
+    if (val == null || val.equalsIgnoreCase("false")) {
+      return null;
+    }
+    // Allow the password to be supplied securely via an environment variable so that
+    // generation can run non-interactively (e.g. headless / detached sessions). The
+    // value is never placed on the command line or in a system property, so it is not
+    // exposed in process listings; environment variables are only readable by the
+    // process owner.
+    final var envPassword = System.getenv(PASSWORD_ENV_VAR);
+    if (envPassword != null && !envPassword.isEmpty()) {
+      return envPassword.toCharArray();
+    }
+    final var console = System.console();
+    if (console == null) {
+      throw new IllegalStateException(
+          "A console is required to securely read the encryption password, "
+              + "or supply it via the " + PASSWORD_ENV_VAR + " environment variable."
+      );
+    }
+    for (; ; ) {
+      final char[] password = console.readPassword("Enter encryption password: ");
+      final char[] confirm = console.readPassword("Confirm encryption password: ");
+      try {
+        if (password == null || password.length == 0) {
+          console.printf("Password must not be empty.%n");
+          continue;
+        }
+        if (!Arrays.equals(password, confirm)) {
+          console.printf("Passwords did not match, please try again.%n");
+          continue;
+        }
+        return password.clone();
+      } finally {
+        if (password != null) {
+          Arrays.fill(password, '\0');
+        }
+        if (confirm != null) {
+          Arrays.fill(confirm, '\0');
+        }
+      }
+    }
+  }
+
   static void main() throws InterruptedException {
     final var moduleName = Entrypoint.class.getModule().getName();
 
+    final char[] password = readPassword(moduleName);
+    try {
+      run(moduleName, password);
+    } finally {
+      if (password != null) {
+        Arrays.fill(password, '\0');
+      }
+    }
+  }
+
+  private static void run(final String moduleName, final char[] password) throws InterruptedException {
     final var beginsWith = getSequence(moduleName, "prefix", 'p');
     final var endsWith = getSequence(moduleName, "suffix", 's');
 
@@ -93,9 +153,15 @@ public final class Entrypoint {
       final var privateKeyEncoding = keyFormat == null || keyFormat.isBlank()
           ? PrivateKeyEncoding.base64KeyPair
           : PrivateKeyEncoding.valueOf(keyFormat);
+      final var keyFileFormatProp = System.getProperty(moduleName + ".keyFileFormat");
+      final var keyFileFormat = keyFileFormatProp == null || keyFileFormatProp.isBlank()
+          ? KeyFileFormat.json
+          : KeyFileFormat.valueOf(keyFileFormatProp);
       final var generator = VanityAddressGenerator.createGenerator(
           keyPath,
+          password,
           privateKeyEncoding,
+          keyFileFormat,
           sigVerify,
           executor,
           numThreads,

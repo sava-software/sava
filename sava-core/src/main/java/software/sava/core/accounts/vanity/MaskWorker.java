@@ -13,8 +13,10 @@ final class MaskWorker extends BaseMaskWorker {
   private final Subsequence endsWith;
 
   MaskWorker(final Path keyPath,
+             final char[] password,
              final SecureRandom secureRandom,
              final PrivateKeyEncoding privateKeyEncoding,
+             final KeyFileFormat keyFileFormat,
              final boolean sigVerify,
              final Subsequence beginsWith,
              final Subsequence endsWith,
@@ -23,7 +25,7 @@ final class MaskWorker extends BaseMaskWorker {
              final AtomicLong searched,
              final Queue<Result> results,
              final int checkFound) {
-    super(keyPath, secureRandom, privateKeyEncoding, sigVerify, beginsWith, find, found, searched, results, checkFound);
+    super(keyPath, password, secureRandom, privateKeyEncoding, keyFileFormat, sigVerify, beginsWith, find, found, searched, results, checkFound);
     this.endsWith = endsWith;
   }
 

@@ -25,8 +25,10 @@ abstract class BaseMaskWorker implements AddressWorker {
   static final LongBinaryOperator SUM = Long::sum;
 
   private final Path keyPath;
+  private final char[] password;
   private final SecureRandom secureRandom;
   private final PrivateKeyEncoding privateKeyEncoding;
+  private final KeyFileFormat keyFileFormat;
   private final boolean sigVerify;
   private final Subsequence beginsWith;
   private final long find;
@@ -42,8 +44,10 @@ abstract class BaseMaskWorker implements AddressWorker {
   protected final byte[] mutablePublicKey;
 
   protected BaseMaskWorker(final Path keyPath,
+                           final char[] password,
                            final SecureRandom secureRandom,
                            final PrivateKeyEncoding privateKeyEncoding,
+                           final KeyFileFormat keyFileFormat,
                            final boolean sigVerify,
                            final Subsequence beginsWith,
                            final long find,
@@ -52,8 +56,10 @@ abstract class BaseMaskWorker implements AddressWorker {
                            final Queue<Result> results,
                            final int checkFound) {
     this.keyPath = keyPath;
+    this.password = password;
     this.secureRandom = secureRandom;
     this.privateKeyEncoding = privateKeyEncoding;
+    this.keyFileFormat = keyFileFormat;
     this.sigVerify = sigVerify;
     this.beginsWith = beginsWith;
     this.find = find;
@@ -134,7 +140,7 @@ abstract class BaseMaskWorker implements AddressWorker {
 
       if (keyPath != null) {
         try {
-          final var formattedKey = switch (privateKeyEncoding) {
+          final var rawSecret = switch (privateKeyEncoding) {
             case jsonKeyPairArray -> {
               final var json = new StringBuilder("[");
               for (int i = 0; ; ) {
@@ -148,14 +154,64 @@ abstract class BaseMaskWorker implements AddressWorker {
               json.append(']');
               yield json.toString();
             }
-            case base64PrivateKey -> '"' + Base64.getEncoder().encodeToString(privateKey) + '"';
-            case base64KeyPair -> '"' + Base64.getEncoder().encodeToString(keyPair) + '"';
-            case base58PrivateKey -> '"' + Base58.encode(privateKey) + '"';
-            case base58KeyPair -> '"' + Base58.encode(keyPair) + '"';
+            case base64PrivateKey -> Base64.getEncoder().encodeToString(privateKey);
+            case base64KeyPair -> Base64.getEncoder().encodeToString(keyPair);
+            case base58PrivateKey -> Base58.encode(privateKey);
+            case base58KeyPair -> Base58.encode(keyPair);
           };
-          Files.writeString(
-              keyPath.resolve(publicKey.toBase58() + ".json"),
-              String.format(
+          // The 'secret' value is rendered without surrounding quotes for the
+          // jsonKeyPairArray encoding (it is itself a JSON array) and quoted otherwise.
+          final var jsonSecret = privateKeyEncoding == PrivateKeyEncoding.jsonKeyPairArray
+              ? rawSecret
+              : '"' + rawSecret + '"';
+          // For encrypted output the secret payload is the same JSON-shaped value used in
+          // the plaintext 'secret' field so it can be decrypted and parsed identically
+          // regardless of the on-disk file format.
+          final var encryptionPayload = jsonSecret;
+          final String keyData;
+          final String fileExtension;
+          if (keyFileFormat == KeyFileFormat.properties) {
+            fileExtension = ".properties";
+            if (password == null) {
+              keyData = String.format(
+                  """
+                      pubKey=%s
+                      encoding=%s
+                      secret=%s
+                      """,
+                  publicKey,
+                  privateKeyEncoding,
+                  rawSecret
+              );
+            } else {
+              final var encrypted = KeyFileEncryption.encrypt(password, secureRandom, encryptionPayload);
+              final var encoder = Base64.getEncoder();
+              keyData = String.format(
+                  """
+                      pubKey=%s
+                      encoding=%s
+                      encrypted=true
+                      kdf=%s
+                      iterations=%d
+                      salt=%s
+                      cipher=%s
+                      iv=%s
+                      secret=%s
+                      """,
+                  publicKey,
+                  privateKeyEncoding,
+                  KeyFileEncryption.KDF,
+                  KeyFileEncryption.ITERATIONS,
+                  encoder.encodeToString(encrypted.salt()),
+                  KeyFileEncryption.CIPHER,
+                  encoder.encodeToString(encrypted.iv()),
+                  encoder.encodeToString(encrypted.cipherText())
+              );
+            }
+          } else {
+            fileExtension = ".json";
+            if (password == null) {
+              keyData = String.format(
                   """
                       {
                         "pubKey": "%s",
@@ -164,8 +220,38 @@ abstract class BaseMaskWorker implements AddressWorker {
                       }""",
                   publicKey,
                   privateKeyEncoding,
-                  formattedKey
-              ),
+                  jsonSecret
+              );
+            } else {
+              final var encrypted = KeyFileEncryption.encrypt(password, secureRandom, encryptionPayload);
+              final var encoder = Base64.getEncoder();
+              keyData = String.format(
+                  """
+                      {
+                        "pubKey": "%s",
+                        "encoding": "%s",
+                        "encrypted": true,
+                        "kdf": "%s",
+                        "iterations": %d,
+                        "salt": "%s",
+                        "cipher": "%s",
+                        "iv": "%s",
+                        "secret": "%s"
+                      }""",
+                  publicKey,
+                  privateKeyEncoding,
+                  KeyFileEncryption.KDF,
+                  KeyFileEncryption.ITERATIONS,
+                  encoder.encodeToString(encrypted.salt()),
+                  KeyFileEncryption.CIPHER,
+                  encoder.encodeToString(encrypted.iv()),
+                  encoder.encodeToString(encrypted.cipherText())
+              );
+            }
+          }
+          Files.writeString(
+              keyPath.resolve(publicKey.toBase58() + fileExtension),
+              keyData,
               StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
           );
         } catch (final IOException e) {

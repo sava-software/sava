@@ -12,6 +12,7 @@ readonly mainClass
 jvmArgs="-server -Xms64M -Xmx128M"
 
 dockerImage=
+build=
 
 prefix=
 pCaseSensitive=
@@ -26,10 +27,13 @@ s1337Letters=
 numThreads=
 numKeys=
 keyFormat="base64KeyPair"
+keyFileFormat=
 checkFound=
 logDelay=
 outDir=
 sigVerify=
+encrypt=
+encryptPassword=
 
 screen=0;
 
@@ -43,6 +47,20 @@ do
     case "$key" in
       jvm | jvmArgs) jvmArgs="$val";;
       d | docker | dockerImage) dockerImage="$val";;
+      b | build)
+        if [[ "$arg" != *=* ]]; then
+          build="true"
+        else
+          case "$val" in
+            "" | 1 | true) build="true" ;;
+            0 | false) build="false" ;;
+            *)
+              printf "'%sbuild=[0|1]' or [true|false] not '%s'.\n" "--" "$arg";
+              exit 2;
+            ;;
+          esac
+        fi
+        ;;
       screen)
         case "$val" in
           1|*screen) screen=1 ;;
@@ -59,6 +77,15 @@ do
       nt | numThreads) numThreads="$val";;
       nk | numKeys) numKeys="$val";;
       kf | keyFormat) keyFormat="$val";;
+      kff | keyFileFormat)
+        case "$val" in
+          json | properties) keyFileFormat="$val" ;;
+          *)
+            printf "'%skeyFileFormat=[json|properties]' not '%s'.\n" "--" "$arg";
+            exit 2;
+          ;;
+        esac
+        ;;
       o | outDir) outDir="$val";;
 
       p | prefix) prefix="$val";;
@@ -125,6 +152,58 @@ do
         esac
         ;;
       sv | sigVerify) sigVerify="$val";;
+      e | encrypt)
+        if [[ "$arg" != *=* ]]; then
+          encrypt="true"
+        else
+          case "$val" in
+            "" | 1 | true) encrypt="true" ;;
+            0 | false) encrypt="false" ;;
+            *)
+              printf "'%sencrypt=[0|1]' or [true|false] not '%s'.\n" "--" "$arg";
+              exit 2;
+            ;;
+          esac
+        fi
+        ;;
+      pw | password)
+        # Securely prompt for the encryption password (with confirmation) instead of
+        # relying on the Java Console. The value is never echoed, stored in shell
+        # history, placed on the command line, or passed as a JVM system property; it
+        # is handed to the Java runtime only via an environment variable.
+        encrypt="true"
+        while true; do
+          read -r -s -p "Enter encryption password: " encryptPassword
+          printf "\n"
+          read -r -s -p "Confirm encryption password: " confirmPassword
+          printf "\n"
+          if [[ -z "$encryptPassword" ]]; then
+            printf "Password must not be empty.\n"
+            continue
+          fi
+          if [[ "$encryptPassword" != "$confirmPassword" ]]; then
+            printf "Passwords did not match, please try again.\n"
+            continue
+          fi
+          break
+        done
+        unset confirmPassword
+        ;;
+      pe | passwordEnv)
+        # Read the encryption password from an already-exported environment variable
+        # named by "$val". This keeps the secret out of the process arguments and the
+        # script, allowing fully non-interactive runs.
+        encrypt="true"
+        if [[ -z "$val" || "$arg" != *=* ]]; then
+          printf "'%spasswordEnv=ENV_VAR_NAME' requires the name of an environment variable.\n" "--";
+          exit 2;
+        fi
+        encryptPassword="${!val}"
+        if [[ -z "$encryptPassword" ]]; then
+          printf "Environment variable '%s' is empty or not set.\n" "$val";
+          exit 2;
+        fi
+        ;;
 
       *)
           printf "Unsupported flag '%s' [key=%s] [val=%s].\n" "$arg" "$key" "$val";
@@ -137,14 +216,31 @@ do
   fi
 done
 
-jvmArgs="$jvmArgs -D$moduleName.sigVerify=$sigVerify -D$moduleName.outDir=$outDir -D$moduleName.numThreads=$numThreads -D$moduleName.numKeys=$numKeys -D$moduleName.keyFormat=$keyFormat -D$moduleName.checkFound=$checkFound -D$moduleName.logDelay=$logDelay -D$moduleName.prefix=$prefix -D$moduleName.pCaseSensitive=$pCaseSensitive -D$moduleName.p1337Numbers=$p1337Numbers -D$moduleName.p1337Letters=$p1337Letters -D$moduleName.suffix=$suffix -D$moduleName.sCaseSensitive=$sCaseSensitive -D$moduleName.s1337Numbers=$s1337Numbers -D$moduleName.s1337Letters=$s1337Letters -m $moduleName/$mainClass"
+if [[ -n "$encrypt" ]]; then
+  jvmArgs="$jvmArgs -D$moduleName.encrypt=$encrypt"
+fi
+
+jvmArgs="$jvmArgs -D$moduleName.sigVerify=$sigVerify -D$moduleName.outDir=$outDir -D$moduleName.numThreads=$numThreads -D$moduleName.numKeys=$numKeys -D$moduleName.keyFormat=$keyFormat -D$moduleName.keyFileFormat=$keyFileFormat -D$moduleName.checkFound=$checkFound -D$moduleName.logDelay=$logDelay -D$moduleName.prefix=$prefix -D$moduleName.pCaseSensitive=$pCaseSensitive -D$moduleName.p1337Numbers=$p1337Numbers -D$moduleName.p1337Letters=$p1337Letters -D$moduleName.suffix=$suffix -D$moduleName.sCaseSensitive=$sCaseSensitive -D$moduleName.s1337Numbers=$s1337Numbers -D$moduleName.s1337Letters=$s1337Letters -m $moduleName/$mainClass"
 IFS=' ' read -r -a jvmArgsArray <<< "$jvmArgs"
+
+# Export the encryption password through an environment variable so the Java runtime
+# can read it without it ever appearing on the command line or as a JVM system
+# property. This assignment is intentionally kept above 'set -x' so the secret is not
+# leaked into the xtrace output.
+if [[ -n "$encryptPassword" ]]; then
+  export SAVA_VANITY_ENCRYPT_PASSWORD="$encryptPassword"
+  unset encryptPassword
+fi
 
 set -x
 
 if [[ -n "$dockerImage" ]]; then
-  if ! docker image inspect "$dockerImage" > /dev/null 2>&1; then
-    printf "Docker image '%s' not found locally, building it.\n" "$dockerImage";
+  if [[ "$build" == "true" ]] || ! docker image inspect "$dockerImage" > /dev/null 2>&1; then
+    if [[ "$build" == "true" ]]; then
+      printf "Building Docker image '%s' as requested by the build flag.\n" "$dockerImage";
+    else
+      printf "Docker image '%s' not found locally, building it.\n" "$dockerImage";
+    fi
     scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     repoRoot="$(cd "$scriptDir/.." && pwd)"
     docker build \
@@ -155,7 +251,21 @@ if [[ -n "$dockerImage" ]]; then
       -f "$scriptDir/Dockerfile" \
       "$repoRoot"
   fi
-  dockerArgs=(run --rm -it)
+  dockerArgs=(run --rm)
+
+  # Only allocate an interactive TTY (-it) when encryption is enabled and no password
+  # was supplied via this script. In that case the Java runtime must fall back to the
+  # interactive Console prompt, which requires an attached terminal. When a password is
+  # already provided (or encryption is disabled), the run is fully non-interactive.
+  if [[ -n "$encrypt" && "$encrypt" != "false" && -z "$SAVA_VANITY_ENCRYPT_PASSWORD" ]]; then
+    dockerArgs+=(-it)
+  fi
+
+  if [[ -n "$SAVA_VANITY_ENCRYPT_PASSWORD" ]]; then
+    # Pass only the variable name; Docker reads its value from this process'
+    # environment, keeping the secret off the command line.
+    dockerArgs+=(-e SAVA_VANITY_ENCRYPT_PASSWORD)
+  fi
 
   if [[ -n "$outDir" ]]; then
     # Resolve the host directory to an absolute path and ensure it exists so it
@@ -171,6 +281,18 @@ if [[ -n "$dockerImage" ]]; then
 else
   javaExe="$(pwd)/$simpleProjectName/build/images/sava-vanity/bin/java"
   readonly javaExe
+  # When not using Docker, (re)build the local jlink binary image. It is rebuilt when
+  # the build flag is set or when the image has not been built yet.
+  if [[ "$build" == "true" ]] || [[ ! -x "$javaExe" ]]; then
+    if [[ "$build" == "true" ]]; then
+      printf "Rebuilding local binary image as requested by the build flag.\n";
+    else
+      printf "Local binary image not found, building it.\n";
+    fi
+    scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repoRoot="$(cd "$scriptDir/.." && pwd)"
+    (cd "$repoRoot" && ./gradlew ":$simpleProjectName:image")
+  fi
   if [[ "$screen" == 0 ]]; then
     "$javaExe" "${jvmArgsArray[@]}"
   else
