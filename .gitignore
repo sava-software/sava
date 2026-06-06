@@ -26,4 +26,4 @@ keys
 Integ.*
 integ.*
 /symlinks/
-/.junie/
+#/.junie/

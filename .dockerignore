@@ -1,0 +1,11 @@
+*
+
+!sava-core/
+!sava-vanity/
+!settings.gradle.kts
+!gradle.properties
+!gradle/
+!.gradle/
+!gradlew
+
+!.dockerignore

@@ -11,6 +11,8 @@ readonly mainClass
 
 jvmArgs="-server -Xms64M -Xmx128M"
 
+dockerImage=
+
 prefix=
 pCaseSensitive=
 p1337Numbers=
@@ -40,6 +42,7 @@ do
 
     case "$key" in
       jvm | jvmArgs) jvmArgs="$val";;
+      d | docker | dockerImage) dockerImage="$val";;
       screen)
         case "$val" in
           1|*screen) screen=1 ;;
@@ -134,16 +137,43 @@ do
   fi
 done
 
-javaExe="$(pwd)/$simpleProjectName/build/images/vanity/bin/java"
-readonly javaExe
-
 jvmArgs="$jvmArgs -D$moduleName.sigVerify=$sigVerify -D$moduleName.outDir=$outDir -D$moduleName.numThreads=$numThreads -D$moduleName.numKeys=$numKeys -D$moduleName.keyFormat=$keyFormat -D$moduleName.checkFound=$checkFound -D$moduleName.logDelay=$logDelay -D$moduleName.prefix=$prefix -D$moduleName.pCaseSensitive=$pCaseSensitive -D$moduleName.p1337Numbers=$p1337Numbers -D$moduleName.p1337Letters=$p1337Letters -D$moduleName.suffix=$suffix -D$moduleName.sCaseSensitive=$sCaseSensitive -D$moduleName.s1337Numbers=$s1337Numbers -D$moduleName.s1337Letters=$s1337Letters -m $moduleName/$mainClass"
 IFS=' ' read -r -a jvmArgsArray <<< "$jvmArgs"
 
 set -x
 
-if [[ "$screen" == 0 ]]; then
-  "$javaExe" "${jvmArgsArray[@]}"
+if [[ -n "$dockerImage" ]]; then
+  if ! docker image inspect "$dockerImage" > /dev/null 2>&1; then
+    printf "Docker image '%s' not found locally, building it.\n" "$dockerImage";
+    scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repoRoot="$(cd "$scriptDir/.." && pwd)"
+    docker build \
+      --build-arg "PROJECT=$simpleProjectName" \
+      --secret "id=ORG_GRADLE_PROJECT_savaGithubPackagesUsername,env=ORG_GRADLE_PROJECT_savaGithubPackagesUsername" \
+      --secret "id=ORG_GRADLE_PROJECT_savaGithubPackagesPassword,env=ORG_GRADLE_PROJECT_savaGithubPackagesPassword" \
+      -t "$dockerImage" \
+      -f "$scriptDir/Dockerfile" \
+      "$repoRoot"
+  fi
+  dockerArgs=(run --rm -it)
+
+  if [[ -n "$outDir" ]]; then
+    # Resolve the host directory to an absolute path and ensure it exists so it
+    # can be bind-mounted with write permissions into the container.
+    hostOutDir="$(cd "$(dirname "$outDir")" 2>/dev/null && pwd)/$(basename "$outDir")"
+    mkdir -p "$hostOutDir"
+    dockerArgs+=(--mount "type=bind,source=$hostOutDir,target=/sava/$outDir,readonly=false")
+  fi
+
+  dockerArgs+=("$dockerImage")
+
+  docker "${dockerArgs[@]}" "${jvmArgsArray[@]}"
 else
-  screen -S "$simpleProjectName" "$javaExe" "${jvmArgsArray[@]}"
+  javaExe="$(pwd)/$simpleProjectName/build/images/sava-vanity/bin/java"
+  readonly javaExe
+  if [[ "$screen" == 0 ]]; then
+    "$javaExe" "${jvmArgsArray[@]}"
+  else
+    screen -S "$simpleProjectName" "$javaExe" "${jvmArgsArray[@]}"
+  fi
 fi

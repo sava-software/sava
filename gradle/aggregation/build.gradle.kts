@@ -2,15 +2,19 @@ plugins {
   id("software.sava.build.feature.publish-maven-central")
 }
 
+val idlClientModules = setOf(
+  "sava-core",
+  "sava-rpc"
+)
+
 dependencies {
-  nmcpAggregation(project(":sava-core"))
-  nmcpAggregation(project(":sava-rpc"))
+  for (module in idlClientModules) {
+    nmcpAggregation(project(":$module"))
+  }
 }
 
 tasks.register("publishToGitHubPackages") {
   group = "publishing"
-  dependsOn(
-    ":sava-core:publishMavenJavaPublicationToSavaGithubPackagesRepository",
-    ":sava-rpc:publishMavenJavaPublicationToSavaGithubPackagesRepository"
-  )
+  val publishTasks = idlClientModules.map { ":$it:publishMavenJavaPublicationToSavaGithubPackagesPublishRepository" }
+  dependsOn(publishTasks)
 }

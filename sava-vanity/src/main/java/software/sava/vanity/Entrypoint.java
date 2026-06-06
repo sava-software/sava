@@ -68,7 +68,7 @@ public final class Entrypoint {
     }
   }
 
-  public static void main(final String[] args) throws InterruptedException {
+  static void main() throws InterruptedException {
     final var moduleName = Entrypoint.class.getModule().getName();
 
     final var beginsWith = getSequence(moduleName, "prefix", 'p');
