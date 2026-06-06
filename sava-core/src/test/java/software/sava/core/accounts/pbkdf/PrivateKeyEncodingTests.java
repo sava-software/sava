@@ -1,7 +1,9 @@
-package software.sava.core.accounts;
+package software.sava.core.accounts.pbkdf;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import software.sava.core.accounts.Signer;
 import software.sava.core.encoding.Base58;
 
 import javax.crypto.Cipher;
@@ -53,98 +55,6 @@ final class PrivateKeyEncodingTests {
     assertEquals(EXPECTED_PUB_KEY, signer.publicKey().toBase58());
   }
 
-
-  // --- Properties tests ---
-
-  @Test
-  void jsonKeyPairArrayFromProperties() {
-    final var props = new Properties();
-    props.setProperty("encoding", "jsonKeyPairArray");
-    props.setProperty("secret", JSON_ARRAY);
-    verifySigner(PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void base64PrivateKeyFromProperties() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base64PrivateKey");
-    props.setProperty("secret", BASE64_PRIVATE_KEY);
-    verifySigner(PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void base64KeyPairFromProperties() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base64KeyPair");
-    props.setProperty("secret", BASE64_KEY_PAIR);
-    verifySigner(PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void base58PrivateKeyFromProperties() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base58PrivateKey");
-    props.setProperty("secret", BASE58_PRIVATE_KEY);
-    verifySigner(PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void base58KeyPairFromProperties() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base58KeyPair");
-    props.setProperty("secret", BASE58_KEY_PAIR);
-    verifySigner(PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void fromPropertiesWithPrefix() {
-    final var props = new Properties();
-    props.setProperty("signer.encoding", "base58PrivateKey");
-    props.setProperty("signer.secret", BASE58_PRIVATE_KEY);
-    props.setProperty("signer.pubKey", EXPECTED_PUB_KEY);
-    verifySigner(PrivateKeyEncoding.fromProperties("signer", props));
-  }
-
-  @Test
-  void fromPropertiesWithDotSuffixedPrefix() {
-    final var props = new Properties();
-    props.setProperty("signer.encoding", "base64KeyPair");
-    props.setProperty("signer.secret", BASE64_KEY_PAIR);
-    verifySigner(PrivateKeyEncoding.fromProperties("signer.", props));
-  }
-
-  @Test
-  void fromPropertiesWithPubKeyValidation() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base58KeyPair");
-    props.setProperty("secret", BASE58_KEY_PAIR);
-    props.setProperty("pubKey", EXPECTED_PUB_KEY);
-    verifySigner(PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void fromPropertiesMissingEncoding() {
-    final var props = new Properties();
-    props.setProperty("secret", BASE58_PRIVATE_KEY);
-    assertThrows(IllegalArgumentException.class, () -> PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void fromPropertiesMissingSecret() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base58PrivateKey");
-    assertThrows(IllegalArgumentException.class, () -> PrivateKeyEncoding.fromProperties(props));
-  }
-
-  @Test
-  void fromPropertiesWrongPubKey() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base58PrivateKey");
-    props.setProperty("secret", BASE58_PRIVATE_KEY);
-    props.setProperty("pubKey", "11111111111111111111111111111111");
-    assertThrows(IllegalStateException.class, () -> PrivateKeyEncoding.fromProperties(props));
-  }
-
   // --- Encrypted properties tests ---
 
   // Mirrors how vanity key files are encrypted (PBKDF2WithHmacSHA512 + AES/GCM/NoPadding) so that
@@ -167,11 +77,12 @@ final class PrivateKeyEncodingTests {
       final SecretKey secretKey = new SecretKeySpec(keyBytes, "AES");
       final var cipher = Cipher.getInstance("AES/GCM/NoPadding");
       cipher.init(Cipher.ENCRYPT_MODE, secretKey, new GCMParameterSpec(128, iv));
+      cipher.updateAAD(EXPECTED_PUB_KEY.getBytes(StandardCharsets.UTF_8));
       final byte[] cipherText = cipher.doFinal(payload.getBytes(StandardCharsets.UTF_8));
       final var encoder = Base64.getEncoder();
       final var props = new Properties();
+      props.setProperty(prefix + "pubKey", EXPECTED_PUB_KEY);
       props.setProperty(prefix + "encoding", encoding);
-      props.setProperty(prefix + "encrypted", "true");
       props.setProperty(prefix + "kdf", "PBKDF2WithHmacSHA512");
       props.setProperty(prefix + "iterations", Integer.toString(iterations));
       props.setProperty(prefix + "salt", encoder.encodeToString(salt));
@@ -219,11 +130,93 @@ final class PrivateKeyEncodingTests {
   }
 
   @Test
-  void unencryptedFromPropertiesWithPasswordArg() {
-    final var props = new Properties();
-    props.setProperty("encoding", "base64KeyPair");
-    props.setProperty("secret", BASE64_KEY_PAIR);
-    verifySigner(PrivateKeyEncoding.fromProperties(props, "ignored".toCharArray()));
+  void encryptedFromPropertiesMissingPropertyFails() {
+    for (final var missing : new String[]{"kdf", "cipher", "iterations", "salt", "iv", "secret", "pubKey", "encoding"}) {
+      final var props = encryptedProperties("", "base64KeyPair", '"' + BASE64_KEY_PAIR + '"', "pw".toCharArray());
+      props.remove(missing);
+      assertThrows(IllegalArgumentException.class,
+          () -> PrivateKeyEncoding.fromProperties(props, "pw".toCharArray()),
+          "Expected failure when '" + missing + "' is missing"
+      );
+    }
+  }
+
+  @Test
+  @ResourceLock("argon2id")
+  void argon2EncryptedFromPropertiesMissingPropertyFails() {
+    for (final var missing : new String[]{"memoryKB", "parallelism"}) {
+      final var props = argon2EncryptedProperties("", "base64KeyPair", '"' + BASE64_KEY_PAIR + '"', "pw".toCharArray());
+      props.remove(missing);
+      assertThrows(IllegalArgumentException.class,
+          () -> PrivateKeyEncoding.fromProperties(props, "pw".toCharArray()),
+          "Expected failure when '" + missing + "' is missing"
+      );
+    }
+  }
+
+  // Mirrors how vanity key files are encrypted with the Argon2id KDF.
+  private static Properties argon2EncryptedProperties(final String prefix,
+                                                      final String encoding,
+                                                      final String payload,
+                                                      final char[] password) {
+    final int memoryKb = 65_536;
+    final int parallelism = 1;
+    final int iterations = 3;
+    final byte[] salt = new byte[16];
+    final byte[] iv = new byte[12];
+    final var random = new SecureRandom();
+    random.nextBytes(salt);
+    random.nextBytes(iv);
+    try {
+      final var params = new org.bouncycastle.crypto.params.Argon2Parameters.Builder(
+          org.bouncycastle.crypto.params.Argon2Parameters.ARGON2_id)
+          .withVersion(org.bouncycastle.crypto.params.Argon2Parameters.ARGON2_VERSION_13)
+          .withSalt(salt)
+          .withMemoryAsKB(memoryKb)
+          .withParallelism(parallelism)
+          .withIterations(iterations)
+          .build();
+      final var generator = new org.bouncycastle.crypto.generators.Argon2BytesGenerator();
+      generator.init(params);
+      final byte[] keyBytes = new byte[32];
+      generator.generateBytes(new String(password).getBytes(StandardCharsets.UTF_8), keyBytes);
+      final SecretKey secretKey = new SecretKeySpec(keyBytes, "AES");
+      final var cipher = Cipher.getInstance("AES/GCM/NoPadding");
+      cipher.init(Cipher.ENCRYPT_MODE, secretKey, new GCMParameterSpec(128, iv));
+      cipher.updateAAD(EXPECTED_PUB_KEY.getBytes(StandardCharsets.UTF_8));
+      final byte[] cipherText = cipher.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+      final var encoder = Base64.getEncoder();
+      final var props = new Properties();
+      props.setProperty(prefix + "pubKey", EXPECTED_PUB_KEY);
+      props.setProperty(prefix + "encoding", encoding);
+      props.setProperty(prefix + "kdf", "Argon2id");
+      props.setProperty(prefix + "memoryKB", Integer.toString(memoryKb));
+      props.setProperty(prefix + "parallelism", Integer.toString(parallelism));
+      props.setProperty(prefix + "iterations", Integer.toString(iterations));
+      props.setProperty(prefix + "salt", encoder.encodeToString(salt));
+      props.setProperty(prefix + "cipher", "AES/GCM/NoPadding");
+      props.setProperty(prefix + "iv", encoder.encodeToString(iv));
+      props.setProperty(prefix + "secret", encoder.encodeToString(cipherText));
+      return props;
+    } catch (final Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
+  @ResourceLock("argon2id")
+  void argon2EncryptedBase64KeyPairFromProperties() {
+    final char[] password = "correct horse battery staple".toCharArray();
+    final var props = argon2EncryptedProperties("", "base64KeyPair", '"' + BASE64_KEY_PAIR + '"', password);
+    props.setProperty("pubKey", EXPECTED_PUB_KEY);
+    verifySigner(PrivateKeyEncoding.fromProperties(props, password));
+  }
+
+  @Test
+  @ResourceLock("argon2id")
+  void argon2EncryptedFromPropertiesWrongPassword() {
+    final var props = argon2EncryptedProperties("", "base64KeyPair", '"' + BASE64_KEY_PAIR + '"', "right".toCharArray());
+    assertThrows(IllegalStateException.class, () -> PrivateKeyEncoding.fromProperties(props, "wrong".toCharArray()));
   }
 
   @Test
@@ -231,18 +224,38 @@ final class PrivateKeyEncodingTests {
     final var propsText = """
         pubKey=4bcoVWVXfw6xKsEYdM6s7AeZQMgDG958kK5Uzhc2sw37
         encoding=base64KeyPair
-        encrypted=true
         kdf=PBKDF2WithHmacSHA512
         iterations=210000
         salt=06MhP/SqfiBN5pSOoj7fOw==
         cipher=AES/GCM/NoPadding
         iv=VOntOEOa1Gz0x560
-        secret=8BO9O/HjnIp9gyQrY6XrJ4yqPRbW7s4HhPWlQMRJ17hlJ9HeAMv5qpLD1RX+XlYlF1pyzX5KdZ0qpqu9HbKngtUrdN/VbBrd3pjfvJfxrBN3gYNiD+fao3aBKvTMGpNsACe9bGfO3fWGWQ==
+        secret=8BO9O/HjnIp9gyQrY6XrJ4yqPRbW7s4HhPWlQMRJ17hlJ9HeAMv5qpLD1RX+XlYlF1pyzX5KdZ0qpqu9HbKngtUrdN/VbBrd3pjfvJfxrBN3gYNiD+fao3aBaI7Z58PQyX+NPQUhoVy5DQ==
         """;
     final var props = new Properties();
     props.load(new java.io.StringReader(propsText));
     final var signer = PrivateKeyEncoding.fromProperties(props, "asdf".toCharArray());
     assertEquals("4bcoVWVXfw6xKsEYdM6s7AeZQMgDG958kK5Uzhc2sw37", signer.publicKey().toBase58());
+  }
+
+  @Test
+  @ResourceLock("argon2id")
+  void argon2idEncryptedFromPropertiesLiteral() throws java.io.IOException {
+    final var propsText = """
+        pubKey=A8Cc3x9a61pTQykR57nq1YvqB8Z9wdENNc6BmcNg9hUD
+        encoding=base64KeyPair
+        kdf=Argon2id
+        iterations=3
+        memoryKB=262144
+        parallelism=4
+        salt=8J9yCDpnGWYT4c/CxFNuAA==
+        cipher=AES/GCM/NoPadding
+        iv=AhwzSW+qJr8Uuwwh
+        secret=iBlCNHxgoBLVuhIGOrR+oUkVwBPZ4c+YBtPt2r9Eq8RbghRW7ESltSDOAYIEmNUiLXRHCBC79fLc5cecc9jL5SGrT0lT03D9ugg4P5A9ncofVsmlcyl+ba3+l6pB7vAJEtpIF/S9AkhGzQ==
+        """;
+    final var props = new Properties();
+    props.load(new java.io.StringReader(propsText));
+    final var signer = PrivateKeyEncoding.fromProperties(props, "asdf1234".toCharArray());
+    assertEquals("A8Cc3x9a61pTQykR57nq1YvqB8Z9wdENNc6BmcNg9hUD", signer.publicKey().toBase58());
   }
 
   // --- parseSecret tests ---

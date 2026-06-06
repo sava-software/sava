@@ -1,5 +1,7 @@
 package software.sava.core.accounts.vanity;
 
+import software.sava.core.accounts.pbkdf.PrivateKeyEncoding;
+import software.sava.core.accounts.pbkdf.KeyDerivation;
 import software.sava.core.encoding.Base58;
 
 import java.nio.file.Path;
@@ -15,6 +17,7 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
                        final SecureRandom secureRandom,
                        final PrivateKeyEncoding privateKeyEncoding,
                        final KeyFileFormat keyFileFormat,
+                       final KeyDerivation keyDerivation,
                        final boolean sigVerify,
                        final Subsequence beginsWith,
                        final long find,
@@ -22,7 +25,7 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
                        final AtomicLong searched,
                        final Queue<Result> results,
                        final int checkFound) {
-    super(keyPath, password, secureRandom, privateKeyEncoding, keyFileFormat, sigVerify, beginsWith, find, found, searched, results, checkFound);
+    super(keyPath, password, secureRandom, privateKeyEncoding, keyFileFormat, keyDerivation, sigVerify, beginsWith, find, found, searched, results, checkFound);
   }
 
   @Override

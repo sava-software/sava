@@ -1,7 +1,10 @@
 package software.sava.core.accounts.vanity;
 
+import software.sava.core.accounts.pbkdf.PrivateKeyEncoding;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
+import software.sava.core.accounts.pbkdf.KeyDerivation;
+import software.sava.core.accounts.pbkdf.PBKDFEncryption;
 import software.sava.core.crypto.Hash;
 import software.sava.core.encoding.Base58;
 
@@ -29,6 +32,7 @@ abstract class BaseMaskWorker implements AddressWorker {
   private final SecureRandom secureRandom;
   private final PrivateKeyEncoding privateKeyEncoding;
   private final KeyFileFormat keyFileFormat;
+  private final KeyDerivation keyDerivation;
   private final boolean sigVerify;
   private final Subsequence beginsWith;
   private final long find;
@@ -48,6 +52,7 @@ abstract class BaseMaskWorker implements AddressWorker {
                            final SecureRandom secureRandom,
                            final PrivateKeyEncoding privateKeyEncoding,
                            final KeyFileFormat keyFileFormat,
+                           final KeyDerivation keyDerivation,
                            final boolean sigVerify,
                            final Subsequence beginsWith,
                            final long find,
@@ -60,6 +65,7 @@ abstract class BaseMaskWorker implements AddressWorker {
     this.secureRandom = secureRandom;
     this.privateKeyEncoding = privateKeyEncoding;
     this.keyFileFormat = keyFileFormat;
+    this.keyDerivation = keyDerivation;
     this.sigVerify = sigVerify;
     this.beginsWith = beginsWith;
     this.find = find;
@@ -167,7 +173,6 @@ abstract class BaseMaskWorker implements AddressWorker {
           // For encrypted output the secret payload is the same JSON-shaped value used in
           // the plaintext 'secret' field so it can be decrypted and parsed identically
           // regardless of the on-disk file format.
-          final var encryptionPayload = jsonSecret;
           final String keyData;
           final String fileExtension;
           if (keyFileFormat == KeyFileFormat.properties) {
@@ -184,29 +189,9 @@ abstract class BaseMaskWorker implements AddressWorker {
                   rawSecret
               );
             } else {
-              final var encrypted = KeyFileEncryption.encrypt(password, secureRandom, encryptionPayload);
-              final var encoder = Base64.getEncoder();
-              keyData = String.format(
-                  """
-                      pubKey=%s
-                      encoding=%s
-                      encrypted=true
-                      kdf=%s
-                      iterations=%d
-                      salt=%s
-                      cipher=%s
-                      iv=%s
-                      secret=%s
-                      """,
-                  publicKey,
-                  privateKeyEncoding,
-                  KeyFileEncryption.KDF,
-                  KeyFileEncryption.ITERATIONS,
-                  encoder.encodeToString(encrypted.salt()),
-                  KeyFileEncryption.CIPHER,
-                  encoder.encodeToString(encrypted.iv()),
-                  encoder.encodeToString(encrypted.cipherText())
-              );
+              final var aad = publicKey.toBase58().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+              final var encrypted = PBKDFEncryption.encrypt(password, secureRandom, jsonSecret, keyDerivation, aad);
+              keyData = keyDerivation.toProperties(publicKey, privateKeyEncoding, encrypted);
             }
           } else {
             fileExtension = ".json";
@@ -223,30 +208,9 @@ abstract class BaseMaskWorker implements AddressWorker {
                   jsonSecret
               );
             } else {
-              final var encrypted = KeyFileEncryption.encrypt(password, secureRandom, encryptionPayload);
-              final var encoder = Base64.getEncoder();
-              keyData = String.format(
-                  """
-                      {
-                        "pubKey": "%s",
-                        "encoding": "%s",
-                        "encrypted": true,
-                        "kdf": "%s",
-                        "iterations": %d,
-                        "salt": "%s",
-                        "cipher": "%s",
-                        "iv": "%s",
-                        "secret": "%s"
-                      }""",
-                  publicKey,
-                  privateKeyEncoding,
-                  KeyFileEncryption.KDF,
-                  KeyFileEncryption.ITERATIONS,
-                  encoder.encodeToString(encrypted.salt()),
-                  KeyFileEncryption.CIPHER,
-                  encoder.encodeToString(encrypted.iv()),
-                  encoder.encodeToString(encrypted.cipherText())
-              );
+              final var aad = publicKey.toBase58().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+              final var encrypted = PBKDFEncryption.encrypt(password, secureRandom, jsonSecret, keyDerivation, aad);
+              keyData = keyDerivation.toJson(publicKey, privateKeyEncoding, encrypted);
             }
           }
           Files.writeString(

@@ -10,6 +10,7 @@ mainClass="software.sava.vanity.Entrypoint"
 readonly mainClass
 
 jvmArgs="-server -Xms64M -Xmx128M"
+jvmOverridden=
 
 dockerImage=
 build=
@@ -27,12 +28,16 @@ s1337Letters=
 numThreads=
 numKeys=
 keyFormat="base64KeyPair"
-keyFileFormat=
+keyFileFormat="properties"
 checkFound=
 logDelay=
 outDir=
 sigVerify=
 encrypt=
+kdf=
+kdfMemoryKB=
+kdfParallelism=
+kdfIterations=
 encryptPassword=
 
 screen=0;
@@ -45,7 +50,7 @@ do
     val="${arg#*=}"
 
     case "$key" in
-      jvm | jvmArgs) jvmArgs="$val";;
+      jvm | jvmArgs) jvmArgs="$val"; jvmOverridden="true";;
       d | docker | dockerImage) dockerImage="$val";;
       b | build)
         if [[ "$arg" != *=* ]]; then
@@ -152,6 +157,36 @@ do
         esac
         ;;
       sv | sigVerify) sigVerify="$val";;
+      kdf)
+        case "$val" in
+          pbkdf2 | argon2id) kdf="$val" ;;
+          *)
+            printf "'%skdf=[pbkdf2|argon2id]' not '%s'.\n" "--" "$arg";
+            exit 2;
+          ;;
+        esac
+        ;;
+      kmem | kdfMemoryKB)
+        if [[ ! "$val" =~ ^[0-9]+$ ]] || [[ "$val" -le 0 ]]; then
+          printf "'%skdfMemoryKB=[positive integer]' not '%s'.\n" "--" "$arg";
+          exit 2;
+        fi
+        kdfMemoryKB="$val"
+        ;;
+      kpar | kdfParallelism)
+        if [[ ! "$val" =~ ^[0-9]+$ ]] || [[ "$val" -le 0 ]]; then
+          printf "'%skdfParallelism=[positive integer]' not '%s'.\n" "--" "$arg";
+          exit 2;
+        fi
+        kdfParallelism="$val"
+        ;;
+      kit | kdfIterations)
+        if [[ ! "$val" =~ ^[0-9]+$ ]] || [[ "$val" -le 0 ]]; then
+          printf "'%skdfIterations=[positive integer]' not '%s'.\n" "--" "$arg";
+          exit 2;
+        fi
+        kdfIterations="$val"
+        ;;
       e | encrypt)
         if [[ "$arg" != *=* ]]; then
           encrypt="true"
@@ -216,8 +251,71 @@ do
   fi
 done
 
+if [[ -z "$outDir" ]]; then
+  printf "'%soutDir=[path]' is required so the generated keys are saved to disk.\n" "--";
+  exit 2;
+fi
+
 if [[ -n "$encrypt" ]]; then
   jvmArgs="$jvmArgs -D$moduleName.encrypt=$encrypt"
+fi
+
+if [[ -n "$kdf" ]]; then
+  jvmArgs="$jvmArgs -D$moduleName.kdf=$kdf"
+fi
+
+# Argon2id parameters are all-or-nothing: either provide none (use the defaults) or all
+# three of memoryKB, parallelism and iterations. For PBKDF2 only iterations applies.
+if [[ "$kdf" == "argon2id" ]]; then
+  argon2Count=0
+  [[ -n "$kdfMemoryKB" ]] && argon2Count=$((argon2Count + 1))
+  [[ -n "$kdfParallelism" ]] && argon2Count=$((argon2Count + 1))
+  [[ -n "$kdfIterations" ]] && argon2Count=$((argon2Count + 1))
+  if [[ "$argon2Count" -ne 0 && "$argon2Count" -ne 3 ]]; then
+    printf "Argon2id parameters are all-or-nothing: provide all of %skdfMemoryKB, %skdfParallelism and %skdfIterations, or none.\n" "--" "--" "--";
+    exit 2;
+  fi
+else
+  if [[ -n "$kdfMemoryKB" || -n "$kdfParallelism" ]]; then
+    printf "'%skdfMemoryKB' and '%skdfParallelism' are only valid with '%skdf=argon2id'.\n" "--" "--" "--";
+    exit 2;
+  fi
+fi
+
+if [[ -n "$kdfMemoryKB" ]]; then
+  jvmArgs="$jvmArgs -D$moduleName.kdfMemoryKB=$kdfMemoryKB"
+fi
+if [[ -n "$kdfParallelism" ]]; then
+  jvmArgs="$jvmArgs -D$moduleName.kdfParallelism=$kdfParallelism"
+fi
+if [[ -n "$kdfIterations" ]]; then
+  jvmArgs="$jvmArgs -D$moduleName.kdfIterations=$kdfIterations"
+fi
+
+# Argon2id is memory-hard: each concurrent derivation allocates 'memoryKB' of heap (the
+# default is 262144 KB == 256 MiB). When Argon2id is selected we therefore size the JVM heap
+# to (memoryKB * numThreads) plus a 128 MiB buffer for the rest of the process, since up to
+# 'numThreads' derivations may run at once. The fixed default 64M/128M heap is far too small
+# and would otherwise OutOfMemory. This is skipped when the user overrides --jvm.
+if [[ "$kdf" == "argon2id" && -z "$jvmOverridden" ]]; then
+  argon2MemoryKB="${kdfMemoryKB:-262144}"
+  if [[ -n "$numThreads" ]]; then
+    heapThreads="$numThreads"
+  else
+    # Mirror the Java default of half the available processors (at least 1).
+    if command -v sysctl > /dev/null 2>&1; then
+      cpuCount="$(sysctl -n hw.ncpu 2>/dev/null)"
+    elif command -v nproc > /dev/null 2>&1; then
+      cpuCount="$(nproc 2>/dev/null)"
+    fi
+    [[ ! "$cpuCount" =~ ^[0-9]+$ ]] && cpuCount=2
+    heapThreads=$((cpuCount / 2))
+    [[ "$heapThreads" -lt 1 ]] && heapThreads=1
+  fi
+  heapMB=$(((argon2MemoryKB * heapThreads) / 1024 + 128))
+  # Replace only the default heap tokens, preserving any -D properties already appended.
+  jvmArgs="${jvmArgs/-Xms64M -Xmx128M/-Xms${heapMB}M -Xmx${heapMB}M}"
+  printf "Sizing JVM heap to %sM for Argon2id (%s KB x %s thread(s) + 128M buffer).\n" "$heapMB" "$argon2MemoryKB" "$heapThreads";
 fi
 
 jvmArgs="$jvmArgs -D$moduleName.sigVerify=$sigVerify -D$moduleName.outDir=$outDir -D$moduleName.numThreads=$numThreads -D$moduleName.numKeys=$numKeys -D$moduleName.keyFormat=$keyFormat -D$moduleName.keyFileFormat=$keyFileFormat -D$moduleName.checkFound=$checkFound -D$moduleName.logDelay=$logDelay -D$moduleName.prefix=$prefix -D$moduleName.pCaseSensitive=$pCaseSensitive -D$moduleName.p1337Numbers=$p1337Numbers -D$moduleName.p1337Letters=$p1337Letters -D$moduleName.suffix=$suffix -D$moduleName.sCaseSensitive=$sCaseSensitive -D$moduleName.s1337Numbers=$s1337Numbers -D$moduleName.s1337Letters=$s1337Letters -m $moduleName/$mainClass"

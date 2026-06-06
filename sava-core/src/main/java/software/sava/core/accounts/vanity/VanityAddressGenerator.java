@@ -1,5 +1,8 @@
 package software.sava.core.accounts.vanity;
 
+import software.sava.core.accounts.pbkdf.PrivateKeyEncoding;
+import software.sava.core.accounts.pbkdf.KeyDerivation;
+
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -15,6 +18,7 @@ public interface VanityAddressGenerator {
                                                 final SecureRandomFactory secureRandomFactory,
                                                 final PrivateKeyEncoding privateKeyEncoding,
                                                 final KeyFileFormat keyFileFormat,
+                                                final KeyDerivation keyDerivation,
                                                 final boolean sigVerify,
                                                 final ExecutorService executor,
                                                 final int numThreads,
@@ -31,36 +35,41 @@ public interface VanityAddressGenerator {
         final var results = new ArrayBlockingQueue<Result>(checkFound * numThreads);
         for (int i = 0; i < numThreads; ++i) {
           final var secureRandom = secureRandomFactory.createSecureRandom();
-          final var worker = endsWith == null
-              ? new BeginsWithMaskWorker(
-              keyPath,
-              password,
-              secureRandom,
-              privateKeyEncoding,
-              keyFileFormat,
-              sigVerify,
-              beginsWith,
-              findKeys,
-              found,
-              searched,
-              results,
-              checkFound
-          )
-              : new MaskWorker(
-              keyPath,
-              password,
-              secureRandom,
-              privateKeyEncoding,
-              keyFileFormat,
-              sigVerify,
-              beginsWith,
-              endsWith,
-              findKeys,
-              found,
-              searched,
-              results,
-              checkFound
-          );
+          final AddressWorker worker;
+          if (endsWith == null) {
+            worker = new BeginsWithMaskWorker(
+                keyPath,
+                password,
+                secureRandom,
+                privateKeyEncoding,
+                keyFileFormat,
+                keyDerivation,
+                sigVerify,
+                beginsWith,
+                findKeys,
+                found,
+                searched,
+                results,
+                checkFound
+            );
+          } else {
+            worker = new MaskWorker(
+                keyPath,
+                password,
+                secureRandom,
+                privateKeyEncoding,
+                keyFileFormat,
+                keyDerivation,
+                sigVerify,
+                beginsWith,
+                endsWith,
+                findKeys,
+                found,
+                searched,
+                results,
+                checkFound
+            );
+          }
           executor.execute(worker);
         }
         return new ConcurrentVanityAddressGenerator(findKeys, results, found, searched);
@@ -74,6 +83,7 @@ public interface VanityAddressGenerator {
                                                 final char[] password,
                                                 final PrivateKeyEncoding privateKeyEncoding,
                                                 final KeyFileFormat keyFileFormat,
+                                                final KeyDerivation keyDerivation,
                                                 final boolean sigVerify,
                                                 final ExecutorService executor,
                                                 final int numThreads,
@@ -87,6 +97,7 @@ public interface VanityAddressGenerator {
         SecureRandomFactory.DEFAULT,
         privateKeyEncoding,
         keyFileFormat,
+        keyDerivation,
         sigVerify,
         executor,
         numThreads,

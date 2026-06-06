@@ -1,7 +1,8 @@
 package software.sava.vanity;
 
+import software.sava.core.accounts.pbkdf.PrivateKeyEncoding;
+import software.sava.core.accounts.pbkdf.KeyDerivation;
 import software.sava.core.accounts.vanity.KeyFileFormat;
-import software.sava.core.accounts.vanity.PrivateKeyEncoding;
 import software.sava.core.accounts.vanity.Result;
 import software.sava.core.accounts.vanity.Subsequence;
 import software.sava.core.accounts.vanity.VanityAddressGenerator;
@@ -52,22 +53,24 @@ public final class Entrypoint {
   private static Path readKeyPath(final String moduleName, final Subsequence beginsWith, final Subsequence endsWith) {
     final var outDir = System.getProperty(moduleName + ".outDir");
     if (outDir == null || outDir.isBlank()) {
-      return null;
-    } else {
-      var keyPath = Path.of(outDir);
-      if (beginsWith != null) {
-        keyPath = keyPath.resolve(beginsWith.subsequence() + '_');
-      }
-      if (endsWith != null) {
-        keyPath = keyPath.resolve('_' + endsWith.subsequence());
-      }
-      try {
-        Files.createDirectories(keyPath);
-      } catch (final IOException e) {
-        throw new UncheckedIOException(e);
-      }
-      return keyPath;
+      throw new IllegalStateException(
+          "An output directory is required so the generated keys are saved to disk; "
+              + "set the " + moduleName + ".outDir system property."
+      );
     }
+    var keyPath = Path.of(outDir);
+    if (beginsWith != null) {
+      keyPath = keyPath.resolve(beginsWith.subsequence() + '_');
+    }
+    if (endsWith != null) {
+      keyPath = keyPath.resolve('_' + endsWith.subsequence());
+    }
+    try {
+      Files.createDirectories(keyPath);
+    } catch (final IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    return keyPath;
   }
 
   private static final String PASSWORD_ENV_VAR = "SAVA_VANITY_ENCRYPT_PASSWORD";
@@ -155,13 +158,41 @@ public final class Entrypoint {
           : PrivateKeyEncoding.valueOf(keyFormat);
       final var keyFileFormatProp = System.getProperty(moduleName + ".keyFileFormat");
       final var keyFileFormat = keyFileFormatProp == null || keyFileFormatProp.isBlank()
-          ? KeyFileFormat.json
+          ? KeyFileFormat.properties
           : KeyFileFormat.valueOf(keyFileFormatProp);
+      final var kdfProp = System.getProperty(moduleName + ".kdf");
+      final KeyDerivation keyDerivation;
+      if (kdfProp == null || kdfProp.isBlank() || kdfProp.equalsIgnoreCase("pbkdf2")) {
+        final int iterations = intProp(moduleName, "kdfIterations", 0);
+        keyDerivation = iterations > 0
+            ? KeyDerivation.createPBKDF2WithHmacSHA512(iterations)
+            : KeyDerivation.defaultPBKDF2WithHmacSHA512();
+      } else if (kdfProp.equalsIgnoreCase("argon2id")) {
+        // Argon2id parameters are all-or-nothing: either none are supplied (use the
+        // defaults) or all three (memory, parallelism, iterations) must be provided.
+        final int memoryKb = intProp(moduleName, "kdfMemoryKB", 0);
+        final int parallelism = intProp(moduleName, "kdfParallelism", 0);
+        final int iterations = intProp(moduleName, "kdfIterations", 0);
+        final int provided = (memoryKb > 0 ? 1 : 0) + (parallelism > 0 ? 1 : 0) + (iterations > 0 ? 1 : 0);
+        if (provided == 0) {
+          keyDerivation = KeyDerivation.defaultArgon2id();
+        } else if (provided == 3) {
+          keyDerivation = KeyDerivation.createArgon2id(memoryKb, parallelism, iterations);
+        } else {
+          throw new IllegalStateException(
+              "Argon2id parameters are all-or-nothing: provide all of kdfMemoryKB, "
+                  + "kdfParallelism and kdfIterations, or none of them."
+          );
+        }
+      } else {
+        throw new IllegalStateException("Unsupported key derivation function: " + kdfProp);
+      }
       final var generator = VanityAddressGenerator.createGenerator(
           keyPath,
           password,
           privateKeyEncoding,
           keyFileFormat,
+          keyDerivation,
           sigVerify,
           executor,
           numThreads,

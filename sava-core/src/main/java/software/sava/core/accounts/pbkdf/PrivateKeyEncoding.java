@@ -1,12 +1,11 @@
-package software.sava.core.accounts;
+package software.sava.core.accounts.pbkdf;
 
+import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.Signer;
 import software.sava.core.encoding.Base58;
 
 import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -51,56 +50,20 @@ public enum PrivateKeyEncoding {
     };
   }
 
-  public static Signer fromProperties(final String prefix, final Properties properties) {
-    final var resolvedPrefix = prefix == null || prefix.isBlank()
-        ? ""
-        : prefix.endsWith(".") ? prefix : prefix + ".";
-    final var encodingValue = properties.getProperty(resolvedPrefix + "encoding");
-    if (encodingValue == null || encodingValue.isBlank()) {
-      throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + "encoding");
-    }
-    final var encoding = PrivateKeyEncoding.valueOf(encodingValue.strip());
-    final var secret = properties.getProperty(resolvedPrefix + "secret");
-    if (secret == null || secret.isBlank()) {
-      throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + "secret");
-    }
-    final var signer = encoding.parseSecret(secret.strip());
-    final var pubKeyValue = properties.getProperty(resolvedPrefix + "pubKey");
-    if (pubKeyValue != null && !pubKeyValue.isBlank()) {
-      final var publicKey = PublicKey.fromBase58Encoded(pubKeyValue.strip());
-      if (!publicKey.equals(signer.publicKey())) {
-        throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
-      }
-    }
-    return signer;
-  }
-
-  public static Signer fromProperties(final Properties properties) {
-    return fromProperties(null, properties);
-  }
-
-  // Authenticated-decryption parameters; must match those used to encrypt vanity key files
-  // (software.sava.core.accounts.vanity.KeyFileEncryption).
-  private static final String DEFAULT_KDF = "PBKDF2WithHmacSHA512";
-  private static final String DEFAULT_CIPHER = "AES/GCM/NoPadding";
-  private static final int KEY_BITS = 256;
-  private static final int GCM_TAG_BITS = 128;
-
   /// Loads a [Signer] from properties that may contain an encrypted secret.
   ///
   /// When the {@code encrypted} property is {@code true}, the {@code secret} value is treated as a
-  /// Base64 encoded AES/GCM cipher text decrypted using a PBKDF2 derived key before being
-  /// parsed. The supplied {@code password} is required in that case. When the entry is not
-  /// encrypted this behaves like [#fromProperties(String, Properties)] and the {@code password}
-  /// argument is ignored.
+  /// Base64 encoded AES/GCM cipher text decrypted using a key derived from the password before
+  /// being parsed. All encryption metadata properties are required and an
+  /// [IllegalArgumentException] is thrown if any are missing: {@code pubKey}, {@code encoding},
+  /// {@code kdf}, {@code cipher}, {@code iterations}, {@code salt}, {@code iv} and {@code secret}.
+  /// The {@code kdf} property selects the derivation function: {@code Argon2id} additionally
+  /// requires {@code memoryKB} and {@code parallelism}, while {@code PBKDF2WithHmacSHA512} uses
+  /// only {@code iterations}.
   public static Signer fromProperties(final String prefix, final Properties properties, final char[] password) {
     final var resolvedPrefix = prefix == null || prefix.isBlank()
         ? ""
         : prefix.endsWith(".") ? prefix : prefix + ".";
-    final var encryptedValue = properties.getProperty(resolvedPrefix + "encrypted");
-    if (encryptedValue == null || !Boolean.parseBoolean(encryptedValue.strip())) {
-      return fromProperties(prefix, properties);
-    }
     if (password == null || password.length == 0) {
       throw new IllegalArgumentException("A password is required to decrypt an encrypted key file.");
     }
@@ -109,14 +72,19 @@ public enum PrivateKeyEncoding {
       throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + "encoding");
     }
     final var encoding = PrivateKeyEncoding.valueOf(encodingValue.strip());
-    final var secret = decrypt(resolvedPrefix, properties, password);
-    final var signer = encoding.parseSecret(unquote(secret.strip()));
+    // The public key is bound as GCM additional authenticated data (AAD) when the file is written,
+    // so it is required to authenticate and decrypt the secret.
     final var pubKeyValue = properties.getProperty(resolvedPrefix + "pubKey");
-    if (pubKeyValue != null && !pubKeyValue.isBlank()) {
-      final var publicKey = PublicKey.fromBase58Encoded(pubKeyValue.strip());
-      if (!publicKey.equals(signer.publicKey())) {
-        throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
-      }
+    if (pubKeyValue == null || pubKeyValue.isBlank()) {
+      throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + "pubKey");
+    }
+    final var pubKey = pubKeyValue.strip();
+    final var aad = pubKey.getBytes(StandardCharsets.UTF_8);
+    final var secret = decrypt(resolvedPrefix, properties, password, aad);
+    final var signer = encoding.parseSecret(unquote(secret.strip()));
+    final var publicKey = PublicKey.fromBase58Encoded(pubKey);
+    if (!publicKey.equals(signer.publicKey())) {
+      throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
     }
     return signer;
   }
@@ -133,13 +101,12 @@ public enum PrivateKeyEncoding {
     return value.strip();
   }
 
-  private static String decrypt(final String resolvedPrefix, final Properties properties, final char[] password) {
-    final var kdfValue = properties.getProperty(resolvedPrefix + "kdf");
-    final var kdf = kdfValue == null || kdfValue.isBlank() ? DEFAULT_KDF : kdfValue.strip();
-    final var cipherValue = properties.getProperty(resolvedPrefix + "cipher");
-    final var cipherName = cipherValue == null || cipherValue.isBlank() ? DEFAULT_CIPHER : cipherValue.strip();
-    final var iterationsValue = requireProperty(resolvedPrefix, properties, "iterations");
-    final int iterations = Integer.parseInt(iterationsValue);
+  private static String decrypt(final String resolvedPrefix,
+                                final Properties properties,
+                                final char[] password,
+                                final byte[] aad) {
+    final var kdf = requireProperty(resolvedPrefix, properties, "kdf");
+    final var cipherName = requireProperty(resolvedPrefix, properties, "cipher");
     final var decoder = Base64.getDecoder();
     final byte[] salt = decoder.decode(requireProperty(resolvedPrefix, properties, "salt"));
     final byte[] iv = decoder.decode(requireProperty(resolvedPrefix, properties, "iv"));
@@ -147,16 +114,13 @@ public enum PrivateKeyEncoding {
 
     byte[] keyBytes = null;
     try {
-      final var keySpec = new PBEKeySpec(password, salt, iterations, KEY_BITS);
-      try {
-        final var factory = SecretKeyFactory.getInstance(kdf);
-        keyBytes = factory.generateSecret(keySpec).getEncoded();
-      } finally {
-        keySpec.clearPassword();
-      }
-      final SecretKey secretKey = new SecretKeySpec(keyBytes, "AES");
+      keyBytes = deriveKey(resolvedPrefix, properties, kdf, password, salt);
+      final var secretKey = new SecretKeySpec(keyBytes, "AES");
       final var cipher = Cipher.getInstance(cipherName);
-      cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
+      cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(PBKDFEncryption.GCM_TAG_BITS, iv));
+      if (aad != null && aad.length > 0) {
+        cipher.updateAAD(aad);
+      }
       final byte[] plainBytes = cipher.doFinal(cipherText);
       try {
         return new String(plainBytes, StandardCharsets.UTF_8);
@@ -170,6 +134,23 @@ public enum PrivateKeyEncoding {
         Arrays.fill(keyBytes, (byte) 0);
       }
     }
+  }
+
+  private static byte[] deriveKey(final String resolvedPrefix,
+                                  final Properties properties,
+                                  final String kdf,
+                                  final char[] password,
+                                  final byte[] salt) {
+    final int iterations = Integer.parseInt(requireProperty(resolvedPrefix, properties, "iterations"));
+    final KeyDerivation keyDerivation;
+    if (kdf.equalsIgnoreCase("argon2id")) {
+      final int memoryKb = Integer.parseInt(requireProperty(resolvedPrefix, properties, "memoryKB"));
+      final int parallelism = Integer.parseInt(requireProperty(resolvedPrefix, properties, "parallelism"));
+      keyDerivation = KeyDerivation.createArgon2id(memoryKb, parallelism, iterations);
+    } else {
+      keyDerivation = KeyDerivation.createPBKDF2WithHmacSHA512(iterations);
+    }
+    return keyDerivation.derive(password, salt);
   }
 
   private static String unquote(final String value) {
