@@ -33,46 +33,50 @@ final class MaskWorker extends BaseMaskWorker {
 
   @Override
   public void run() {
-    final int endLength = endsWith.length();
-    final char[] shortEncoded = new char[endLength << 1];
-    final int shortStart = shortEncoded.length - endLength;
-    long fastEncodeOffsets;
-    long start = System.currentTimeMillis();
-    for (int i = 0, keyStart, shortKeyStart; ; ) {
-      generateKeyPair();
+    try {
+      final int endLength = endsWith.length();
+      final char[] shortEncoded = new char[endLength << 1];
+      final int shortStart = shortEncoded.length - endLength;
+      long fastEncodeOffsets;
+      long start = System.currentTimeMillis();
+      for (int i = 0, keyStart, shortKeyStart; ; ) {
+        generateKeyPair();
 
-      fastEncodeOffsets = Base58.beginMutableEncode(mutablePublicKey, endLength, shortEncoded);
-      shortKeyStart = (int) fastEncodeOffsets;
-      if (endsWith.contains(shortEncoded, shortStart)) {
-        final int shortEncodedLen = shortEncoded.length - shortKeyStart;
-        final int encodedStart = encoded.length - shortEncodedLen;
+        fastEncodeOffsets = Base58.beginMutableEncode(mutablePublicKey, endLength, shortEncoded);
+        shortKeyStart = (int) fastEncodeOffsets;
+        if (endsWith.contains(shortEncoded, shortStart)) {
+          final int shortEncodedLen = shortEncoded.length - shortKeyStart;
+          final int encodedStart = encoded.length - shortEncodedLen;
 
-        keyStart = Base58.continueMutableEncode(
-            mutablePublicKey,
-            (int) (fastEncodeOffsets >>> 48),
-            (int) (fastEncodeOffsets >>> 32) & 0xFFFF,
-            encodedStart,
-            encoded
-        );
-        if (queueResult(start, keyStart)) {
-          searched.getAndAccumulate(i, SUM);
-          if (foundHitLimitOrInterrupted()) {
+          keyStart = Base58.continueMutableEncode(
+              mutablePublicKey,
+              (int) (fastEncodeOffsets >>> 48),
+              (int) (fastEncodeOffsets >>> 32) & 0xFFFF,
+              encodedStart,
+              encoded
+          );
+          if (queueResult(start, keyStart)) {
+            searched.getAndAccumulate(i, SUM);
+            if (foundHitLimitOrInterrupted()) {
+              return;
+            } else {
+              i = 0;
+              start = System.currentTimeMillis();
+              continue;
+            }
+          }
+        }
+        if (++i == checkFound) {
+          if (foundLimitOrInterrupted()) {
             return;
           } else {
+            searched.getAndAccumulate(i, SUM);
             i = 0;
-            start = System.currentTimeMillis();
-            continue;
           }
         }
       }
-      if (++i == checkFound) {
-        if (foundLimitOrInterrupted()) {
-          return;
-        } else {
-          searched.getAndAccumulate(i, SUM);
-          i = 0;
-        }
-      }
+    } finally {
+      clearSecrets();
     }
   }
 }

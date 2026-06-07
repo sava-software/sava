@@ -3,6 +3,7 @@ package software.sava.core.accounts.pbkdf;
 import software.sava.core.accounts.PublicKey;
 
 import java.util.Base64;
+import java.util.Properties;
 
 public record EncryptionEnvelope(KeyDerivation keyDerivation,
                                  byte[] aad,
@@ -21,15 +22,24 @@ public record EncryptionEnvelope(KeyDerivation keyDerivation,
     );
   }
 
-  public String toProperties() {
-    return toProperties((String) null);
+  public void addProperties(final Properties properties) {
+    keyDerivation.addProperties(properties);
+    final var encoder = Base64.getEncoder();
+    properties.put("aad", encoder.encodeToString(aad));
+    properties.put("salt", encoder.encodeToString(salt));
+    properties.put("iv", encoder.encodeToString(iv));
+    properties.put("secret", encoder.encodeToString(cipherText));
   }
 
-  public String toProperties(final PublicKey publicKey) {
-    return toProperties("pubKey=" + publicKey.toBase58());
+  public String toPropertiesString() {
+    return toPropertiesString((String) null);
   }
 
-  public String toProperties(final String prefix) {
+  public String toPropertiesString(final PublicKey publicKey) {
+    return toPropertiesString("pubKey=" + publicKey.toBase58());
+  }
+
+  public String toPropertiesString(final String prefix) {
     final var encoder = Base64.getEncoder();
     return String.format(
         """
@@ -41,7 +51,7 @@ public record EncryptionEnvelope(KeyDerivation keyDerivation,
             secret=%s
             """,
         prefix == null || prefix.isBlank() ? "" : prefix.strip(),
-        keyDerivation.toProperties().strip(),
+        keyDerivation.toPropertiesString().strip(),
         encoder.encodeToString(aad),
         encoder.encodeToString(salt),
         encoder.encodeToString(iv),

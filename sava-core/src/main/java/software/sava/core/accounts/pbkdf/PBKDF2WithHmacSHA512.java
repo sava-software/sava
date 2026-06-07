@@ -4,6 +4,7 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
+import java.util.Properties;
 
 public record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
 
@@ -38,7 +39,7 @@ public record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
   }
 
   @Override
-  public String toProperties() {
+  public String toPropertiesString() {
     return String.format(
         """
             kdf=PBKDF2WithHmacSHA512
@@ -46,5 +47,11 @@ public record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
             """,
         iterations
     );
+  }
+
+  @Override
+  public void addProperties(final Properties properties) {
+    properties.put("kdf", "PBKDF2WithHmacSHA512");
+    properties.put("iterations", Integer.toString(iterations));
   }
 }

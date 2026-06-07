@@ -8,6 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.Properties;
 
 public final class PBKDFEncryption {
 
@@ -46,8 +48,6 @@ public final class PBKDFEncryption {
       }
     } catch (final GeneralSecurityException e) {
       throw new IllegalStateException("Failed to encrypt key file.", e);
-    } finally {
-      Arrays.fill(data, (byte) 0);
     }
   }
 
@@ -58,7 +58,13 @@ public final class PBKDFEncryption {
                                final byte[] iv,
                                final byte[] cipherText) {
     final var keyBytes = keyDerivation.derive(password, salt, KEY_BITS);
-    return decrypt(keyBytes, aad, iv, cipherText);
+    try {
+      return decrypt(keyBytes, aad, iv, cipherText);
+    } finally {
+      if (keyBytes != null) {
+        Arrays.fill(keyBytes, (byte) 0);
+      }
+    }
   }
 
   public static byte[] decrypt(final byte[] keyBytes,
@@ -75,18 +81,55 @@ public final class PBKDFEncryption {
       return cipher.doFinal(cipherText);
     } catch (final GeneralSecurityException e) {
       throw new IllegalStateException("Failed to decrypt key file.", e);
-    } finally {
-      if (keyBytes != null) {
-        Arrays.fill(keyBytes, (byte) 0);
-      }
     }
   }
 
   static byte[] toUtf8Bytes(final char[] password) {
     final var buffer = StandardCharsets.UTF_8.encode(CharBuffer.wrap(password));
-    final byte[] bytes = new byte[buffer.remaining()];
-    buffer.get(bytes);
-    Arrays.fill(buffer.array(), (byte) 0);
-    return bytes;
+    try {
+      final byte[] bytes = new byte[buffer.remaining()];
+      buffer.get(bytes);
+      return bytes;
+    } finally {
+      Arrays.fill(buffer.array(), (byte) 0);
+    }
+  }
+
+  public static byte[] decrypt(final String resolvedPrefix, final Properties properties, final char[] password) {
+    final var aadValue = properties.getProperty(resolvedPrefix + "aad");
+    final byte[] aad = aadValue == null || aadValue.isBlank() ? new byte[0] : Base64.getDecoder().decode(aadValue);
+    return decrypt(resolvedPrefix, properties, password, aad);
+  }
+
+  public static byte[] decrypt(final String resolvedPrefix,
+                               final Properties properties,
+                               final char[] password,
+                               final byte[] aad) {
+    final var kdf = requireProperty(resolvedPrefix, properties, "kdf");
+    final var decoder = Base64.getDecoder();
+    final byte[] salt = decoder.decode(requireProperty(resolvedPrefix, properties, "salt"));
+    final byte[] iv = decoder.decode(requireProperty(resolvedPrefix, properties, "iv"));
+    final byte[] cipherText = decoder.decode(requireProperty(resolvedPrefix, properties, "secret"));
+
+    final int iterations = Integer.parseInt(requireProperty(resolvedPrefix, properties, "iterations"));
+    final KeyDerivation keyDerivation;
+    if (kdf.equalsIgnoreCase("argon2id")) {
+      final int memoryKb = Integer.parseInt(requireProperty(resolvedPrefix, properties, "memoryKB"));
+      final int parallelism = Integer.parseInt(requireProperty(resolvedPrefix, properties, "parallelism"));
+      keyDerivation = KeyDerivation.createArgon2id(memoryKb, parallelism, iterations);
+    } else if (kdf.equalsIgnoreCase("pbkdf2WithHmacSHA512")) {
+      keyDerivation = KeyDerivation.createPBKDF2WithHmacSHA512(iterations);
+    } else {
+      throw new IllegalArgumentException("Unsupported key derivation function: " + kdf);
+    }
+    return decrypt(password, keyDerivation, aad, salt, iv, cipherText);
+  }
+
+  private static String requireProperty(final String resolvedPrefix, final Properties properties, final String name) {
+    final var value = properties.getProperty(resolvedPrefix + name);
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + name);
+    }
+    return value.strip();
   }
 }

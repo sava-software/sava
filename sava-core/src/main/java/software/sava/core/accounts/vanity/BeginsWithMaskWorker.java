@@ -29,27 +29,31 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
 
   @Override
   public void run() {
-    long start = System.currentTimeMillis();
-    for (int i = 0, keyStart; ; ) {
-      generateKeyPair();
+    try {
+      long start = System.currentTimeMillis();
+      for (int i = 0, keyStart; ; ) {
+        generateKeyPair();
 
-      keyStart = Base58.mutableEncode(mutablePublicKey, encoded);
-      if (queueResult(start, keyStart)) {
-        searched.getAndAccumulate(i, SUM);
-        if (foundHitLimitOrInterrupted()) {
-          return;
-        } else {
-          i = 0;
-          start = System.currentTimeMillis();
-        }
-      } else if (++i == checkFound) {
-        if (foundLimitOrInterrupted()) {
-          return;
-        } else {
+        keyStart = Base58.mutableEncode(mutablePublicKey, encoded);
+        if (queueResult(start, keyStart)) {
           searched.getAndAccumulate(i, SUM);
-          i = 0;
+          if (foundHitLimitOrInterrupted()) {
+            return;
+          } else {
+            i = 0;
+            start = System.currentTimeMillis();
+          }
+        } else if (++i == checkFound) {
+          if (foundLimitOrInterrupted()) {
+            return;
+          } else {
+            searched.getAndAccumulate(i, SUM);
+            i = 0;
+          }
         }
       }
+    } finally {
+      clearSecrets();
     }
   }
 }

@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -201,7 +202,7 @@ abstract class BaseMaskWorker implements AddressWorker {
             );
             if (keyFileFormat == KeyFileFormat.properties) {
               fileExtension = ".properties";
-              keyData = encrypted.toProperties(publicKey);
+              keyData = encrypted.toPropertiesString(publicKey);
             } else {
               fileExtension = ".json";
               keyData = encrypted.toJson(publicKey);
@@ -230,6 +231,16 @@ abstract class BaseMaskWorker implements AddressWorker {
     secureRandom.nextBytes(privateKey);
     generatePublicKey(digest, privateKey, 0, publicKey, 0, mutablePublicKey, mutableKeyPair);
     System.arraycopy(publicKey, 0, mutablePublicKey, 0, 32);
+  }
+
+  // Zero out the per-worker scratch buffers that hold secret material once the
+  // worker is done searching. `privateKey` holds the last generated seed and
+  // `mutableKeyPair` holds its SHA-512 expansion (the ed25519 secret scalar).
+  // The shared `password` and the `keyPair` handed off via `Result` are owned
+  // by the caller and intentionally left untouched here.
+  protected final void clearSecrets() {
+    Arrays.fill(privateKey, (byte) 0);
+    Arrays.fill(mutableKeyPair, (byte) 0);
   }
 
   protected final boolean foundLimitOrInterrupted() {

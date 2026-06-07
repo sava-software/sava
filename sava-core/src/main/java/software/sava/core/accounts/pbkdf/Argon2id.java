@@ -4,6 +4,7 @@ import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
 
 import java.util.Arrays;
+import java.util.Properties;
 
 record Argon2id(int memoryKB,
                 int parallelism,
@@ -57,7 +58,7 @@ record Argon2id(int memoryKB,
   }
 
   @Override
-  public String toProperties() {
+  public String toPropertiesString() {
     return String.format(
         """
             kdf=Argon2id
@@ -69,5 +70,13 @@ record Argon2id(int memoryKB,
         memoryKB,
         parallelism
     );
+  }
+
+  @Override
+  public void addProperties(final Properties properties) {
+    properties.put("kdf", "Argon2id");
+    properties.put("iterations", Integer.toString(iterations));
+    properties.put("memoryKB", Integer.toString(memoryKB));
+    properties.put("parallelism", Integer.toString(parallelism));
   }
 }

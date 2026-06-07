@@ -9,7 +9,6 @@ import software.sava.core.encoding.Base58;
 
 import java.security.PrivateKey;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Properties;
 
 import static software.sava.core.crypto.SunCrypto.SECURE_RANDOM;
@@ -93,9 +92,17 @@ public interface Signer {
     return new KeyPairSigner(publicKey, privateKey);
   }
 
-  static EncryptionEnvelope encryptKeyPair(final byte[] keyPair, final char[] password, final KeyDerivation kdf) {
-    final var publicKey = Arrays.copyOfRange(keyPair, Signer.KEY_LENGTH, Signer.KEY_LENGTH << 1);
-    return PBKDFEncryption.encrypt(password, SECURE_RANDOM, keyPair, kdf, publicKey);
+  static EncryptionEnvelope encryptKey(final byte[] key, final char[] password, final KeyDerivation kdf) {
+    final byte[] publicKey;
+    if (key.length == KEY_LENGTH) {
+      publicKey = new byte[Signer.KEY_LENGTH];
+      Ed25519.generatePublicKey(key, 0, publicKey, 0);
+    } else if (key.length == KEY_LENGTH << 1) {
+      publicKey = Arrays.copyOfRange(key, Signer.KEY_LENGTH, Signer.KEY_LENGTH << 1);
+    } else {
+      throw new IllegalArgumentException("Invalid secret key or key pair length");
+    }
+    return PBKDFEncryption.encrypt(password, SECURE_RANDOM, key, kdf, publicKey);
   }
 
   static Signer fromProperties(final String prefix, final Properties properties, final char[] password) {
@@ -112,12 +119,19 @@ public interface Signer {
       if (aadValue == null || aadValue.isBlank()) {
         throw new IllegalArgumentException(String.format("The public key must be provided by %spubKey or %saad", resolvedPrefix, resolvedPrefix));
       }
-      publicKey = PublicKey.fromBase64Encoded(aadValue);
+      publicKey = PublicKey.fromBase64Encoded(aadValue.strip());
     } else {
       publicKey = PublicKey.fromBase58Encoded(pubKeyValue.strip());
     }
-    final var secret = decrypt(resolvedPrefix, properties, password, publicKey.toByteArray());
-    final var signer = Signer.createFromKeyPair(secret);
+    final var secret = PBKDFEncryption.decrypt(resolvedPrefix, properties, password, publicKey.toByteArray());
+    final Signer signer;
+    if (secret.length == KEY_LENGTH) {
+      signer = Signer.createFromPrivateKey(secret);
+    } else if (secret.length == KEY_LENGTH << 1) {
+      signer = Signer.createFromKeyPair(secret);
+    } else {
+      throw new IllegalArgumentException("Invalid private key or key pair length");
+    }
     if (!publicKey.equals(signer.publicKey())) {
       throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
     }
@@ -126,36 +140,6 @@ public interface Signer {
 
   static Signer fromProperties(final Properties properties, final char[] password) {
     return fromProperties(null, properties, password);
-  }
-
-  private static byte[] decrypt(final String resolvedPrefix,
-                                final Properties properties,
-                                final char[] password,
-                                final byte[] aad) {
-    final var kdf = requireProperty(resolvedPrefix, properties, "kdf");
-    final var decoder = Base64.getDecoder();
-    final byte[] salt = decoder.decode(requireProperty(resolvedPrefix, properties, "salt"));
-    final byte[] iv = decoder.decode(requireProperty(resolvedPrefix, properties, "iv"));
-    final byte[] cipherText = decoder.decode(requireProperty(resolvedPrefix, properties, "secret"));
-
-    final int iterations = Integer.parseInt(requireProperty(resolvedPrefix, properties, "iterations"));
-    final KeyDerivation keyDerivation;
-    if (kdf.equalsIgnoreCase("argon2id")) {
-      final int memoryKb = Integer.parseInt(requireProperty(resolvedPrefix, properties, "memoryKB"));
-      final int parallelism = Integer.parseInt(requireProperty(resolvedPrefix, properties, "parallelism"));
-      keyDerivation = KeyDerivation.createArgon2id(memoryKb, parallelism, iterations);
-    } else {
-      keyDerivation = KeyDerivation.createPBKDF2WithHmacSHA512(iterations);
-    }
-    return PBKDFEncryption.decrypt(password, keyDerivation, aad, salt, iv, cipherText);
-  }
-
-  private static String requireProperty(final String resolvedPrefix, final Properties properties, final String name) {
-    final var value = properties.getProperty(resolvedPrefix + name);
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + name);
-    }
-    return value.strip();
   }
 
   PublicKey publicKey();
