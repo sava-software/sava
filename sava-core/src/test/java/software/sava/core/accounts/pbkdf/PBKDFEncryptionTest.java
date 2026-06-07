@@ -15,13 +15,18 @@ final class PBKDFEncryptionTest {
 
   private static final byte[] AAD = PublicKey.fromBase58Encoded("4bcoVWVXfw6xKsEYdM6s7AeZQMgDG958kK5Uzhc2sw37").toByteArray();
 
+  // Use the minimum supported PBKDF2 iteration count so these tests' key derivation stays fast.
+  private static KeyDerivation minPBKDF2() {
+    return KeyDerivation.createPBKDF2WithHmacSHA512(PBKDF2WithHmacSHA512.MIN_ITERATIONS);
+  }
+
   @Test
   void roundTrip() {
     final var secureRandom = new SecureRandom();
     final var secret = new byte[64];
     secureRandom.nextBytes(secret);
     final var expectedSecret = Arrays.copyOf(secret, secret.length);
-    final var kdf = KeyDerivation.defaultPBKDF2WithHmacSHA512();
+    final var kdf = minPBKDF2();
     final var encrypted = PBKDFEncryption.encrypt(
         "correct horse".toCharArray(), secureRandom, secret, kdf, AAD
     );
@@ -38,12 +43,12 @@ final class PBKDFEncryptionTest {
   void wrongAadFails() {
     final var secureRandom = new SecureRandom();
     final var encrypted = PBKDFEncryption.encrypt(
-        "right".toCharArray(), secureRandom, "some-secret".getBytes(StandardCharsets.UTF_8), KeyDerivation.defaultPBKDF2WithHmacSHA512(), AAD
+        "right".toCharArray(), secureRandom, "some-secret".getBytes(StandardCharsets.UTF_8), minPBKDF2(), AAD
     );
     final var tamperedAad = "tampered-public-key".getBytes(StandardCharsets.UTF_8);
     final var runtimeEx = assertThrows(IllegalStateException.class, () -> PBKDFEncryption.decrypt(
             "right".toCharArray(),
-            KeyDerivation.defaultPBKDF2WithHmacSHA512(),
+            minPBKDF2(),
             tamperedAad,
             encrypted.salt(),
             encrypted.iv(),
@@ -60,7 +65,7 @@ final class PBKDFEncryptionTest {
         "right".toCharArray(),
         secureRandom,
         "some-secret".getBytes(StandardCharsets.UTF_8),
-        KeyDerivation.defaultPBKDF2WithHmacSHA512(),
+        minPBKDF2(),
         AAD
     );
     final var runtimeEx = assertThrows(IllegalStateException.class, () -> encrypted.decrypt("wrong".toCharArray()));

@@ -12,13 +12,13 @@ record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
   // cannot silently request a weak (cheap to brute-force) derivation. This sits well above the
   // OWASP interactive floor (210_000) because this KDF protects a long-lived key at rest and runs
   // only once per key-file load/save, so a stronger floor is affordable.
-  static final int MIN_ITERATIONS = 800_000;
+  static final int MIN_ITERATIONS = 500_000;
 
   // Default iteration count for newly produced key files, calibrated for the offline/at-rest
   // threat model rather than the much lower OWASP interactive minimum.
   static final int DEFAULT_ITERATIONS = 2_100_000;
 
-  // Upper bound to cap the CPU cost an externally-provided file can force on us (DoS guard).
+  // Upper bound to cap the CPU cost an externally provided file can force on us (DoS guard).
   static final int MAX_ITERATIONS = 100_000_000;
 
   static final PBKDF2WithHmacSHA512 DEFAULT = new PBKDF2WithHmacSHA512(DEFAULT_ITERATIONS);

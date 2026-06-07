@@ -16,6 +16,14 @@ import static software.sava.core.accounts.Signer.KEY_LENGTH;
 
 final class SignerTest {
 
+  // Use the minimum supported PBKDF2 iteration count for tests so the (otherwise expensive)
+  // key derivation stays fast; the security floor itself is exercised by the rejects* tests.
+  private static final int MIN_PBKDF2_ITERATIONS = 500_000;
+
+  private static KeyDerivation minPBKDF2() {
+    return KeyDerivation.createPBKDF2WithHmacSHA512(MIN_PBKDF2_ITERATIONS);
+  }
+
   @Test
   void generateKeyPair() {
     final byte[] keyPair = Signer.generatePrivateKeyPairBytes();
@@ -97,7 +105,7 @@ final class SignerTest {
     final var keyPair = Signer.generatePrivateKeyPairBytes();
     final var password = "correct horse battery staple";
     final char[] passwordChars = password.toCharArray();
-    final var props = encryptedProperties(keyPair, passwordChars, KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(keyPair, passwordChars, minPBKDF2());
     final var signer = Signer.fromProperties(props, passwordChars);
     verifySigner(keyPair, signer);
     assertArrayEquals(password.toCharArray(), passwordChars);
@@ -117,13 +125,13 @@ final class SignerTest {
 
   @Test
   void encryptedFromPropertiesRequiresPassword() {
-    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), minPBKDF2());
     assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, null));
   }
 
   @Test
   void encryptedFromPropertiesWrongPassword() {
-    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "right".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "right".toCharArray(), minPBKDF2());
     assertThrows(IllegalStateException.class, () -> Signer.fromProperties(props, "wrong".toCharArray()));
   }
 
@@ -164,28 +172,28 @@ final class SignerTest {
 
   @Test
   void rejectsWeakPbkdf2Iterations() {
-    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), minPBKDF2());
     props.setProperty("iterations", "1");
     assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
   }
 
   @Test
   void rejectsExcessivePbkdf2Iterations() {
-    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), minPBKDF2());
     props.setProperty("iterations", Integer.toString(Integer.MAX_VALUE));
     assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
   }
 
   @Test
   void rejectsNonNumericIterations() {
-    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), minPBKDF2());
     props.setProperty("iterations", "not-a-number");
     assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
   }
 
   @Test
   void rejectsShortSalt() {
-    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), minPBKDF2());
     props.setProperty("salt", java.util.Base64.getEncoder().encodeToString(new byte[]{1, 2, 3}));
     final var runtimeEx = assertThrows(IllegalStateException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
     assertInstanceOf(AEADBadTagException.class, runtimeEx.getCause());
@@ -193,7 +201,7 @@ final class SignerTest {
 
   @Test
   void rejectsWrongLengthIv() {
-    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), minPBKDF2());
     props.setProperty("iv", java.util.Base64.getEncoder().encodeToString(new byte[8]));
     final var runtimeEx = assertThrows(IllegalStateException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
     assertInstanceOf(AEADBadTagException.class, runtimeEx.getCause());
