@@ -1,6 +1,5 @@
 package software.sava.core.accounts.vanity;
 
-import software.sava.core.accounts.pbkdf.PrivateKeyEncoding;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.pbkdf.KeyDerivation;
@@ -146,38 +145,30 @@ abstract class BaseMaskWorker implements AddressWorker {
 
       if (keyPath != null) {
         try {
-          final var rawSecret = switch (privateKeyEncoding) {
-            case jsonKeyPairArray -> {
-              final var json = new StringBuilder("[");
-              for (int i = 0; ; ) {
-                json.append(Byte.toUnsignedInt(keyPair[i]));
-                if (++i == keyPair.length) {
-                  break;
-                } else {
-                  json.append(',');
-                }
-              }
-              json.append(']');
-              yield json.toString();
-            }
-            case base64PrivateKey -> Base64.getEncoder().encodeToString(privateKey);
-            case base64KeyPair -> Base64.getEncoder().encodeToString(keyPair);
-            case base58PrivateKey -> Base58.encode(privateKey);
-            case base58KeyPair -> Base58.encode(keyPair);
-          };
-          // The 'secret' value is rendered without surrounding quotes for the
-          // jsonKeyPairArray encoding (it is itself a JSON array) and quoted otherwise.
-          final var jsonSecret = privateKeyEncoding == PrivateKeyEncoding.jsonKeyPairArray
-              ? rawSecret
-              : '"' + rawSecret + '"';
-          // For encrypted output the secret payload is the same JSON-shaped value used in
-          // the plaintext 'secret' field so it can be decrypted and parsed identically
-          // regardless of the on-disk file format.
           final String keyData;
           final String fileExtension;
-          if (keyFileFormat == KeyFileFormat.properties) {
-            fileExtension = ".properties";
-            if (password == null) {
+          if (password == null) {
+            final var rawSecret = switch (privateKeyEncoding) {
+              case jsonKeyPairArray -> {
+                final var json = new StringBuilder("[");
+                for (int i = 0; ; ) {
+                  json.append(Byte.toUnsignedInt(keyPair[i]));
+                  if (++i == keyPair.length) {
+                    break;
+                  } else {
+                    json.append(',');
+                  }
+                }
+                json.append(']');
+                yield json.toString();
+              }
+              case base64PrivateKey -> Base64.getEncoder().encodeToString(privateKey);
+              case base64KeyPair -> Base64.getEncoder().encodeToString(keyPair);
+              case base58PrivateKey -> Base58.encode(privateKey);
+              case base58KeyPair -> Base58.encode(keyPair);
+            };
+            if (keyFileFormat == KeyFileFormat.properties) {
+              fileExtension = ".properties";
               keyData = String.format(
                   """
                       pubKey=%s
@@ -189,13 +180,7 @@ abstract class BaseMaskWorker implements AddressWorker {
                   rawSecret
               );
             } else {
-              final var aad = publicKey.toBase58().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-              final var encrypted = PBKDFEncryption.encrypt(password, secureRandom, jsonSecret, keyDerivation, aad);
-              keyData = keyDerivation.toProperties(publicKey, privateKeyEncoding, encrypted);
-            }
-          } else {
-            fileExtension = ".json";
-            if (password == null) {
+              fileExtension = ".json";
               keyData = String.format(
                   """
                       {
@@ -205,14 +190,24 @@ abstract class BaseMaskWorker implements AddressWorker {
                       }""",
                   publicKey,
                   privateKeyEncoding,
-                  jsonSecret
+                  privateKeyEncoding == PrivateKeyEncoding.jsonKeyPairArray
+                      ? rawSecret
+                      : '"' + rawSecret + '"'
               );
+            }
+          } else {
+            final var encrypted = PBKDFEncryption.encrypt(
+                password, secureRandom, keyPair, keyDerivation, publicKey.toByteArray()
+            );
+            if (keyFileFormat == KeyFileFormat.properties) {
+              fileExtension = ".properties";
+              keyData = encrypted.toProperties(publicKey);
             } else {
-              final var aad = publicKey.toBase58().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-              final var encrypted = PBKDFEncryption.encrypt(password, secureRandom, jsonSecret, keyDerivation, aad);
-              keyData = keyDerivation.toJson(publicKey, privateKeyEncoding, encrypted);
+              fileExtension = ".json";
+              keyData = encrypted.toJson(publicKey);
             }
           }
+
           Files.writeString(
               keyPath.resolve(publicKey.toBase58() + fileExtension),
               keyData,

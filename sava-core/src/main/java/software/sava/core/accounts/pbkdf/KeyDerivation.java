@@ -1,7 +1,5 @@
 package software.sava.core.accounts.pbkdf;
 
-import software.sava.core.accounts.PublicKey;
-
 public interface KeyDerivation {
 
   static KeyDerivation createPBKDF2WithHmacSHA512(final int iterations) {
@@ -12,9 +10,7 @@ public interface KeyDerivation {
     return PBKDF2WithHmacSHA512.DEFAULT;
   }
 
-  static KeyDerivation createArgon2id(final int memoryKb,
-                                      final int parallelism,
-                                      final int iterations) {
+  static KeyDerivation createArgon2id(final int memoryKb, final int parallelism, final int iterations) {
     return new Argon2id(memoryKb, parallelism, iterations);
   }
 
@@ -22,15 +18,11 @@ public interface KeyDerivation {
     return Argon2id.DEFAULT;
   }
 
-  byte[] derive(final char[] password, final byte[] salt);
+  byte[] derive(final char[] password, final byte[] salt, final int keyBits);
 
-  String toJson(final PublicKey publicKey,
-                final PrivateKeyEncoding privateKeyEncoding,
-                final Encrypted encrypted);
+  String toJson();
 
-  String toProperties(final PublicKey publicKey,
-                      final PrivateKeyEncoding privateKeyEncoding,
-                      final Encrypted encrypted);
+  String toProperties();
 
   int iterations();
 }

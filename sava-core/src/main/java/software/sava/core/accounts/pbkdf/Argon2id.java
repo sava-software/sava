@@ -2,12 +2,8 @@ package software.sava.core.accounts.pbkdf;
 
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
-import software.sava.core.accounts.PublicKey;
 
 import java.util.Arrays;
-import java.util.Base64;
-
-import static software.sava.core.accounts.pbkdf.PBKDFEncryption.KEY_BYTES;
 
 record Argon2id(int memoryKB,
                 int parallelism,
@@ -24,7 +20,7 @@ record Argon2id(int memoryKB,
   static final Argon2id DEFAULT = new Argon2id(ARGON2_MEMORY_KB, ARGON2_PARALLELISM, ARGON2_ITERATIONS);
 
   @Override
-  public byte[] derive(final char[] password, final byte[] salt) {
+  public byte[] derive(final char[] password, final byte[] salt, final int keyBits) {
     final byte[] passwordBytes = PBKDFEncryption.toUtf8Bytes(password);
     try {
       final var params = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
@@ -36,7 +32,7 @@ record Argon2id(int memoryKB,
           .build();
       final var generator = new Argon2BytesGenerator();
       generator.init(params);
-      final byte[] keyBytes = new byte[KEY_BYTES];
+      final byte[] keyBytes = new byte[keyBits / 8];
       generator.generateBytes(passwordBytes, keyBytes);
       return keyBytes;
     } finally {
@@ -45,63 +41,33 @@ record Argon2id(int memoryKB,
   }
 
   @Override
-  public String toJson(final PublicKey publicKey,
-                       final PrivateKeyEncoding privateKeyEncoding,
-                       final Encrypted encrypted) {
-    final var encoder = Base64.getEncoder();
+  public String toJson() {
     return String.format(
         """
             {
-              "pubKey": "%s",
-              "encoding": "%s",
               "kdf": "Argon2id",
               "iterations": %d,
               "memoryKB": %d,
-              "parallelism": %d,
-              "salt": "%s",
-              "cipher": "%s",
-              "iv": "%s",
-              "secret": "%s"
+              "parallelism": %d
             }""",
-        publicKey.toBase58(),
-        privateKeyEncoding,
         iterations,
         memoryKB,
-        parallelism,
-        encoder.encodeToString(encrypted.salt()),
-        PBKDFEncryption.CIPHER,
-        encoder.encodeToString(encrypted.iv()),
-        encoder.encodeToString(encrypted.cipherText())
+        parallelism
     );
   }
 
   @Override
-  public String toProperties(final PublicKey publicKey,
-                             final PrivateKeyEncoding privateKeyEncoding,
-                             final Encrypted encrypted) {
-    final var encoder = Base64.getEncoder();
+  public String toProperties() {
     return String.format(
         """
-            pubKey=%s
-            encoding=%s
             kdf=Argon2id
             iterations=%d
             memoryKB=%d
             parallelism=%d
-            salt=%s
-            cipher=%s
-            iv=%s
-            secret=%s
             """,
-        publicKey,
-        privateKeyEncoding,
         iterations,
         memoryKB,
-        parallelism,
-        encoder.encodeToString(encrypted.salt()),
-        PBKDFEncryption.CIPHER,
-        encoder.encodeToString(encrypted.iv()),
-        encoder.encodeToString(encrypted.cipherText())
+        parallelism
     );
   }
 }

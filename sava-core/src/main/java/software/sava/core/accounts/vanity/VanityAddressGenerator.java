@@ -1,6 +1,5 @@
 package software.sava.core.accounts.vanity;
 
-import software.sava.core.accounts.pbkdf.PrivateKeyEncoding;
 import software.sava.core.accounts.pbkdf.KeyDerivation;
 
 import java.nio.file.Path;
