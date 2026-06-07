@@ -6,6 +6,7 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import software.sava.core.accounts.pbkdf.KeyDerivation;
 import software.sava.core.encoding.Base58;
 
+import javax.crypto.AEADBadTagException;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Properties;
@@ -186,14 +187,16 @@ final class SignerTest {
   void rejectsShortSalt() {
     final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
     props.setProperty("salt", java.util.Base64.getEncoder().encodeToString(new byte[]{1, 2, 3}));
-    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+    final var runtimeEx = assertThrows(IllegalStateException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+    assertInstanceOf(AEADBadTagException.class, runtimeEx.getCause());
   }
 
   @Test
   void rejectsWrongLengthIv() {
     final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
     props.setProperty("iv", java.util.Base64.getEncoder().encodeToString(new byte[8]));
-    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+    final var runtimeEx = assertThrows(IllegalStateException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+    assertInstanceOf(AEADBadTagException.class, runtimeEx.getCause());
   }
 
   @Test
