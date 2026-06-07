@@ -124,18 +124,22 @@ public interface Signer {
       publicKey = PublicKey.fromBase58Encoded(pubKeyValue.strip());
     }
     final var secret = PBKDFEncryption.decrypt(resolvedPrefix, properties, password, publicKey.toByteArray());
-    final Signer signer;
-    if (secret.length == KEY_LENGTH) {
-      signer = Signer.createFromPrivateKey(secret);
-    } else if (secret.length == KEY_LENGTH << 1) {
-      signer = Signer.createFromKeyPair(secret);
-    } else {
-      throw new IllegalArgumentException("Invalid private key or key pair length");
+    try {
+      final Signer signer;
+      if (secret.length == KEY_LENGTH) {
+        signer = Signer.createFromPrivateKey(secret);
+      } else if (secret.length == KEY_LENGTH << 1) {
+        signer = Signer.createFromKeyPair(secret);
+      } else {
+        throw new IllegalArgumentException("Invalid private key or key pair length");
+      }
+      if (!publicKey.equals(signer.publicKey())) {
+        throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
+      }
+      return signer;
+    } finally {
+      Arrays.fill(secret, (byte) 0);
     }
-    if (!publicKey.equals(signer.publicKey())) {
-      throw new IllegalStateException(String.format("[expected=%s] != [derived=%s]", publicKey, signer.publicKey()));
-    }
-    return signer;
   }
 
   static Signer fromProperties(final Properties properties, final char[] password) {

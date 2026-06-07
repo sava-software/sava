@@ -111,11 +111,11 @@ public final class PBKDFEncryption {
     final byte[] iv = decoder.decode(requireProperty(resolvedPrefix, properties, "iv"));
     final byte[] cipherText = decoder.decode(requireProperty(resolvedPrefix, properties, "secret"));
 
-    final int iterations = Integer.parseInt(requireProperty(resolvedPrefix, properties, "iterations"));
+    final int iterations = parseIntProperty(resolvedPrefix, properties, "iterations");
     final KeyDerivation keyDerivation;
     if (kdf.equalsIgnoreCase("argon2id")) {
-      final int memoryKb = Integer.parseInt(requireProperty(resolvedPrefix, properties, "memoryKB"));
-      final int parallelism = Integer.parseInt(requireProperty(resolvedPrefix, properties, "parallelism"));
+      final int memoryKb = parseIntProperty(resolvedPrefix, properties, "memoryKB");
+      final int parallelism = parseIntProperty(resolvedPrefix, properties, "parallelism");
       keyDerivation = KeyDerivation.createArgon2id(memoryKb, parallelism, iterations);
     } else if (kdf.equalsIgnoreCase("pbkdf2WithHmacSHA512")) {
       keyDerivation = KeyDerivation.createPBKDF2WithHmacSHA512(iterations);
@@ -131,5 +131,16 @@ public final class PBKDFEncryption {
       throw new IllegalArgumentException("Missing required property: " + resolvedPrefix + name);
     }
     return value.strip();
+  }
+
+  private static int parseIntProperty(final String resolvedPrefix, final Properties properties, final String name) {
+    final var value = requireProperty(resolvedPrefix, properties, name);
+    try {
+      return Integer.parseInt(value);
+    } catch (final NumberFormatException e) {
+      throw new IllegalArgumentException(String.format(
+          "Property %s%s must be an integer but was '%s'", resolvedPrefix, name, value), e
+      );
+    }
   }
 }

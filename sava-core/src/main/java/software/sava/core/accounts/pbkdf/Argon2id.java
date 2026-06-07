@@ -18,7 +18,32 @@ record Argon2id(int memoryKB,
   static final int ARGON2_PARALLELISM = 4;
   static final int ARGON2_ITERATIONS = 3;
 
+  // Bounds applied to attacker-controllable parameters read from a key file. The lower bounds keep
+  // the derivation strong (no silently-weak KDF) and the upper bounds guard against
+  // memory/CPU exhaustion (DoS) when loading an externally-provided file.
+  static final int MIN_MEMORY_KB = 19_456;       // OWASP Argon2id floor (19 MiB).
+  static final int MAX_MEMORY_KB = 2_097_152;     // RFC 9106 first-recommended ceiling (2 GiB).
+  static final int MIN_PARALLELISM = 1;
+  static final int MAX_PARALLELISM = 16;
+  static final int MIN_ITERATIONS = 1;
+  static final int MAX_ITERATIONS = 100;
+
   static final Argon2id DEFAULT = new Argon2id(ARGON2_MEMORY_KB, ARGON2_PARALLELISM, ARGON2_ITERATIONS);
+
+  Argon2id {
+    if (memoryKB < MIN_MEMORY_KB || memoryKB > MAX_MEMORY_KB) {
+      throw new IllegalArgumentException(String.format(
+          "Argon2id memoryKB must be within [%d, %d] but was %d", MIN_MEMORY_KB, MAX_MEMORY_KB, memoryKB));
+    }
+    if (parallelism < MIN_PARALLELISM || parallelism > MAX_PARALLELISM) {
+      throw new IllegalArgumentException(String.format(
+          "Argon2id parallelism must be within [%d, %d] but was %d", MIN_PARALLELISM, MAX_PARALLELISM, parallelism));
+    }
+    if (iterations < MIN_ITERATIONS || iterations > MAX_ITERATIONS) {
+      throw new IllegalArgumentException(String.format(
+          "Argon2id iterations must be within [%d, %d] but was %d", MIN_ITERATIONS, MAX_ITERATIONS, iterations));
+    }
+  }
 
   @Override
   public byte[] derive(final char[] password, final byte[] salt, final int keyBits) {

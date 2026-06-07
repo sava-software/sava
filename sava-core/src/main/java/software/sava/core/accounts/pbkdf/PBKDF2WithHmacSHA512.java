@@ -6,12 +6,33 @@ import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Properties;
 
-public record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
+record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
 
-  // OWASP recommended minimum for PBKDF2-HMAC-SHA512.
-  static final int ITERATIONS = 210_000;
+  // Lower bound used when reading attacker-controllable parameters so a corrupted/malicious file
+  // cannot silently request a weak (cheap to brute-force) derivation. This sits well above the
+  // OWASP interactive floor (210_000) because this KDF protects a long-lived key at rest and runs
+  // only once per key-file load/save, so a stronger floor is affordable.
+  static final int MIN_ITERATIONS = 800_000;
 
-  static final PBKDF2WithHmacSHA512 DEFAULT = new PBKDF2WithHmacSHA512(ITERATIONS);
+  // Default iteration count for newly produced key files, calibrated for the offline/at-rest
+  // threat model rather than the much lower OWASP interactive minimum.
+  static final int DEFAULT_ITERATIONS = 2_100_000;
+
+  // Upper bound to cap the CPU cost an externally-provided file can force on us (DoS guard).
+  static final int MAX_ITERATIONS = 100_000_000;
+
+  static final PBKDF2WithHmacSHA512 DEFAULT = new PBKDF2WithHmacSHA512(DEFAULT_ITERATIONS);
+
+  PBKDF2WithHmacSHA512 {
+    if (iterations < MIN_ITERATIONS) {
+      throw new IllegalArgumentException(String.format(
+          "PBKDF2WithHmacSHA512 iterations must be at least %d but was %d", MIN_ITERATIONS, iterations));
+    }
+    if (iterations > MAX_ITERATIONS) {
+      throw new IllegalArgumentException(String.format(
+          "PBKDF2WithHmacSHA512 iterations must be at most %d but was %d", MAX_ITERATIONS, iterations));
+    }
+  }
 
   @Override
   public byte[] derive(final char[] password, final byte[] salt, final int keyBits) {

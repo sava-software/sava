@@ -162,21 +162,77 @@ final class SignerTest {
   }
 
   @Test
+  void rejectsWeakPbkdf2Iterations() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    props.setProperty("iterations", "1");
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
+  void rejectsExcessivePbkdf2Iterations() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    props.setProperty("iterations", Integer.toString(Integer.MAX_VALUE));
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
+  void rejectsNonNumericIterations() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    props.setProperty("iterations", "not-a-number");
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
+  void rejectsShortSalt() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    props.setProperty("salt", java.util.Base64.getEncoder().encodeToString(new byte[]{1, 2, 3}));
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
+  void rejectsWrongLengthIv() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultPBKDF2WithHmacSHA512());
+    props.setProperty("iv", java.util.Base64.getEncoder().encodeToString(new byte[8]));
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
+  void rejectsExcessiveArgon2Memory() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultArgon2id());
+    props.setProperty("memoryKB", Integer.toString(Integer.MAX_VALUE));
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
+  void rejectsWeakArgon2Memory() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultArgon2id());
+    props.setProperty("memoryKB", "8");
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
+  void rejectsExcessiveArgon2Parallelism() {
+    final var props = encryptedProperties(Signer.generatePrivateKeyPairBytes(), "pw".toCharArray(), KeyDerivation.defaultArgon2id());
+    props.setProperty("parallelism", Integer.toString(Integer.MAX_VALUE));
+    assertThrows(IllegalArgumentException.class, () -> Signer.fromProperties(props, "pw".toCharArray()));
+  }
+
+  @Test
   void encryptedFromPropertiesLiteral() throws java.io.IOException {
     final var propsText = """
-        pubKey=4bC4GcP7zzksyv9oeqJ3w7yHHLgkkpbsGKrmpYBLkr8U
+        pubKey=Dbu5gpwRWZZRSCms8eey3PmV3eVem6pcZLtdWWsdWYue
         kdf=PBKDF2WithHmacSHA512
-        iterations=210000
-        aad=NVVPTFl+i9ZQ3b6Iq7KHFzCv2UkD+mFDUR5TGIoz7/0=
-        salt=+OnLFicjZxX5UDQCwulAxA==
+        iterations=2100000
+        aad=uzzg6oC0WBDSM6cdRsBW2q8dxla2VCglyJICg0xBXRE=
+        salt=HEsb3WnvalAtEbsqgPg83A==
         cipher=AES/GCM/NoPadding
-        iv=Mtl611cPAdqqBR4o
-        secret=K/Mg2QuXKhhhrb6q37NoL7ZJe6zpWj9BXsTfvYgcRWWAq1UrfFY0yJPbfXIcFMxqOqu4gNygmt0G6mve3RoJgcHHsBRZMeDRodpQoMLU8dg=
+        iv=mY6NLUs5sXU5FoIQ
+        secret=mymz2cNTT1lKAy30ukG6+6atjeyxUFurerbiLdcEoIzc5F0K9t7KHTvJPfH/gFI8SYMetmwRye5G9uYCaWKW523sAK8zXtPc8WfsplvWl7g=
         """;
     final var props = new Properties();
     props.load(new StringReader(propsText));
     final var signer = Signer.fromProperties(props, "asdf".toCharArray());
-    assertEquals("4bC4GcP7zzksyv9oeqJ3w7yHHLgkkpbsGKrmpYBLkr8U", signer.publicKey().toBase58());
+    assertEquals("Dbu5gpwRWZZRSCms8eey3PmV3eVem6pcZLtdWWsdWYue", signer.publicKey().toBase58());
   }
 
   @Test
