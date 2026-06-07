@@ -1,5 +1,29 @@
 # Changelog
 
+## [25.4.0](https://github.com/sava-software/sava/compare/25.3.5...25.4.0) (2026-06-07)
+
+
+### Features
+
+* **accounts:** enforce stricter key property validation and secure secret handling ([cac0358](https://github.com/sava-software/sava/commit/cac0358ea970618f4e381690349a3f33e89eeefe))
+* **vanity:** add Argon2id key derivation with heap tuning and JSON replacement ([10a470a](https://github.com/sava-software/sava/commit/10a470a2399829ed8cbe0fb2bdb9737322cdd7e8))
+* **vanity:** add Docker support and optimize build scripts ([1f7552c](https://github.com/sava-software/sava/commit/1f7552c987f64918d02a931c3443fd4a415865c5))
+* **vanity:** add password-based encrypted key file support ([ba145d6](https://github.com/sava-software/sava/commit/ba145d6b57d4b9a7521612c1a144b6fed15dccc1))
+
+
+### Bug Fixes
+
+* **accounts:** lower PBKDF2 minimum iterations in tests for faster execution ([18d5a93](https://github.com/sava-software/sava/commit/18d5a93808aed01cb81475241073044df8922274))
+* **accounts:** update salt and iv validation to throw specific exceptions ([9e07aeb](https://github.com/sava-software/sava/commit/9e07aeba327ad5b43aef23a73b21df78107d27db))
+* **release-please:** improve workflow condition to support forked repos ([cda3498](https://github.com/sava-software/sava/commit/cda34980d171a5fb86e36c932d7a127f7137ea49))
+* **vanity:** handle null or empty keyFormat gracefully ([cda3498](https://github.com/sava-software/sava/commit/cda34980d171a5fb86e36c932d7a127f7137ea49))
+* **vanity:** set default keyFormat in genKeys.sh script ([cda3498](https://github.com/sava-software/sava/commit/cda34980d171a5fb86e36c932d7a127f7137ea49))
+
+
+### Miscellaneous Chores
+
+* release 25.4.0 ([2c823f9](https://github.com/sava-software/sava/commit/2c823f9acacb124a02a1791c645af21c1fad157f))
+
 ## [25.3.5](https://github.com/sava-software/sava/compare/25.3.4...25.3.5) (2026-05-29)
 
 
