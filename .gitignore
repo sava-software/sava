@@ -1,3 +1,25 @@
+# Exclude everything by default.
+/*
+
+# Explicitly include tracked files and directories.
+!/.dockerignore
+!/.github/
+!/.gitignore
+!/.release-please-manifest.json
+!/CHANGELOG.md
+!/LICENSE
+!/README.md
+!/assets/
+!/gradle/
+!/gradle.properties
+!/gradlew
+!/gradlew.bat
+!/logging.properties
+!/release-please-config.json
+!/sava-*/
+!/settings.gradle.kts
+
+# Re-apply ignores within included directories.
 .gradle
 .kotlin
 build/
@@ -16,14 +38,11 @@ gradle-app.setting
 hs_err_pid*
 *.iml
 .idea
-/*/out/
+out/
 *.secret
 .DS_Store
-out/
 ignore
 .keys
 keys
 Integ.*
 integ.*
-/symlinks/
-#/.junie/
