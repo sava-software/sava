@@ -25,7 +25,9 @@ public record EncryptionEnvelope(KeyDerivation keyDerivation,
   public void addProperties(final Properties properties) {
     keyDerivation.addProperties(properties);
     final var encoder = Base64.getEncoder();
-    properties.put("aad", encoder.encodeToString(aad));
+    if (aad != null && aad.length > 0) {
+      properties.put("aad", encoder.encodeToString(aad));
+    }
     properties.put("salt", encoder.encodeToString(salt));
     properties.put("iv", encoder.encodeToString(iv));
     properties.put("secret", encoder.encodeToString(cipherText));
@@ -45,14 +47,13 @@ public record EncryptionEnvelope(KeyDerivation keyDerivation,
         """
             %s
             %s
-            aad=%s
-            salt=%s
+            %ssalt=%s
             iv=%s
             secret=%s
             """,
         prefix == null || prefix.isBlank() ? "" : prefix.strip(),
         keyDerivation.toPropertiesString().strip(),
-        encoder.encodeToString(aad),
+        aad == null || aad.length == 0 ? "" : "aad=" + encoder.encodeToString(aad) + '\n',
         encoder.encodeToString(salt),
         encoder.encodeToString(iv),
         encoder.encodeToString(cipherText)
@@ -77,14 +78,13 @@ public record EncryptionEnvelope(KeyDerivation keyDerivation,
             {
             %s
               "kdf": "%s",
-              "aad": "%s",
-              "salt": "%s",
+              %s"salt": "%s",
               "iv": "%s",
               "secret": "%s"
             }""",
         prefix == null || prefix.isBlank() ? "" : prefix.indent(2).strip(),
         keyDerivation.toJson().indent(2).strip(),
-        encoder.encodeToString(aad),
+        aad == null || aad.length == 0 ? "" : "\"aad\": \"" + encoder.encodeToString(aad) + "\",\n  ",
         encoder.encodeToString(salt),
         encoder.encodeToString(iv),
         encoder.encodeToString(cipherText)

@@ -1,8 +1,8 @@
 package software.sava.core.accounts.pbkdf;
 
 import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -19,7 +19,56 @@ public final class PBKDFEncryption {
   static final int IV_BYTES = 12;
   static final int GCM_TAG_BITS = 128;
 
-  private PBKDFEncryption() {
+  @SuppressWarnings("ClassCanBeRecord")
+  private static final class RawSecretKey implements SecretKey {
+
+    private final byte[] keyBytes;
+
+    private RawSecretKey(final byte[] keyBytes) {
+      this.keyBytes = keyBytes;
+    }
+
+    @Override
+    public String getAlgorithm() {
+      return "AES";
+    }
+
+    @Override
+    public String getFormat() {
+      return "RAW";
+    }
+
+    @Override
+    public byte[] getEncoded() {
+      return keyBytes;
+    }
+
+    @Override
+    public void destroy() {
+      Arrays.fill(keyBytes, (byte) 0);
+    }
+
+    @Override
+    public boolean isDestroyed() {
+      for (final byte b : keyBytes) {
+        if (b != 0) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+
+  private static void requirePassword(final char[] password) {
+    if (password == null || password.length == 0) {
+      throw new IllegalArgumentException("Password must not be null or empty.");
+    }
+    for (final char c : password) {
+      if (c != '\0') {
+        return;
+      }
+    }
+    throw new IllegalArgumentException("Password has been zeroed out; it may have already been destroyed.");
   }
 
   public static EncryptionEnvelope encrypt(final char[] password,
@@ -27,6 +76,7 @@ public final class PBKDFEncryption {
                                            final byte[] data,
                                            final KeyDerivation keyDerivation,
                                            final byte[] aad) {
+    requirePassword(password);
     final byte[] salt = new byte[SALT_BYTES];
     secureRandom.nextBytes(salt);
     final byte[] iv = new byte[IV_BYTES];
@@ -35,7 +85,7 @@ public final class PBKDFEncryption {
     try {
       final var keyBytes = keyDerivation.derive(password, salt, KEY_BITS);
       try {
-        final var secretKey = new SecretKeySpec(keyBytes, "AES");
+        final var secretKey = new RawSecretKey(keyBytes);
         final var cipher = Cipher.getInstance(CIPHER);
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
         if (aad != null && aad.length > 0) {
@@ -47,7 +97,7 @@ public final class PBKDFEncryption {
         Arrays.fill(keyBytes, (byte) 0);
       }
     } catch (final GeneralSecurityException e) {
-      throw new IllegalStateException("Failed to encrypt key file.", e);
+      throw new IllegalStateException("Failed to encrypt data.", e);
     }
   }
 
@@ -61,9 +111,7 @@ public final class PBKDFEncryption {
     try {
       return decrypt(keyBytes, aad, iv, cipherText);
     } finally {
-      if (keyBytes != null) {
-        Arrays.fill(keyBytes, (byte) 0);
-      }
+      Arrays.fill(keyBytes, (byte) 0);
     }
   }
 
@@ -72,7 +120,7 @@ public final class PBKDFEncryption {
                                final byte[] iv,
                                final byte[] cipherText) {
     try {
-      final var secretKey = new SecretKeySpec(keyBytes, "AES");
+      final var secretKey = new RawSecretKey(keyBytes);
       final var cipher = Cipher.getInstance(CIPHER);
       cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
       if (aad != null && aad.length > 0) {
@@ -80,7 +128,7 @@ public final class PBKDFEncryption {
       }
       return cipher.doFinal(cipherText);
     } catch (final GeneralSecurityException e) {
-      throw new IllegalStateException("Failed to decrypt key file.", e);
+      throw new IllegalStateException("Failed to decrypt data.", e);
     }
   }
 
@@ -142,5 +190,8 @@ public final class PBKDFEncryption {
           "Property %s%s must be an integer but was '%s'", resolvedPrefix, name, value), e
       );
     }
+  }
+
+  private PBKDFEncryption() {
   }
 }
