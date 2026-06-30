@@ -14,7 +14,6 @@ import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 import static software.sava.core.tx.TransactionRecord.mergeAccounts;
-import static software.sava.core.tx.TransactionRecord.requireSignerCount;
 
 public interface Transaction {
 
