@@ -83,7 +83,7 @@ public interface Transaction {
   }
 
   static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
     Arrays.sort(accountMetas, Transaction.LEGACY_META_COMPARATOR);
     return accountMetas;
   }
