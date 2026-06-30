@@ -15,6 +15,7 @@ import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GE
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
+import static software.sava.core.tx.TransactionRecord.mergeAccounts;
 
 public interface Transaction {
 
@@ -89,28 +90,6 @@ public interface Transaction {
 
   static Transaction createTx(final PublicKey feePayer, final List<Instruction> instructions) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions);
-  }
-
-  private static int mergeAccounts(final AccountMeta feePayer,
-                                   final Map<PublicKey, AccountMeta> accounts,
-                                   final List<Instruction> instructions) {
-    final int numInstructions = instructions.size();
-    if (numInstructions == 0) {
-      throw new IllegalArgumentException("No instructions provided");
-    }
-    if (feePayer != null) {
-      accounts.put(feePayer.publicKey(), feePayer);
-    }
-    int serializedInstructionLength = 0;
-    for (final var instruction : instructions) {
-      serializedInstructionLength += instruction.serializedLength();
-      for (final var meta : instruction.accounts()) {
-        accounts.merge(meta.publicKey(), meta, Transaction.MERGE_ACCOUNT_META);
-      }
-      final var programMeta = instruction.programId();
-      accounts.merge(programMeta.publicKey(), programMeta, Transaction.MERGE_ACCOUNT_META);
-    }
-    return serializedInstructionLength;
   }
 
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {

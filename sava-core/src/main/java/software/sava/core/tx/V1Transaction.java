@@ -1,49 +1,38 @@
 package software.sava.core.tx;
 
-import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.encoding.Base58;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.SequencedCollection;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
-import static software.sava.core.encoding.CompactU16Encoding.signedByte;
+import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 
-record TransactionRecord(AccountMeta feePayer,
-                         List<Instruction> instructions,
-                         AddressLookupTable lookupTable,
-                         LookupTableAccountMeta[] tableAccountMetas,
-                         byte[] data,
-                         int numSigners,
-                         int messageOffset,
-                         int accountsOffset,
-                         int recentBlockHashIndex) implements Transaction {
+// SIMD-0385 Transaction V1 format.
+record V1Transaction(AccountMeta feePayer,
+                     List<Instruction> instructions,
+                     byte[] data,
+                     int numSigners,
+                     int signaturesOffset,
+                     int accountsOffset,
+                     int recentBlockHashIndex) implements Transaction {
 
-  static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
+  // Maximum serialized length of a v1 transaction as defined by SIMD-0385.
+  public static final int MAX_SERIALIZED_LENGTH_V1 = 4096;
 
-  static int mergeAccounts(final AccountMeta feePayer,
-                           final Map<PublicKey, AccountMeta> accounts,
-                           final List<Instruction> instructions) {
-    final int numInstructions = instructions.size();
-    if (numInstructions == 0) {
-      throw new IllegalArgumentException("No instructions provided");
-    }
-    if (feePayer != null) {
-      accounts.put(feePayer.publicKey(), feePayer);
-    }
-    int serializedInstructionLength = 0;
-    for (final var instruction : instructions) {
-      serializedInstructionLength += instruction.serializedLength();
-      for (final var meta : instruction.accounts()) {
-        accounts.merge(meta.publicKey(), meta, Transaction.MERGE_ACCOUNT_META);
+  private boolean notSigned() {
+    for (int i = signaturesOffset, to = signaturesOffset + SIGNATURE_LENGTH; i < to; ++i) {
+      if (data[i] != 0) {
+        return false;
       }
-      final var programMeta = instruction.programId();
-      accounts.merge(programMeta.publicKey(), programMeta, Transaction.MERGE_ACCOUNT_META);
     }
-    return serializedInstructionLength;
+    return true;
   }
 
   @Override
@@ -53,12 +42,12 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public AddressLookupTable lookupTable() {
-    return lookupTable;
+    return null;
   }
 
   @Override
   public LookupTableAccountMeta[] tableAccountMetas() {
-    return tableAccountMetas;
+    return NO_TABLES;
   }
 
   @Override
@@ -81,8 +70,7 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public int version() {
-    int version = data[messageOffset] & 0xFF;
-    return signedByte(version) ? version & 0x7F : VERSIONED_BIT_MASK;
+    return data[0] & 0x7F;
   }
 
   @Override
@@ -99,17 +87,16 @@ record TransactionRecord(AccountMeta feePayer,
           Transaction.sign(
               signer,
               this.data,
-              this.messageOffset,
-              this.data.length - this.messageOffset,
-              1 + (i * SIGNATURE_LENGTH)
+              0,
+              this.signaturesOffset,
+              this.signaturesOffset + (i * SIGNATURE_LENGTH)
           );
           return;
         }
       }
       throw new IllegalArgumentException("Failed to find index for signer " + signer.publicKey());
     } else {
-      this.data[0] = 1;
-      Transaction.sign(signer, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);
+      Transaction.sign(signer, this.data, 0, this.signaturesOffset, this.signaturesOffset);
     }
   }
 
@@ -118,9 +105,9 @@ record TransactionRecord(AccountMeta feePayer,
     Transaction.sign(
         signer,
         this.data,
-        this.messageOffset,
-        this.data.length - this.messageOffset,
-        1 + (index * SIGNATURE_LENGTH)
+        0,
+        this.signaturesOffset,
+        this.signaturesOffset + (index * SIGNATURE_LENGTH)
     );
   }
 
@@ -130,8 +117,7 @@ record TransactionRecord(AccountMeta feePayer,
     if (numSigners != this.numSigners) {
       throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners, numSigners));
     }
-    this.data[0] = (byte) numSigners;
-    Transaction.sign(signers, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);
+    Transaction.sign(signers, this.data, 0, this.signaturesOffset, this.signaturesOffset);
   }
 
   @Override
@@ -140,7 +126,6 @@ record TransactionRecord(AccountMeta feePayer,
     if (numSigners != this.numSigners) {
       throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners, numSigners));
     }
-    this.data[0] = (byte) numSigners;
     for (final var signer : signers) {
       sign(signer);
     }
@@ -148,12 +133,18 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public String getBase58Id() {
-    return Transaction.getBase58Id(this.data);
+    if (notSigned()) {
+      throw new IllegalStateException("Transaction has not been signed yet.");
+    }
+    return Base58.encode(data, signaturesOffset, signaturesOffset + SIGNATURE_LENGTH);
   }
 
   @Override
   public byte[] getId() {
-    return Transaction.getId(this.data);
+    if (notSigned()) {
+      throw new IllegalStateException("Transaction has not been signed yet.");
+    }
+    return Arrays.copyOfRange(data, signaturesOffset, signaturesOffset + SIGNATURE_LENGTH);
   }
 
   @Override
@@ -161,8 +152,13 @@ record TransactionRecord(AccountMeta feePayer,
     return data.length;
   }
 
+  @Override
+  public boolean exceedsSizeLimit() {
+    return size() > MAX_SERIALIZED_LENGTH_V1;
+  }
+
   private Transaction setBlockHash(final Transaction transaction) {
-    if (transaction instanceof TransactionRecord transactionRecord) {
+    if (transaction instanceof V1Transaction transactionRecord) {
       System.arraycopy(
           this.data, this.recentBlockHashIndex,
           transactionRecord.data, transactionRecord.recentBlockHashIndex,
@@ -182,7 +178,7 @@ record TransactionRecord(AccountMeta feePayer,
     for (final var _ix : instructions) {
       ixArray[i++] = _ix;
     }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+    return setBlockHash(TxBuilder.create().feePayer(feePayer).instructions(Arrays.asList(ixArray)).buildV1());
   }
 
   @Override
@@ -194,7 +190,7 @@ record TransactionRecord(AccountMeta feePayer,
     for (final var _ix : instructions) {
       ixArray[i++] = _ix;
     }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+    return setBlockHash(TxBuilder.create().feePayer(feePayer).instructions(Arrays.asList(ixArray)).buildV1());
   }
 
   @Override
@@ -207,7 +203,7 @@ record TransactionRecord(AccountMeta feePayer,
     for (final var ix : this.instructions) {
       ixArray[i++] = ix;
     }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+    return setBlockHash(TxBuilder.create().feePayer(feePayer).instructions(Arrays.asList(ixArray)).buildV1());
   }
 
   @Override
@@ -218,7 +214,7 @@ record TransactionRecord(AccountMeta feePayer,
       ixArray[i++] = _ix;
     }
     ixArray[instructions.size()] = ix;
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+    return setBlockHash(TxBuilder.create().feePayer(feePayer).instructions(Arrays.asList(ixArray)).buildV1());
   }
 
   @Override
@@ -231,13 +227,13 @@ record TransactionRecord(AccountMeta feePayer,
     for (final var ix : instructions) {
       ixArray[i++] = ix;
     }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+    return setBlockHash(TxBuilder.create().feePayer(feePayer).instructions(Arrays.asList(ixArray)).buildV1());
   }
 
   @Override
   public Transaction replaceInstruction(final int index, final Instruction instruction) {
     final var ixArray = instructions.toArray(Instruction[]::new);
     ixArray[index] = instruction;
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+    return setBlockHash(TxBuilder.create().feePayer(feePayer).instructions(Arrays.asList(ixArray)).buildV1());
   }
 }

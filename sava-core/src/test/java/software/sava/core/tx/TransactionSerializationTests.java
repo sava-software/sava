@@ -7,6 +7,7 @@ import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
+import software.sava.core.encoding.ByteUtil;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -605,5 +606,306 @@ final class TransactionSerializationTests {
 
     final var accountsUsingAPI = skeleton.parseAccounts(writeableLoaded, readonlyLoaded);
     assertArrayEquals(accountsUsingTables, accountsUsingAPI);
+  }
+
+  @Test
+  void testV1Serialization() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    assertNotEquals(signerA.publicKey(), signerB.publicKey());
+
+    final byte[] ixData = {1, 2, 3, 4, 5};
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        ixData
+    );
+    final var tx = TxBuilder.create().feePayer(signerA.publicKey()).instruction(ix).buildV1();
+
+    assertEquals(1, tx.version());
+    assertEquals(2, tx.numSigners());
+    assertInstanceOf(V1Transaction.class, tx);
+
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 1);
+    }
+    tx.setRecentBlockHash(blockHash);
+    assertArrayEquals(blockHash, tx.recentBlockHash());
+
+    final byte[] data = tx.serialized();
+
+    int i = 0;
+    // VersionByte
+    assertEquals((byte) 129, data[i++]);
+    // LegacyHeader: numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts
+    assertEquals(2, data[i++]);
+    assertEquals(0, data[i++]);
+    assertEquals(1, data[i++]);
+    // TransactionConfigMask (u32) == 0
+    for (int m = 0; m < 4; ++m) {
+      assertEquals(0, data[i++]);
+    }
+    // LifetimeSpecifier
+    assertArrayEquals(blockHash, Arrays.copyOfRange(data, i, i + Transaction.BLOCK_HASH_LENGTH));
+    i += Transaction.BLOCK_HASH_LENGTH;
+    // NumInstructions
+    assertEquals(1, data[i++]);
+    // NumAddresses
+    assertEquals(3, data[i++]);
+    // Addresses: fee payer, writable signer, readonly program
+    assertArrayEquals(signerA.publicKey().toByteArray(), Arrays.copyOfRange(data, i, i + 32));
+    i += 32;
+    assertArrayEquals(signerB.publicKey().toByteArray(), Arrays.copyOfRange(data, i, i + 32));
+    i += 32;
+    assertArrayEquals(SolanaAccounts.MAIN_NET.systemProgram().toByteArray(), Arrays.copyOfRange(data, i, i + 32));
+    i += 32;
+    // InstructionHeader: (programIdIndex, numAccounts, numDataBytes u16 LE)
+    assertEquals(2, data[i++]);
+    assertEquals(1, data[i++]);
+    assertEquals(5, data[i++]);
+    assertEquals(0, data[i++]);
+    // InstructionPayload: account indices then data
+    assertEquals(1, data[i++]);
+    assertArrayEquals(ixData, Arrays.copyOfRange(data, i, i + ixData.length));
+    i += ixData.length;
+
+    final int signaturesOffset = i;
+    assertEquals(signaturesOffset + (2 * Transaction.SIGNATURE_LENGTH), data.length);
+
+    assertThrows(IllegalStateException.class, tx::getBase58Id);
+
+    tx.sign(signerA);
+    tx.sign(signerB);
+
+    assertTrue(signerA.publicKey().verifySignature(
+        data, 0, signaturesOffset,
+        Arrays.copyOfRange(data, signaturesOffset, signaturesOffset + Transaction.SIGNATURE_LENGTH)
+    ));
+    assertTrue(signerB.publicKey().verifySignature(
+        data, 0, signaturesOffset,
+        Arrays.copyOfRange(data, signaturesOffset + Transaction.SIGNATURE_LENGTH, signaturesOffset + (2 * Transaction.SIGNATURE_LENGTH))
+    ));
+
+    final var signerC = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    assertThrows(IllegalArgumentException.class, () -> tx.sign(signerC));
+
+    assertArrayEquals(
+        Arrays.copyOfRange(data, signaturesOffset, signaturesOffset + Transaction.SIGNATURE_LENGTH),
+        tx.getId()
+    );
+  }
+
+  @Test
+  void testV1SerializationWithConfig() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    assertNotEquals(signerA.publicKey(), signerB.publicKey());
+
+    final byte[] ixData = {1, 2, 3, 4, 5};
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        ixData
+    );
+
+    final long priorityFeeLamports = 5_000L;
+    final int computeUnitLimit = 200_000;
+    final int accountDataSizeLimit = 65_536;
+    final int heapSize = 64 * 1_024;
+
+    final var tx = TxBuilder.create()
+        .feePayer(signerA.publicKey())
+        .instruction(ix)
+        .priorityFeeLamports(priorityFeeLamports)
+        .computeUnitLimit(computeUnitLimit)
+        .accountDataSizeLimit(accountDataSizeLimit)
+        .heapSize(heapSize)
+        .buildV1();
+
+    assertEquals(1, tx.version());
+    assertEquals(2, tx.numSigners());
+    assertInstanceOf(V1Transaction.class, tx);
+
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 1);
+    }
+    tx.setRecentBlockHash(blockHash);
+
+    final byte[] data = tx.serialized();
+
+    int i = 0;
+    // VersionByte
+    assertEquals((byte) 129, data[i++]);
+    // LegacyHeader
+    assertEquals(2, data[i++]);
+    assertEquals(0, data[i++]);
+    assertEquals(1, data[i++]);
+    // TransactionConfigMask (u32): bits [0,1] priority-fee, [2] CU limit, [3] data size, [4] heap.
+    final int expectedMask = 0b0001_1111;
+    assertEquals(expectedMask, ByteUtil.getInt32LE(data, i));
+    i += Integer.BYTES;
+    // LifetimeSpecifier
+    assertArrayEquals(blockHash, Arrays.copyOfRange(data, i, i + Transaction.BLOCK_HASH_LENGTH));
+    i += Transaction.BLOCK_HASH_LENGTH;
+    // NumInstructions
+    assertEquals(1, data[i++]);
+    // NumAddresses
+    assertEquals(3, data[i++]);
+    // Addresses
+    assertArrayEquals(signerA.publicKey().toByteArray(), Arrays.copyOfRange(data, i, i + 32));
+    i += 32;
+    assertArrayEquals(signerB.publicKey().toByteArray(), Arrays.copyOfRange(data, i, i + 32));
+    i += 32;
+    assertArrayEquals(SolanaAccounts.MAIN_NET.systemProgram().toByteArray(), Arrays.copyOfRange(data, i, i + 32));
+    i += 32;
+    // ConfigValues, ordered by ascending mask bit position.
+    assertEquals(priorityFeeLamports, ByteUtil.getInt64LE(data, i));
+    i += Long.BYTES;
+    assertEquals(computeUnitLimit, ByteUtil.getInt32LE(data, i));
+    i += Integer.BYTES;
+    assertEquals(accountDataSizeLimit, ByteUtil.getInt32LE(data, i));
+    i += Integer.BYTES;
+    assertEquals(heapSize, ByteUtil.getInt32LE(data, i));
+    i += Integer.BYTES;
+    // InstructionHeader: (programIdIndex, numAccounts, numDataBytes u16 LE)
+    assertEquals(2, data[i++]);
+    assertEquals(1, data[i++]);
+    assertEquals(5, data[i++]);
+    assertEquals(0, data[i++]);
+    // InstructionPayload: account indices then data
+    assertEquals(1, data[i++]);
+    assertArrayEquals(ixData, Arrays.copyOfRange(data, i, i + ixData.length));
+    i += ixData.length;
+
+    final int signaturesOffset = i;
+    assertEquals(signaturesOffset + (2 * Transaction.SIGNATURE_LENGTH), data.length);
+
+    tx.sign(signerA);
+    tx.sign(signerB);
+    assertTrue(signerA.publicKey().verifySignature(
+        data, 0, signaturesOffset,
+        Arrays.copyOfRange(data, signaturesOffset, signaturesOffset + Transaction.SIGNATURE_LENGTH)
+    ));
+    assertTrue(signerB.publicKey().verifySignature(
+        data, 0, signaturesOffset,
+        Arrays.copyOfRange(data, signaturesOffset + Transaction.SIGNATURE_LENGTH, signaturesOffset + (2 * Transaction.SIGNATURE_LENGTH))
+    ));
+  }
+
+  @Test
+  void testV1InvalidHeapSize() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[]{1}
+    );
+    // Not a multiple of 1KiB.
+    assertThrows(IllegalStateException.class, () -> TxBuilder.create()
+        .feePayer(signerA.publicKey()).instruction(ix).heapSize(33_000).buildV1());
+    // Below the 32KiB minimum.
+    assertThrows(IllegalStateException.class, () -> TxBuilder.create()
+        .feePayer(signerA.publicKey()).instruction(ix).heapSize(16 * 1_024).buildV1());
+    // Above the 256KiB maximum.
+    assertThrows(IllegalStateException.class, () -> TxBuilder.create()
+        .feePayer(signerA.publicKey()).instruction(ix).heapSize(512 * 1_024).buildV1());
+  }
+
+  @Test
+  void testV1SkeletonDeserialization() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var readOnlyAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var secondProgram = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+
+    final byte[] ixData1 = {1, 2, 3, 4, 5};
+    final byte[] ixData2 = {9, 8, 7};
+    final var ix1 = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        ixData1
+    );
+    final var ix2 = Instruction.createInstruction(
+        secondProgram,
+        List.of(AccountMeta.createRead(readOnlyAccount)),
+        ixData2
+    );
+
+    // Include config values to exercise the v1 ConfigValues skip while computing the instructions
+    // offset during deserialization.
+    final var tx = TxBuilder.create()
+        .feePayer(feePayer.publicKey())
+        .instructions(List.of(ix1, ix2))
+        .priorityFeeLamports(5_000L)
+        .computeUnitLimit(200_000)
+        .buildV1();
+
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 7);
+    }
+    tx.setRecentBlockHash(blockHash);
+    tx.sign(feePayer);
+    tx.sign(signerB);
+
+    final byte[] data = tx.serialized();
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+
+    assertEquals(1, skeleton.version());
+    assertTrue(skeleton.isVersioned());
+    assertFalse(skeleton.isLegacy());
+    assertEquals(2, skeleton.numSignatures());
+    assertEquals(2, skeleton.numSigners());
+    assertEquals(0, skeleton.numReadonlySignedAccounts());
+    // readOnlyAccount + the two program ids.
+    assertEquals(3, skeleton.numReadonlyUnsignedAccounts());
+    assertEquals(2, skeleton.numInstructions());
+    assertEquals(0, skeleton.lookupTableAccounts().length);
+    assertEquals(0, skeleton.numIndexedAccounts());
+
+    assertEquals(tx.getBase58Id(), skeleton.id());
+    assertArrayEquals(blockHash, skeleton.blockHash());
+    assertEquals(feePayer.publicKey(), skeleton.feePayer());
+
+    final var signerKeys = skeleton.parseSignerPublicKeys();
+    assertArrayEquals(new PublicKey[]{feePayer.publicKey(), signerB.publicKey()}, signerKeys);
+
+    // feePayer, signerB, readOnlyAccount, systemProgram, secondProgram
+    final var accounts = skeleton.parseAccounts();
+    assertEquals(5, accounts.length);
+    assertEquals(feePayer.publicKey(), accounts[0].publicKey());
+
+    final var instructions = skeleton.parseInstructions(accounts);
+    assertEquals(2, instructions.length);
+
+    assertEquals(SolanaAccounts.MAIN_NET.systemProgram(), instructions[0].programId().publicKey());
+    assertEquals(1, instructions[0].accounts().size());
+    assertEquals(signerB.publicKey(), instructions[0].accounts().getFirst().publicKey());
+    assertArrayEquals(ixData1, Arrays.copyOfRange(
+        instructions[0].data(), instructions[0].offset(), instructions[0].offset() + instructions[0].len()
+    ));
+
+    assertEquals(secondProgram, instructions[1].programId().publicKey());
+    assertEquals(1, instructions[1].accounts().size());
+    assertEquals(readOnlyAccount, instructions[1].accounts().getFirst().publicKey());
+    assertArrayEquals(ixData2, Arrays.copyOfRange(
+        instructions[1].data(), instructions[1].offset(), instructions[1].offset() + instructions[1].len()
+    ));
+
+    final var programAccounts = skeleton.parseProgramAccounts();
+    assertEquals(
+        Set.of(SolanaAccounts.MAIN_NET.systemProgram(), secondProgram),
+        new HashSet<>(Arrays.asList(programAccounts))
+    );
+
+    final var withoutAccounts = skeleton.parseInstructionsWithoutAccounts();
+    assertEquals(2, withoutAccounts.length);
+    assertTrue(withoutAccounts[0].accounts().isEmpty());
+    assertArrayEquals(ixData2, Arrays.copyOfRange(
+        withoutAccounts[1].data(), withoutAccounts[1].offset(), withoutAccounts[1].offset() + withoutAccounts[1].len()
+    ));
   }
 }

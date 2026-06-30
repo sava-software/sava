@@ -17,8 +17,8 @@ import static software.sava.core.accounts.meta.AccountMeta.*;
 import static software.sava.core.encoding.CompactU16Encoding.decode;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.tx.Instruction.createInstruction;
-import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
-import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
+import static software.sava.core.tx.Transaction.*;
+import static software.sava.core.tx.TxBuilder.V1_INSTRUCTION_HEADER_LENGTH;
 
 record TransactionSkeletonRecord(byte[] data,
                                  int version,
@@ -47,7 +47,58 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public String id() {
-    return Base58.encode(data, 1, 1 + Transaction.SIGNATURE_LENGTH);
+    if (isV1()) {
+      final int signaturesOffset = data.length - (numSignatures * SIGNATURE_LENGTH);
+      return Base58.encode(data, signaturesOffset, signaturesOffset + SIGNATURE_LENGTH);
+    } else {
+      return Base58.encode(data, 1, 1 + SIGNATURE_LENGTH);
+    }
+  }
+
+  // SIMD-0385 v1 transactions use message version 1.
+  private boolean isV1() {
+    return version == 1;
+  }
+
+  // Returns the offset of the first instruction's payload (account indices and data). The v1 format
+  // serializes all fixed-width instruction headers contiguously, immediately followed by all of the
+  // instruction payloads, whereas the legacy and v0 formats interleave each instruction's header
+  // and payload.
+  private int firstInstructionCursor() {
+    return isV1()
+        ? instructionsOffset + (numInstructions * V1_INSTRUCTION_HEADER_LENGTH)
+        : instructionsOffset;
+  }
+
+  private int decodeInstruction(final int i, int payloadCursor, final int[] layout) {
+    if (isV1()) {
+      final int header = instructionsOffset + (i * V1_INSTRUCTION_HEADER_LENGTH);
+      layout[0] = data[header] & 0xFF;
+      final int numAccounts = data[header + 1] & 0xFF;
+      layout[1] = numAccounts;
+      final int numDataBytes = (data[header + 2] & 0xFF) | ((data[header + 3] & 0xFF) << 8);
+      layout[3] = numDataBytes;
+      layout[2] = payloadCursor;
+      payloadCursor += numAccounts;
+      layout[4] = payloadCursor;
+      payloadCursor += numDataBytes;
+      return payloadCursor;
+    } else {
+      int o = payloadCursor;
+      layout[0] = decode(data, o);
+      o += getByteLen(data, o);
+      final int numAccounts = decode(data, o);
+      layout[1] = numAccounts;
+      o += getByteLen(data, o);
+      layout[2] = o;
+      o += numAccounts;
+      final int numDataBytes = decode(data, o);
+      layout[3] = numDataBytes;
+      o += getByteLen(data, o);
+      layout[4] = o;
+      o += numDataBytes;
+      return o;
+    }
   }
 
   @Override
@@ -143,18 +194,15 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public int serializedInstructionsLength() {
     int serializedInstructionsLength = 0;
-    int o = instructionsOffset;
-    for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
-      numAccounts = decode(data, o);
-      o += getByteLen(data, o);
-      o += numAccounts;
-
-      len = decode(data, o);
-      o += getByteLen(data, o);
-      o += len;
-
-      serializedInstructionsLength += 1 // programId index
-          + getByteLen(numAccounts) + numAccounts + getByteLen(len) + len;
+    final boolean v1 = isV1();
+    final int[] layout = new int[5];
+    for (int i = 0, o = firstInstructionCursor(), numAccounts, len; i < numInstructions; ++i) {
+      o = decodeInstruction(i, o, layout);
+      numAccounts = layout[1];
+      len = layout[3];
+      serializedInstructionsLength += v1
+          ? V1_INSTRUCTION_HEADER_LENGTH + numAccounts + len
+          : 1 /* programId index */ + getByteLen(numAccounts) + numAccounts + getByteLen(len) + len;
     }
     return serializedInstructionsLength;
   }
@@ -230,22 +278,20 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public Instruction[] parseInstructions(final AccountMeta[] accounts) {
     final var instructions = new Instruction[numInstructions];
-    for (int i = 0, o = instructionsOffset, numIxAccounts, accountIndex; i < numInstructions; ++i) {
-      final var programAccount = accounts[decode(data, o)];
-      o += getByteLen(data, o);
+    final int[] layout = new int[5];
+    for (int i = 0, o = firstInstructionCursor(), numIxAccounts, accountIndicesOffset, accountIndex; i < numInstructions; ++i) {
+      o = decodeInstruction(i, o, layout);
+      final var programAccount = accounts[layout[0]];
 
-      numIxAccounts = decode(data, o);
+      numIxAccounts = layout[1];
+      accountIndicesOffset = layout[2];
       final var ixAccounts = new AccountMeta[numIxAccounts];
-      o += getByteLen(data, o);
       for (int a = 0; a < numIxAccounts; ++a) {
-        accountIndex = data[o++] & 0xFF;
+        accountIndex = data[accountIndicesOffset++] & 0xFF;
         ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
       }
 
-      final int len = decode(data, o);
-      o += getByteLen(data, o);
-      instructions[i] = createInstruction(programAccount, Arrays.asList(ixAccounts), data, o, len);
-      o += len;
+      instructions[i] = createInstruction(programAccount, Arrays.asList(ixAccounts), data, layout[4], layout[3]);
     }
     return instructions;
   }
@@ -261,18 +307,10 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public PublicKey[] parseProgramAccounts() {
     final var programs = new PublicKey[numInstructions];
-    for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
-      programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
-      programs[i] = getAccount(programAccountIndex);
-
-      numIxAccounts = decode(data, o);
-      o += getByteLen(data, o);
-      o += numIxAccounts;
-
-      len = decode(data, o);
-      o += getByteLen(data, o);
-      o += len;
+    final int[] layout = new int[5];
+    for (int i = 0, o = firstInstructionCursor(); i < numInstructions; ++i) {
+      o = decodeInstruction(i, o, layout);
+      programs[i] = getAccount(layout[0]);
     }
     return programs;
   }
@@ -282,19 +320,11 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public Instruction[] parseInstructionsWithoutAccounts() {
     final var instructions = new Instruction[numInstructions];
-    for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
-      final var programAccount = getAccount(programAccountIndex);
-
-      numIxAccounts = decode(data, o);
-      o += getByteLen(data, o);
-      o += numIxAccounts;
-
-      len = decode(data, o);
-      o += getByteLen(data, o);
-      instructions[i] = createInstruction(programAccount, NO_ACCOUNTS, data, o, len);
-      o += len;
+    final int[] layout = new int[5];
+    for (int i = 0, o = firstInstructionCursor(); i < numInstructions; ++i) {
+      o = decodeInstruction(i, o, layout);
+      final var programAccount = getAccount(layout[0]);
+      instructions[i] = createInstruction(programAccount, NO_ACCOUNTS, data, layout[4], layout[3]);
     }
     return instructions;
   }
@@ -302,28 +332,21 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public Instruction[] filterInstructions(final AccountMeta[] accounts, final Discriminator discriminator) {
     final var instructions = new Instruction[numInstructions];
+    final int[] layout = new int[5];
     int d = 0;
-    for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
-
-      numIxAccounts = decode(data, o);
-      o += getByteLen(data, o);
-      int accountsOffset = o;
-      o += numIxAccounts;
-
-      len = decode(data, o);
-      o += getByteLen(data, o);
-
-      if (discriminator.equals(data, o)) {
+    for (int i = 0, o = firstInstructionCursor(); i < numInstructions; ++i) {
+      o = decodeInstruction(i, o, layout);
+      final int dataOffset = layout[4];
+      if (discriminator.equals(data, dataOffset)) {
+        final int numIxAccounts = layout[1];
+        int accountIndicesOffset = layout[2];
         final var ixAccounts = new AccountMeta[numIxAccounts];
         for (int a = 0; a < numIxAccounts; ++a) {
-          final int accountIndex = data[accountsOffset++] & 0xFF;
+          final int accountIndex = data[accountIndicesOffset++] & 0xFF;
           ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
         }
-        instructions[d++] = createInstruction(getAccount(programAccountIndex), Arrays.asList(ixAccounts), data, o, len);
+        instructions[d++] = createInstruction(getAccount(layout[0]), Arrays.asList(ixAccounts), data, dataOffset, layout[3]);
       }
-      o += len;
     }
     return d == numInstructions
         ? instructions
@@ -333,22 +356,14 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public Instruction[] filterInstructionsWithoutAccounts(final Discriminator discriminator) {
     final var instructions = new Instruction[numInstructions];
+    final int[] layout = new int[5];
     int d = 0;
-    for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
-
-      numIxAccounts = decode(data, o);
-      o += getByteLen(data, o);
-      o += numIxAccounts;
-
-      len = decode(data, o);
-      o += getByteLen(data, o);
-
-      if (discriminator.equals(data, o)) {
-        instructions[d++] = createInstruction(getAccount(programAccountIndex), NO_ACCOUNTS, data, o, len);
+    for (int i = 0, o = firstInstructionCursor(); i < numInstructions; ++i) {
+      o = decodeInstruction(i, o, layout);
+      final int dataOffset = layout[4];
+      if (discriminator.equals(data, dataOffset)) {
+        instructions[d++] = createInstruction(getAccount(layout[0]), NO_ACCOUNTS, data, dataOffset, layout[3]);
       }
-      o += len;
     }
     return d == numInstructions
         ? instructions
