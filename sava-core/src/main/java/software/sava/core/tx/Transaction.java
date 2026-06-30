@@ -42,6 +42,12 @@ public interface Transaction {
     }
   }
 
+  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
+    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    Arrays.sort(accountMetas, Transaction.LEGACY_META_COMPARATOR);
+    return accountMetas;
+  }
+
   static Transaction createTx(final PublicKey feePayer, final List<Instruction> instructions) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions);
   }

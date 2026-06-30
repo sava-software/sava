@@ -23,9 +23,9 @@ public final class TxBuilder {
   static final int V1_CONFIG_MASK_LENGTH = 4;
   // Length, in bytes, of a single v1 InstructionHeader: (u8 programIdIndex, u8 numAccounts, u16 numDataBytes).
   static final int V1_INSTRUCTION_HEADER_LENGTH = 4;
-  // Maximum number of instructions and addresses permitted in a v1 transaction.
+  // Maximum number of instructions and accounts permitted in a v1 transaction.
   static final int MAX_V1_INSTRUCTIONS = 64;
-  static final int MAX_V1_ADDRESSES = 64;
+  static final int MAX_V1_ACCOUNTS = 64;
 
   private AccountMeta feePayer;
   private final List<Instruction> instructions;
@@ -100,11 +100,10 @@ public final class TxBuilder {
     final int instructionPayloadLength = mergeAccounts(feePayer, accounts, instructions);
     final var sortedAccounts = Transaction.sortLegacyAccounts(accounts);
 
-    final int numAddresses = sortedAccounts.length;
-    if (numAddresses > MAX_V1_ADDRESSES) {
-      throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_ADDRESSES + " addresses.");
+    final int numAccounts = sortedAccounts.length;
+    if (numAccounts > MAX_V1_ACCOUNTS) {
+      throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_ACCOUNTS + " accounts.");
     }
-
 
     final var feePayer = sortedAccounts[0];
     if (!feePayer.feePayer()) {
@@ -114,7 +113,7 @@ public final class TxBuilder {
     int numRequiredSignatures = 1;
     int numReadonlySignedAccounts = 0;
     int a = 1;
-    for (; a < numAddresses; ++a) {
+    for (; a < numAccounts; ++a) {
       final var account = sortedAccounts[a];
       if (account.signer()) {
         ++numRequiredSignatures;
@@ -125,7 +124,7 @@ public final class TxBuilder {
         break;
       }
     }
-    for (; a < numAddresses; ++a) {
+    for (; a < numAccounts; ++a) {
       final var account = sortedAccounts[a];
       if (!account.write()) {
         break;
@@ -152,8 +151,8 @@ public final class TxBuilder {
         + V1_CONFIG_MASK_LENGTH
         + Transaction.BLOCK_HASH_LENGTH // LifetimeSpecifier
         + 1 // NumInstructions
-        + 1 // NumAddresses
-        + (numAddresses << 5) // Addresses
+        + 1 // NumAccounts
+        + (numAccounts << 5) // Accounts
         + (Integer.bitCount(configMask) << 2) // ConfigValues, 4 bytes per set TransactionConfigMask bit.
         + (numInstructions * V1_INSTRUCTION_HEADER_LENGTH) // InstructionHeaders
         + instructionPayloadLength; // InstructionPayloads
@@ -179,12 +178,12 @@ public final class TxBuilder {
     i += Transaction.BLOCK_HASH_LENGTH;
 
     out[i++] = (byte) numInstructions;
-    out[i++] = (byte) numAddresses;
+    out[i++] = (byte) numAccounts;
 
-    // Addresses
-    final var accountIndexLookupTable = HashMap.<PublicKey, Integer>newHashMap(numAddresses);
+    // Accounts
+    final var accountIndexLookupTable = HashMap.<PublicKey, Integer>newHashMap(numAccounts);
     final int accountsOffset = i;
-    for (int index = 0; index < numAddresses; ++index) {
+    for (int index = 0; index < numAccounts; ++index) {
       final var publicKey = sortedAccounts[index].publicKey();
       accountIndexLookupTable.put(publicKey, index);
       i += publicKey.write(out, i);
@@ -243,8 +242,7 @@ public final class TxBuilder {
   private static int mergeAccounts(final AccountMeta feePayer,
                                    final Map<PublicKey, AccountMeta> accounts,
                                    final List<Instruction> instructions) {
-    final int numInstructions = instructions.size();
-    if (numInstructions == 0) {
+    if (instructions.isEmpty()) {
       throw new IllegalArgumentException("No instructions provided");
     }
     if (feePayer != null) {
