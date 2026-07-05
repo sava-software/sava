@@ -4,7 +4,6 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
-import software.sava.core.encoding.ByteUtil;
 import software.sava.core.programs.Discriminator;
 
 import java.util.Arrays;
@@ -16,11 +15,11 @@ import java.util.stream.Stream;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.encoding.CompactU16Encoding.*;
+import static software.sava.core.tx.BaseTransactionSkeleton.LEGACY_INVOKED_INDEXES;
+import static software.sava.core.tx.BaseTransactionSkeleton.NO_TABLES;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
-import static software.sava.core.tx.TransactionRecord.VERSIONED_BIT_MASK;
-import static software.sava.core.tx.TransactionSkeletonRecord.LEGACY_INVOKED_INDEXES;
-import static software.sava.core.tx.TransactionSkeletonRecord.NO_TABLES;
-import static software.sava.core.tx.TxBuilder.*;
+import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
+import static software.sava.core.tx.TxBuilderImpl.V1_VERSION_BYTE;
 
 public interface TransactionSkeleton {
 
@@ -33,7 +32,7 @@ public interface TransactionSkeleton {
    */
   static TransactionSkeleton deserializeSkeleton(final byte[] data) {
     if ((data[0] & 0xFF) == (V1_VERSION_BYTE & 0xFF)) {
-      return deserializeV1Skeleton(data);
+      return V1TransactionSkeleton.deserialize(data);
     }
     int o = 0;
     final int serializedSignatureCount = decode(data, o);
@@ -104,7 +103,8 @@ public interface TransactionSkeleton {
             o += numReadIndexes;
             numAccounts += numReadIndexes;
           }
-          return new TransactionSkeletonRecord(
+          Arrays.sort(invokedIndexes);
+          return new TransactionSkeletonImpl(
               data,
               version,
               messageOffset,
@@ -117,7 +117,7 @@ public interface TransactionSkeleton {
               numAccounts
           );
         } else {
-          return new TransactionSkeletonRecord(
+          return new TransactionSkeletonImpl(
               data,
               version,
               messageOffset,
@@ -131,7 +131,7 @@ public interface TransactionSkeleton {
           );
         }
       } else {
-        return new TransactionSkeletonRecord(
+        return new TransactionSkeletonImpl(
             data,
             version,
             messageOffset,
@@ -156,7 +156,7 @@ public interface TransactionSkeleton {
         o += getByteLen(data, o);
         o += len;
       }
-      return new TransactionSkeletonRecord(
+      return new TransactionSkeletonImpl(
           data,
           version,
           messageOffset,
@@ -169,57 +169,6 @@ public interface TransactionSkeleton {
           numIncludedAccounts
       );
     }
-  }
-
-  private static TransactionSkeleton deserializeV1Skeleton(final byte[] data) {
-    final int messageOffset = 0;
-    int o = 1; // VersionByte
-
-    // LegacyHeader
-    final int numRequiredSignatures = data[o++] & 0xFF;
-    final int numReadonlySignedAccounts = data[o++] & 0xFF;
-    final int numReadonlyUnsignedAccounts = data[o++] & 0xFF;
-
-    // TransactionConfigMask (u32)
-    final int configMask = ByteUtil.getInt32LE(data, o);
-    o += V1_CONFIG_MASK_LENGTH;
-
-    // LifetimeSpecifier (recent block hash)
-    final int recentBlockHashIndex = o;
-    o += Transaction.BLOCK_HASH_LENGTH;
-
-    final int numInstructions = data[o++] & 0xFF;
-    final int numIncludedAccounts = data[o++] & 0xFF;
-
-    final int accountsOffset = o;
-    o += numIncludedAccounts << 5;
-
-    // ConfigValues: 4 bytes per set TransactionConfigMask bit.
-    o += Integer.bitCount(configMask) << 2;
-
-    final int instructionsOffset = o;
-    // The v1 format serializes all fixed-width instruction headers contiguously (followed by all of
-    // the instruction payloads), so the invoked program indexes can be read directly from the header
-    // block. The payloads do not need to be walked here: the signatures are simply appended after
-    // the message at the end of the transaction.
-    final int[] invokedIndexes = new int[numInstructions];
-    for (int i = 0; i < numInstructions; ++i) {
-      // InstructionHeader: (u8 programIdIndex, u8 numAccounts, u16 LE numDataBytes)
-      invokedIndexes[i] = data[instructionsOffset + (i * V1_INSTRUCTION_HEADER_LENGTH)] & 0xFF;
-    }
-    Arrays.sort(invokedIndexes);
-
-    return new TransactionSkeletonRecord(
-        data,
-        1,
-        messageOffset,
-        numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
-        numIncludedAccounts, accountsOffset,
-        recentBlockHashIndex,
-        numInstructions, instructionsOffset, invokedIndexes,
-        -1, NO_TABLES,
-        numIncludedAccounts
-    );
   }
 
   byte[] data();
@@ -261,6 +210,18 @@ public interface TransactionSkeleton {
   }
 
   PublicKey[] lookupTableAccounts();
+
+  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  long priorityFeeLamports();
+
+  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  int computeUnitLimit();
+
+  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  int accountDataSizeLimit();
+
+  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  int heapSize();
 
   AccountMeta[] parseAccounts();
 
@@ -461,4 +422,17 @@ public interface TransactionSkeleton {
    *                               not representable by a mutable transaction
    */
   Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
+
+  default TxBuilder prototypeTransaction() {
+    return prototypeTransaction(this.parseInstructionsWithoutTableAccounts());
+  }
+
+  default TxBuilder prototypeTransaction(final Instruction[] instructions) {
+    return new TxBuilderImpl()
+        .addInstructions(instructions)
+        .heapSize(heapSize())
+        .computeUnitLimit(computeUnitLimit())
+        .priorityFeeLamports(priorityFeeLamports())
+        .accountDataSizeLimit(accountDataSizeLimit());
+  }
 }
