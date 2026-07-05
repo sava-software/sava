@@ -620,7 +620,7 @@ final class TransactionSerializationTests {
         List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
         ixData
     );
-    final var tx = TxBuilder.create().feePayer(signerA.publicKey()).instruction(ix).buildV1();
+    final var tx = TxBuilder.createBuilder().feePayer(signerA.publicKey()).addInstruction(ix).createTransaction();
 
     assertEquals(1, tx.version());
     assertEquals(2, tx.numSigners());
@@ -714,14 +714,14 @@ final class TransactionSerializationTests {
     final int accountDataSizeLimit = 65_536;
     final int heapSize = 64 * 1_024;
 
-    final var tx = TxBuilder.create()
+    final var tx = TxBuilder.createBuilder()
         .feePayer(signerA.publicKey())
-        .instruction(ix)
+        .addInstruction(ix)
         .priorityFeeLamports(priorityFeeLamports)
         .computeUnitLimit(computeUnitLimit)
         .accountDataSizeLimit(accountDataSizeLimit)
         .heapSize(heapSize)
-        .buildV1();
+        .createTransaction();
 
     assertEquals(1, tx.version());
     assertEquals(2, tx.numSigners());
@@ -804,14 +804,17 @@ final class TransactionSerializationTests {
         new byte[]{1}
     );
     // Not a multiple of 1KiB.
-    assertThrows(IllegalStateException.class, () -> TxBuilder.create()
-        .feePayer(signerA.publicKey()).instruction(ix).heapSize(33_000).buildV1());
+    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(33_000).createTransaction()
+    );
     // Below the 32KiB minimum.
-    assertThrows(IllegalStateException.class, () -> TxBuilder.create()
-        .feePayer(signerA.publicKey()).instruction(ix).heapSize(16 * 1_024).buildV1());
+    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(16 * 1_024).createTransaction()
+    );
     // Above the 256KiB maximum.
-    assertThrows(IllegalStateException.class, () -> TxBuilder.create()
-        .feePayer(signerA.publicKey()).instruction(ix).heapSize(512 * 1_024).buildV1());
+    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(512 * 1_024).createTransaction()
+    );
   }
 
   @Test
@@ -836,12 +839,12 @@ final class TransactionSerializationTests {
 
     // Include config values to exercise the v1 ConfigValues skip while computing the instructions
     // offset during deserialization.
-    final var tx = TxBuilder.create()
+    final var tx = TxBuilder.createBuilder()
         .feePayer(feePayer.publicKey())
-        .instructions(List.of(ix1, ix2))
+        .addInstructions(List.of(ix1, ix2))
         .priorityFeeLamports(5_000L)
         .computeUnitLimit(200_000)
-        .buildV1();
+        .createTransaction();
 
     final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
     for (int b = 0; b < blockHash.length; ++b) {
@@ -866,6 +869,16 @@ final class TransactionSerializationTests {
     assertEquals(0, skeleton.lookupTableAccounts().length);
     assertEquals(0, skeleton.numIndexedAccounts());
 
+
+    final var v1Skeleton = assertInstanceOf(V1TransactionSkeleton.class, skeleton);
+    // ConfigValues: priority fee (bits 0,1) and compute unit limit (bit 2) were set.
+    assertEquals(0b0000_0111, v1Skeleton.configMask());
+    assertEquals(5_000L, skeleton.priorityFeeLamports());
+    assertEquals(200_000, skeleton.computeUnitLimit());
+    assertEquals(0, skeleton.accountDataSizeLimit());
+    assertEquals(0, skeleton.heapSize());
+    assertInstanceOf(V1TransactionSkeleton.class, skeleton);
+
     assertEquals(tx.getBase58Id(), skeleton.id());
     assertArrayEquals(blockHash, skeleton.blockHash());
     assertEquals(feePayer.publicKey(), skeleton.feePayer());
@@ -885,15 +898,17 @@ final class TransactionSerializationTests {
     assertEquals(1, instructions[0].accounts().size());
     assertEquals(signerB.publicKey(), instructions[0].accounts().getFirst().publicKey());
     assertArrayEquals(ixData1, Arrays.copyOfRange(
-        instructions[0].data(), instructions[0].offset(), instructions[0].offset() + instructions[0].len()
-    ));
+            instructions[0].data(), instructions[0].offset(), instructions[0].offset() + instructions[0].len()
+        )
+    );
 
     assertEquals(secondProgram, instructions[1].programId().publicKey());
     assertEquals(1, instructions[1].accounts().size());
     assertEquals(readOnlyAccount, instructions[1].accounts().getFirst().publicKey());
     assertArrayEquals(ixData2, Arrays.copyOfRange(
-        instructions[1].data(), instructions[1].offset(), instructions[1].offset() + instructions[1].len()
-    ));
+            instructions[1].data(), instructions[1].offset(), instructions[1].offset() + instructions[1].len()
+        )
+    );
 
     final var programAccounts = skeleton.parseProgramAccounts();
     assertEquals(
@@ -905,7 +920,114 @@ final class TransactionSerializationTests {
     assertEquals(2, withoutAccounts.length);
     assertTrue(withoutAccounts[0].accounts().isEmpty());
     assertArrayEquals(ixData2, Arrays.copyOfRange(
-        withoutAccounts[1].data(), withoutAccounts[1].offset(), withoutAccounts[1].offset() + withoutAccounts[1].len()
-    ));
+            withoutAccounts[1].data(), withoutAccounts[1].offset(), withoutAccounts[1].offset() + withoutAccounts[1].len()
+        )
+    );
+  }
+
+  // Compute Budget instruction discriminators, per SIMD / ComputeBudgetProgram.
+  private static final int REQUEST_HEAP_FRAME_DISCRIMINATOR = 1;
+  private static final int SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR = 2;
+  private static final int SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR = 3;
+  private static final int SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR = 4;
+
+  private static Instruction setComputeUnitPrice(final long microLamports) {
+    final byte[] data = new byte[9];
+    data[0] = (byte) SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR;
+    ByteUtil.putInt64LE(data, 1, microLamports);
+    return Instruction.createInstruction(SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram(), List.of(), data);
+  }
+
+  private static Instruction setComputeUnitLimit(final int units) {
+    final byte[] data = new byte[5];
+    data[0] = (byte) SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR;
+    ByteUtil.putInt32LE(data, 1, units);
+    return Instruction.createInstruction(SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram(), List.of(), data);
+  }
+
+  private static Instruction setLoadedAccountsDataSizeLimit(final int accountDataSizeLimit) {
+    final byte[] data = new byte[5];
+    data[0] = (byte) SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR;
+    ByteUtil.putInt32LE(data, 1, accountDataSizeLimit);
+    return Instruction.createInstruction(SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram(), List.of(), data);
+  }
+
+  private static Instruction requestHeapFrame(final int heapSize) {
+    final byte[] data = new byte[5];
+    data[0] = (byte) REQUEST_HEAP_FRAME_DISCRIMINATOR;
+    ByteUtil.putInt32LE(data, 1, heapSize);
+    return Instruction.createInstruction(SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram(), List.of(), data);
+  }
+
+  @Test
+  void testLegacySkeletonComputeBudgetConfigValues() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    final long priorityFeeLamports = 25_000L;
+    final int computeUnitLimit = 200_000;
+    final int accountDataSizeLimit = 65_536;
+    final int heapSize = 64 * 1_024;
+
+    final byte[] ixData = {1, 2, 3, 4, 5};
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        ixData
+    );
+
+    final var tx = Transaction.createTx(feePayer.publicKey(), List.of(
+            setComputeUnitPrice(priorityFeeLamports),
+            setComputeUnitLimit(computeUnitLimit),
+            setLoadedAccountsDataSizeLimit(accountDataSizeLimit),
+            requestHeapFrame(heapSize),
+            ix
+        )
+    );
+
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 3);
+    }
+    tx.setRecentBlockHash(blockHash);
+    tx.sign(feePayer);
+    tx.sign(signerB);
+
+    final byte[] data = tx.serialized();
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+
+    assertEquals(priorityFeeLamports, skeleton.priorityFeeLamports());
+    assertEquals(computeUnitLimit, skeleton.computeUnitLimit());
+    assertEquals(accountDataSizeLimit, skeleton.accountDataSizeLimit());
+    assertEquals(heapSize, skeleton.heapSize());
+  }
+
+  @Test
+  void testLegacySkeletonWithoutComputeBudget() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[]{1, 2, 3}
+    );
+
+    final var tx = Transaction.createTx(feePayer.publicKey(), List.of(ix));
+
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 5);
+    }
+    tx.setRecentBlockHash(blockHash);
+    tx.sign(feePayer);
+    tx.sign(signerB);
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
+
+    assertEquals(0L, skeleton.priorityFeeLamports());
+    assertEquals(0, skeleton.computeUnitLimit());
+    assertEquals(0, skeleton.accountDataSizeLimit());
+    assertEquals(0, skeleton.heapSize());
   }
 }
