@@ -350,77 +350,44 @@ public interface TransactionSkeleton {
     return createTransaction(accounts);
   }
 
-  /**
-   * Creates a mutable transaction using one lookup table.
-   *
-   * @throws IllegalStateException if the serialized signature-slot count does not match the
-   *                               message header's required-signature count, or its prefix is
-   *                               not representable by a mutable transaction
-   */
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
-  /**
-   * Creates a mutable transaction from the supplied instructions and lookup table.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
     return createTransaction(Arrays.asList(instructions), lookupTable);
   }
 
-  /**
-   * Creates a mutable transaction after parsing instructions against the supplied accounts.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(instructions, lookupTable);
   }
 
-  /**
-   * Creates a mutable transaction after resolving accounts through one lookup table.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
     final var accounts = parseAccounts(lookupTable);
     return createTransaction(accounts, lookupTable);
   }
 
-  /**
-   * Creates a mutable transaction after parsing instructions against the supplied accounts.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final AccountMeta[] accounts,
                                         final LookupTableAccountMeta[] tableAccountMetas) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(Arrays.asList(instructions), tableAccountMetas);
   }
 
-  /**
-   * Creates a mutable transaction after resolving accounts through the supplied lookup metadata.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
-  default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
-    final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
-    return createTransaction(accounts, tableAccountMetas);
-  }
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
 
-  /**
-   * Creates a mutable transaction using the supplied lookup-table metadata.
-   *
-   * @throws IllegalStateException if the serialized signature-slot count does not match the
-   *                               message header's required-signature count, or its prefix is
-   *                               not representable by a mutable transaction
-   */
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
   Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
 
   default TxBuilder prototypeTransaction() {
