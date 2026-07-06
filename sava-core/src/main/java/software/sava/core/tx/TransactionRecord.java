@@ -6,14 +6,18 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 
 // Legacy and v0 transaction formats.
 final class TransactionRecord extends BaseTransaction {
 
+  static final int VERSIONED_MSG_HEADER_LENGTH = 1 + TxBuilderImpl.MSG_HEADER_LENGTH;
+  static final int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
   static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
 
   private final AddressLookupTable lookupTable;
@@ -55,12 +59,34 @@ final class TransactionRecord extends BaseTransaction {
     for (final var instruction : instructions) {
       serializedInstructionLength += instruction.serializedLength();
       for (final var meta : instruction.accounts()) {
-        accounts.merge(meta.publicKey(), meta, Transaction.MERGE_ACCOUNT_META);
+        accounts.merge(meta.publicKey(), meta, TxBuilderImpl.MERGE_ACCOUNT_META);
       }
       final var programMeta = instruction.programId();
-      accounts.merge(programMeta.publicKey(), programMeta, Transaction.MERGE_ACCOUNT_META);
+      accounts.merge(programMeta.publicKey(), programMeta, TxBuilderImpl.MERGE_ACCOUNT_META);
     }
     return serializedInstructionLength;
+  }
+
+  private static final Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
+    if (am1.feePayer()) {
+      return -1;
+    } else if (am2.feePayer()) {
+      return 1;
+    } else if (am1.signer() == am2.signer()) {
+      if (am1.write() == am2.write()) {
+        return am1.invoked() == am2.invoked() ? 0 : am1.invoked() ? -1 : 1;
+      } else {
+        return am1.write() ? -1 : 1;
+      }
+    } else {
+      return am1.signer() ? -1 : 1;
+    }
+  };
+
+  static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
+    final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    Arrays.sort(accountMetas, VO_META_COMPARATOR);
+    return accountMetas;
   }
 
   @Override
@@ -116,17 +142,12 @@ final class TransactionRecord extends BaseTransaction {
   @Override
   public int version() {
     final int version = data[messageOffset] & 0xFF;
-    return signedByte(version) ? version & 0x7F : VERSIONED_BIT_MASK;
+    return signedByte(version) ? version & 0x7F : BaseTransaction.VERSIONED_BIT_MASK;
   }
 
   @Override
-  public String getBase58Id() {
-    return Transaction.getBase58Id(this.data);
-  }
-
-  @Override
-  public byte[] getId() {
-    return Transaction.getId(this.data);
+  public boolean exceedsSizeLimit() {
+    return size() > Transaction.MAX_SERIALIZED_LENGTH;
   }
 
   @Override

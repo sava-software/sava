@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.lookupAccountIndexOrThrow;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
-import static software.sava.core.tx.Transaction.MERGE_ACCOUNT_META;
+import static software.sava.core.tx.TxBuilderImpl.MERGE_ACCOUNT_META;
 
 record InstructionRecord(AccountMeta programId,
                          List<AccountMeta> accounts,

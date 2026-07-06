@@ -18,7 +18,6 @@ import static software.sava.core.encoding.CompactU16Encoding.*;
 import static software.sava.core.tx.BaseTransactionSkeleton.LEGACY_INVOKED_INDEXES;
 import static software.sava.core.tx.BaseTransactionSkeleton.NO_TABLES;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
-import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 import static software.sava.core.tx.TxBuilderImpl.V1_VERSION_BYTE;
 
 public interface TransactionSkeleton {
@@ -40,7 +39,7 @@ public interface TransactionSkeleton {
       version &= 0x7F;
     } else {
       numRequiredSignatures = version;
-      version = VERSIONED_BIT_MASK;
+      version = BaseTransaction.VERSIONED_BIT_MASK;
     }
     final int numReadonlySignedAccounts = data[o++];
     final int numReadonlyUnsignedAccounts = data[o++];
@@ -277,47 +276,6 @@ public interface TransactionSkeleton {
     final var accounts = parseAccounts();
     return createTransaction(accounts);
   }
-
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
-  Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
-
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
-  default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
-    return createTransaction(Arrays.asList(instructions), lookupTable);
-  }
-
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
-  default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
-    final var instructions = parseInstructions(accounts);
-    return createTransaction(instructions, lookupTable);
-  }
-
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
-  default Transaction createTransaction(final AddressLookupTable lookupTable) {
-    final var accounts = parseAccounts(lookupTable);
-    return createTransaction(accounts, lookupTable);
-  }
-
-  /// **Note:** for V1 transactions the provided lookup tables will be ignored
-  /// because V1 transactions do not support address lookup tables.
-  default Transaction createTransaction(final AccountMeta[] accounts,
-                                        final LookupTableAccountMeta[] tableAccountMetas) {
-    final var instructions = parseInstructions(accounts);
-    return createTransaction(Arrays.asList(instructions), tableAccountMetas);
-  }
-
-  /// **Note:** for V1 transactions the provided lookup tables will be ignored
-  /// because V1 transactions do not support address lookup tables.
-  Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
-
-  /// **Note:** for V1 transactions the provided lookup tables will be ignored
-  /// because V1 transactions do not support address lookup tables.
-  Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
-
   default TxBuilder prototypeTransaction() {
     return prototypeTransaction(this.parseInstructionsWithoutTableAccounts());
   }
@@ -330,4 +288,65 @@ public interface TransactionSkeleton {
         .priorityFeeLamports(priorityFeeLamports())
         .accountDataSizeLimit(accountDataSizeLimit());
   }
+
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  ///
+  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  @Deprecated
+  Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
+
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  ///
+  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  @Deprecated
+  default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
+    return createTransaction(Arrays.asList(instructions), lookupTable);
+  }
+
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  ///
+  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  @Deprecated
+  default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
+    final var instructions = parseInstructions(accounts);
+    return createTransaction(instructions, lookupTable);
+  }
+
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  ///
+  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  @Deprecated
+  default Transaction createTransaction(final AddressLookupTable lookupTable) {
+    final var accounts = parseAccounts(lookupTable);
+    return createTransaction(accounts, lookupTable);
+  }
+
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  ///
+  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  @Deprecated
+  default Transaction createTransaction(final AccountMeta[] accounts,
+                                        final LookupTableAccountMeta[] tableAccountMetas) {
+    final var instructions = parseInstructions(accounts);
+    return createTransaction(Arrays.asList(instructions), tableAccountMetas);
+  }
+
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  ///
+  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  @Deprecated
+  Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
+
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  ///
+  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  @Deprecated
+  Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
 }

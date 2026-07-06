@@ -27,9 +27,11 @@ public interface Transaction {
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
 
+  @Deprecated
   BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
   // fee payer, sign, write, read
+  @Deprecated
   Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
       return -1;
@@ -45,6 +47,7 @@ public interface Transaction {
       return am1.signer() ? -1 : 1;
     }
   };
+  @Deprecated
   Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
       return -1;
@@ -61,27 +64,26 @@ public interface Transaction {
     }
   };
 
+  @Deprecated
   int MSG_HEADER_LENGTH = 3;
-  int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
+  @Deprecated
+  int VERSIONED_MSG_HEADER_LENGTH = 1 + TxBuilderImpl.MSG_HEADER_LENGTH;
+  @Deprecated
   byte VERSIONED_BIT_MASK = (byte) (1 << 7);
+  @Deprecated
   int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
 
   static String getBase58Id(final byte[] signedTransaction) {
-    if (signedTransaction[0] == 0) {
-      throw new IllegalStateException("Transaction has not been signed yet.");
-    } else {
-      return Base58.encode(signedTransaction, 1, 1 + Transaction.SIGNATURE_LENGTH);
-    }
+    final int offset = BaseTransaction.signedIdOffset(signedTransaction);
+    return Base58.encode(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
   }
 
   static byte[] getId(final byte[] signedTransaction) {
-    if (signedTransaction[0] == 0) {
-      throw new IllegalStateException("Transaction has not been signed yet.");
-    } else {
-      return Arrays.copyOfRange(signedTransaction, 1, 1 + Transaction.SIGNATURE_LENGTH);
-    }
+    final int offset = BaseTransaction.signedIdOffset(signedTransaction);
+    return Arrays.copyOfRange(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
   }
 
+  @Deprecated
   static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
     final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
     Arrays.sort(accountMetas, Transaction.LEGACY_META_COMPARATOR);
@@ -95,7 +97,7 @@ public interface Transaction {
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
-    return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(accounts));
+    return createTx(instructions, serializedInstructionLength, TxBuilderImpl.sortLegacyAccounts(accounts));
   }
 
   static Transaction createTx(final AccountMeta feePayer, final Instruction instruction) {
@@ -106,6 +108,8 @@ public interface Transaction {
     return createTx((AccountMeta) null, instructions);
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable) {
@@ -114,15 +118,19 @@ public interface Transaction {
     }
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
-    return createTx(instructions, serializedInstructionLength, sortV0Accounts(accounts), lookupTable);
+    return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(accounts), lookupTable);
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions, lookupTable);
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable,
@@ -136,6 +144,8 @@ public interface Transaction {
     }
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final List<Instruction> instructions, final AddressLookupTable lookupTable) {
     return createTx((AccountMeta) null, instructions, lookupTable);
   }
@@ -176,7 +186,7 @@ public interface Transaction {
   static Transaction createTx(final Instruction[] instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts) {
-    return createTx(Arrays.asList(instructions), serializedInstructionLength, sortV0Accounts(mergedAccounts));
+    return createTx(Arrays.asList(instructions), serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts));
   }
 
   static Transaction createTx(final List<Instruction> instructions,
@@ -210,7 +220,7 @@ public interface Transaction {
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int numInstructions = instructions.size();
     final int bufferSize = sigLen
-        + Transaction.MSG_HEADER_LENGTH
+        + TxBuilderImpl.MSG_HEADER_LENGTH
         + getByteLen(numAccounts) + (numAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(numInstructions) + serializedInstructionLength;
@@ -253,23 +263,28 @@ public interface Transaction {
     );
   }
 
+  @Deprecated
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
     final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
     Arrays.sort(accountMetas, Transaction.VO_META_COMPARATOR);
     return accountMetas;
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts,
                               final AddressLookupTable lookupTable) {
     if (lookupTable == null) {
-      return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(mergedAccounts));
+      return createTx(instructions, serializedInstructionLength, TxBuilderImpl.sortLegacyAccounts(mergedAccounts));
     } else {
-      return createTx(instructions, serializedInstructionLength, sortV0Accounts(mergedAccounts), lookupTable);
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts), lookupTable);
     }
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,
@@ -329,11 +344,11 @@ public interface Transaction {
     final int numTableIndexedAccounts = numLookupReads + numLookupWrites;
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
-        + VERSIONED_MSG_HEADER_LENGTH
+        + TransactionRecord.VERSIONED_MSG_HEADER_LENGTH
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + (numTableIndexedAccounts > 0 ? (1 + BASE_LOOKUP_TABLE_LEN + numTableIndexedAccounts) : 1);
+        + (numTableIndexedAccounts > 0 ? (1 + TransactionRecord.BASE_LOOKUP_TABLE_LEN + numTableIndexedAccounts) : 1);
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
@@ -341,7 +356,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = VERSIONED_BIT_MASK;
+    out[i] = BaseTransaction.VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;
@@ -403,6 +418,8 @@ public interface Transaction {
     }
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final LookupTableAccountMeta[] tableAccountMetas) {
@@ -411,23 +428,29 @@ public interface Transaction {
     return createTx(instructions, serializedInstructionLength, accounts, tableAccountMetas);
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final LookupTableAccountMeta[] tableAccountMetas) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions, tableAccountMetas);
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts,
                               final LookupTableAccountMeta[] tableAccountMetas) {
     if (tableAccountMetas == null || tableAccountMetas.length == 0) {
-      return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(mergedAccounts));
+      return createTx(instructions, serializedInstructionLength, TxBuilderImpl.sortLegacyAccounts(mergedAccounts));
     } else {
-      return createTx(instructions, serializedInstructionLength, sortV0Accounts(mergedAccounts), tableAccountMetas);
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts), tableAccountMetas);
     }
   }
 
+  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,
@@ -505,11 +528,11 @@ public interface Transaction {
 
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
-        + VERSIONED_MSG_HEADER_LENGTH
+        + TransactionRecord.VERSIONED_MSG_HEADER_LENGTH
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + (1 + (numTablesWithIndexedAccounts * BASE_LOOKUP_TABLE_LEN) + (numAccounts - numIncludedAccounts));
+        + (1 + (numTablesWithIndexedAccounts * TransactionRecord.BASE_LOOKUP_TABLE_LEN) + (numAccounts - numIncludedAccounts));
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
@@ -517,7 +540,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = VERSIONED_BIT_MASK;
+    out[i] = BaseTransaction.VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;
@@ -582,12 +605,17 @@ public interface Transaction {
   }
 
   static void setBlockHash(final byte[] data, final byte[] recentBlockHash) {
-    final int numSigners = Byte.toUnsignedInt(data[0]);
-    final int versionOffset = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
-    final int accountMetaOffset = versionOffset + (signedByte(data[versionOffset]) ? 4 : 3);
-    final int accountMetaByteLen = CompactU16Encoding.getByteLen(data, accountMetaOffset);
-    final int accountMetaLen = CompactU16Encoding.decode(data, accountMetaOffset) * PublicKey.PUBLIC_KEY_LENGTH;
-    final int recentBlockHashOffset = accountMetaOffset + accountMetaByteLen + accountMetaLen;
+    final int recentBlockHashOffset;
+    if (V1Transaction.isV1(data)) {
+      recentBlockHashOffset = V1TransactionSkeleton.V1_RECENT_BLOCK_HASH_INDEX;
+    } else {
+      final int numSigners = Byte.toUnsignedInt(data[0]);
+      final int versionOffset = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
+      final int accountMetaOffset = versionOffset + (signedByte(data[versionOffset]) ? 4 : 3);
+      final int accountMetaByteLen = CompactU16Encoding.getByteLen(data, accountMetaOffset);
+      final int accountMetaLen = CompactU16Encoding.decode(data, accountMetaOffset) * PublicKey.PUBLIC_KEY_LENGTH;
+      recentBlockHashOffset = accountMetaOffset + accountMetaByteLen + accountMetaLen;
+    }
     System.arraycopy(recentBlockHash, 0, data, recentBlockHashOffset, Transaction.BLOCK_HASH_LENGTH);
   }
 
@@ -595,15 +623,20 @@ public interface Transaction {
                    final byte[] out,
                    final int msgOffset,
                    final int msgLen,
-                   int offset) {
-    signer.sign(out, msgOffset, msgLen, offset);
+                   final int sigOffset) {
+    signer.sign(out, msgOffset, msgLen, sigOffset);
   }
 
   static void sign(final Signer signer, final byte[] out) {
-    out[0] = 1;
-    final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;
-    final int msgLen = out.length - sigLen;
-    Transaction.sign(signer, out, sigLen, msgLen, 1);
+    if (V1Transaction.isV1(out)) {
+      final int sigOffset = out.length - Transaction.SIGNATURE_LENGTH;
+      Transaction.sign(signer, out, 0, sigOffset, sigOffset);
+    } else {
+      out[0] = 1;
+      final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;
+      final int msgLen = out.length - sigLen;
+      Transaction.sign(signer, out, sigLen, msgLen, 1);
+    }
   }
 
   static String signAndBase64Encode(final Signer signer, final byte[] out) {
@@ -615,18 +648,23 @@ public interface Transaction {
                    final byte[] out,
                    final int msgOffset,
                    final int msgLen,
-                   int offset) {
+                   int sigOffset) {
     for (final var signer : signers) {
-      offset = signer.sign(out, msgOffset, msgLen, offset);
+      sigOffset = signer.sign(out, msgOffset, msgLen, sigOffset);
     }
   }
 
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     final int numSigners = signers.size();
-    out[0] = (byte) numSigners;
-    final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
-    final int msgLen = out.length - sigLen;
-    Transaction.sign(signers, out, sigLen, msgLen, 1);
+    if (V1Transaction.isV1(out)) {
+      final int sigOffset = out.length - (numSigners * Transaction.SIGNATURE_LENGTH);
+      Transaction.sign(signers, out, 0, sigOffset, sigOffset);
+    } else {
+      out[0] = (byte) numSigners;
+      final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
+      final int msgLen = out.length - sigLen;
+      Transaction.sign(signers, out, sigLen, msgLen, 1);
+    }
   }
 
   static String signAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
@@ -700,9 +738,7 @@ public interface Transaction {
 
   int size();
 
-  default boolean exceedsSizeLimit() {
-    return size() > Transaction.MAX_SERIALIZED_LENGTH;
-  }
+  boolean exceedsSizeLimit();
 
   List<Instruction> instructions();
 

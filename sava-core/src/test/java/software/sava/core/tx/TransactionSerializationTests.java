@@ -7,6 +7,7 @@ import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
+import software.sava.core.encoding.Base58;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.*;
@@ -1072,9 +1073,14 @@ final class TransactionSerializationTests {
     assertThrows(IndexOutOfBoundsException.class, () -> builder.setInstruction(3, markerInstruction(4)));
     assertThrows(IndexOutOfBoundsException.class, () -> builder.setInstruction(-1, markerInstruction(4)));
 
-    // There is no instruction to replace in an empty builder.
+    // Setting index 0 on an empty builder behaves like addInstruction.
+    final var emptyBuilder = TxBuilder.createBuilder();
+    assertSame(emptyBuilder, emptyBuilder.setInstruction(0, markerInstruction(1)));
+    assertArrayEquals(new byte[]{1}, builtInstructionMarkers(emptyBuilder, feePayer));
+
+    // Any other index on an empty builder is out of bounds.
     assertThrows(IndexOutOfBoundsException.class,
-        () -> TxBuilder.createBuilder().setInstruction(0, markerInstruction(1))
+        () -> TxBuilder.createBuilder().setInstruction(1, markerInstruction(1))
     );
   }
 
@@ -1100,5 +1106,200 @@ final class TransactionSerializationTests {
     assertThrows(IndexOutOfBoundsException.class,
         () -> TxBuilder.createBuilder().insertInstruction(1, markerInstruction(6))
     );
+  }
+
+  @Test
+  void testMultiSignerSignedCheck() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    assertNotEquals(signerA.publicKey(), signerB.publicKey());
+
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[]{1, 2, 3}
+    );
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 1);
+    }
+
+    // V1: signatures are appended at the end of the serialized data.
+    final var v1Tx = TxBuilder.createBuilder().feePayer(signerA.publicKey()).addInstruction(ix).createTransaction();
+    assertEquals(2, v1Tx.numSigners());
+    assertInstanceOf(V1Transaction.class, v1Tx);
+    v1Tx.setRecentBlockHash(blockHash);
+
+    assertThrows(IllegalStateException.class, v1Tx::getBase58Id);
+    assertThrows(IllegalStateException.class, v1Tx::getId);
+
+    v1Tx.sign(signerA);
+    final byte[] v1Id = v1Tx.getId();
+    assertArrayEquals(v1Id, v1Tx.getId());
+    assertEquals(Base58.encode(v1Id), v1Tx.getBase58Id());
+
+    v1Tx.sign(signerB);
+    assertArrayEquals(v1Id, v1Tx.getId());
+    assertEquals(Base58.encode(v1Id), v1Tx.getBase58Id());
+
+    // The static helpers detect the v1 format from the serialized data.
+    final byte[] v1Data = v1Tx.serialized();
+    assertArrayEquals(v1Id, Transaction.getId(v1Data));
+    assertEquals(v1Tx.getBase58Id(), Transaction.getBase58Id(v1Data));
+
+    // Legacy: a signature count byte precedes the signatures at the front of the data.
+    final var legacyTx = Transaction.createTx(signerA.publicKey(), ix);
+    assertEquals(2, legacyTx.numSigners());
+    legacyTx.setRecentBlockHash(blockHash);
+
+    assertThrows(IllegalStateException.class, legacyTx::getBase58Id);
+    assertThrows(IllegalStateException.class, legacyTx::getId);
+
+    legacyTx.sign(signerA);
+    final byte[] legacyId = legacyTx.getId();
+    assertArrayEquals(legacyId, legacyTx.getId());
+    assertEquals(Base58.encode(legacyId), legacyTx.getBase58Id());
+
+    legacyTx.sign(signerB);
+    assertArrayEquals(legacyId, legacyTx.getId());
+    assertEquals(Base58.encode(legacyId), legacyTx.getBase58Id());
+
+    final byte[] legacyData = legacyTx.serialized();
+    assertArrayEquals(legacyId, Transaction.getId(legacyData));
+    assertEquals(legacyTx.getBase58Id(), Transaction.getBase58Id(legacyData));
+  }
+
+  @Test
+  void testStaticSetBlockHash() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[]{1, 2, 3, 4, 5}
+    );
+
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 1);
+    }
+
+    // Legacy: the block hash follows the header and account metas.
+    final var legacyTx = Transaction.createTx(signerA.publicKey(), ix);
+    assertNotEquals(1, legacyTx.version());
+    final byte[] legacyData = legacyTx.serialized();
+    Transaction.setBlockHash(legacyData, blockHash);
+    assertArrayEquals(blockHash, legacyTx.recentBlockHash());
+
+    // V1 (SIMD-0385): the message is serialized first and the block hash sits at a fixed offset.
+    final var v1Tx = TxBuilder.createBuilder().feePayer(signerA.publicKey()).addInstruction(ix).createTransaction();
+    assertEquals(1, v1Tx.version());
+    assertInstanceOf(V1Transaction.class, v1Tx);
+    final byte[] v1Data = v1Tx.serialized();
+    Transaction.setBlockHash(v1Data, blockHash);
+    assertArrayEquals(blockHash, v1Tx.recentBlockHash());
+
+    // V1 with ConfigValues: the fixed block hash offset is independent of the config values that
+    // are serialized after the accounts.
+    final var v1ConfigTx = TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey())
+        .addInstruction(ix)
+        .priorityFeeLamports(5_000L)
+        .computeUnitLimit(200_000)
+        .createTransaction();
+    assertEquals(1, v1ConfigTx.version());
+    final byte[] v1ConfigData = v1ConfigTx.serialized();
+    Transaction.setBlockHash(v1ConfigData, blockHash);
+    assertArrayEquals(blockHash, v1ConfigTx.recentBlockHash());
+  }
+
+  @Test
+  void testStaticSign() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var readOnlyAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+
+    // A single-signer transaction: the fee payer is the only signer.
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createRead(readOnlyAccount)),
+        new byte[]{1, 2, 3, 4, 5}
+    );
+
+    // Legacy: the signature count byte precedes the single signature at the front of the data.
+    final var legacyTx = Transaction.createTx(signerA.publicKey(), ix);
+    assertEquals(1, legacyTx.numSigners());
+    assertNotEquals(1, legacyTx.version());
+    final byte[] legacyData = legacyTx.serialized();
+    Transaction.sign(signerA, legacyData);
+    assertEquals(1, legacyData[0]);
+    final int legacyMsgOffset = 1 + Transaction.SIGNATURE_LENGTH;
+    assertTrue(signerA.publicKey().verifySignature(
+        legacyData, legacyMsgOffset, legacyData.length - legacyMsgOffset,
+        Arrays.copyOfRange(legacyData, 1, legacyMsgOffset)
+    ));
+
+    // V1 (SIMD-0385): the message is serialized first and the single signature is appended at the end.
+    final var v1Tx = TxBuilder.createBuilder().feePayer(signerA.publicKey()).addInstruction(ix).createTransaction();
+    assertEquals(1, v1Tx.numSigners());
+    assertEquals(1, v1Tx.version());
+    assertInstanceOf(V1Transaction.class, v1Tx);
+    final byte[] v1Data = v1Tx.serialized();
+    Transaction.sign(signerA, v1Data);
+    final int v1SigOffset = v1Data.length - Transaction.SIGNATURE_LENGTH;
+    assertTrue(signerA.publicKey().verifySignature(
+        v1Data, 0, v1SigOffset,
+        Arrays.copyOfRange(v1Data, v1SigOffset, v1Data.length)
+    ));
+  }
+
+  @Test
+  void testStaticSignSigners() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    assertNotEquals(signerA.publicKey(), signerB.publicKey());
+
+    // Two required signers: the fee payer and a writable signer, ordered as they are serialized.
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[]{1, 2, 3, 4, 5}
+    );
+    final var signers = List.of(signerA, signerB);
+
+    // Legacy: the signature count byte precedes the signatures at the front of the data.
+    final var legacyTx = Transaction.createTx(signerA.publicKey(), ix);
+    assertEquals(2, legacyTx.numSigners());
+    assertNotEquals(1, legacyTx.version());
+    final byte[] legacyData = legacyTx.serialized();
+    Transaction.sign(signers, legacyData);
+    assertEquals(2, legacyData[0]);
+    final int legacyMsgOffset = 1 + (2 * Transaction.SIGNATURE_LENGTH);
+    final int legacyMsgLen = legacyData.length - legacyMsgOffset;
+    assertTrue(signerA.publicKey().verifySignature(
+        legacyData, legacyMsgOffset, legacyMsgLen,
+        Arrays.copyOfRange(legacyData, 1, 1 + Transaction.SIGNATURE_LENGTH)
+    ));
+    assertTrue(signerB.publicKey().verifySignature(
+        legacyData, legacyMsgOffset, legacyMsgLen,
+        Arrays.copyOfRange(legacyData, 1 + Transaction.SIGNATURE_LENGTH, legacyMsgOffset)
+    ));
+
+    // V1 (SIMD-0385): the message is serialized first and the signatures are appended at the end.
+    final var v1Tx = TxBuilder.createBuilder().feePayer(signerA.publicKey()).addInstruction(ix).createTransaction();
+    assertEquals(2, v1Tx.numSigners());
+    assertEquals(1, v1Tx.version());
+    assertInstanceOf(V1Transaction.class, v1Tx);
+    final byte[] v1Data = v1Tx.serialized();
+    Transaction.sign(signers, v1Data);
+    final int v1SigOffset = v1Data.length - (2 * Transaction.SIGNATURE_LENGTH);
+    assertTrue(signerA.publicKey().verifySignature(
+        v1Data, 0, v1SigOffset,
+        Arrays.copyOfRange(v1Data, v1SigOffset, v1SigOffset + Transaction.SIGNATURE_LENGTH)
+    ));
+    assertTrue(signerB.publicKey().verifySignature(
+        v1Data, 0, v1SigOffset,
+        Arrays.copyOfRange(v1Data, v1SigOffset + Transaction.SIGNATURE_LENGTH, v1Data.length)
+    ));
   }
 }

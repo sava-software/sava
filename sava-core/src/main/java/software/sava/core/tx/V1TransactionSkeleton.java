@@ -13,7 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 import static software.sava.core.tx.Instruction.createInstruction;
-import static software.sava.core.tx.Transaction.*;
+import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
+import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
 import static software.sava.core.tx.TxBuilderImpl.V1_CONFIG_MASK_LENGTH;
 import static software.sava.core.tx.TxBuilderImpl.V1_INSTRUCTION_HEADER_LENGTH;
 
@@ -22,7 +23,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
 
   // The v1 header and TransactionConfigMask are fixed width, so the recent block hash and the
   // accounts always begin at the same offsets within the serialized message.
-  static final int V1_RECENT_BLOCK_HASH_INDEX = 1 /* VersionByte */ + MSG_HEADER_LENGTH + V1_CONFIG_MASK_LENGTH;
+  static final int V1_RECENT_BLOCK_HASH_INDEX = 1 /* VersionByte */ + TxBuilderImpl.MSG_HEADER_LENGTH + V1_CONFIG_MASK_LENGTH;
   static final int V1_ACCOUNTS_OFFSET = V1_RECENT_BLOCK_HASH_INDEX + BLOCK_HASH_LENGTH + 2 /* NumInstructions + NumAddresses */;
 
   // TransactionConfigMask bit positions, ordered ascending as serialized in the ConfigValues block.
