@@ -20,7 +20,6 @@ import static software.sava.core.encoding.CompactU16Encoding.decode;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
-import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
 
 // Skeleton for legacy and v0 transaction messages.
 final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
@@ -151,12 +150,12 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
 
   @Override
   public boolean isVersioned() {
-    return version != VERSIONED_BIT_MASK;
+    return version != BaseTransaction.VERSIONED_BIT_MASK;
   }
 
   @Override
   public boolean isLegacy() {
-    return version == VERSIONED_BIT_MASK;
+    return version == BaseTransaction.VERSIONED_BIT_MASK;
   }
 
   @Override

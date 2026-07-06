@@ -3,7 +3,6 @@ package software.sava.core.tx;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
-import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
 import java.util.List;
@@ -28,13 +27,8 @@ final class V1Transaction extends BaseTransaction {
     this.signaturesOffset = signaturesOffset;
   }
 
-  private boolean notSigned() {
-    for (int i = signaturesOffset, to = signaturesOffset + SIGNATURE_LENGTH; i < to; ++i) {
-      if (data[i] != 0) {
-        return false;
-      }
-    }
-    return true;
+  static boolean isV1(final byte[] txData) {
+    return (txData[0] & VERSIONED_BIT_MASK) == VERSIONED_BIT_MASK;
   }
 
   @Override
@@ -73,7 +67,6 @@ final class V1Transaction extends BaseTransaction {
     return signaturesOffset + (signerIndex * SIGNATURE_LENGTH);
   }
 
-  // The v1 format does not serialize a signature count before the signatures.
   @Override
   protected void recordNumSignatures(final int numSignatures) {
   }
@@ -91,22 +84,6 @@ final class V1Transaction extends BaseTransaction {
   @Override
   public int numSigners() {
     return data[1] & 0xFF;
-  }
-
-  @Override
-  public String getBase58Id() {
-    if (notSigned()) {
-      throw new IllegalStateException("Transaction has not been signed yet.");
-    }
-    return Base58.encode(data, signaturesOffset, signaturesOffset + SIGNATURE_LENGTH);
-  }
-
-  @Override
-  public byte[] getId() {
-    if (notSigned()) {
-      throw new IllegalStateException("Transaction has not been signed yet.");
-    }
-    return Arrays.copyOfRange(data, signaturesOffset, signaturesOffset + SIGNATURE_LENGTH);
   }
 
   @Override

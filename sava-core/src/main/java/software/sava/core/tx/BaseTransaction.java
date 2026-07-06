@@ -10,6 +10,8 @@ import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 
 abstract class BaseTransaction implements Transaction {
 
+  static final byte VERSIONED_BIT_MASK = (byte) (1 << 7);
+
   protected final AccountMeta feePayer;
   protected final List<Instruction> instructions;
   protected final byte[] data;
@@ -18,6 +20,26 @@ abstract class BaseTransaction implements Transaction {
     this.feePayer = feePayer;
     this.instructions = instructions;
     this.data = data;
+  }
+
+  static int signedIdOffset(final byte[] signedTransaction) {
+    final int numSigners;
+    final int signaturesOffset;
+    if (V1Transaction.isV1(signedTransaction)) {
+      numSigners = signedTransaction[1] & 0xFF;
+      signaturesOffset = signedTransaction.length - (numSigners * SIGNATURE_LENGTH);
+    } else {
+      numSigners = signedTransaction[0];
+      signaturesOffset = 1;
+    }
+    if (numSigners != 0) {
+      for (int i = signaturesOffset, to = signaturesOffset + SIGNATURE_LENGTH; i < to; ++i) {
+        if (signedTransaction[i] != 0) {
+          return signaturesOffset;
+        }
+      }
+    }
+    throw new IllegalStateException("Transaction has not been signed by the fee payer yet.");
   }
 
   // Returns the byte offset of the recent block hash within the serialized data.
@@ -78,6 +100,16 @@ abstract class BaseTransaction implements Transaction {
   public final byte[] recentBlockHash() {
     final int recentBlockHashIndex = recentBlockHashIndex();
     return Arrays.copyOfRange(data, recentBlockHashIndex, recentBlockHashIndex + Transaction.BLOCK_HASH_LENGTH);
+  }
+
+  @Override
+  public final String getBase58Id() {
+    return Transaction.getBase58Id(this.data);
+  }
+
+  @Override
+  public final byte[] getId() {
+    return Transaction.getId(this.data);
   }
 
   @Override

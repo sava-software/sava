@@ -5,13 +5,33 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.*;
+import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
+import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 import static software.sava.core.tx.Transaction.MAX_ACCOUNTS;
-import static software.sava.core.tx.Transaction.MSG_HEADER_LENGTH;
-
 
 final class TxBuilderImpl implements TxBuilder {
+
+  static final BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
+
+  private static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
+    if (am1.feePayer()) {
+      return -1;
+    } else if (am2.feePayer()) {
+      return 1;
+    } else if (am1.signer() == am2.signer()) {
+      if (am1.write() == am2.write()) {
+        return 0;
+      } else {
+        return am1.write() ? -1 : 1;
+      }
+    } else {
+      return am1.signer() ? -1 : 1;
+    }
+  };
+
+  static final int MSG_HEADER_LENGTH = 3;
 
   // SIMD-0385 Transaction V1 format.
   // The version byte that distinguishes a v1 transaction from the legacy and v0 formats.
@@ -149,7 +169,7 @@ final class TxBuilderImpl implements TxBuilder {
 
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int instructionPayloadLength = mergeAccounts(feePayer, accounts, instructions);
-    final var sortedAccounts = Transaction.sortLegacyAccounts(accounts);
+    final var sortedAccounts = sortLegacyAccounts(accounts);
 
     final int numAccounts = sortedAccounts.length;
     if (numAccounts > MAX_V1_ACCOUNTS) {
@@ -285,6 +305,12 @@ final class TxBuilderImpl implements TxBuilder {
     );
   }
 
+  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
+    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    Arrays.sort(accountMetas, LEGACY_META_COMPARATOR);
+    return accountMetas;
+  }
+
   private static int mergeAccounts(final AccountMeta feePayer,
                                    final Map<PublicKey, AccountMeta> accounts,
                                    final List<Instruction> instructions) {
@@ -298,10 +324,10 @@ final class TxBuilderImpl implements TxBuilder {
     for (final var instruction : instructions) {
       instructionPayloadLength += instruction.accounts().size() + instruction.len();
       for (final var meta : instruction.accounts()) {
-        accounts.merge(meta.publicKey(), meta, Transaction.MERGE_ACCOUNT_META);
+        accounts.merge(meta.publicKey(), meta, MERGE_ACCOUNT_META);
       }
       final var programMeta = instruction.programId();
-      accounts.merge(programMeta.publicKey(), programMeta, Transaction.MERGE_ACCOUNT_META);
+      accounts.merge(programMeta.publicKey(), programMeta, MERGE_ACCOUNT_META);
     }
     return instructionPayloadLength;
   }
