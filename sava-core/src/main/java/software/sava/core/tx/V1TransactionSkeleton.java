@@ -325,6 +325,11 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   }
 
   @Override
+  public Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
+    return createTransaction();
+  }
+
+  @Override
   public Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable) {
     return createTransaction(instructions);
   }

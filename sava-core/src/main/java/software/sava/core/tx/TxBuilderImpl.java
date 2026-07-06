@@ -23,6 +23,8 @@ final class TxBuilderImpl implements TxBuilder {
   // Maximum number of instructions and accounts permitted in a v1 transaction.
   private static final int MAX_V1_INSTRUCTIONS = 64;
   private static final int MAX_V1_ACCOUNTS = 64;
+  private static final int MIN_HEAP_SIZE = 32 * 1_024;
+  private static final int MAX_HEAP_SIZE = 256 * 1_024;
 
   private AccountMeta feePayer;
   private List<Instruction> instructions;
@@ -75,6 +77,34 @@ final class TxBuilderImpl implements TxBuilder {
   }
 
   @Override
+  public TxBuilder setInstruction(final int index, final Instruction instruction) {
+    if (this.instructions == null) {
+      if (index != 0) {
+        throw new IndexOutOfBoundsException(String.format("Index %s out of bounds for length 0", index));
+      }
+      this.instructions = new ArrayList<>();
+      this.instructions.add(instruction);
+    } else {
+      this.instructions.set(index, instruction);
+    }
+    return this;
+  }
+
+  @Override
+  public TxBuilder insertInstruction(final int index, final Instruction instruction) {
+    if (this.instructions == null) {
+      if (index != 0) {
+        throw new IndexOutOfBoundsException(String.format("Index %s out of bounds for length 0", index));
+      }
+      this.instructions = new ArrayList<>();
+      this.instructions.add(instruction);
+    } else {
+      this.instructions.add(index, instruction);
+    }
+    return this;
+  }
+
+  @Override
   public TxBuilder priorityFeeLamports(final long priorityFeeLamports) {
     this.priorityFeeLamports = priorityFeeLamports;
     return this;
@@ -95,7 +125,7 @@ final class TxBuilderImpl implements TxBuilder {
   @Override
   public TxBuilder heapSize(final int heapSize) {
     // Per SIMD-0385, a requested heap size must be a multiple of 1KiB within [32KiB, 256KiB].
-    if (heapSize % 1_024 != 0 || heapSize < 32 * 1_024 || heapSize > 256 * 1_024) {
+    if (heapSize % 1_024 != 0 || heapSize < MIN_HEAP_SIZE || heapSize > MAX_HEAP_SIZE) {
       throw new IllegalStateException(
           "A v1 requested heap size must be a multiple of 1KiB in the inclusive range [32KiB, 256KiB]."
       );

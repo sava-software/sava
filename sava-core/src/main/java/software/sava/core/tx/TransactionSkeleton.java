@@ -278,33 +278,44 @@ public interface TransactionSkeleton {
     return createTransaction(accounts);
   }
 
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
     return createTransaction(Arrays.asList(instructions), lookupTable);
   }
 
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(instructions, lookupTable);
   }
 
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
     final var accounts = parseAccounts(lookupTable);
     return createTransaction(accounts, lookupTable);
   }
 
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
   default Transaction createTransaction(final AccountMeta[] accounts,
                                         final LookupTableAccountMeta[] tableAccountMetas) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(Arrays.asList(instructions), tableAccountMetas);
   }
 
-  default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
-    final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
-    return createTransaction(accounts, tableAccountMetas);
-  }
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
+  Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
 
+  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  /// because V1 transactions do not support address lookup tables.
   Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
 
   default TxBuilder prototypeTransaction() {

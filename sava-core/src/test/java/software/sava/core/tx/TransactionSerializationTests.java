@@ -1030,4 +1030,75 @@ final class TransactionSerializationTests {
     assertEquals(0, skeleton.accountDataSizeLimit());
     assertEquals(0, skeleton.heapSize());
   }
+
+  private static Instruction markerInstruction(final int marker) {
+    return Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(),
+        new byte[]{(byte) marker}
+    );
+  }
+
+  private static byte[] builtInstructionMarkers(final TxBuilder builder, final Signer feePayer) {
+    final var tx = builder.feePayer(feePayer.publicKey()).createTransaction();
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
+    final var instructions = skeleton.parseInstructionsWithoutAccounts();
+    final byte[] markers = new byte[instructions.length];
+    for (int i = 0; i < instructions.length; ++i) {
+      final var ix = instructions[i];
+      assertEquals(1, ix.len());
+      markers[i] = ix.data()[ix.offset()];
+    }
+    return markers;
+  }
+
+  @Test
+  void testTxBuilderSetInstruction() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    final var builder = TxBuilder.createBuilder()
+        .addInstruction(markerInstruction(1))
+        .addInstruction(markerInstruction(2))
+        .addInstruction(markerInstruction(3));
+
+    // Replace the middle, first and last instructions.
+    assertSame(builder, builder.setInstruction(1, markerInstruction(7)));
+    builder.setInstruction(0, markerInstruction(5));
+    builder.setInstruction(2, markerInstruction(9));
+
+    assertArrayEquals(new byte[]{5, 7, 9}, builtInstructionMarkers(builder, feePayer));
+
+    // Out of range indexes.
+    assertThrows(IndexOutOfBoundsException.class, () -> builder.setInstruction(3, markerInstruction(4)));
+    assertThrows(IndexOutOfBoundsException.class, () -> builder.setInstruction(-1, markerInstruction(4)));
+
+    // There is no instruction to replace in an empty builder.
+    assertThrows(IndexOutOfBoundsException.class,
+        () -> TxBuilder.createBuilder().setInstruction(0, markerInstruction(1))
+    );
+  }
+
+  @Test
+  void testTxBuilderInsertInstruction() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    // Inserting at index 0 on an empty builder behaves like addInstruction.
+    final var builder = TxBuilder.createBuilder();
+    assertSame(builder, builder.insertInstruction(0, markerInstruction(2)));
+
+    builder.addInstruction(markerInstruction(4));
+    // Insert before, between and after the existing instructions.
+    builder.insertInstruction(0, markerInstruction(1)); // [1, 2, 4]
+    builder.insertInstruction(2, markerInstruction(3)); // [1, 2, 3, 4]
+    builder.insertInstruction(4, markerInstruction(5)); // [1, 2, 3, 4, 5]
+
+    assertArrayEquals(new byte[]{1, 2, 3, 4, 5}, builtInstructionMarkers(builder, feePayer));
+
+    // Out of range indexes.
+    assertThrows(IndexOutOfBoundsException.class, () -> builder.insertInstruction(6, markerInstruction(6)));
+    assertThrows(IndexOutOfBoundsException.class, () -> builder.insertInstruction(-1, markerInstruction(6)));
+    assertThrows(IndexOutOfBoundsException.class,
+        () -> TxBuilder.createBuilder().insertInstruction(1, markerInstruction(6))
+    );
+  }
 }

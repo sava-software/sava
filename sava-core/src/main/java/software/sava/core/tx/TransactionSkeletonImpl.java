@@ -366,6 +366,12 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   }
 
   @Override
+  public Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
+    final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
+    return createTransaction(accounts, tableAccountMetas);
+  }
+
+  @Override
   public Transaction createTransaction(final List<Instruction> instructions) {
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),

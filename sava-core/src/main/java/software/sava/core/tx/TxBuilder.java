@@ -32,6 +32,20 @@ public interface TxBuilder {
     return this;
   }
 
+  /***
+   *
+   * @throws IndexOutOfBoundsException if the index is out of range
+   *         ({@code index < 0 || index >= size()})
+   */
+  TxBuilder setInstruction(final int index, final Instruction instruction);
+
+  /***
+   *
+   * @throws IndexOutOfBoundsException if the index is out of range
+   *         ({@code index < 0 || index >= size()})
+   */
+  TxBuilder insertInstruction(int index, Instruction instruction);
+
   TxBuilder priorityFeeLamports(final long priorityFeeLamports);
 
   TxBuilder computeUnitLimit(final int computeUnitLimit);
