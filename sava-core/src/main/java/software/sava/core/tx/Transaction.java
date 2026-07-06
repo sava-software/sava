@@ -27,10 +27,12 @@ public interface Transaction {
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
 
+  /// @deprecated internal serialization
   @Deprecated
   BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
   // fee payer, sign, write, read
+  /// @deprecated internal serialization
   @Deprecated
   Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
@@ -47,6 +49,8 @@ public interface Transaction {
       return am1.signer() ? -1 : 1;
     }
   };
+
+  /// @deprecated internal serialization
   @Deprecated
   Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
@@ -64,12 +68,16 @@ public interface Transaction {
     }
   };
 
+  /// @deprecated internal serialization
   @Deprecated
   int MSG_HEADER_LENGTH = 3;
+  /// @deprecated internal serialization
   @Deprecated
   int VERSIONED_MSG_HEADER_LENGTH = 1 + TxBuilderImpl.MSG_HEADER_LENGTH;
+  /// @deprecated internal serialization
   @Deprecated
   byte VERSIONED_BIT_MASK = (byte) (1 << 7);
+  /// @deprecated internal serialization
   @Deprecated
   int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
 
@@ -83,6 +91,7 @@ public interface Transaction {
     return Arrays.copyOfRange(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
   }
 
+  /// @deprecated internal serialization
   @Deprecated
   static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
     final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
@@ -108,8 +117,9 @@ public interface Transaction {
     return createTx((AccountMeta) null, instructions);
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable) {
@@ -121,16 +131,18 @@ public interface Transaction {
     return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(accounts), lookupTable);
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions, lookupTable);
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable,
@@ -144,8 +156,9 @@ public interface Transaction {
     }
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions, final AddressLookupTable lookupTable) {
     return createTx((AccountMeta) null, instructions, lookupTable);
   }
@@ -263,6 +276,7 @@ public interface Transaction {
     );
   }
 
+  /// @deprecated internal serialization
   @Deprecated
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
     final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
@@ -270,8 +284,9 @@ public interface Transaction {
     return accountMetas;
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts,
@@ -283,8 +298,9 @@ public interface Transaction {
     }
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,
@@ -418,8 +434,9 @@ public interface Transaction {
     }
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final LookupTableAccountMeta[] tableAccountMetas) {
@@ -428,16 +445,18 @@ public interface Transaction {
     return createTx(instructions, serializedInstructionLength, accounts, tableAccountMetas);
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final LookupTableAccountMeta[] tableAccountMetas) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions, tableAccountMetas);
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts,
@@ -449,8 +468,9 @@ public interface Transaction {
     }
   }
 
-  /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  @Deprecated
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,

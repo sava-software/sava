@@ -289,64 +289,71 @@ public interface TransactionSkeleton {
         .accountDataSizeLimit(accountDataSizeLimit());
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
-  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
-  @Deprecated
+  // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  // @Deprecated
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
+  // TODO: deprecate once v1 transactions are active on mainnet
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
-  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
-  @Deprecated
+  // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  // @Deprecated
   default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
     return createTransaction(Arrays.asList(instructions), lookupTable);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
-  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
-  @Deprecated
+  // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  // @Deprecated
   default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(instructions, lookupTable);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
-  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
-  @Deprecated
+  // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  // @Deprecated
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
     final var accounts = parseAccounts(lookupTable);
     return createTransaction(accounts, lookupTable);
   }
 
-  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  // TODO: deprecate once v1 transactions are active on mainnet
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
-  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
-  @Deprecated
+  // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  // @Deprecated
   default Transaction createTransaction(final AccountMeta[] accounts,
                                         final LookupTableAccountMeta[] tableAccountMetas) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(Arrays.asList(instructions), tableAccountMetas);
   }
 
-  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  // TODO: deprecate once v1 transactions are active on mainnet
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
-  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
-  @Deprecated
+  // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  // @Deprecated
   Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
 
-  /// **Note:** for V1 transactions the provided lookup tables will be ignored
+  // TODO: deprecate once v1 transactions are active on mainnet
+  /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
-  /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
-  @Deprecated
+  // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
+  // @Deprecated
   Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
 }
