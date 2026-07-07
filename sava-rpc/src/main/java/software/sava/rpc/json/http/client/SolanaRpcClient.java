@@ -889,20 +889,6 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature);
 
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getTransaction(String)] instead.
-  @Deprecated
-  default CompletableFuture<Tx> getTransaction(final int maxSupportedTransactionVersion, final String txSignature) {
-    return getTransaction(defaultCommitment(), maxSupportedTransactionVersion, txSignature);
-  }
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getTransaction(Commitment, String)] instead.
-  @Deprecated
-  CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                       final int maxSupportedTransactionVersion,
-                                       final String txSignature);
-
   CompletableFuture<Long> getTransactionCount();
 
   CompletableFuture<Long> getTransactionCount(final Commitment commitment);
