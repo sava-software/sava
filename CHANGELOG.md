@@ -1,5 +1,13 @@
 # Changelog
 
+## [25.4.1](https://github.com/sava-software/sava/compare/25.4.0...25.4.1) (2026-07-07)
+
+
+### Features
+
+* **accounts:** improve key handling with secure destruction and aad validation ([e05c8d9](https://github.com/sava-software/sava/commit/e05c8d99fdb7f30e3c381e6cc2d6899ef6a787bd))
+* **rpc:** add support for returnData in transaction metadata ([c996a51](https://github.com/sava-software/sava/commit/c996a51c0fa9e7790e95904fdb74318eab2f6f7f))
+
 ## [25.4.0](https://github.com/sava-software/sava/compare/25.3.5...25.4.0) (2026-06-07)
 
 
