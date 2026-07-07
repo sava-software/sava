@@ -819,6 +819,46 @@ final class TransactionSerializationTests {
   }
 
   @Test
+  void testV1InvalidConfigMask() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(createWritableSigner(signerB.publicKey())),
+        new byte[]{1}
+    );
+    final var tx = TxBuilder.createBuilder().feePayer(signerA.publicKey()).addInstruction(ix).createTransaction();
+    final byte[] data = tx.serialized();
+    // The TransactionConfigMask is the little-endian u32 following the version byte and LegacyHeader.
+    final int maskOffset = 1 + 3;
+
+    assertNotNull(TransactionSkeleton.deserializeSkeleton(data));
+
+    // A single priority fee bit is malformed, both must be set.
+    data[maskOffset] = (byte) 0b0000_0001;
+    assertThrows(IllegalStateException.class, () -> TransactionSkeleton.deserializeSkeleton(data));
+    data[maskOffset] = (byte) 0b0000_0010;
+    assertThrows(IllegalStateException.class, () -> TransactionSkeleton.deserializeSkeleton(data));
+
+    // Each set mask bit contributes one 4-byte ConfigValue, so unknown bits are skipped rather
+    // than rejected. Splice an unknown config value in after the accounts and verify the
+    // instructions still parse from their shifted offsets.
+    data[maskOffset] = (byte) 0b0010_0000;
+    final int configValuesOffset = V1TransactionSkeleton.V1_ACCOUNTS_OFFSET + (3 << 5);
+    final byte[] extended = new byte[data.length + Integer.BYTES];
+    System.arraycopy(data, 0, extended, 0, configValuesOffset);
+    ByteUtil.putInt32LE(extended, configValuesOffset, Integer.MAX_VALUE);
+    System.arraycopy(data, configValuesOffset, extended, configValuesOffset + Integer.BYTES, data.length - configValuesOffset);
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(extended);
+    assertEquals(1, skeleton.version());
+    final var instructions = skeleton.parseInstructions(skeleton.parseAccounts());
+    assertEquals(1, instructions.length);
+    assertEquals(SolanaAccounts.MAIN_NET.systemProgram(), instructions[0].programId().publicKey());
+    assertArrayEquals(new byte[]{1}, instructions[0].copyData());
+  }
+
+  @Test
   void testV1TooManySignatures() {
     final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
     // 12 signers plus the fee payer exceeds the 12 signature maximum.
