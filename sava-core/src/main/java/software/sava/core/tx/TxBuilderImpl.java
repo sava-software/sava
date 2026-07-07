@@ -30,8 +30,9 @@ final class TxBuilderImpl implements TxBuilder {
     }
   };
 
+  static final int MAX_SERIALIZED_LENGTH_V1 = 4_096;
+  // static final int MAX_BASE64_V1_SIZE = 5_464;
   static final int MSG_HEADER_LENGTH = 3;
-
   // SIMD-0385 Transaction V1 format.
   // The version byte that distinguishes a v1 transaction from the legacy and v0 formats.
   static final byte V1_VERSION_BYTE = (byte) 129;
@@ -274,8 +275,8 @@ final class TxBuilderImpl implements TxBuilder {
         + instructionPayloadLength; // InstructionPayloads
     final int bufferSize = messageLength + (numRequiredSignatures << 6);
     // Bounding the serialized size also guarantees instruction data lengths fit the u16 header field.
-    if (strict && bufferSize > V1Transaction.MAX_SERIALIZED_LENGTH_V1) {
-      throw new IllegalStateException("A v1 transaction may not exceed " + V1Transaction.MAX_SERIALIZED_LENGTH_V1 + " bytes.");
+    if (strict && bufferSize > MAX_SERIALIZED_LENGTH_V1) {
+      throw new IllegalStateException("A v1 transaction may not exceed " + MAX_SERIALIZED_LENGTH_V1 + " bytes.");
     }
 
     final byte[] out = new byte[bufferSize];

@@ -11,11 +11,7 @@ import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 import static software.sava.core.tx.V1TransactionSkeleton.V1_ACCOUNTS_OFFSET;
 import static software.sava.core.tx.V1TransactionSkeleton.V1_RECENT_BLOCK_HASH_INDEX;
 
-// SIMD-0385 V1 Transaction format.
 final class V1Transaction extends BaseTransaction {
-
-  // Maximum serialized length of a v1 transaction as defined by SIMD-0385.
-  public static final int MAX_SERIALIZED_LENGTH_V1 = 4_096;
 
   private final int signaturesOffset;
 
@@ -88,7 +84,7 @@ final class V1Transaction extends BaseTransaction {
 
   @Override
   public boolean exceedsSizeLimit() {
-    return size() > MAX_SERIALIZED_LENGTH_V1;
+    return size() > TxBuilderImpl.MAX_SERIALIZED_LENGTH_V1;
   }
 
   @Override
