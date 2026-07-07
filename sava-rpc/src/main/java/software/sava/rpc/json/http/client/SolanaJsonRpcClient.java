@@ -33,6 +33,8 @@ import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
 final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements SolanaRpcClient {
 
+  static final int MAX_SUPPORTED_TRANSACTION_VERSION = 1;
+
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
   static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
 
@@ -305,11 +307,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                            final long slot,
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
-    return sendPostRequest(BLOCK, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b}]}""",
-            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards
-        )
-    );
+    return getBlock(commitment, slot, blockTxDetails, MAX_SUPPORTED_TRANSACTION_VERSION, rewards);
   }
 
   @Deprecated
@@ -1402,6 +1400,11 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   }
 
   @Deprecated
+  @Override
+  public CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
+    return getTransaction(commitment, MAX_SUPPORTED_TRANSACTION_VERSION, txSignature);
+  }
+
   @Override
   public CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                               final int maxSupportedTransactionVersion,
