@@ -46,6 +46,7 @@ public sealed interface TransactionError permits
     TransactionError.ProgramExecutionTemporarilyRestricted,
     TransactionError.UnbalancedTransaction,
     TransactionError.ProgramCacheHitMaxLimit,
+    TransactionError.CommitCancelled,
     TransactionError.Unknown {
 
   record Unknown(String type) implements TransactionError {
@@ -199,6 +200,10 @@ public sealed interface TransactionError permits
     static final ProgramCacheHitMaxLimit INSTANCE = new ProgramCacheHitMaxLimit();
   }
 
+  record CommitCancelled() implements TransactionError {
+    static final CommitCancelled INSTANCE = new CommitCancelled();
+  }
+
   static TransactionError parseError(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
       case STRING -> ji.applyChars(PARSER);
@@ -283,6 +288,8 @@ public sealed interface TransactionError permits
       return UnbalancedTransaction.INSTANCE;
     } else if (fieldEquals("ProgramCacheHitMaxLimit", buf, offset, len)) {
       return ProgramCacheHitMaxLimit.INSTANCE;
+    } else if (fieldEquals("CommitCancelled", buf, offset, len)) {
+      return CommitCancelled.INSTANCE;
     } else {
       final var type = new String(buf, offset, len);
       return new Unknown(type);

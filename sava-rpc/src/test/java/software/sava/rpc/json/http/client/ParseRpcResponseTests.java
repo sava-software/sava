@@ -696,6 +696,17 @@ final class ParseRpcResponseTests {
   }
 
   @Test
+  void transactionErrorVariants() {
+    var ji = JsonIterator.parse("\"CommitCancelled\"");
+    assertInstanceOf(TransactionError.CommitCancelled.class, TransactionError.parseError(ji));
+
+    // Unrecognized variants fall back to Unknown rather than failing.
+    ji = JsonIterator.parse("\"SomeFutureError\"");
+    final var unknown = assertInstanceOf(TransactionError.Unknown.class, TransactionError.parseError(ji));
+    assertEquals("SomeFutureError", unknown.type());
+  }
+
+  @Test
   void txMetaReturnData() {
     final var ji = JsonIterator.parse("""
         {
