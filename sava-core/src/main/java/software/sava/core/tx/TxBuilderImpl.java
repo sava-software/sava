@@ -9,7 +9,6 @@ import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
 import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
-import static software.sava.core.tx.Transaction.MAX_ACCOUNTS;
 
 final class TxBuilderImpl implements TxBuilder {
 
@@ -43,9 +42,14 @@ final class TxBuilderImpl implements TxBuilder {
   // Maximum number of instructions and accounts permitted in a v1 transaction.
   private static final int MAX_V1_INSTRUCTIONS = 64;
   private static final int MAX_V1_ACCOUNTS = 64;
+  // Maximum number of signatures permitted in a v1 transaction.
+  private static final int MAX_V1_SIGNATURES = 12;
+  // Per-instruction limit imposed by the u8 account count header field.
+  private static final int MAX_V1_INSTRUCTION_ACCOUNTS = 0xFF;
   private static final int MIN_HEAP_SIZE = 32 * 1_024;
   private static final int MAX_HEAP_SIZE = 256 * 1_024;
 
+  private boolean strict;
   private AccountMeta feePayer;
   private List<Instruction> instructions;
   private long priorityFeeLamports;
@@ -54,6 +58,22 @@ final class TxBuilderImpl implements TxBuilder {
   private int heapSize;
 
   TxBuilderImpl() {
+    strict = true;
+  }
+
+  @Override
+  public boolean strict() {
+    return strict;
+  }
+
+  @Override
+  public void strict(final boolean strict) {
+    this.strict = strict;
+  }
+
+  @Override
+  public AccountMeta feePayer() {
+    return feePayer;
   }
 
   @Override
@@ -125,9 +145,19 @@ final class TxBuilderImpl implements TxBuilder {
   }
 
   @Override
+  public long priorityFeeLamports() {
+    return priorityFeeLamports;
+  }
+
+  @Override
   public TxBuilder priorityFeeLamports(final long priorityFeeLamports) {
     this.priorityFeeLamports = priorityFeeLamports;
     return this;
+  }
+
+  @Override
+  public int computeUnitLimit() {
+    return computeUnitLimit;
   }
 
   @Override
@@ -137,15 +167,25 @@ final class TxBuilderImpl implements TxBuilder {
   }
 
   @Override
+  public int accountDataSizeLimit() {
+    return accountDataSizeLimit;
+  }
+
+  @Override
   public TxBuilder accountDataSizeLimit(final int accountDataSizeLimit) {
     this.accountDataSizeLimit = accountDataSizeLimit;
     return this;
   }
 
   @Override
+  public int heapSize() {
+    return heapSize;
+  }
+
+  @Override
   public TxBuilder heapSize(final int heapSize) {
     // Per SIMD-0385, a requested heap size must be a multiple of 1KiB within [32KiB, 256KiB].
-    if (heapSize % 1_024 != 0 || heapSize < MIN_HEAP_SIZE || heapSize > MAX_HEAP_SIZE) {
+    if (strict && (heapSize % 1_024 != 0 || heapSize < MIN_HEAP_SIZE || heapSize > MAX_HEAP_SIZE)) {
       throw new IllegalStateException(
           "A v1 requested heap size must be a multiple of 1KiB in the inclusive range [32KiB, 256KiB]."
       );
@@ -161,18 +201,20 @@ final class TxBuilderImpl implements TxBuilder {
       throw new IllegalStateException("No instructions provided");
     }
     final int numInstructions = instructions.size();
-    if (numInstructions == 0) {
-      throw new IllegalArgumentException("No instructions provided");
-    } else if (numInstructions > MAX_V1_INSTRUCTIONS) {
-      throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_INSTRUCTIONS + " instructions.");
+    if (strict) {
+      if (numInstructions == 0) {
+        throw new IllegalArgumentException("No instructions provided");
+      } else if (numInstructions > MAX_V1_INSTRUCTIONS) {
+        throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_INSTRUCTIONS + " instructions.");
+      }
     }
 
-    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
+    final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_V1_ACCOUNTS);
     final int instructionPayloadLength = mergeAccounts(feePayer, accounts, instructions);
     final var sortedAccounts = sortLegacyAccounts(accounts);
 
     final int numAccounts = sortedAccounts.length;
-    if (numAccounts > MAX_V1_ACCOUNTS) {
+    if (strict && numAccounts > MAX_V1_ACCOUNTS) {
       throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_ACCOUNTS + " accounts.");
     }
 
@@ -194,6 +236,9 @@ final class TxBuilderImpl implements TxBuilder {
       } else {
         break;
       }
+    }
+    if (strict && numRequiredSignatures > MAX_V1_SIGNATURES) {
+      throw new IllegalStateException("A v1 transaction may not require more than " + MAX_V1_SIGNATURES + " signatures.");
     }
     for (; a < numAccounts; ++a) {
       final var account = sortedAccounts[a];
@@ -228,6 +273,10 @@ final class TxBuilderImpl implements TxBuilder {
         + (numInstructions * V1_INSTRUCTION_HEADER_LENGTH) // InstructionHeaders
         + instructionPayloadLength; // InstructionPayloads
     final int bufferSize = messageLength + (numRequiredSignatures << 6);
+    // Bounding the serialized size also guarantees instruction data lengths fit the u16 header field.
+    if (strict && bufferSize > V1Transaction.MAX_SERIALIZED_LENGTH_V1) {
+      throw new IllegalStateException("A v1 transaction may not exceed " + V1Transaction.MAX_SERIALIZED_LENGTH_V1 + " bytes.");
+    }
 
     final byte[] out = new byte[bufferSize];
 
@@ -278,8 +327,16 @@ final class TxBuilderImpl implements TxBuilder {
 
     // InstructionHeaders
     for (final var instruction : instructions) {
-      out[i++] = indexOfOrThrow(accountIndexLookupTable, instruction.programId().publicKey());
-      out[i++] = (byte) instruction.accounts().size();
+      final byte programIdIndex = indexOfOrThrow(accountIndexLookupTable, instruction.programId().publicKey());
+      if (programIdIndex == 0) {
+        throw new IllegalStateException("A v1 instruction program may not be the fee payer.");
+      }
+      out[i++] = programIdIndex;
+      final int numInstructionAccounts = instruction.accounts().size();
+      if (numInstructionAccounts > MAX_V1_INSTRUCTION_ACCOUNTS) {
+        throw new IllegalStateException("A v1 instruction may not reference more than " + MAX_V1_INSTRUCTION_ACCOUNTS + " accounts.");
+      }
+      out[i++] = (byte) numInstructionAccounts;
       final int dataLength = instruction.len();
       out[i++] = (byte) dataLength;
       out[i++] = (byte) (dataLength >> 8);

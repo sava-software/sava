@@ -819,6 +819,75 @@ final class TransactionSerializationTests {
   }
 
   @Test
+  void testV1TooManySignatures() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    // 12 signers plus the fee payer exceeds the 12 signature maximum.
+    final var signers = new ArrayList<AccountMeta>(12);
+    for (int s = 0; s < 12; ++s) {
+      signers.add(createWritableSigner(Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey()));
+    }
+    final var ix = Instruction.createInstruction(SolanaAccounts.MAIN_NET.systemProgram(), signers, new byte[]{1});
+    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+        .feePayer(feePayer).addInstruction(ix).createTransaction()
+    );
+  }
+
+  @Test
+  void testLegacyProgramMayNotBeFeePayer() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var ix = Instruction.createInstruction(
+        feePayer,
+        List.of(createWritableSigner(signerB.publicKey())),
+        new byte[]{1}
+    );
+    assertThrows(IllegalStateException.class, () -> Transaction.createTx(feePayer, ix));
+  }
+
+  @Test
+  void testV1ProgramMayNotBeFeePayer() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var ix = Instruction.createInstruction(
+        feePayer,
+        List.of(createWritableSigner(signerB.publicKey())),
+        new byte[]{1}
+    );
+    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+        .feePayer(feePayer).addInstruction(ix).createTransaction()
+    );
+  }
+
+  @Test
+  void testV1TooManyInstructionAccounts() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var account = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    // Account indices may repeat within an instruction, exceeding the u8 count without exceeding 64 unique accounts.
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        Collections.nCopies(256, createRead(account)),
+        new byte[]{1}
+    );
+    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+        .feePayer(feePayer).addInstruction(ix).createTransaction()
+    );
+  }
+
+  @Test
+  void testV1TransactionTooLarge() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var account = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(createRead(account)),
+        new byte[V1Transaction.MAX_SERIALIZED_LENGTH_V1]
+    );
+    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+        .feePayer(feePayer).addInstruction(ix).createTransaction()
+    );
+  }
+
+  @Test
   void testV1SkeletonDeserialization() {
     final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
     final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());

@@ -102,7 +102,11 @@ record InstructionRecord(AccountMeta programId,
 
   @Override
   public int serialize(final byte[] out, int i, final AccountIndexLookupTableEntry[] accountIndexLookupTable) {
-    out[i] = lookupAccountIndexOrThrow(accountIndexLookupTable, programId.publicKey());
+    final byte programIdIndex = lookupAccountIndexOrThrow(accountIndexLookupTable, programId.publicKey());
+    if (programIdIndex == 0) {
+      throw new IllegalStateException("An instruction program may not be the fee payer.");
+    }
+    out[i] = programIdIndex;
     ++i;
     i += CompactU16Encoding.encodeLength(out, i, accounts.size());
     for (final var account : accounts) {
@@ -115,7 +119,11 @@ record InstructionRecord(AccountMeta programId,
 
   @Override
   public int serialize(final byte[] out, int i, final Map<PublicKey, Integer> accountIndexLookupTable) {
-    out[i] = indexOfOrThrow(accountIndexLookupTable, programId.publicKey());
+    final byte programIdIndex = indexOfOrThrow(accountIndexLookupTable, programId.publicKey());
+    if (programIdIndex == 0) {
+      throw new IllegalStateException("An instruction program may not be the fee payer.");
+    }
+    out[i] = programIdIndex;
     ++i;
     i += CompactU16Encoding.encodeLength(out, i, accounts.size());
     for (final var account : accounts) {
