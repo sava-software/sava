@@ -73,7 +73,6 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     final int numReadonlySignedAccounts = data[o++] & 0xFF;
     final int numReadonlyUnsignedAccounts = data[o++] & 0xFF;
 
-    // TransactionConfigMask (u32)
     final int configMask = ByteUtil.getInt32LE(data, o);
     // A single priority fee bit is malformed per SIMD-0385, both must be set.
     final int priorityFeeBits = configMask & PRIORITY_FEE_MASK;
@@ -82,7 +81,6 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     }
     o += V1_CONFIG_MASK_LENGTH;
 
-    // LifetimeSpecifier (recent block hash) begins at the fixed V1_RECENT_BLOCK_HASH_INDEX.
     o += BLOCK_HASH_LENGTH;
 
     final int numInstructions = data[o++] & 0xFF;
@@ -120,16 +118,10 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     } else {
       heapSize = 0;
     }
-    // Per SIMD-0385, each set TransactionConfigMask bit contributes one 4-byte ConfigValue.
-    // Unknown bits are all higher than the known bits, so their values follow the known values
-    // and may be skipped without affecting subsequent offsets.
+
     o += Integer.bitCount(configMask & ~KNOWN_CONFIG_MASK_BITS) << 2;
 
     final int instructionsOffset = o;
-    // The v1 format serializes all fixed-width instruction headers contiguously (followed by all
-    // the instruction payloads), so the invoked program indexes can be read directly from the header
-    // block. The payloads do not need to be walked here: the signatures are simply appended after
-    // the message at the end of the transaction.
     final int[] invokedIndexes = new int[numInstructions];
     for (int i = 0; i < numInstructions; ++i) {
       // InstructionHeader: (u8 programIdIndex, u8 numAccounts, u16 LE numDataBytes)
