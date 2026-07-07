@@ -31,6 +31,10 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   private static final int COMPUTE_UNIT_LIMIT_MASK = 0b0000_0100;
   private static final int ACCOUNT_DATA_SIZE_LIMIT_MASK = 0b0000_1000;
   private static final int HEAP_SIZE_MASK = 0b0001_0000;
+  private static final int KNOWN_CONFIG_MASK_BITS = PRIORITY_FEE_MASK
+      | COMPUTE_UNIT_LIMIT_MASK
+      | ACCOUNT_DATA_SIZE_LIMIT_MASK
+      | HEAP_SIZE_MASK;
 
   private final long priorityFeeLamports;
   private final int computeUnitLimit;
@@ -71,6 +75,11 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
 
     // TransactionConfigMask (u32)
     final int configMask = ByteUtil.getInt32LE(data, o);
+    // A single priority fee bit is malformed per SIMD-0385, both must be set.
+    final int priorityFeeBits = configMask & PRIORITY_FEE_MASK;
+    if (priorityFeeBits != 0 && priorityFeeBits != PRIORITY_FEE_MASK) {
+      throw new IllegalStateException("Both v1 priority fee TransactionConfigMask bits must be set: 0x" + Integer.toHexString(configMask));
+    }
     o += V1_CONFIG_MASK_LENGTH;
 
     // LifetimeSpecifier (recent block hash) begins at the fixed V1_RECENT_BLOCK_HASH_INDEX.
@@ -111,6 +120,10 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     } else {
       heapSize = 0;
     }
+    // Per SIMD-0385, each set TransactionConfigMask bit contributes one 4-byte ConfigValue.
+    // Unknown bits are all higher than the known bits, so their values follow the known values
+    // and may be skipped without affecting subsequent offsets.
+    o += Integer.bitCount(configMask & ~KNOWN_CONFIG_MASK_BITS) << 2;
 
     final int instructionsOffset = o;
     // The v1 format serializes all fixed-width instruction headers contiguously (followed by all
