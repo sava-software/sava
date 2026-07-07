@@ -312,11 +312,13 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     );
   }
 
+  @Deprecated
   @Override
   public CompletableFuture<Block> getBlock(final long slot, final int maxSupportedTransactionVersion) {
     return getBlock(this.defaultCommitment, slot, maxSupportedTransactionVersion);
   }
 
+  @Deprecated
   @Override
   public CompletableFuture<Block> getBlock(final long slot,
                                            final BlockTxDetails blockTxDetails,
@@ -324,6 +326,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion);
   }
 
+  @Deprecated
   @Override
   public CompletableFuture<Block> getBlock(final long slot,
                                            final BlockTxDetails blockTxDetails,
@@ -332,6 +335,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion, rewards);
   }
 
+  @Deprecated
   @Override
   public CompletableFuture<Block> getBlock(final Commitment commitment,
                                            final long slot,
@@ -1397,6 +1401,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     return getTransaction(defaultCommitment, txSignature);
   }
 
+  @Deprecated
   @Override
   public CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                               final int maxSupportedTransactionVersion,

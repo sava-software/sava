@@ -199,24 +199,39 @@ public interface SolanaRpcClient {
                                     final BlockTxDetails blockTxDetails,
                                     final boolean rewards);
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getBlock(long)] instead.
+  @Deprecated
   CompletableFuture<Block> getBlock(final long slot, final int maxSupportedTransactionVersion);
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getBlock(Commitment, long)] instead.
+  @Deprecated
   default CompletableFuture<Block> getBlock(final Commitment commitment,
                                             final long slot,
                                             final int maxSupportedTransactionVersion) {
     return getBlock(commitment, slot, BlockTxDetails.none, maxSupportedTransactionVersion);
   }
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getBlock(long, boolean)] instead.
+  @Deprecated
   default CompletableFuture<Block> getBlock(final long slot,
                                             final int maxSupportedTransactionVersion,
                                             final boolean rewards) {
     return getBlock(slot, BlockTxDetails.none, maxSupportedTransactionVersion, rewards);
   }
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getBlock(long, BlockTxDetails)] instead.
+  @Deprecated
   CompletableFuture<Block> getBlock(final long slot,
                                     final BlockTxDetails blockTxDetails,
                                     final int maxSupportedTransactionVersion);
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getBlock(Commitment, long, BlockTxDetails)] instead.
+  @Deprecated
   default CompletableFuture<Block> getBlock(final Commitment commitment,
                                             final long slot,
                                             final BlockTxDetails blockTxDetails,
@@ -224,11 +239,17 @@ public interface SolanaRpcClient {
     return getBlock(commitment, slot, blockTxDetails, maxSupportedTransactionVersion, true);
   }
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getBlock(long, BlockTxDetails, boolean)] instead.
+  @Deprecated
   CompletableFuture<Block> getBlock(final long slot,
                                     final BlockTxDetails blockTxDetails,
                                     final int maxSupportedTransactionVersion,
                                     final boolean rewards);
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getBlock(Commitment, long, BlockTxDetails, boolean)] instead.
+  @Deprecated
   CompletableFuture<Block> getBlock(final Commitment commitment,
                                     final long slot,
                                     final BlockTxDetails blockTxDetails,
@@ -822,10 +843,16 @@ public interface SolanaRpcClient {
     return getTransaction(commitment, 0, txSignature);
   }
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getTransaction(String)] instead.
+  @Deprecated
   default CompletableFuture<Tx> getTransaction(final int maxSupportedTransactionVersion, final String txSignature) {
     return getTransaction(defaultCommitment(), maxSupportedTransactionVersion, txSignature);
   }
 
+  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
+  /// transaction versions this library is able to parse. Use [#getTransaction(Commitment, String)] instead.
+  @Deprecated
   CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                        final int maxSupportedTransactionVersion,
                                        final String txSignature);
