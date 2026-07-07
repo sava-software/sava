@@ -10,6 +10,7 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record TxMeta(TransactionError error,
                      int computeUnitsConsumed,
+                     Long costUnits,
                      long fee,
                      List<Long> preBalances,
                      List<Long> postBalances,
@@ -17,6 +18,7 @@ public record TxMeta(TransactionError error,
                      List<TokenBalance> postTokenBalances,
                      List<TxInnerInstruction> innerInstructions,
                      LoadedAddresses loadedAddresses,
+                     TxReturnData returnData,
                      List<String> logMessages,
                      List<TxReward> rewards) {
 
@@ -38,6 +40,7 @@ public record TxMeta(TransactionError error,
 
     private TransactionError error;
     private int computeUnitsConsumed;
+    private Long costUnits;
     private long fee;
     private List<Long> preBalances;
     private List<Long> postBalances;
@@ -45,6 +48,7 @@ public record TxMeta(TransactionError error,
     private List<TokenBalance> postTokenBalances;
     private List<TxInnerInstruction> innerInstructions;
     private LoadedAddresses loadedAddresses;
+    private TxReturnData returnData;
     private List<String> logMessages;
     private List<TxReward> rewards;
 
@@ -55,6 +59,7 @@ public record TxMeta(TransactionError error,
       return new TxMeta(
           error,
           computeUnitsConsumed,
+          costUnits,
           fee,
           preBalances,
           postBalances,
@@ -62,6 +67,7 @@ public record TxMeta(TransactionError error,
           postTokenBalances,
           innerInstructions,
           loadedAddresses,
+          returnData,
           logMessages,
           rewards
       );
@@ -73,6 +79,8 @@ public record TxMeta(TransactionError error,
         this.error = TransactionError.parseError(ji);
       } else if (fieldEquals("computeUnitsConsumed", buf, offset, len)) {
         this.computeUnitsConsumed = ji.readInt();
+      } else if (fieldEquals("costUnits", buf, offset, len)) {
+        this.costUnits = ji.readLong();
       } else if (fieldEquals("fee", buf, offset, len)) {
         this.fee = ji.readLong();
       } else if (fieldEquals("preBalances", buf, offset, len)) {
@@ -87,6 +95,8 @@ public record TxMeta(TransactionError error,
         this.innerInstructions = TxInnerInstruction.parseInstructions(ji);
       } else if (fieldEquals("loadedAddresses", buf, offset, len)) {
         this.loadedAddresses = LoadedAddresses.parse(ji);
+      } else if (fieldEquals("returnData", buf, offset, len)) {
+        this.returnData = TxReturnData.parse(ji);
       } else if (fieldEquals("logMessages", buf, offset, len)) {
         final var logMessages = new ArrayList<String>();
         while (ji.readArray()) {

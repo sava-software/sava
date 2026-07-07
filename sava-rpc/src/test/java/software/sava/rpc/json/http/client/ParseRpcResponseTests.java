@@ -634,6 +634,8 @@ final class ParseRpcResponseTests {
     final var meta = tx.meta();
     assertNull(meta.error());
     assertEquals(111048, meta.computeUnitsConsumed());
+    assertEquals(115456L, meta.costUnits());
+    assertNull(meta.returnData());
     assertEquals(7072L, meta.fee());
 
     final var ii = meta.innerInstructions();
@@ -691,6 +693,26 @@ final class ParseRpcResponseTests {
     assertEquals(new java.math.BigInteger("74495451"), postTB.getLast().amount());
 
     assertTrue(meta.rewards().isEmpty());
+  }
+
+  @Test
+  void txMetaReturnData() {
+    final var ji = JsonIterator.parse("""
+        {
+          "computeUnitsConsumed": 5000,
+          "err": null,
+          "fee": 5000,
+          "returnData": {
+            "data": ["AQID", "base64"],
+            "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          },
+          "status": {"Ok": null}
+        }""");
+    final var meta = TxMeta.parse(ji);
+    assertNull(meta.costUnits());
+    final var returnData = meta.returnData();
+    assertEquals(PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), returnData.programId());
+    assertArrayEquals(new byte[]{1, 2, 3}, returnData.data());
   }
 
   @Test
