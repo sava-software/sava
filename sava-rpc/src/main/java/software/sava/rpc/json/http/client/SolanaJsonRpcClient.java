@@ -34,6 +34,8 @@ import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
 final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements SolanaRpcClient {
 
+  static final int MAX_SUPPORTED_TRANSACTION_VERSION = 1;
+
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
   static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
 
@@ -284,13 +286,42 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                            final long slot,
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
-    final var maxSupportedTransactionVersion = blockTxDetails == BlockTxDetails.full
-        ? ",\"maxSupportedTransactionVersion\":0"
-        : "";
+    return getBlock(commitment, slot, blockTxDetails, MAX_SUPPORTED_TRANSACTION_VERSION, rewards);
+  }
+
+  @Deprecated
+  @Override
+  public CompletableFuture<Block> getBlock(final long slot, final int maxSupportedTransactionVersion) {
+    return getBlock(this.defaultCommitment, slot, maxSupportedTransactionVersion);
+  }
+
+  @Deprecated
+  @Override
+  public CompletableFuture<Block> getBlock(final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final int maxSupportedTransactionVersion) {
+    return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion);
+  }
+
+  @Deprecated
+  @Override
+  public CompletableFuture<Block> getBlock(final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final int maxSupportedTransactionVersion,
+                                           final boolean rewards) {
+    return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion, rewards);
+  }
+
+  @Deprecated
+  @Override
+  public CompletableFuture<Block> getBlock(final Commitment commitment,
+                                           final long slot,
+                                           final BlockTxDetails blockTxDetails,
+                                           final int maxSupportedTransactionVersion,
+                                           final boolean rewards) {
     return sendPostRequest(BLOCK, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b%s}]}""",
-            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards,
-            maxSupportedTransactionVersion
+                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","maxSupportedTransactionVersion":%d,"rewards":%b}]}""",
+            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, maxSupportedTransactionVersion, rewards
         )
     );
   }
@@ -1424,6 +1455,16 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
+    return getTransaction(commitment, MAX_SUPPORTED_TRANSACTION_VERSION, txSignature);
+  }
+
+  @Override
+  public CompletableFuture<Tx> getTransaction(final Commitment commitment,
+                                              final int maxSupportedTransactionVersion,
+                                              final String txSignature) {
+    final var maxVersionParam = maxSupportedTransactionVersion < 0
+        ? ""
+        : String.format("\"maxSupportedTransactionVersion\":%d,", maxSupportedTransactionVersion);
     return sendPostRequest(TRANSACTION, format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s","maxSupportedTransactionVersion":0,"encoding":"base64"}]}""",
             id.incrementAndGet(), txSignature, commitment.getValue()
