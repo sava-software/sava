@@ -880,7 +880,7 @@ final class TransactionSerializationTests {
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(createRead(account)),
-        new byte[V1Transaction.MAX_SERIALIZED_LENGTH_V1]
+        new byte[TxBuilderImpl.MAX_SERIALIZED_LENGTH_V1]
     );
     assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
         .feePayer(feePayer).addInstruction(ix).createTransaction()
