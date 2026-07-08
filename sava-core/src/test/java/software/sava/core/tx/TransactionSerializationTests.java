@@ -813,15 +813,15 @@ final class TransactionSerializationTests {
         new byte[]{1}
     );
     // Not a multiple of 1KiB.
-    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+    assertThrows(IllegalArgumentException.class, () -> TxBuilder.createBuilder()
         .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(33_000).createTransaction()
     );
     // Below the 32KiB minimum.
-    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+    assertThrows(IllegalArgumentException.class, () -> TxBuilder.createBuilder()
         .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(16 * 1_024).createTransaction()
     );
     // Above the 256KiB maximum.
-    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
+    assertThrows(IllegalArgumentException.class, () -> TxBuilder.createBuilder()
         .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(512 * 1_024).createTransaction()
     );
   }
@@ -1241,6 +1241,11 @@ final class TransactionSerializationTests {
     tx.setRecentBlockHash(blockHash);
 
     assertThrows(UnsupportedOperationException.class, () -> tx.setPriorityFeeLamports(10_000L));
+    // The heap size values are validated before creating a new transaction.
+    assertThrows(IllegalArgumentException.class, () -> tx.setHeapSize(33_000));
+    // The runtime rejects a SetLoadedAccountsDataSizeLimit instruction with a value of 0.
+    assertThrows(IllegalArgumentException.class, () -> tx.setAccountDataSizeLimit(0));
+    assertThrows(IllegalArgumentException.class, () -> tx.setAccountDataSizeLimit(-1));
 
     final var updated = tx
         .setComputeUnitLimit(300_000)
@@ -1300,6 +1305,11 @@ final class TransactionSerializationTests {
     assertEquals(heapSize, skeleton.heapSize());
     assertArrayEquals(blockHash, tx.recentBlockHash());
 
+    // Not a multiple of 1KiB, below the 32KiB minimum, and above the 256KiB maximum.
+    assertThrows(IllegalArgumentException.class, () -> tx.setHeapSize(33_000));
+    assertThrows(IllegalArgumentException.class, () -> tx.setHeapSize(16 * 1_024));
+    assertThrows(IllegalArgumentException.class, () -> tx.setHeapSize(512 * 1_024));
+
     assertSame(tx, tx.setPriorityFeeLamports(7_500L));
     assertSame(tx, tx.setHeapSize(128 * 1_024));
 
@@ -1310,6 +1320,10 @@ final class TransactionSerializationTests {
     assertEquals(400_000, skeleton.computeUnitLimit());
     assertEquals(131_072, skeleton.accountDataSizeLimit());
     assertArrayEquals(blockHash, tx.recentBlockHash());
+
+    // Unlike legacy/v0, a v1 ConfigValue of 0 is valid, equivalent to an unset 0 byte limit.
+    assertSame(tx, tx.setAccountDataSizeLimit(0));
+    assertEquals(0, TransactionSkeleton.deserializeSkeleton(tx.serialized()).accountDataSizeLimit());
   }
 
   @Test

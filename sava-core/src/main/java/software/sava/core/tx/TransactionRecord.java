@@ -179,6 +179,7 @@ final class TransactionRecord extends BaseTransaction {
 
   @Override
   public Transaction setHeapSize(final int heapSize) {
+    TxBuilderImpl.checkHeapSize(heapSize);
     return setComputeBudgetValue(REQUEST_HEAP_FRAME_DISCRIMINATOR, heapSize);
   }
 
@@ -189,6 +190,14 @@ final class TransactionRecord extends BaseTransaction {
 
   @Override
   public Transaction setAccountDataSizeLimit(final int accountDataSizeLimit) {
+    // The runtime rejects a SetLoadedAccountsDataSizeLimit instruction with a value of 0 with
+    // InvalidLoadedAccountsDataSizeLimit. Negative values would serialize as u32 values beyond
+    // the 64MiB maximum.
+    if (accountDataSizeLimit <= 0) {
+      throw new IllegalArgumentException(
+          "A loaded accounts data size limit must be greater than 0, was " + accountDataSizeLimit + '.'
+      );
+    }
     return setComputeBudgetValue(SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR, accountDataSizeLimit);
   }
 

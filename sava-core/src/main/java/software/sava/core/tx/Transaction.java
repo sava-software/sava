@@ -852,15 +852,21 @@ public interface Transaction {
   ///                               or this transaction was produced elsewhere without one.
   Transaction setComputeUnitLimit(final int computeUnitLimit);
 
-  /// Sets the loaded accounts data size limit for this transaction.
+  /// Sets the loaded accounts data size limit, in bytes, for this transaction. Values above the
+  /// 64MiB maximum are clamped by the runtime rather than rejected.
   ///
   /// Legacy and v0 transactions replace the existing SetLoadedAccountsDataSizeLimit compute
-  /// budget instruction if present, otherwise one is prepended, and a new transaction is returned.
+  /// budget instruction if present, otherwise one is prepended, and a new transaction is
+  /// returned. The runtime rejects an instruction with a value of 0, so the limit must be
+  /// greater than 0.
   ///
   /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
   /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
-  /// to the runtime maximum.
+  /// to the runtime maximum. Unlike legacy and v0 transactions, a value of 0 is valid and per
+  /// SIMD-0385 is equivalent to an unset limit of 0 bytes.
   ///
+  /// @throws IllegalArgumentException if the limit is not greater than 0 for a legacy or v0
+  ///                                  transaction.
   /// @throws IllegalStateException if the account data size limit TransactionConfigMask bit of
   ///                               this v1 transaction is not set, because it was explicitly
   ///                               cleared or this transaction was produced elsewhere without one.
@@ -875,6 +881,8 @@ public interface Transaction {
   /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
   /// return this transaction.
   ///
+  /// @throws IllegalArgumentException if the heap size is not a multiple of 1KiB in the
+  ///                                  inclusive range [32KiB, 256KiB].
   /// @throws IllegalStateException if the heap size TransactionConfigMask bit of this v1
   ///                               transaction is not set, because a heap size was not provided
   ///                               to the {@link TxBuilder} or this transaction was produced

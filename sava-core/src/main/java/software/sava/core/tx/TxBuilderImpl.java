@@ -187,14 +187,19 @@ final class TxBuilderImpl implements TxBuilder {
     return heapSize;
   }
 
+  static void checkHeapSize(final int heapSize) {
+    if (heapSize < MIN_HEAP_SIZE || heapSize > MAX_HEAP_SIZE || heapSize % 1_024 != 0) {
+      throw new IllegalArgumentException(
+          "A requested heap size must be a multiple of 1KiB in the inclusive range [32KiB, 256KiB]."
+      );
+    }
+  }
+
   @Override
   public TxBuilder heapSize(final int heapSize) {
-    // Per SIMD-0385, a requested heap size must be a multiple of 1KiB within [32KiB, 256KiB].
     // 0 clears the request.
-    if (strict && heapSize != 0 && (heapSize < MIN_HEAP_SIZE || heapSize > MAX_HEAP_SIZE || heapSize % 1_024 != 0)) {
-      throw new IllegalStateException(
-          "A v1 requested heap size must be a multiple of 1KiB in the inclusive range [32KiB, 256KiB]."
-      );
+    if (strict && heapSize != 0) {
+      checkHeapSize(heapSize);
     }
     this.heapSize = heapSize;
     return this;
