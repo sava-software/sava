@@ -3,13 +3,13 @@ package software.sava.core.tx;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
+import software.sava.core.encoding.ByteUtil;
 
 import java.util.Arrays;
 import java.util.List;
 
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
-import static software.sava.core.tx.V1TransactionSkeleton.V1_ACCOUNTS_OFFSET;
-import static software.sava.core.tx.V1TransactionSkeleton.V1_RECENT_BLOCK_HASH_INDEX;
+import static software.sava.core.tx.V1TransactionSkeleton.*;
 
 final class V1Transaction extends BaseTransaction {
 
@@ -72,6 +72,44 @@ final class V1Transaction extends BaseTransaction {
     return TxBuilder.createBuilder().feePayer(feePayer).addInstructions(instructions).createTransaction();
   }
 
+  // Returns the offset of the ConfigValue corresponding to the given TransactionConfigMask bits.
+  private int configValueOffset(final int maskBits) {
+    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
+    if ((configMask & maskBits) != maskBits) {
+      throw new IllegalStateException(
+          "The TransactionConfigMask bits 0x" + Integer.toHexString(maskBits)
+              + " are not set for this v1 transaction, re-create it with a TxBuilder instead."
+      );
+    }
+    return V1_ACCOUNTS_OFFSET
+        + ((data[V1_ACCOUNTS_OFFSET - 1] & 0xFF) << 5)
+        + (Integer.bitCount(configMask & (Integer.lowestOneBit(maskBits) - 1)) << 2);
+  }
+
+  @Override
+  public Transaction setPriorityFeeLamports(final long priorityFeeLamports) {
+    ByteUtil.putInt64LE(data, configValueOffset(PRIORITY_FEE_MASK), priorityFeeLamports);
+    return this;
+  }
+
+  @Override
+  public Transaction setHeapSize(final int heapSize) {
+    ByteUtil.putInt32LE(data, configValueOffset(HEAP_SIZE_MASK), heapSize);
+    return this;
+  }
+
+  @Override
+  public Transaction setComputeUnitLimit(final int computeUnitLimit) {
+    ByteUtil.putInt32LE(data, configValueOffset(COMPUTE_UNIT_LIMIT_MASK), computeUnitLimit);
+    return this;
+  }
+
+  @Override
+  public Transaction setAccountDataSizeLimit(final int accountDataSizeLimit) {
+    ByteUtil.putInt32LE(data, configValueOffset(ACCOUNT_DATA_SIZE_LIMIT_MASK), accountDataSizeLimit);
+    return this;
+  }
+
   @Override
   public int version() {
     return data[0] & 0x7F;
@@ -85,6 +123,16 @@ final class V1Transaction extends BaseTransaction {
   @Override
   public boolean exceedsSizeLimit() {
     return size() > TxBuilderImpl.MAX_SERIALIZED_LENGTH_V1;
+  }
+
+  @Override
+  public int numAccounts() {
+    return data[V1_ACCOUNTS_OFFSET - 1] & 0xFF;
+  }
+
+  @Override
+  public boolean exceedsSignatureLimit() {
+    return numSigners() > TxBuilderImpl.MAX_V1_SIGNATURES;
   }
 
   @Override

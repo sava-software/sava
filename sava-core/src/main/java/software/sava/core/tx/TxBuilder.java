@@ -77,10 +77,31 @@ public interface TxBuilder {
 
   int computeUnitLimit();
 
+  /// Sets the compute unit limit, capped by the runtime at 1.4 million.
+  ///
+  /// Defaults to the 1.4 million maximum so that the corresponding ConfigValue is serialized and
+  /// may be updated in place later via {@link Transaction#setComputeUnitLimit(int)}. Set to 0 to
+  /// clear, omitting the ConfigValue, which per SIMD-0385 defaults the limit to 0 compute units.
+  ///
+  /// If not known ahead of time, simulate the transaction with the default maximum,
+  /// then set the limit to the units consumed reported by the RPC simulation,
+  /// plus a buffer if desired, before signing and sending.
   TxBuilder computeUnitLimit(final int computeUnitLimit);
 
   int accountDataSizeLimit();
 
+  /// Sets the loaded accounts data size limit, in bytes, capped by the runtime at 64MiB.
+  ///
+  /// Defaults to the 64MiB maximum, mirroring the legacy/v0 default, so that the corresponding
+  /// ConfigValue is serialized and may be updated in place later via
+  /// {@link Transaction#setAccountDataSizeLimit(int)}. Set to 0 to clear, omitting the
+  /// ConfigValue, which per SIMD-0385 defaults the limit to 0 bytes; a transaction which loads
+  /// account data without a sufficient limit will fail with MaxLoadedAccountsDataSizeExceeded
+  /// and still pay fees.
+  ///
+  /// If not known ahead of time, simulate the transaction with the default maximum,
+  /// then set the limit to the loaded accounts data size reported by the RPC simulation,
+  /// plus a buffer if desired, before signing and sending.
   TxBuilder accountDataSizeLimit(final int accountDataSizeLimit);
 
   int heapSize();
