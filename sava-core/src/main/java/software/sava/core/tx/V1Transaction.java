@@ -94,6 +94,7 @@ final class V1Transaction extends BaseTransaction {
 
   @Override
   public Transaction setHeapSize(final int heapSize) {
+    TxBuilderImpl.checkHeapSize(heapSize);
     ByteUtil.putInt32LE(data, configValueOffset(HEAP_SIZE_MASK), heapSize);
     return this;
   }
