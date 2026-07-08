@@ -1400,6 +1400,62 @@ final class TransactionSerializationTests {
   }
 
   @Test
+  void testV1DerivedTransactionPreservesConfigValues() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[]{1, 2, 3}
+    );
+
+    final var tx = TxBuilder.createBuilder()
+        .feePayer(feePayer.publicKey())
+        .addInstruction(ix)
+        .priorityFeeLamports(5_000L)
+        .computeUnitLimit(200_000)
+        .accountDataSizeLimit(65_536)
+        .heapSize(64 * 1_024)
+        .createTransaction();
+
+    final byte[] blockHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    for (int b = 0; b < blockHash.length; ++b) {
+      blockHash[b] = (byte) (b + 17);
+    }
+    tx.setRecentBlockHash(blockHash);
+
+    final var prependIx = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(feePayer.publicKey())),
+        new byte[]{4, 5, 6}
+    );
+    final var derived = tx.prependIx(prependIx);
+    assertNotSame(tx, derived);
+    assertEquals(2, derived.numInstructions());
+    assertArrayEquals(blockHash, derived.recentBlockHash());
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(derived.serialized());
+    assertEquals(5_000L, skeleton.priorityFeeLamports());
+    assertEquals(200_000, skeleton.computeUnitLimit());
+    assertEquals(65_536, skeleton.accountDataSizeLimit());
+    assertEquals(64 * 1_024, skeleton.heapSize());
+
+    // Cleared limits stay cleared on derived transactions.
+    final var clearedBuilder = TxBuilder.createBuilder()
+        .feePayer(feePayer.publicKey())
+        .addInstruction(ix)
+        .computeUnitLimit(0)
+        .accountDataSizeLimit(0);
+    final var clearedDerived = clearedBuilder.createTransaction().prependIx(prependIx);
+    final var clearedSkeleton = TransactionSkeleton.deserializeSkeleton(clearedDerived.serialized());
+    assertEquals(0L, clearedSkeleton.priorityFeeLamports());
+    assertEquals(0, clearedSkeleton.computeUnitLimit());
+    assertEquals(0, clearedSkeleton.accountDataSizeLimit());
+    assertEquals(0, clearedSkeleton.heapSize());
+  }
+
+  @Test
   void testExceedsLimits() {
     final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
 

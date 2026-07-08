@@ -69,7 +69,33 @@ final class V1Transaction extends BaseTransaction {
 
   @Override
   protected Transaction createTransaction(final List<Instruction> instructions) {
-    return TxBuilder.createBuilder().feePayer(feePayer).addInstructions(instructions).createTransaction();
+    final var builder = TxBuilder.createBuilder()
+        .feePayer(feePayer)
+        .addInstructions(instructions);
+    // Carry over the ConfigValues so that derived transactions preserve the fee and resource
+    // requests of this transaction instead of resetting them to the builder defaults.
+    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
+    int o = V1_ACCOUNTS_OFFSET + ((data[V1_ACCOUNTS_OFFSET - 1] & 0xFF) << 5);
+    if ((configMask & PRIORITY_FEE_MASK) == PRIORITY_FEE_MASK) {
+      builder.priorityFeeLamports(ByteUtil.getInt64LE(data, o));
+      o += Long.BYTES;
+    }
+    if ((configMask & COMPUTE_UNIT_LIMIT_MASK) != 0) {
+      builder.computeUnitLimit(ByteUtil.getInt32LE(data, o));
+      o += Integer.BYTES;
+    } else {
+      builder.computeUnitLimit(0);
+    }
+    if ((configMask & ACCOUNT_DATA_SIZE_LIMIT_MASK) != 0) {
+      builder.accountDataSizeLimit(ByteUtil.getInt32LE(data, o));
+      o += Integer.BYTES;
+    } else {
+      builder.accountDataSizeLimit(0);
+    }
+    if ((configMask & HEAP_SIZE_MASK) != 0) {
+      builder.heapSize(ByteUtil.getInt32LE(data, o));
+    }
+    return builder.createTransaction();
   }
 
   // Returns the offset of the ConfigValue corresponding to the given TransactionConfigMask bits.
