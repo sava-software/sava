@@ -195,7 +195,22 @@ public interface TransactionSkeleton {
 
   PublicKey[] lookupTableAccounts();
 
-  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  /// The priority fee, in lamports, for this transaction.
+  ///
+  /// v1 transactions return the priority fee ConfigValue directly.
+  ///
+  /// Legacy and v0 transactions derive the fee from the SetComputeUnitPrice compute budget
+  /// instruction, which is priced in micro-lamports per compute unit. The price is multiplied
+  /// by the requested compute unit limit, capped at the 1.4 million maximum, then converted to
+  /// lamports, rounding up, mirroring the runtime's prioritization fee calculation.
+  ///
+  /// If no SetComputeUnitLimit instruction is present, a default limit of 200,000 units per
+  /// non-compute-budget instruction is assumed. This is an estimate; per SIMD-0170 the runtime
+  /// only allocates 3,000 units for each builtin program instruction, so the derived fee may
+  /// differ for such transactions. Transactions which explicitly set a compute unit limit are
+  /// exact.
+  ///
+  /// @return 0 if no priority fee ConfigValue or SetComputeUnitPrice instruction is present.
   long priorityFeeLamports();
 
   /// @return 0 if not explicitly set via Config Value or Compute Budget.
@@ -276,20 +291,23 @@ public interface TransactionSkeleton {
     final var accounts = parseAccounts();
     return createTransaction(accounts);
   }
+
   default TxBuilder prototypeTransaction() {
     return prototypeTransaction(this.parseInstructionsWithoutTableAccounts());
   }
 
   default TxBuilder prototypeTransaction(final Instruction[] instructions) {
     return new TxBuilderImpl()
+        .feePayer(feePayer())
         .addInstructions(instructions)
-        .heapSize(heapSize())
         .computeUnitLimit(computeUnitLimit())
         .priorityFeeLamports(priorityFeeLamports())
-        .accountDataSizeLimit(accountDataSizeLimit());
+        .accountDataSizeLimit(accountDataSizeLimit())
+        .heapSize(heapSize());
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -298,6 +316,7 @@ public interface TransactionSkeleton {
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
   // TODO: deprecate once v1 transactions are active on mainnet
+
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -308,6 +327,7 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -319,6 +339,7 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -330,6 +351,7 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -342,6 +364,7 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -350,6 +373,7 @@ public interface TransactionSkeleton {
   Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
 
   // TODO: deprecate once v1 transactions are active on mainnet
+
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///

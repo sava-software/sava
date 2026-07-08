@@ -24,6 +24,7 @@ public interface Transaction {
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
+  int MAX_INSTRUCTIONS = 64;
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
 
@@ -760,6 +761,40 @@ public interface Transaction {
 
   boolean exceedsSizeLimit();
 
+  /// The number of unique accounts referenced by this transaction, including any which would be
+  /// loaded via an address lookup table.
+  int numAccounts();
+
+  /// Whether the number of unique accounts referenced by this transaction, including any which
+  /// would be loaded via an address lookup table, exceeds the 64 account limit.
+  ///
+  default boolean exceedsAccountLimit() {
+    return numAccounts() > MAX_ACCOUNTS;
+  }
+
+  /// The number of top-level instructions.
+  int numInstructions();
+
+  /// Whether the number of top-level instructions exceeds the 64-instruction limit. SIMD-0385
+  /// imposes the limit on the v1 format directly, while legacy and v0 transactions are bound at
+  /// execution by the 64 instruction trace limit.
+  ///
+  default boolean exceedsInstructionLimit() {
+    return numInstructions() > MAX_INSTRUCTIONS;
+  }
+
+  int numSigners();
+
+  /// Whether the number of required signatures exceeds the 12-signature limit imposed on v1
+  /// transactions by SIMD-0385.
+  ///
+  /// Legacy and v0 transactions have no distinct signature count limit, they are only bound by
+  /// the serialized size limit, so this is always false.
+  ///
+  boolean exceedsSignatureLimit();
+
+  AccountMeta feePayer();
+
   List<Instruction> instructions();
 
   AddressLookupTable lookupTable();
@@ -773,8 +808,6 @@ public interface Transaction {
   byte[] recentBlockHash();
 
   int version();
-
-  int numSigners();
 
   byte[] serialized();
 
@@ -790,5 +823,61 @@ public interface Transaction {
 
   Transaction replaceInstruction(final int index, final Instruction instruction);
 
-  AccountMeta feePayer();
+  /// Sets the priority fee, in lamports, for this transaction. Only supported for v1
+  /// transactions, which overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction.
+  ///
+  /// The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports
+  /// per compute unit, not lamports, so legacy and v0 transactions are unsupported; include a
+  /// SetComputeUnitPrice instruction instead.
+  ///
+  /// @throws UnsupportedOperationException if this is a legacy or v0 transaction.
+  /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
+  ///                               transaction are not set, because a priority fee was not
+  ///                               provided to the {@link TxBuilder} or this transaction was
+  ///                               produced elsewhere without one.
+  Transaction setPriorityFeeLamports(final long priorityFeeLamports);
+
+  /// Sets the compute unit limit for this transaction.
+  ///
+  /// Legacy and v0 transactions replace the existing SetComputeUnitLimit compute budget
+  /// instruction if present, otherwise one is prepended, and a new transaction is returned.
+  ///
+  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
+  /// to the runtime maximum.
+  ///
+  /// @throws IllegalStateException if the compute unit limit TransactionConfigMask bit of this
+  ///                               v1 transaction is not set, because it was explicitly cleared
+  ///                               or this transaction was produced elsewhere without one.
+  Transaction setComputeUnitLimit(final int computeUnitLimit);
+
+  /// Sets the loaded accounts data size limit for this transaction.
+  ///
+  /// Legacy and v0 transactions replace the existing SetLoadedAccountsDataSizeLimit compute
+  /// budget instruction if present, otherwise one is prepended, and a new transaction is returned.
+  ///
+  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
+  /// to the runtime maximum.
+  ///
+  /// @throws IllegalStateException if the account data size limit TransactionConfigMask bit of
+  ///                               this v1 transaction is not set, because it was explicitly
+  ///                               cleared or this transaction was produced elsewhere without one.
+  Transaction setAccountDataSizeLimit(final int accountDataSizeLimit);
+
+  /// Sets the requested heap size, in bytes, for this transaction, which per SIMD-0385 must be
+  /// a multiple of 1KiB in the inclusive range [32KiB,256KiB].
+  ///
+  /// Legacy and v0 transactions replace the existing RequestHeapFrame compute budget instruction
+  /// if present, otherwise one is prepended, and a new transaction is returned.
+  ///
+  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction.
+  ///
+  /// @throws IllegalStateException if the heap size TransactionConfigMask bit of this v1
+  ///                               transaction is not set, because a heap size was not provided
+  ///                               to the {@link TxBuilder} or this transaction was produced
+  ///                               elsewhere without one.
+  Transaction setHeapSize(final int heapSize);
 }

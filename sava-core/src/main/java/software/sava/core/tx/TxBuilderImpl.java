@@ -41,14 +41,16 @@ final class TxBuilderImpl implements TxBuilder {
   // Length, in bytes, of a single v1 InstructionHeader: (u8 programIdIndex, u8 numAccounts, u16 numDataBytes).
   static final int V1_INSTRUCTION_HEADER_LENGTH = 4;
   // Maximum number of instructions and accounts permitted in a v1 transaction.
-  private static final int MAX_V1_INSTRUCTIONS = 64;
-  private static final int MAX_V1_ACCOUNTS = 64;
+  static final int MAX_V1_INSTRUCTIONS = 64;
+  static final int MAX_V1_ACCOUNTS = 64;
   // Maximum number of signatures permitted in a v1 transaction.
-  private static final int MAX_V1_SIGNATURES = 12;
+  static final int MAX_V1_SIGNATURES = 12;
   // Per-instruction limit imposed by the u8 account count header field.
   private static final int MAX_V1_INSTRUCTION_ACCOUNTS = 0xFF;
   private static final int MIN_HEAP_SIZE = 32 * 1_024;
   private static final int MAX_HEAP_SIZE = 256 * 1_024;
+  static final int MAX_COMPUTE_UNIT_LIMIT = 1_400_000;
+  static final int MAX_ACCOUNT_DATA_SIZE_LIMIT = 64 * 1_024 * 1_024;
 
   private boolean strict;
   private AccountMeta feePayer;
@@ -60,6 +62,8 @@ final class TxBuilderImpl implements TxBuilder {
 
   TxBuilderImpl() {
     strict = true;
+    computeUnitLimit = MAX_COMPUTE_UNIT_LIMIT;
+    accountDataSizeLimit = MAX_ACCOUNT_DATA_SIZE_LIMIT;
   }
 
   @Override
@@ -186,7 +190,8 @@ final class TxBuilderImpl implements TxBuilder {
   @Override
   public TxBuilder heapSize(final int heapSize) {
     // Per SIMD-0385, a requested heap size must be a multiple of 1KiB within [32KiB, 256KiB].
-    if (strict && (heapSize % 1_024 != 0 || heapSize < MIN_HEAP_SIZE || heapSize > MAX_HEAP_SIZE)) {
+    // 0 clears the request.
+    if (strict && heapSize != 0 && (heapSize < MIN_HEAP_SIZE || heapSize > MAX_HEAP_SIZE || heapSize % 1_024 != 0)) {
       throw new IllegalStateException(
           "A v1 requested heap size must be a multiple of 1KiB in the inclusive range [32KiB, 256KiB]."
       );

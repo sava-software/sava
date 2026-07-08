@@ -1,9 +1,11 @@
 package software.sava.core.tx;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
+import software.sava.core.encoding.ByteUtil;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -11,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
+import static software.sava.core.encoding.CompactU16Encoding.decode;
+import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 
 // Legacy and v0 transaction formats.
@@ -139,6 +143,55 @@ final class TransactionRecord extends BaseTransaction {
     return Transaction.createTx(feePayer, instructions, lookupTable, tableAccountMetas);
   }
 
+  private static final byte REQUEST_HEAP_FRAME_DISCRIMINATOR = (byte) 1;
+  private static final byte SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR = (byte) 2;
+  private static final byte SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR = (byte) 4;
+
+  private Transaction setComputeBudgetValue(final byte discriminator, final byte[] ixData) {
+    final var invokedComputeBudgetProgram = SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram();
+    final var ix = Instruction.createInstruction(invokedComputeBudgetProgram, List.of(), ixData);
+    final var computeBudgetProgram = invokedComputeBudgetProgram.publicKey();
+    for (int i = 0, numInstructions = instructions.size(); i < numInstructions; ++i) {
+      final var instruction = instructions.get(i);
+      if (computeBudgetProgram.equals(instruction.programId().publicKey())
+          && instruction.len() > 0
+          && instruction.data()[instruction.offset()] == discriminator) {
+        return replaceInstruction(i, ix);
+      }
+    }
+    return prependIx(ix);
+  }
+
+  private Transaction setComputeBudgetValue(final byte discriminator, final int value) {
+    final byte[] ixData = new byte[1 + Integer.BYTES];
+    ixData[0] = discriminator;
+    ByteUtil.putInt32LE(ixData, 1, value);
+    return setComputeBudgetValue(discriminator, ixData);
+  }
+
+  @Override
+  public Transaction setPriorityFeeLamports(final long priorityFeeLamports) {
+    throw new UnsupportedOperationException(
+        "The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports"
+            + " per compute unit, not lamports, include a SetComputeUnitPrice instruction instead."
+    );
+  }
+
+  @Override
+  public Transaction setHeapSize(final int heapSize) {
+    return setComputeBudgetValue(REQUEST_HEAP_FRAME_DISCRIMINATOR, heapSize);
+  }
+
+  @Override
+  public Transaction setComputeUnitLimit(final int computeUnitLimit) {
+    return setComputeBudgetValue(SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, computeUnitLimit);
+  }
+
+  @Override
+  public Transaction setAccountDataSizeLimit(final int accountDataSizeLimit) {
+    return setComputeBudgetValue(SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR, accountDataSizeLimit);
+  }
+
   @Override
   public int version() {
     final int version = data[messageOffset] & 0xFF;
@@ -148,6 +201,42 @@ final class TransactionRecord extends BaseTransaction {
   @Override
   public boolean exceedsSizeLimit() {
     return size() > Transaction.MAX_SERIALIZED_LENGTH;
+  }
+
+  @Override
+  public int numAccounts() {
+    final boolean versioned = signedByte(data[messageOffset]);
+    int numAccounts = decode(data, messageOffset + (versioned ? 4 : 3));
+    if (versioned) {
+      // Skip over the instructions to the address table lookups and add the indexed account counts.
+      int o = recentBlockHashIndex + Transaction.BLOCK_HASH_LENGTH;
+      final int numInstructions = decode(data, o);
+      o += getByteLen(data, o);
+      for (int i = 0, len; i < numInstructions; ++i) {
+        ++o; // programId index
+        len = decode(data, o);
+        o += getByteLen(data, o) + len;
+        len = decode(data, o);
+        o += getByteLen(data, o) + len;
+      }
+      final int numTables = decode(data, o);
+      o += getByteLen(data, o);
+      for (int t = 0, len; t < numTables; ++t) {
+        o += PublicKey.PUBLIC_KEY_LENGTH;
+        len = decode(data, o);
+        numAccounts += len;
+        o += getByteLen(data, o) + len;
+        len = decode(data, o);
+        numAccounts += len;
+        o += getByteLen(data, o) + len;
+      }
+    }
+    return numAccounts;
+  }
+
+  @Override
+  public boolean exceedsSignatureLimit() {
+    return false;
   }
 
   @Override

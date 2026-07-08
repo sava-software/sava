@@ -74,6 +74,11 @@ abstract class BaseTransaction implements Transaction {
   }
 
   @Override
+  public final int numInstructions() {
+    return instructions.size();
+  }
+
+  @Override
   public final byte[] serialized() {
     return data;
   }

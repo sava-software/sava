@@ -95,10 +95,44 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     return 0;
   }
 
+  // Runtime default compute unit limit granted per non-compute-budget instruction when no
+  // SetComputeUnitLimit instruction is present. An estimate; per SIMD-0170 the runtime only
+  // allocates 3,000 units for each builtin program instruction.
+  static final int DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT = 200_000;
+
+  private int numNonComputeBudgetInstructions() {
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    int count = 0;
+    for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
+      final var programAccount = super.accountKey(decode(data, o));
+      o += getByteLen(data, o);
+      final int numAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numAccounts;
+      final int numDataBytes = decode(data, o);
+      o += getByteLen(data, o);
+      o += numDataBytes;
+      if (!computeBudgetProgram.equals(programAccount)) {
+        ++count;
+      }
+    }
+    return count;
+  }
+
   @Override
   public long priorityFeeLamports() {
-    final int offset = computeBudgetValueOffset((byte) 3);
-    return offset > 0 ? ByteUtil.getInt64LE(data, offset) : 0;
+    final int priceOffset = computeBudgetValueOffset((byte) 3);
+    if (priceOffset <= 0) {
+      return 0;
+    }
+    final long microLamportsPerComputeUnit = ByteUtil.getInt64LE(data, priceOffset);
+    long computeUnitLimit = computeUnitLimit() & 0xFFFF_FFFFL;
+    if (computeUnitLimit == 0) {
+      computeUnitLimit = (long) DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions();
+    }
+    computeUnitLimit = Math.min(computeUnitLimit, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
+    // Round up to whole lamports, mirroring the runtime's prioritization fee calculation.
+    return ((microLamportsPerComputeUnit * computeUnitLimit) + 999_999) / 1_000_000;
   }
 
   @Override

@@ -23,14 +23,15 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
 
   // The v1 header and TransactionConfigMask are fixed width, so the recent block hash and the
   // accounts always begin at the same offsets within the serialized message.
-  static final int V1_RECENT_BLOCK_HASH_INDEX = 1 /* VersionByte */ + TxBuilderImpl.MSG_HEADER_LENGTH + V1_CONFIG_MASK_LENGTH;
+  static final int V1_CONFIG_MASK_OFFSET = 1 /* VersionByte */ + TxBuilderImpl.MSG_HEADER_LENGTH;
+  static final int V1_RECENT_BLOCK_HASH_INDEX = V1_CONFIG_MASK_OFFSET + V1_CONFIG_MASK_LENGTH;
   static final int V1_ACCOUNTS_OFFSET = V1_RECENT_BLOCK_HASH_INDEX + BLOCK_HASH_LENGTH + 2 /* NumInstructions + NumAddresses */;
 
   // TransactionConfigMask bit positions, ordered ascending as serialized in the ConfigValues block.
-  private static final int PRIORITY_FEE_MASK = 0b0000_0011; // Two bits per SIMD-0385.
-  private static final int COMPUTE_UNIT_LIMIT_MASK = 0b0000_0100;
-  private static final int ACCOUNT_DATA_SIZE_LIMIT_MASK = 0b0000_1000;
-  private static final int HEAP_SIZE_MASK = 0b0001_0000;
+  static final int PRIORITY_FEE_MASK = 0b0000_0011; // Two bits per SIMD-0385.
+  static final int COMPUTE_UNIT_LIMIT_MASK = 0b0000_0100;
+  static final int ACCOUNT_DATA_SIZE_LIMIT_MASK = 0b0000_1000;
+  static final int HEAP_SIZE_MASK = 0b0001_0000;
   private static final int KNOWN_CONFIG_MASK_BITS = PRIORITY_FEE_MASK
       | COMPUTE_UNIT_LIMIT_MASK
       | ACCOUNT_DATA_SIZE_LIMIT_MASK
@@ -149,7 +150,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   }
 
   public int configMask() {
-    return data[4] & 0xFF;
+    return ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
   }
 
   @Override
