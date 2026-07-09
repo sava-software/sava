@@ -687,8 +687,10 @@ public interface Transaction {
   ///                                  since one signature cannot fill a wider signature block
   static void sign(final Signer signer, final byte[] out) {
     if (V1Transaction.isV1(out)) {
-      final int sigOffset = out.length - Transaction.SIGNATURE_LENGTH;
-      Transaction.sign(signer, out, 0, sigOffset, sigOffset);
+      // The v1 message spans up to the appended signatures, the fee payer signature is first.
+      final int numSigners = out[1] & 0xFF;
+      final int signaturesOffset = out.length - (numSigners * Transaction.SIGNATURE_LENGTH);
+      Transaction.sign(signer, out, 0, signaturesOffset, signaturesOffset);
     } else {
       out[0] = 1;
       final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;

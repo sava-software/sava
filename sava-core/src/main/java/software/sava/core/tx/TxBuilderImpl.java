@@ -372,7 +372,7 @@ final class TxBuilderImpl implements TxBuilder {
 
     return new V1Transaction(
         feePayer,
-        instructions,
+        List.copyOf(instructions),
         out,
         messageLength
     );
