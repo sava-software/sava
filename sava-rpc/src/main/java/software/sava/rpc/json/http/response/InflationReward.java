@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +57,11 @@ public record InflationReward(long amount,
       } else if (fieldEquals("postBalance", buf, offset, len)) {
         postBalance = ji.readLong();
       } else if (fieldEquals("commission", buf, offset, len)) {
-        commission = ji.readInt();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          commission = ji.readInt();
+        } else {
+          ji.skip();
+        }
       } else {
         ji.skip();
       }

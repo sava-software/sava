@@ -329,7 +329,7 @@ final class TransactionRecord extends BaseTransaction {
 
   @Override
   public boolean exceedsSizeLimit() {
-    return size() > Transaction.MAX_SERIALIZED_LENGTH;
+    return size() > 1232;
   }
 
   @Override

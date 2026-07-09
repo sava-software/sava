@@ -8,7 +8,7 @@ import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record Tx(int slot,
+public record Tx(long slot,
                  OptionalLong blockTime,
                  TxMeta meta,
                  byte[] data,
@@ -26,7 +26,7 @@ public record Tx(int slot,
 
   private static final class Parser implements FieldBufferPredicate {
 
-    private int slot;
+    private long slot;
     private long blockTime;
     private TxMeta meta;
     private byte[] data;
@@ -48,7 +48,7 @@ public record Tx(int slot,
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("slot", buf, offset, len)) {
-        this.slot = ji.readInt();
+        this.slot = ji.readLong();
       } else if (fieldEquals("blockTime", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {
           this.blockTime = ji.readLong();

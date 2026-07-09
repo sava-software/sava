@@ -4,6 +4,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,9 +92,17 @@ public record ClusterNode(String gossip,
       } else if (fieldEquals("version", buf, offset, len)) {
         version = ji.readString();
       } else if (fieldEquals("featureSet", buf, offset, len)) {
-        featureSet = ji.readLong();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          featureSet = ji.readLong();
+        } else {
+          ji.skip();
+        }
       } else if (fieldEquals("shredVersion", buf, offset, len)) {
-        shredVersion = ji.readInt();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          shredVersion = ji.readInt();
+        } else {
+          ji.skip();
+        }
       } else {
         ji.skip();
       }

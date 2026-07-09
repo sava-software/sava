@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
@@ -30,7 +31,11 @@ public record HighestSnapshotSlot(long full, long incremental) {
       if (fieldEquals("full", buf, offset, len)) {
         full = ji.readLong();
       } else if (fieldEquals("incremental", buf, offset, len)) {
-        incremental = ji.readLong();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          incremental = ji.readLong();
+        } else {
+          ji.skip();
+        }
       } else {
         ji.skip();
       }

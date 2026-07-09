@@ -165,7 +165,11 @@ public record AccountInfo<T>(PublicKey pubKey,
       } else if (fieldEquals("rentEpoch", buf, offset, len)) {
         rentEpoch = ji.readBigInteger();
       } else if (fieldEquals("space", buf, offset, len)) {
-        space = ji.readInt();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          space = ji.readInt();
+        } else {
+          ji.skip();
+        }
       } else {
         ji.skip();
       }

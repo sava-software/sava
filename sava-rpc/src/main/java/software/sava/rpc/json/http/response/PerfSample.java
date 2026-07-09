@@ -2,11 +2,13 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import static systems.comodal.jsoniter.JsonIterator.fieldStartsWith;
 
 public record PerfSample(long slot,
                          long numSlots,
@@ -47,8 +49,12 @@ public record PerfSample(long slot,
         numSlots = ji.readLong();
       } else if (fieldEquals("numTransactions", buf, offset, len)) {
         numTransactions = ji.readLong();
-      } else if (fieldEquals("numNonVoteTransactions", buf, offset, len) || fieldEquals("numNonVoteTransaction", buf, offset, len)) {
-        numNonVoteTransaction = ji.readLong();
+      } else if (fieldStartsWith("numNonVoteTransaction", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          numNonVoteTransaction = ji.readLong();
+        } else {
+          ji.skip();
+        }
       } else if (fieldEquals("samplePeriodSecs", buf, offset, len)) {
         samplePeriodSecs = ji.readInt();
       } else {
