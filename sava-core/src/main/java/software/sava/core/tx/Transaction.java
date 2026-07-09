@@ -100,20 +100,32 @@ public interface Transaction {
     return accountMetas;
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer, final List<Instruction> instructions) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
     return createTx(instructions, serializedInstructionLength, TxBuilderImpl.sortLegacyAccounts(accounts));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer, final Instruction instruction) {
     return createTx(feePayer, List.of(instruction));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions) {
     return createTx((AccountMeta) null, instructions);
   }
@@ -164,6 +176,9 @@ public interface Transaction {
     return createTx((AccountMeta) null, instructions, lookupTable);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final Instruction... push) {
@@ -173,18 +188,30 @@ public interface Transaction {
     return createTx(feePayer, pushed);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions, final Instruction... push) {
     return createTx(null, instructions, push);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer, final Instruction instruction) {
     return createTx(feePayer, List.of(instruction));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final Instruction instruction) {
     return createTx((AccountMeta) null, instruction);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions, final AccountMeta[] sortedAccountKeys) {
     if (instructions.isEmpty()) {
       throw new IllegalArgumentException("No instructions provided");
@@ -193,16 +220,25 @@ public interface Transaction {
     return createTx(instructions, serializedInstructionLength, sortedAccountKeys);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final Instruction instruction, final AccountMeta[] sortedAccountKeys) {
     return createTx(List.of(instruction), instruction.serializedLength(), sortedAccountKeys);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final Instruction[] instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts) {
     return createTx(Arrays.asList(instructions), serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts) {
