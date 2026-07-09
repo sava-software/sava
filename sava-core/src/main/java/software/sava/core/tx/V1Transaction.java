@@ -119,6 +119,17 @@ final class V1Transaction extends BaseTransaction {
   }
 
   @Override
+  public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
+    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
+    final int computeUnitLimit = (configMask & COMPUTE_UNIT_LIMIT_MASK) != 0
+        ? ByteUtil.getInt32LE(data, configValueOffset(COMPUTE_UNIT_LIMIT_MASK))
+        : TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT;
+    return setPriorityFeeLamports(
+        TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, computeUnitLimit)
+    );
+  }
+
+  @Override
   public Transaction setHeapSize(final int heapSize) {
     TxBuilderImpl.checkHeapSize(heapSize);
     ByteUtil.putInt32LE(data, configValueOffset(HEAP_SIZE_MASK), heapSize);

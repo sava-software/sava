@@ -1126,6 +1126,117 @@ final class TransactionSerializationTests {
   }
 
   @Test
+  void testComputeUnitPriceToPriorityFeeLamports() {
+    // 25,000 micro-lamports per compute unit multiplied by the 200,000 unit limit, in lamports.
+    assertEquals(5_000L, TxBuilder.computeUnitPriceToPriorityFeeLamports(25_000L, 200_000));
+
+    // Fractional lamports are rounded up: 3 * 200,000 micro-lamports = 0.6 lamports.
+    assertEquals(1L, TxBuilder.computeUnitPriceToPriorityFeeLamports(3L, 200_000));
+
+    // A zero price yields no priority fee.
+    assertEquals(0L, TxBuilder.computeUnitPriceToPriorityFeeLamports(0L, 200_000));
+
+    // The compute unit limit is capped at the 1.4 million maximum.
+    assertEquals(
+        TxBuilder.computeUnitPriceToPriorityFeeLamports(1_000L, 1_400_000),
+        TxBuilder.computeUnitPriceToPriorityFeeLamports(1_000L, 2_000_000)
+    );
+
+    // Overflowing fees saturate rather than wrapping negative.
+    assertEquals(Long.MAX_VALUE, TxBuilder.computeUnitPriceToPriorityFeeLamports(Long.MAX_VALUE, 1_400_000));
+    assertEquals(Long.MAX_VALUE, TxBuilder.computeUnitPriceToPriorityFeeLamports(-1L, 1_400_000));
+
+    // The builder convenience method uses its configured compute unit limit.
+    final var builder = TxBuilder.createBuilder().computeUnitLimit(200_000);
+    builder.priorityFeeLamportsFromComputeUnitPrice(25_000L);
+    assertEquals(5_000L, builder.priorityFeeLamports());
+  }
+
+  @Test
+  void testPriorityFeeLamportsToComputeUnitPrice() {
+    // 25,000 lamports over the 200,000 unit limit, in micro-lamports per compute unit.
+    assertEquals(125_000L, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(25_000L, 200_000));
+
+    // The conversions are inverses whenever the fee scales to a whole micro-lamport price.
+    assertEquals(25_000L, TxBuilder.computeUnitPriceToPriorityFeeLamports(
+        TransactionRecord.priorityFeeLamportsToComputeUnitPrice(25_000L, 200_000), 200_000
+    ));
+
+    // Fractional prices are rounded up: 1 lamport over the 1.4 million maximum.
+    assertEquals(1L, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(1L, 1_400_000));
+
+    // A zero fee yields no price, and overflowing fees saturate.
+    assertEquals(0L, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(0L, 200_000));
+    assertEquals(Long.MAX_VALUE, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(-1L, 200_000));
+    assertEquals(Long.MAX_VALUE, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(Long.MAX_VALUE, 200_000));
+  }
+
+  @Test
+  void testV1SetPriorityFeeLamportsFromComputeUnitPrice() {
+    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    final byte[] ixData = {1, 2, 3, 4, 5};
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        ixData
+    );
+
+    // Uses the compute unit limit already set on the transaction.
+    final var tx = TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey())
+        .addInstruction(ix)
+        .priorityFeeLamports(1) // Reserve the priority fee ConfigValue so it may be set later.
+        .computeUnitLimit(200_000)
+        .createTransaction();
+    assertSame(tx, tx.setPriorityFeeLamportsFromComputeUnitPrice(25_000L));
+    // 25,000 micro-lamports per compute unit multiplied by the 200,000 unit limit, in lamports.
+    assertEquals(5_000L, TransactionSkeleton.deserializeSkeleton(tx.serialized()).priorityFeeLamports());
+
+    // The two-arg overload sets both the compute unit limit and the derived priority fee.
+    final var tx2 = TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey())
+        .addInstruction(ix)
+        .priorityFeeLamports(1)
+        .computeUnitLimit(200_000)
+        .createTransaction();
+    assertSame(tx2, tx2.setPriorityFeeLamportsFromComputeUnitPrice(25_000L, 300_000));
+    final var skeleton2 = TransactionSkeleton.deserializeSkeleton(tx2.serialized());
+    assertEquals(300_000, skeleton2.computeUnitLimit());
+    // 25,000 * 300,000 micro-lamports = 7,500 lamports.
+    assertEquals(7_500L, skeleton2.priorityFeeLamports());
+
+    // With no compute unit limit set, the 1.4 million runtime maximum is used.
+    final var tx3 = TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey())
+        .addInstruction(ix)
+        .priorityFeeLamports(1)
+        .computeUnitLimit(0)
+        .createTransaction();
+    tx3.setPriorityFeeLamportsFromComputeUnitPrice(1L);
+    // 1 * 1,400,000 micro-lamports = 1.4 lamports, rounded up to 2.
+    assertEquals(2L, TransactionSkeleton.deserializeSkeleton(tx3.serialized()).priorityFeeLamports());
+
+    // Legacy/v0 transactions add a SetComputeUnitPrice compute budget instruction with the price
+    // directly, priced in micro-lamports per compute unit, returning a new transaction.
+    final var legacyTx = Transaction.createTx(signerA.publicKey(), List.of(ix));
+    final var legacyPriced = legacyTx.setPriorityFeeLamportsFromComputeUnitPrice(25_000L);
+    final var legacySkeleton = TransactionSkeleton.deserializeSkeleton(legacyPriced.serialized());
+    // With no SetComputeUnitLimit instruction, the default of 200,000 units for the single
+    // non-compute-budget instruction applies: 25,000 * 200,000 micro-lamports = 5,000 lamports.
+    assertEquals(5_000L, legacySkeleton.priorityFeeLamports());
+    assertEquals(0, legacySkeleton.computeUnitLimit());
+
+    // The two-arg overload also sets the compute unit limit via a SetComputeUnitLimit instruction.
+    final var legacyBoth = legacyTx.setPriorityFeeLamportsFromComputeUnitPrice(25_000L, 300_000);
+    final var legacyBothSkeleton = TransactionSkeleton.deserializeSkeleton(legacyBoth.serialized());
+    assertEquals(300_000, legacyBothSkeleton.computeUnitLimit());
+    // 25,000 * 300,000 micro-lamports = 7,500 lamports.
+    assertEquals(7_500L, legacyBothSkeleton.priorityFeeLamports());
+  }
+
+  @Test
   void testLegacyPriorityFeeDefaultComputeUnitLimit() {
     final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
     final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
@@ -1201,9 +1312,6 @@ final class TransactionSerializationTests {
     }
     tx.setRecentBlockHash(blockHash);
 
-    // The SetComputeUnitPrice instruction is priced in micro-lamports per compute unit.
-    assertThrows(UnsupportedOperationException.class, () -> tx.setPriorityFeeLamports(25_000L));
-
     final var updated = tx
         .setComputeUnitLimit(400_000)
         .setAccountDataSizeLimit(131_072)
@@ -1219,6 +1327,15 @@ final class TransactionSerializationTests {
     assertEquals(400_000, skeleton.computeUnitLimit());
     assertEquals(131_072, skeleton.accountDataSizeLimit());
     assertEquals(128 * 1_024, skeleton.heapSize());
+
+    // Lamports are converted to a SetComputeUnitPrice replacement against the 400,000 unit
+    // limit: 25,000 lamports scale to 62,500 micro-lamports per compute unit and back exactly.
+    final var lamportsPriced = updated.setPriorityFeeLamports(25_000L);
+    assertEquals(5, lamportsPriced.instructions().size());
+    assertEquals(
+        25_000L,
+        TransactionSkeleton.deserializeSkeleton(lamportsPriced.serialized()).priorityFeeLamports()
+    );
   }
 
   @Test
@@ -1240,7 +1357,13 @@ final class TransactionSerializationTests {
     }
     tx.setRecentBlockHash(blockHash);
 
-    assertThrows(UnsupportedOperationException.class, () -> tx.setPriorityFeeLamports(10_000L));
+    // Without a SetComputeUnitLimit instruction, the lamports are converted against the
+    // 200,000 unit default limit for the single non-compute-budget instruction.
+    final var lamportsPriced = tx.setPriorityFeeLamports(10_000L);
+    assertEquals(
+        10_000L,
+        TransactionSkeleton.deserializeSkeleton(lamportsPriced.serialized()).priorityFeeLamports()
+    );
     // The heap size values are validated before creating a new transaction.
     assertThrows(IllegalArgumentException.class, () -> tx.setHeapSize(33_000));
     // The runtime rejects a SetLoadedAccountsDataSizeLimit instruction with a value of 0.

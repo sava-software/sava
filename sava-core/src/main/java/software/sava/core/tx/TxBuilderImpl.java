@@ -161,6 +161,11 @@ final class TxBuilderImpl implements TxBuilder {
   }
 
   @Override
+  public TxBuilder priorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
+    return priorityFeeLamports(TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, computeUnitLimit()));
+  }
+
+  @Override
   public int computeUnitLimit() {
     return computeUnitLimit;
   }

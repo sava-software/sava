@@ -27,7 +27,7 @@ public interface TxBuilder {
   ///  - a serialized size within the v1 maximum
   ///
   /// Additionally, [#heapSize(int)] validates that a requested heap size is a multiple of 1KiB within
-  /// the inclusive range [32KiB, 256KiB].
+  /// the inclusive range [32KiB,256KiB].
   ///
   /// @return {@code true} if strict mode is enabled
   boolean strict();
@@ -74,6 +74,42 @@ public interface TxBuilder {
   long priorityFeeLamports();
 
   TxBuilder priorityFeeLamports(final long priorityFeeLamports);
+
+  /// Converts a legacy/v0 SetComputeUnitPrice compute budget price, denominated in micro-lamports
+  /// per compute unit, into the equivalent v1 priority fee in lamports for the given compute unit
+  /// limit.
+  ///
+  /// The price is multiplied by the compute unit limit, capped at the 1.4 million maximum, then
+  /// converted to lamports, rounding up, mirroring the runtime's prioritization fee calculation.
+  /// Saturates at {@link Long#MAX_VALUE} if the fee overflows, which far exceeds the total supply
+  /// of SOL.
+  ///
+  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
+  /// @param computeUnitLimit            the compute unit limit the price applies to
+  /// @return the equivalent priority fee in lamports
+  static long computeUnitPriceToPriorityFeeLamports(final long microLamportsPerComputeUnit,
+                                                    final int computeUnitLimit) {
+    final long cappedComputeUnitLimit = Math.min(computeUnitLimit & 0xFFFF_FFFFL, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
+    if (cappedComputeUnitLimit == 0 || microLamportsPerComputeUnit == 0) {
+      return 0;
+    } else if (microLamportsPerComputeUnit < 0
+        || microLamportsPerComputeUnit > (Long.MAX_VALUE - 999_999) / cappedComputeUnitLimit) {
+      return Long.MAX_VALUE;
+    }
+    // Round up to whole lamports, mirroring the runtime's prioritization fee calculation.
+    return ((microLamportsPerComputeUnit * cappedComputeUnitLimit) + 999_999) / 1_000_000;
+  }
+
+  /// Sets the priority fee from a legacy/v0 SetComputeUnitPrice compute budget price, denominated
+  /// in micro-lamports per compute unit, converting it to lamports against this builder's current
+  /// {@link #computeUnitLimit()}.
+  ///
+  /// Set the desired compute unit limit before calling this method so the conversion reflects the
+  /// intended limit.
+  ///
+  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
+  /// @see #computeUnitPriceToPriorityFeeLamports(long, int)
+  TxBuilder priorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit);
 
   int computeUnitLimit();
 
