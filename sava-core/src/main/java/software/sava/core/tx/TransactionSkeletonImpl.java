@@ -130,9 +130,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     if (computeUnitLimit == 0) {
       computeUnitLimit = (long) DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions();
     }
-    computeUnitLimit = Math.min(computeUnitLimit, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
-    // Round up to whole lamports, mirroring the runtime's prioritization fee calculation.
-    return ((microLamportsPerComputeUnit * computeUnitLimit) + 999_999) / 1_000_000;
+    return TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, (int) computeUnitLimit);
   }
 
   @Override

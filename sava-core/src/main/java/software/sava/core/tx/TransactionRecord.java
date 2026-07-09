@@ -13,9 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
-import static software.sava.core.encoding.CompactU16Encoding.decode;
-import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
-import static software.sava.core.encoding.CompactU16Encoding.signedByte;
+import static software.sava.core.encoding.CompactU16Encoding.*;
 
 // Legacy and v0 transaction formats.
 final class TransactionRecord extends BaseTransaction {
@@ -93,6 +91,33 @@ final class TransactionRecord extends BaseTransaction {
     return accountMetas;
   }
 
+  /// Converts a v1 priority fee, denominated in lamports, into the equivalent legacy/v0
+  /// SetComputeUnitPrice compute budget price in micro-lamports per compute unit for the given
+  /// compute unit limit.
+  ///
+  /// The fee is converted to micro-lamports then divided by the compute unit limit, capped at the
+  /// 1.4 million maximum, rounding up so that the prioritization fee charged by the runtime is at
+  /// least the given lamports. Saturates at {@link Long#MAX_VALUE} if the price overflows.
+  ///
+  /// The inverse of {@link #computeUnitPriceToPriorityFeeLamports(long, int)}; converting the
+  /// resulting price back yields the given fee whenever the fee scales to a whole number of
+  /// micro-lamports per compute unit.
+  ///
+  /// @param priorityFeeLamports the priority fee in lamports
+  /// @param computeUnitLimit    the compute unit limit the fee applies to
+  /// @return the equivalent compute unit price in micro-lamports per compute unit
+  public static long priorityFeeLamportsToComputeUnitPrice(final long priorityFeeLamports, final int computeUnitLimit) {
+    final long cappedComputeUnitLimit = Math.min(computeUnitLimit & 0xFFFF_FFFFL, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
+    if (cappedComputeUnitLimit == 0 || priorityFeeLamports == 0) {
+      return 0;
+    } else if (priorityFeeLamports < 0 || priorityFeeLamports > Long.MAX_VALUE / 1_000_000) {
+      return Long.MAX_VALUE;
+    }
+    final long microLamports = priorityFeeLamports * 1_000_000;
+    // Round up so that the fee charged by the runtime is at least the given lamports.
+    return (microLamports + (cappedComputeUnitLimit - 1)) / cappedComputeUnitLimit;
+  }
+
   @Override
   public AddressLookupTable lookupTable() {
     return lookupTable;
@@ -145,6 +170,7 @@ final class TransactionRecord extends BaseTransaction {
 
   private static final byte REQUEST_HEAP_FRAME_DISCRIMINATOR = (byte) 1;
   private static final byte SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR = (byte) 2;
+  private static final byte SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR = (byte) 3;
   private static final byte SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR = (byte) 4;
 
   private Transaction setComputeBudgetValue(final byte discriminator, final byte[] ixData) {
@@ -162,18 +188,112 @@ final class TransactionRecord extends BaseTransaction {
     return prependIx(ix);
   }
 
-  private Transaction setComputeBudgetValue(final byte discriminator, final int value) {
+  private static byte[] computeBudgetIxData(final byte discriminator, final int value) {
     final byte[] ixData = new byte[1 + Integer.BYTES];
     ixData[0] = discriminator;
     ByteUtil.putInt32LE(ixData, 1, value);
-    return setComputeBudgetValue(discriminator, ixData);
+    return ixData;
+  }
+
+  private static byte[] computeBudgetIxData(final byte discriminator, final long value) {
+    final byte[] ixData = new byte[1 + Long.BYTES];
+    ixData[0] = discriminator;
+    ByteUtil.putInt64LE(ixData, 1, value);
+    return ixData;
+  }
+
+  private Transaction setComputeBudgetValue(final byte discriminator, final int value) {
+    return setComputeBudgetValue(discriminator, computeBudgetIxData(discriminator, value));
+  }
+
+  private Transaction setComputeBudgetValue(final byte discriminator, final long value) {
+    return setComputeBudgetValue(discriminator, computeBudgetIxData(discriminator, value));
+  }
+
+  /// Replaces or prepends two compute budget instructions in a single pass, rebuilding the
+  /// transaction only once rather than once per instruction.
+  private Transaction setComputeBudgetValues(final byte discriminator1, final byte[] ixData1,
+                                             final byte discriminator2, final byte[] ixData2) {
+    final var invokedComputeBudgetProgram = SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram();
+    final var computeBudgetProgram = invokedComputeBudgetProgram.publicKey();
+    final var ix1 = Instruction.createInstruction(invokedComputeBudgetProgram, List.of(), ixData1);
+    final var ix2 = Instruction.createInstruction(invokedComputeBudgetProgram, List.of(), ixData2);
+
+    final int numInstructions = instructions.size();
+    final var updated = new Instruction[numInstructions];
+    boolean found1 = false;
+    boolean found2 = false;
+    for (int i = 0; i < numInstructions; ++i) {
+      final var instruction = instructions.get(i);
+      if (computeBudgetProgram.equals(instruction.programId().publicKey()) && instruction.len() > 0) {
+        final byte discriminator = instruction.data()[instruction.offset()];
+        if (!found1 && discriminator == discriminator1) {
+          updated[i] = ix1;
+          found1 = true;
+          continue;
+        }
+        if (!found2 && discriminator == discriminator2) {
+          updated[i] = ix2;
+          found2 = true;
+          continue;
+        }
+      }
+      updated[i] = instruction;
+    }
+
+    final int numToPrepend = (found1 ? 0 : 1) + (found2 ? 0 : 1);
+    if (numToPrepend == 0) {
+      return setBlockHash(createTransaction(Arrays.asList(updated)));
+    }
+    final var ixArray = new Instruction[numToPrepend + numInstructions];
+    int i = 0;
+    if (!found1) {
+      ixArray[i++] = ix1;
+    }
+    if (!found2) {
+      ixArray[i++] = ix2;
+    }
+    System.arraycopy(updated, 0, ixArray, i, numInstructions);
+    return setBlockHash(createTransaction(Arrays.asList(ixArray)));
+  }
+
+  private int effectiveComputeUnitLimit() {
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    int numNonComputeBudgetInstructions = 0;
+    for (final var instruction : instructions) {
+      if (computeBudgetProgram.equals(instruction.programId().publicKey())) {
+        if (instruction.len() > 0 && instruction.data()[instruction.offset()] == SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR) {
+          return ByteUtil.getInt32LE(instruction.data(), instruction.offset() + 1);
+        }
+      } else {
+        ++numNonComputeBudgetInstructions;
+      }
+    }
+    return (int) Math.min(
+        (long) TransactionSkeletonImpl.DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions,
+        TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT
+    );
   }
 
   @Override
   public Transaction setPriorityFeeLamports(final long priorityFeeLamports) {
-    throw new UnsupportedOperationException(
-        "The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports"
-            + " per compute unit, not lamports, include a SetComputeUnitPrice instruction instead."
+    final long microLamportsPerComputeUnit = priorityFeeLamportsToComputeUnitPrice(
+        priorityFeeLamports, effectiveComputeUnitLimit()
+    );
+    return setComputeBudgetValue(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, microLamportsPerComputeUnit);
+  }
+
+  @Override
+  public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
+    return setComputeBudgetValue(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, microLamportsPerComputeUnit);
+  }
+
+  @Override
+  public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit,
+                                                                final int computeUnitLimit) {
+    return setComputeBudgetValues(
+        SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, computeBudgetIxData(SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, computeUnitLimit),
+        SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, computeBudgetIxData(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, microLamportsPerComputeUnit)
     );
   }
 
