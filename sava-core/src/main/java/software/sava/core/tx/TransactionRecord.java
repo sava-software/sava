@@ -69,25 +69,9 @@ final class TransactionRecord extends BaseTransaction {
     return serializedInstructionLength;
   }
 
-  private static final Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
-    if (am1.feePayer()) {
-      return -1;
-    } else if (am2.feePayer()) {
-      return 1;
-    } else if (am1.signer() == am2.signer()) {
-      if (am1.write() == am2.write()) {
-        return am1.invoked() == am2.invoked() ? 0 : am1.invoked() ? -1 : 1;
-      } else {
-        return am1.write() ? -1 : 1;
-      }
-    } else {
-      return am1.signer() ? -1 : 1;
-    }
-  };
-
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
     final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, VO_META_COMPARATOR);
+    Arrays.sort(accountMetas, TxBuilderImpl.VO_META_COMPARATOR);
     return accountMetas;
   }
 
@@ -170,10 +154,10 @@ final class TransactionRecord extends BaseTransaction {
     return Transaction.createTx(feePayer, instructions, lookupTable, tableAccountMetas);
   }
 
-  private static final byte REQUEST_HEAP_FRAME_DISCRIMINATOR = (byte) 1;
-  private static final byte SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR = (byte) 2;
-  private static final byte SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR = (byte) 3;
-  private static final byte SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR = (byte) 4;
+  static final byte REQUEST_HEAP_FRAME_DISCRIMINATOR = (byte) 1;
+  static final byte SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR = (byte) 2;
+  static final byte SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR = (byte) 3;
+  static final byte SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR = (byte) 4;
 
   private Transaction setComputeBudgetValue(final byte discriminator, final byte[] ixData) {
     final var invokedComputeBudgetProgram = SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram();

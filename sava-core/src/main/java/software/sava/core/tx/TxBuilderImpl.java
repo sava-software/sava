@@ -14,7 +14,7 @@ final class TxBuilderImpl implements TxBuilder {
 
   static final BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
-  private static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
+  static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
       return -1;
     } else if (am2.feePayer()) {
@@ -22,6 +22,22 @@ final class TxBuilderImpl implements TxBuilder {
     } else if (am1.signer() == am2.signer()) {
       if (am1.write() == am2.write()) {
         return 0;
+      } else {
+        return am1.write() ? -1 : 1;
+      }
+    } else {
+      return am1.signer() ? -1 : 1;
+    }
+  };
+
+  static final Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
+    if (am1.feePayer()) {
+      return -1;
+    } else if (am2.feePayer()) {
+      return 1;
+    } else if (am1.signer() == am2.signer()) {
+      if (am1.write() == am2.write()) {
+        return am1.invoked() == am2.invoked() ? 0 : am1.invoked() ? -1 : 1;
       } else {
         return am1.write() ? -1 : 1;
       }
@@ -40,9 +56,10 @@ final class TxBuilderImpl implements TxBuilder {
   static final int V1_CONFIG_MASK_LENGTH = 4;
   // Length, in bytes, of a single v1 InstructionHeader: (u8 programIdIndex, u8 numAccounts, u16 numDataBytes).
   static final int V1_INSTRUCTION_HEADER_LENGTH = 4;
-  // Maximum number of instructions and accounts permitted in a v1 transaction.
-  static final int MAX_V1_INSTRUCTIONS = 64;
-  static final int MAX_V1_ACCOUNTS = 64;
+  // Maximum number of instructions and accounts permitted in a v1 transaction, the same limits
+  // Transaction#exceedsInstructionLimit and Transaction#exceedsAccountLimit are checked against.
+  static final int MAX_V1_INSTRUCTIONS = Transaction.MAX_INSTRUCTIONS;
+  static final int MAX_V1_ACCOUNTS = Transaction.MAX_ACCOUNTS;
   // Maximum number of signatures permitted in a v1 transaction.
   static final int MAX_V1_SIGNATURES = 12;
   // Per-instruction limit imposed by the u8 account count header field.

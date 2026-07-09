@@ -411,7 +411,10 @@ public interface TransactionSkeleton {
   ///
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
-  Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
+  default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
+    final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
+    return createTransaction(accounts, tableAccountMetas);
+  }
 
   // TODO: deprecate once v1 transactions are active on mainnet
   /// **Note:** for V1 transactions the provided lookup table will be ignored

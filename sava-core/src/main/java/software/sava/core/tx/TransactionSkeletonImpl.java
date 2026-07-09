@@ -76,6 +76,13 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     return Base58.encode(data, 1, 1 + SIGNATURE_LENGTH);
   }
 
+  // Runtime default compute unit limit granted per non-compute-budget instruction when no
+  // SetComputeUnitLimit instruction is present. An estimate; per SIMD-0170 the runtime only
+  // allocates 3,000 units for each builtin program instruction.
+  static final int DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT = 200_000;
+
+  // Returns the offset of the first matching compute budget instruction value, or 0 if not
+  // present, exiting early on a match; compute budget instructions are conventionally first.
   private int computeBudgetValueOffset(final byte discriminator, final int valueLength) {
     final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
     for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
@@ -99,14 +106,14 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     return 0;
   }
 
-  // Runtime default compute unit limit granted per non-compute-budget instruction when no
-  // SetComputeUnitLimit instruction is present. An estimate; per SIMD-0170 the runtime only
-  // allocates 3,000 units for each builtin program instruction.
-  static final int DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT = 200_000;
-
-  private int numNonComputeBudgetInstructions() {
+  @Override
+  public long priorityFeeLamports() {
+    // A single walk collecting the price and limit, exiting early once both are found; the
+    // non-compute-budget instruction count is only needed when no limit instruction is present.
     final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
-    int count = 0;
+    int priceOffset = 0;
+    int limitOffset = 0;
+    int numNonComputeBudgetInstructions = 0;
     for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
       final var programAccount = super.accountKey(decode(data, o));
       o += getByteLen(data, o);
@@ -115,44 +122,54 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
       o += numAccounts;
       final int numDataBytes = decode(data, o);
       o += getByteLen(data, o);
-      o += numDataBytes;
-      if (!computeBudgetProgram.equals(programAccount)) {
-        ++count;
+      if (computeBudgetProgram.equals(programAccount)) {
+        if (numDataBytes > Integer.BYTES) {
+          if (priceOffset == 0
+              && numDataBytes > Long.BYTES
+              && data[o] == TransactionRecord.SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR) {
+            priceOffset = o + 1;
+          } else if (limitOffset == 0 && data[o] == TransactionRecord.SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR) {
+            limitOffset = o + 1;
+          }
+          if (priceOffset != 0 && limitOffset != 0) {
+            break;
+          }
+        }
+      } else {
+        ++numNonComputeBudgetInstructions;
       }
+      o += numDataBytes;
     }
-    return count;
-  }
-
-  @Override
-  public long priorityFeeLamports() {
-    final int priceOffset = computeBudgetValueOffset((byte) 3, Long.BYTES);
-    if (priceOffset <= 0) {
+    if (priceOffset == 0) {
       return 0;
     }
     final long microLamportsPerComputeUnit = ByteUtil.getInt64LE(data, priceOffset);
-    long computeUnitLimit = computeUnitLimit() & 0xFFFF_FFFFL;
+    long computeUnitLimit = limitOffset == 0 ? 0 : ByteUtil.getInt32LE(data, limitOffset) & 0xFFFF_FFFFL;
     if (computeUnitLimit == 0) {
-      computeUnitLimit = (long) DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions();
+      computeUnitLimit = Math.min(
+          (long) DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions,
+          TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT
+      );
     }
     return TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, (int) computeUnitLimit);
   }
 
   @Override
   public int computeUnitLimit() {
-    final int offset = computeBudgetValueOffset((byte) 2, Integer.BYTES);
-    return offset > 0 ? ByteUtil.getInt32LE(data, offset) : 0;
+    final int offset = computeBudgetValueOffset(TransactionRecord.SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, Integer.BYTES);
+    return offset == 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
   public int accountDataSizeLimit() {
-    final int offset = computeBudgetValueOffset((byte) 4, Integer.BYTES);
-    return offset > 0 ? ByteUtil.getInt32LE(data, offset) : 0;
+    final int offset = computeBudgetValueOffset(TransactionRecord.SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR, Integer.BYTES);
+    return offset == 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
   public int heapSize() {
-    final int offset = computeBudgetValueOffset((byte) 1, Integer.BYTES);
-    return offset > 0 ? ByteUtil.getInt32LE(data, offset) : 0;
+    final int offset = computeBudgetValueOffset(TransactionRecord.REQUEST_HEAP_FRAME_DISCRIMINATOR, Integer.BYTES);
+    return offset == 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
@@ -398,12 +415,6 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
         accountsOffset,
         recentBlockHashIndex
     );
-  }
-
-  @Override
-  public Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
-    final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
-    return createTransaction(accounts, tableAccountMetas);
   }
 
   @Override

@@ -1907,6 +1907,30 @@ final class TransactionSerializationTests {
   }
 
   @Test
+  void testSkeletonReflectsInPlaceConfigUpdates() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var readAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(), List.of(AccountMeta.createRead(readAccount)), new byte[]{1}
+    );
+    final var built = TxBuilder.createBuilder()
+        .feePayer(feePayer.publicKey())
+        .addInstruction(ix)
+        .priorityFeeLamports(5_000L)
+        .createTransaction();
+
+    // The skeleton derives config values from the shared serialized data, so in-place updates
+    // via the created transaction are observed rather than returning stale cached values.
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(built.serialized());
+    final var tx = skeleton.createTransaction();
+    assertEquals(5_000L, skeleton.priorityFeeLamports());
+    tx.setPriorityFeeLamports(9_000L);
+    tx.setComputeUnitLimit(250_000);
+    assertEquals(9_000L, skeleton.priorityFeeLamports());
+    assertEquals(250_000, skeleton.computeUnitLimit());
+  }
+
+  @Test
   void testCreateTransactionSnapshotsInstructions() {
     final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
     final var readAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();

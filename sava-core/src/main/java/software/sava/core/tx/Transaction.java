@@ -34,44 +34,16 @@ public interface Transaction {
 
   /// @deprecated internal serialization
   @Deprecated
-  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
+  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = TxBuilderImpl.MERGE_ACCOUNT_META;
 
   // fee payer, sign, write, read
   /// @deprecated internal serialization
   @Deprecated
-  Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
-    if (am1.feePayer()) {
-      return -1;
-    } else if (am2.feePayer()) {
-      return 1;
-    } else if (am1.signer() == am2.signer()) {
-      if (am1.write() == am2.write()) {
-        return 0;
-      } else {
-        return am1.write() ? -1 : 1;
-      }
-    } else {
-      return am1.signer() ? -1 : 1;
-    }
-  };
+  Comparator<AccountMeta> LEGACY_META_COMPARATOR = TxBuilderImpl.LEGACY_META_COMPARATOR;
 
   /// @deprecated internal serialization
   @Deprecated
-  Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
-    if (am1.feePayer()) {
-      return -1;
-    } else if (am2.feePayer()) {
-      return 1;
-    } else if (am1.signer() == am2.signer()) {
-      if (am1.write() == am2.write()) {
-        return am1.invoked() == am2.invoked() ? 0 : am1.invoked() ? -1 : 1;
-      } else {
-        return am1.write() ? -1 : 1;
-      }
-    } else {
-      return am1.signer() ? -1 : 1;
-    }
-  };
+  Comparator<AccountMeta> VO_META_COMPARATOR = TxBuilderImpl.VO_META_COMPARATOR;
 
   /// @deprecated internal serialization
   @Deprecated
