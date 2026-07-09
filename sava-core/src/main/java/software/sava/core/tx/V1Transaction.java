@@ -74,42 +74,31 @@ final class V1Transaction extends BaseTransaction {
         .addInstructions(instructions);
     // Carry over the ConfigValues so that derived transactions preserve the fee and resource
     // requests of this transaction instead of resetting them to the builder defaults.
-    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
-    int o = V1_ACCOUNTS_OFFSET + ((data[V1_ACCOUNTS_OFFSET - 1] & 0xFF) << 5);
-    if ((configMask & PRIORITY_FEE_MASK) == PRIORITY_FEE_MASK) {
-      builder.priorityFeeLamports(ByteUtil.getInt64LE(data, o));
-      o += Long.BYTES;
+    int offset = V1TransactionSkeleton.configValueOffset(data, PRIORITY_FEE_MASK);
+    if (offset >= 0) {
+      builder.priorityFeeLamports(ByteUtil.getInt64LE(data, offset));
     }
-    if ((configMask & COMPUTE_UNIT_LIMIT_MASK) != 0) {
-      builder.computeUnitLimit(ByteUtil.getInt32LE(data, o));
-      o += Integer.BYTES;
-    } else {
-      builder.computeUnitLimit(0);
-    }
-    if ((configMask & ACCOUNT_DATA_SIZE_LIMIT_MASK) != 0) {
-      builder.accountDataSizeLimit(ByteUtil.getInt32LE(data, o));
-      o += Integer.BYTES;
-    } else {
-      builder.accountDataSizeLimit(0);
-    }
-    if ((configMask & HEAP_SIZE_MASK) != 0) {
-      builder.heapSize(ByteUtil.getInt32LE(data, o));
+    offset = V1TransactionSkeleton.configValueOffset(data, COMPUTE_UNIT_LIMIT_MASK);
+    builder.computeUnitLimit(offset < 0 ? 0 : ByteUtil.getInt32LE(data, offset));
+    offset = V1TransactionSkeleton.configValueOffset(data, ACCOUNT_DATA_SIZE_LIMIT_MASK);
+    builder.accountDataSizeLimit(offset < 0 ? 0 : ByteUtil.getInt32LE(data, offset));
+    offset = V1TransactionSkeleton.configValueOffset(data, HEAP_SIZE_MASK);
+    if (offset >= 0) {
+      builder.heapSize(ByteUtil.getInt32LE(data, offset));
     }
     return builder.createTransaction();
   }
 
   // Returns the offset of the ConfigValue corresponding to the given TransactionConfigMask bits.
   private int configValueOffset(final int maskBits) {
-    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
-    if ((configMask & maskBits) != maskBits) {
+    final int offset = V1TransactionSkeleton.configValueOffset(data, maskBits);
+    if (offset < 0) {
       throw new IllegalStateException(
           "The TransactionConfigMask bits 0x" + Integer.toHexString(maskBits)
               + " are not set for this v1 transaction, re-create it with a TxBuilder instead."
       );
     }
-    return V1_ACCOUNTS_OFFSET
-        + ((data[V1_ACCOUNTS_OFFSET - 1] & 0xFF) << 5)
-        + (Integer.bitCount(configMask & (Integer.lowestOneBit(maskBits) - 1)) << 2);
+    return offset;
   }
 
   @Override
@@ -120,10 +109,10 @@ final class V1Transaction extends BaseTransaction {
 
   @Override
   public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
-    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
-    final int computeUnitLimit = (configMask & COMPUTE_UNIT_LIMIT_MASK) != 0
-        ? ByteUtil.getInt32LE(data, configValueOffset(COMPUTE_UNIT_LIMIT_MASK))
-        : TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT;
+    final int offset = V1TransactionSkeleton.configValueOffset(data, COMPUTE_UNIT_LIMIT_MASK);
+    final int computeUnitLimit = offset < 0
+        ? TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT
+        : ByteUtil.getInt32LE(data, offset);
     return setPriorityFeeLamports(
         TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, computeUnitLimit)
     );

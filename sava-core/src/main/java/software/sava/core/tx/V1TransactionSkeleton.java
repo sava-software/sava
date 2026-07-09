@@ -32,15 +32,21 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   static final int COMPUTE_UNIT_LIMIT_MASK = 0b0000_0100;
   static final int ACCOUNT_DATA_SIZE_LIMIT_MASK = 0b0000_1000;
   static final int HEAP_SIZE_MASK = 0b0001_0000;
-  private static final int KNOWN_CONFIG_MASK_BITS = PRIORITY_FEE_MASK
-      | COMPUTE_UNIT_LIMIT_MASK
-      | ACCOUNT_DATA_SIZE_LIMIT_MASK
-      | HEAP_SIZE_MASK;
 
-  private final long priorityFeeLamports;
-  private final int computeUnitLimit;
-  private final int accountDataSizeLimit;
-  private final int heapSize;
+  /// Returns the offset of the ConfigValue corresponding to the given TransactionConfigMask
+  /// bits, or -1 if the bits are not set.
+  ///
+  /// ConfigValues are serialized by ascending TransactionConfigMask bit position, 4 bytes per
+  /// set bit, so the value offset is 4 bytes for each set bit below the target bits.
+  static int configValueOffset(final byte[] data, final int maskBits) {
+    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
+    if ((configMask & maskBits) != maskBits) {
+      return -1;
+    }
+    return V1_ACCOUNTS_OFFSET
+        + ((data[V1_ACCOUNTS_OFFSET - 1] & 0xFF) << 5)
+        + (Integer.bitCount(configMask & (Integer.lowestOneBit(maskBits) - 1)) << 2);
+  }
 
   private V1TransactionSkeleton(final byte[] data,
                                 final int numSignatures,
@@ -49,11 +55,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
                                 final int numIncludedAccounts,
                                 final int numInstructions,
                                 final int instructionsOffset,
-                                final int[] invokedIndexes,
-                                final long priorityFeeLamports,
-                                final int computeUnitLimit,
-                                final int accountDataSizeLimit,
-                                final int heapSize) {
+                                final int[] invokedIndexes) {
     super(
         data,
         1,
@@ -61,10 +63,6 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
         numInstructions, instructionsOffset, invokedIndexes,
         numIncludedAccounts
     );
-    this.priorityFeeLamports = priorityFeeLamports;
-    this.computeUnitLimit = computeUnitLimit;
-    this.accountDataSizeLimit = accountDataSizeLimit;
-    this.heapSize = heapSize;
   }
 
   static TransactionSkeleton deserialize(final byte[] data) {
@@ -87,40 +85,10 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     final int numInstructions = data[o++] & 0xFF;
     final int numIncludedAccounts = data[o++] & 0xFF;
 
-    // Accounts begin at the fixed V1_ACCOUNTS_OFFSET.
+    // Accounts begin at the fixed V1_ACCOUNTS_OFFSET, followed by the ConfigValues, 4 bytes per
+    // set TransactionConfigMask bit, including unknown bits.
     o += numIncludedAccounts << 5;
-
-    // ConfigValues, ordered by ascending TransactionConfigMask bit position.
-    final long priorityFeeLamports;
-    if ((configMask & PRIORITY_FEE_MASK) != 0) {
-      priorityFeeLamports = ByteUtil.getInt64LE(data, o);
-      o += Long.BYTES;
-    } else {
-      priorityFeeLamports = 0L;
-    }
-    final int computeUnitLimit;
-    if ((configMask & COMPUTE_UNIT_LIMIT_MASK) != 0) {
-      computeUnitLimit = ByteUtil.getInt32LE(data, o);
-      o += Integer.BYTES;
-    } else {
-      computeUnitLimit = 0;
-    }
-    final int accountDataSizeLimit;
-    if ((configMask & ACCOUNT_DATA_SIZE_LIMIT_MASK) != 0) {
-      accountDataSizeLimit = ByteUtil.getInt32LE(data, o);
-      o += Integer.BYTES;
-    } else {
-      accountDataSizeLimit = 0;
-    }
-    final int heapSize;
-    if ((configMask & HEAP_SIZE_MASK) != 0) {
-      heapSize = ByteUtil.getInt32LE(data, o);
-      o += Integer.BYTES;
-    } else {
-      heapSize = 0;
-    }
-
-    o += Integer.bitCount(configMask & ~KNOWN_CONFIG_MASK_BITS) << 2;
+    o += Integer.bitCount(configMask) << 2;
 
     final int instructionsOffset = o;
     final int[] invokedIndexes = new int[numInstructions];
@@ -134,8 +102,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
         data,
         numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
         numIncludedAccounts,
-        numInstructions, instructionsOffset, invokedIndexes,
-        priorityFeeLamports, computeUnitLimit, accountDataSizeLimit, heapSize
+        numInstructions, instructionsOffset, invokedIndexes
     );
   }
 
@@ -155,22 +122,26 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
 
   @Override
   public long priorityFeeLamports() {
-    return priorityFeeLamports;
+    final int offset = configValueOffset(data, PRIORITY_FEE_MASK);
+    return offset < 0 ? 0L : ByteUtil.getInt64LE(data, offset);
   }
 
   @Override
   public int computeUnitLimit() {
-    return computeUnitLimit;
+    final int offset = configValueOffset(data, COMPUTE_UNIT_LIMIT_MASK);
+    return offset < 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
   public int accountDataSizeLimit() {
-    return accountDataSizeLimit;
+    final int offset = configValueOffset(data, ACCOUNT_DATA_SIZE_LIMIT_MASK);
+    return offset < 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
   public int heapSize() {
-    return heapSize;
+    final int offset = configValueOffset(data, HEAP_SIZE_MASK);
+    return offset < 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
