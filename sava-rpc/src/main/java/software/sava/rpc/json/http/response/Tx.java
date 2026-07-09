@@ -10,8 +10,8 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.Supplier;
 
-/// @param transactionIndex Index of the transaction within its block, empty when the responding node does not
-///                         serve this field.
+import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+
 public record Tx(long slot,
                  OptionalLong blockTime,
                  TxMeta meta,
@@ -31,8 +31,6 @@ public record Tx(long slot,
   public static Tx parse(final JsonIterator ji) {
     return ji.parseObject(Parser.FIELDS, new Parser());
   }
-
-  private static final class Parser implements FieldIndexPredicate, Supplier<Tx> {
 
     private long slot;
     private long blockTime;
@@ -66,14 +64,14 @@ public record Tx(long slot,
     );
 
     @Override
-    public boolean test(final int fieldIndex, final JsonIterator ji) {
-      switch (fieldIndex) {
-        case 0 -> this.slot = ji.readLong();
-        case 1 -> this.blockTime = ji.readLongOr(this.blockTime);
-        case 2 -> {
-          if (ji.notNull()) {
-            this.meta = TxMeta.parse(ji);
-          }
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("slot", buf, offset, len)) {
+        this.slot = ji.readLong();
+      } else if (fieldEquals("blockTime", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          this.blockTime = ji.readLong();
+        } else {
+          ji.skip();
         }
         case 3 -> {
           if (ji.whatIsNext() == ValueType.ARRAY) {

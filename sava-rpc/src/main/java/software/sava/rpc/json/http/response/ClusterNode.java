@@ -5,6 +5,7 @@ import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -74,24 +75,45 @@ public record ClusterNode(String gossip,
     );
 
     @Override
-    public boolean test(final int fieldIndex, final JsonIterator ji) {
-      switch (fieldIndex) {
-        case 0 -> gossip = ji.readString();
-        case 1 -> pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
-        case 2 -> rpc = ji.readString();
-        case 3 -> pubsub = ji.readString();
-        case 4 -> serveRepair = ji.readString();
-        case 5 -> tpu = ji.readString();
-        case 6 -> tpuForwards = ji.readString();
-        case 7 -> tpuForwardsQuic = ji.readString();
-        case 8 -> tpuQuic = ji.readString();
-        case 9 -> tpuVote = ji.readString();
-        case 10 -> tvu = ji.readString();
-        case 11 -> version = ji.readString();
-        case 12 -> clientId = ji.readString();
-        case 13 -> featureSet = ji.readLongOr(featureSet);
-        case 14 -> shredVersion = ji.readIntOr(shredVersion);
-        default -> ji.skip();
+    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+      if (fieldEquals("gossip", buf, offset, len)) {
+        gossip = ji.readString();
+      } else if (fieldEquals("pubkey", buf, offset, len)) {
+        pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
+      } else if (fieldEquals("rpc", buf, offset, len)) {
+        rpc = ji.readString();
+      } else if (fieldEquals("pubsub", buf, offset, len)) {
+        pubsub = ji.readString();
+      } else if (fieldEquals("serveRepair", buf, offset, len)) {
+        serveRepair = ji.readString();
+      } else if (fieldEquals("tpu", buf, offset, len)) {
+        tpu = ji.readString();
+      } else if (fieldEquals("tpuForwards", buf, offset, len)) {
+        tpuForwards = ji.readString();
+      } else if (fieldEquals("tpuForwardsQuic", buf, offset, len)) {
+        tpuForwardsQuic = ji.readString();
+      } else if (fieldEquals("tpuQuic", buf, offset, len)) {
+        tpuQuic = ji.readString();
+      } else if (fieldEquals("tpuVote", buf, offset, len)) {
+        tpuVote = ji.readString();
+      } else if (fieldEquals("tvu", buf, offset, len)) {
+        tvu = ji.readString();
+      } else if (fieldEquals("version", buf, offset, len)) {
+        version = ji.readString();
+      } else if (fieldEquals("featureSet", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          featureSet = ji.readLong();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("shredVersion", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          shredVersion = ji.readInt();
+        } else {
+          ji.skip();
+        }
+      } else {
+        ji.skip();
       }
       return true;
     }

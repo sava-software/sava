@@ -17,9 +17,12 @@ import static software.sava.core.tx.TransactionRecord.mergeAccounts;
 
 public interface Transaction {
 
-  /// @deprecated no longer valid for all transaction versions once v1 transactions are activated.
+  /// @deprecated no longer valid for all transaction versions
   @Deprecated
   int MAX_SERIALIZED_LENGTH = 1232;
+  /// @deprecated - redundant value, check against the serialized bytes.
+  @Deprecated
+  int MAX_BASE_64_ENCODED_LENGTH = 1683;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
