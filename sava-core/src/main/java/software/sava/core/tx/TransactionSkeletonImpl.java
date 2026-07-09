@@ -76,7 +76,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     return Base58.encode(data, 1, 1 + SIGNATURE_LENGTH);
   }
 
-  private int computeBudgetValueOffset(final byte discriminator) {
+  private int computeBudgetValueOffset(final byte discriminator, final int valueLength) {
     final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
     for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
       final var programAccount = super.accountKey(decode(data, o));
@@ -87,7 +87,11 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
       final int numDataBytes = decode(data, o);
       o += getByteLen(data, o);
 
-      if (computeBudgetProgram.equals(programAccount) && data[o] == discriminator) {
+      // Guard the data length before reading the discriminator and value, a malformed compute
+      // budget instruction must not read into the next instruction or past the message.
+      if (numDataBytes > valueLength
+          && computeBudgetProgram.equals(programAccount)
+          && data[o] == discriminator) {
         return o + 1;
       }
       o += numDataBytes;
@@ -121,7 +125,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
 
   @Override
   public long priorityFeeLamports() {
-    final int priceOffset = computeBudgetValueOffset((byte) 3);
+    final int priceOffset = computeBudgetValueOffset((byte) 3, Long.BYTES);
     if (priceOffset <= 0) {
       return 0;
     }
@@ -135,19 +139,19 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
 
   @Override
   public int computeUnitLimit() {
-    final int offset = computeBudgetValueOffset((byte) 2);
+    final int offset = computeBudgetValueOffset((byte) 2, Integer.BYTES);
     return offset > 0 ? ByteUtil.getInt32LE(data, offset) : 0;
   }
 
   @Override
   public int accountDataSizeLimit() {
-    final int offset = computeBudgetValueOffset((byte) 4);
+    final int offset = computeBudgetValueOffset((byte) 4, Integer.BYTES);
     return offset > 0 ? ByteUtil.getInt32LE(data, offset) : 0;
   }
 
   @Override
   public int heapSize() {
-    final int offset = computeBudgetValueOffset((byte) 1);
+    final int offset = computeBudgetValueOffset((byte) 1, Integer.BYTES);
     return offset > 0 ? ByteUtil.getInt32LE(data, offset) : 0;
   }
 

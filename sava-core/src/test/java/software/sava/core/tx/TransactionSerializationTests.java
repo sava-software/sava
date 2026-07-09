@@ -282,6 +282,15 @@ final class TransactionSerializationTests {
     assertEquals(44, transaction.numAccounts());
     assertFalse(transaction.exceedsAccountLimit());
 
+    // Accounts indexed into lookup tables must be resolved to prototype a v1 transaction.
+    assertThrows(IllegalStateException.class, skeleton::prototypeTransaction);
+    final var v1Tx = skeleton.prototypeTransaction(instructions).createTransaction();
+    assertEquals(1, v1Tx.version());
+    // The compute budget instruction is superseded by ConfigValues, dropping its program account.
+    assertEquals(instructions.length - 1, v1Tx.numInstructions());
+    assertEquals(43, v1Tx.numAccounts());
+    assertFalse(v1Tx.exceedsAccountLimit());
+
     final var instructions2 = transaction.instructions();
     assertEquals(instructions.length, instructions2.size());
 
@@ -1123,6 +1132,17 @@ final class TransactionSerializationTests {
     assertEquals(computeUnitLimit, skeleton.computeUnitLimit());
     assertEquals(accountDataSizeLimit, skeleton.accountDataSizeLimit());
     assertEquals(heapSize, skeleton.heapSize());
+
+    // Explicitly set compute budget values carry over to a prototyped v1 transaction, and the
+    // four superseded compute budget instructions are filtered out.
+    final var v1Skeleton = TransactionSkeleton.deserializeSkeleton(
+        skeleton.prototypeTransaction().createTransaction().serialized()
+    );
+    assertEquals(1, v1Skeleton.numInstructions());
+    assertEquals(5_000L, v1Skeleton.priorityFeeLamports());
+    assertEquals(computeUnitLimit, v1Skeleton.computeUnitLimit());
+    assertEquals(accountDataSizeLimit, v1Skeleton.accountDataSizeLimit());
+    assertEquals(heapSize, v1Skeleton.heapSize());
   }
 
   @Test
@@ -1169,6 +1189,14 @@ final class TransactionSerializationTests {
     assertEquals(0L, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(0L, 200_000));
     assertEquals(Long.MAX_VALUE, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(-1L, 200_000));
     assertEquals(Long.MAX_VALUE, TransactionRecord.priorityFeeLamportsToComputeUnitPrice(Long.MAX_VALUE, 200_000));
+
+    // The saturation guard accounts for the round-up addend: Long.MAX_VALUE / 1e6 exactly would
+    // overflow the addend at the maximum limit and must saturate, one lamport lower fits.
+    assertEquals(
+        Long.MAX_VALUE,
+        TransactionRecord.priorityFeeLamportsToComputeUnitPrice(Long.MAX_VALUE / 1_000_000, 1_400_000)
+    );
+    assertTrue(TransactionRecord.priorityFeeLamportsToComputeUnitPrice((Long.MAX_VALUE / 1_000_000) - 1, 1_400_000) > 0);
   }
 
   @Test
@@ -1284,6 +1312,19 @@ final class TransactionSerializationTests {
     assertEquals(0, skeleton.computeUnitLimit());
     assertEquals(0, skeleton.accountDataSizeLimit());
     assertEquals(0, skeleton.heapSize());
+
+    // Unset legacy compute budget values fall back to the builder defaults so the prototyped v1
+    // transaction retains the runtime maximums with the ConfigValues reserved.
+    final var v1Tx = skeleton.prototypeTransaction().createTransaction();
+    final var v1Skeleton = TransactionSkeleton.deserializeSkeleton(v1Tx.serialized());
+    assertEquals(0L, v1Skeleton.priorityFeeLamports());
+    assertEquals(TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT, v1Skeleton.computeUnitLimit());
+    assertEquals(TxBuilderImpl.MAX_ACCOUNT_DATA_SIZE_LIMIT, v1Skeleton.accountDataSizeLimit());
+    assertEquals(0, v1Skeleton.heapSize());
+
+    // The reserved slots update in place.
+    assertSame(v1Tx, v1Tx.setComputeUnitLimit(200_000));
+    assertSame(v1Tx, v1Tx.setAccountDataSizeLimit(65_536));
   }
 
   @Test
@@ -1845,6 +1886,71 @@ final class TransactionSerializationTests {
   }
 
   @Test
+  void testMalformedComputeBudgetInstructions() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+
+    // A truncated SetComputeUnitPrice with no u64 payload, and an empty data instruction as the
+    // final instruction so that an unguarded discriminator read would index past the message.
+    final var truncatedPrice = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram(), List.of(), new byte[]{3}
+    );
+    final var emptyData = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram(), List.of(), new byte[0]
+    );
+    final var tx = Transaction.createTx(feePayer.publicKey(), List.of(truncatedPrice, emptyData));
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
+    assertEquals(0L, skeleton.priorityFeeLamports());
+    assertEquals(0, skeleton.computeUnitLimit());
+    assertEquals(0, skeleton.accountDataSizeLimit());
+    assertEquals(0, skeleton.heapSize());
+  }
+
+  @Test
+  void testCreateTransactionSnapshotsInstructions() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var readAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var ix1 = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(), List.of(AccountMeta.createRead(readAccount)), new byte[]{1}
+    );
+    final var ix2 = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(), List.of(AccountMeta.createRead(readAccount)), new byte[]{2}
+    );
+
+    // Created transactions snapshot the instruction list, further builder mutations must not
+    // desync the instruction view from the serialized data.
+    final var builder = TxBuilder.createBuilder().feePayer(feePayer.publicKey()).addInstruction(ix1);
+    final var snapshot = builder.createTransaction();
+    builder.addInstruction(ix2);
+    assertEquals(1, snapshot.numInstructions());
+    assertEquals(List.of(ix1), snapshot.instructions());
+    assertEquals(2, builder.createTransaction().numInstructions());
+  }
+
+  @Test
+  void testUnsignedToString() {
+    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var readAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(), List.of(AccountMeta.createRead(readAccount)), new byte[]{1}
+    );
+
+    // toString must not throw for unsigned transactions, while getBase58Id still does.
+    final var v1Tx = TxBuilder.createBuilder().feePayer(feePayer.publicKey()).addInstruction(ix).createTransaction();
+    assertTrue(v1Tx.toString().contains("id=<unsigned>"));
+    assertThrows(IllegalStateException.class, v1Tx::getBase58Id);
+
+    final var legacyTx = Transaction.createTx(feePayer.publicKey(), ix);
+    assertTrue(legacyTx.toString().contains("id=<unsigned>"));
+    assertThrows(IllegalStateException.class, legacyTx::getBase58Id);
+
+    v1Tx.sign(feePayer);
+    assertTrue(v1Tx.toString().contains("id=" + v1Tx.getBase58Id()));
+    legacyTx.sign(feePayer);
+    assertTrue(legacyTx.toString().contains("id=" + legacyTx.getBase58Id()));
+  }
+
+  @Test
   void testStaticSign() {
     final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
     final var readOnlyAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
@@ -1880,6 +1986,36 @@ final class TransactionSerializationTests {
     assertTrue(signerA.publicKey().verifySignature(
         v1Data, 0, v1SigOffset,
         Arrays.copyOfRange(v1Data, v1SigOffset, v1Data.length)
+    ));
+
+    // V1 multi-signer: the message excludes every appended signature slot and the fee payer
+    // signature occupies the first slot.
+    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var multiSignerIx = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
+        new byte[]{1, 2, 3}
+    );
+    final var multiTx = TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey())
+        .addInstruction(multiSignerIx)
+        .createTransaction();
+    assertEquals(2, multiTx.numSigners());
+    final byte[] multiData = multiTx.serialized();
+
+    final var expectedTx = TxBuilder.createBuilder()
+        .feePayer(signerA.publicKey())
+        .addInstruction(multiSignerIx)
+        .createTransaction();
+    expectedTx.sign(signerA);
+
+    Transaction.sign(signerA, multiData);
+    assertArrayEquals(expectedTx.serialized(), multiData);
+
+    final int multiSigsOffset = multiData.length - (2 * Transaction.SIGNATURE_LENGTH);
+    assertTrue(signerA.publicKey().verifySignature(
+        multiData, 0, multiSigsOffset,
+        Arrays.copyOfRange(multiData, multiSigsOffset, multiSigsOffset + Transaction.SIGNATURE_LENGTH)
     ));
   }
 

@@ -1,6 +1,7 @@
 package software.sava.core.tx;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
@@ -292,22 +293,67 @@ public interface TransactionSkeleton {
     return createTransaction(accounts);
   }
 
+  /// Creates a v1 {@link TxBuilder} from this transaction's fee payer, instructions, and compute
+  /// budget values.
+  ///
+  /// v0 transactions which load accounts via address lookup tables must resolve those accounts
+  /// first, e.g. {@code prototypeTransaction(parseInstructions(parseAccounts(lookupTables)))}.
+  ///
+  /// @throws IllegalStateException if this transaction loads accounts via address lookup tables.
   default TxBuilder prototypeTransaction() {
+    if (numIndexedAccounts() > 0) {
+      throw new IllegalStateException(
+          "Accounts indexed into address lookup tables must be resolved, use prototypeTransaction(parseInstructions(parseAccounts(lookupTables))) instead."
+      );
+    }
     return prototypeTransaction(this.parseInstructionsWithoutTableAccounts());
   }
 
+  /// Creates a v1 {@link TxBuilder} from this transaction's fee payer, the given instructions,
+  /// and this transaction's compute budget values.
+  ///
+  /// ComputeBudgetProgram instructions are filtered out, their values are carried over as
+  /// ConfigValues instead; per SIMD-0385 the v1 runtime ignores them for configuration and
+  /// processes them as no-ops which still consume compute units.
+  ///
+  /// {@link #computeUnitLimit()} and {@link #accountDataSizeLimit()} return 0 when not
+  /// explicitly set, which a {@link TxBuilder} treats as clearing the ConfigValue, a 0 unit and
+  /// 0 byte budget per SIMD-0385. To mirror the runtime defaults such transactions actually
+  /// executed with, unset values are not carried over so that the builder defaults of the
+  /// runtime maximums are retained, which also reserves the ConfigValues for in-place updates.
+  ///
+  /// The legacy/v0 {@link #priorityFeeLamports()} carried over is derived from the
+  /// SetComputeUnitPrice instruction and, when no SetComputeUnitLimit instruction is present, an
+  /// estimated compute unit limit; prefer re-pricing the created transaction via
+  /// {@link Transaction#setPriorityFeeLamports(long)} after simulating it.
   default TxBuilder prototypeTransaction(final Instruction[] instructions) {
-    return new TxBuilderImpl()
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    int numRetained = 0;
+    final var retained = new Instruction[instructions.length];
+    for (final var instruction : instructions) {
+      if (!computeBudgetProgram.equals(instruction.programId().publicKey())) {
+        retained[numRetained++] = instruction;
+      }
+    }
+    final var builder = new TxBuilderImpl()
         .feePayer(feePayer())
-        .addInstructions(instructions)
-        .computeUnitLimit(computeUnitLimit())
+        .addInstructions(numRetained == instructions.length
+            ? instructions
+            : Arrays.copyOfRange(retained, 0, numRetained))
         .priorityFeeLamports(priorityFeeLamports())
-        .accountDataSizeLimit(accountDataSizeLimit())
         .heapSize(heapSize());
+    final int computeUnitLimit = computeUnitLimit();
+    if (computeUnitLimit != 0) {
+      builder.computeUnitLimit(computeUnitLimit);
+    }
+    final int accountDataSizeLimit = accountDataSizeLimit();
+    if (accountDataSizeLimit != 0) {
+      builder.accountDataSizeLimit(accountDataSizeLimit);
+    }
+    return builder;
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -316,7 +362,6 @@ public interface TransactionSkeleton {
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
   // TODO: deprecate once v1 transactions are active on mainnet
-
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -327,7 +372,6 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -339,7 +383,6 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -351,7 +394,6 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -364,7 +406,6 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
@@ -373,7 +414,6 @@ public interface TransactionSkeleton {
   Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas);
 
   // TODO: deprecate once v1 transactions are active on mainnet
-
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///

@@ -110,7 +110,9 @@ final class TransactionRecord extends BaseTransaction {
     final long cappedComputeUnitLimit = Math.min(computeUnitLimit & 0xFFFF_FFFFL, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
     if (cappedComputeUnitLimit == 0 || priorityFeeLamports == 0) {
       return 0;
-    } else if (priorityFeeLamports < 0 || priorityFeeLamports > Long.MAX_VALUE / 1_000_000) {
+    } else if (priorityFeeLamports < 0
+        || priorityFeeLamports > (Long.MAX_VALUE - (cappedComputeUnitLimit - 1)) / 1_000_000) {
+      // Saturate, guarding the round-up addend below against overflowing as well.
       return Long.MAX_VALUE;
     }
     final long microLamports = priorityFeeLamports * 1_000_000;

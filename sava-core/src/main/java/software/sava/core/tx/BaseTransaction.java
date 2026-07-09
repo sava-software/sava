@@ -22,7 +22,8 @@ abstract class BaseTransaction implements Transaction {
     this.data = data;
   }
 
-  static int signedIdOffset(final byte[] signedTransaction) {
+  // Returns the byte offset of the fee payer signature, or -1 if it has not been written yet.
+  static int feePayerSignatureOffset(final byte[] signedTransaction) {
     final int numSigners;
     final int signaturesOffset;
     if (V1Transaction.isV1(signedTransaction)) {
@@ -39,7 +40,15 @@ abstract class BaseTransaction implements Transaction {
         }
       }
     }
-    throw new IllegalStateException("Transaction has not been signed by the fee payer yet.");
+    return -1;
+  }
+
+  static int signedIdOffset(final byte[] signedTransaction) {
+    final int offset = feePayerSignatureOffset(signedTransaction);
+    if (offset < 0) {
+      throw new IllegalStateException("Transaction has not been signed by the fee payer yet.");
+    }
+    return offset;
   }
 
   // Returns the byte offset of the recent block hash within the serialized data.
@@ -251,7 +260,7 @@ abstract class BaseTransaction implements Transaction {
   public String toString() {
     return "Transaction{" +
         " version=" + version() +
-        ", id=" + getBase58Id() +
+        ", id=" + (feePayerSignatureOffset(data) < 0 ? "<unsigned>" : getBase58Id()) +
         ", feePayer=" + feePayer.publicKey().toBase58() +
         ", data=" + Base64.getEncoder().encodeToString(data) +
         '}';
