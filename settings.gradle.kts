@@ -39,14 +39,14 @@ pluginManagement {
       }
     }
   }
-  // Repo-local convention plugins (e.g. 'sava.docs-in-sync') — conventions that
-  // belong to this repo rather than sava-build.
-  includeBuild("gradle/plugins")
+//  if (settingsDir.resolve("../sava-build").isDirectory) {
+//    includeBuild("../sava-build")
+//  }
 }
 
 plugins {
-  id("software.sava.build") version "21.5.26"
-  id("software.sava.build.feature.jdk-provisioning") version "21.5.26"
+  id("software.sava.build") version "21.4.3"
+  id("software.sava.build.feature.jdk-provisioning") version "21.4.3"
 }
 
 javaModules {
