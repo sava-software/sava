@@ -23,7 +23,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
 
   // The v1 header and TransactionConfigMask are fixed width, so the recent block hash and the
   // accounts always begin at the same offsets within the serialized message.
-  static final int V1_CONFIG_MASK_OFFSET = 1 /* VersionByte */ + TxBuilderImpl.MSG_HEADER_LENGTH;
+  static final int V1_CONFIG_MASK_OFFSET = 1 /* VersionByte */ + TransactionRecord.MSG_HEADER_LENGTH;
   static final int V1_RECENT_BLOCK_HASH_INDEX = V1_CONFIG_MASK_OFFSET + V1_CONFIG_MASK_LENGTH;
   static final int V1_ACCOUNTS_OFFSET = V1_RECENT_BLOCK_HASH_INDEX + BLOCK_HASH_LENGTH + 2 /* NumInstructions + NumAddresses */;
 
