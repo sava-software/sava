@@ -1,5 +1,19 @@
 # Changelog
 
+## [25.5.0](https://github.com/sava-software/sava/compare/25.4.1...25.5.0) (2026-07-10)
+
+
+### Features
+
+* **release:** re-release 25.4.1 context ([3c1e948](https://github.com/sava-software/sava/commit/3c1e94856e00e65d4533db6eb04aede6f04f3fd3))
+* **rpc:** add CommitCancelled variant to TransactionError ([d97e07d](https://github.com/sava-software/sava/commit/d97e07d1157e7c8b55317acfb56a2745abb53a53))
+* **rpc:** enhance JSON parsing resilience and refactor transaction constants ([1d06e68](https://github.com/sava-software/sava/commit/1d06e68a5b094a0d74c2a9d967ac5a12122b08f6))
+
+
+### Bug Fixes
+
+* **github:** update publish workflow permissions ([3d26b44](https://github.com/sava-software/sava/commit/3d26b4423d364c6b41ad0ec56dcb5140ea9d924b))
+
 ## [25.4.1](https://github.com/sava-software/sava/compare/25.4.0...25.4.1) (2026-07-07)
 
 
