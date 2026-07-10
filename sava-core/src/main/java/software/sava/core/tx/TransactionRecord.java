@@ -1,17 +1,17 @@
 package software.sava.core.tx;
 
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.encoding.Base58;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.SequencedCollection;
+import java.util.*;
+import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
+import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 
 record TransactionRecord(AccountMeta feePayer,
@@ -25,6 +25,80 @@ record TransactionRecord(AccountMeta feePayer,
                          int recentBlockHashIndex) implements Transaction {
 
   static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
+
+  static final BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
+
+  // fee payer, sign, write, read
+  static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
+    if (am1.feePayer()) {
+      return -1;
+    } else if (am2.feePayer()) {
+      return 1;
+    } else if (am1.signer() == am2.signer()) {
+      if (am1.write() == am2.write()) {
+        return 0;
+      } else {
+        return am1.write() ? -1 : 1;
+      }
+    } else {
+      return am1.signer() ? -1 : 1;
+    }
+  };
+
+  static final Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
+    if (am1.feePayer()) {
+      return -1;
+    } else if (am2.feePayer()) {
+      return 1;
+    } else if (am1.signer() == am2.signer()) {
+      if (am1.write() == am2.write()) {
+        return am1.invoked() == am2.invoked() ? 0 : am1.invoked() ? -1 : 1;
+      } else {
+        return am1.write() ? -1 : 1;
+      }
+    } else {
+      return am1.signer() ? -1 : 1;
+    }
+  };
+
+  static final int MSG_HEADER_LENGTH = 3;
+  static final int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
+  static final byte VERSIONED_BIT_MASK = (byte) (1 << 7);
+  static final int BASE_LOOKUP_TABLE_LEN = PUBLIC_KEY_LENGTH + 2;
+
+  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
+    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    Arrays.sort(accountMetas, LEGACY_META_COMPARATOR);
+    return accountMetas;
+  }
+
+  static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
+    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    Arrays.sort(accountMetas, VO_META_COMPARATOR);
+    return accountMetas;
+  }
+
+  static int mergeAccounts(final AccountMeta feePayer,
+                           final Map<PublicKey, AccountMeta> accounts,
+                           final List<Instruction> instructions) {
+    final int numInstructions = instructions.size();
+    if (numInstructions == 0) {
+      throw new IllegalArgumentException("No instructions provided");
+    }
+    if (feePayer != null) {
+      accounts.put(feePayer.publicKey(), feePayer);
+    }
+    int serializedInstructionLength = 0;
+    for (final var instruction : instructions) {
+      serializedInstructionLength += instruction.serializedLength();
+      for (final var meta : instruction.accounts()) {
+        accounts.merge(meta.publicKey(), meta, MERGE_ACCOUNT_META);
+      }
+      final var programMeta = instruction.programId();
+      accounts.merge(programMeta.publicKey(), programMeta, MERGE_ACCOUNT_META);
+    }
+    return serializedInstructionLength;
+  }
 
   @Override
   public List<Instruction> instructions() {
@@ -63,6 +137,11 @@ record TransactionRecord(AccountMeta feePayer,
   public int version() {
     int version = data[messageOffset] & 0xFF;
     return signedByte(version) ? version & 0x7F : VERSIONED_BIT_MASK;
+  }
+
+  @Override
+  public boolean exceedsSizeLimit() {
+    return size() > 1232;
   }
 
   @Override

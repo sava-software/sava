@@ -934,6 +934,7 @@ final class ParseRpcResponseTests {
     final var block = Block.parse(ji);
     assertEquals(0, block.blockHeight());
     assertEquals(0, block.blockTime());
+    assertEquals(0, block.numRewardPartitions());
     assertEquals("4w2QK5udZJKwXhNcssAEc8mATt8o1ZnFQrzGJg9NGZpz", block.blockHash());
     assertEquals(16383, block.parentSlot());
     assertEquals("PNRrabCwVfJmYdrxtKV4euA5daxsbFtYZEvcZWWxf2e", block.previousBlockHash());
@@ -972,8 +973,8 @@ final class ParseRpcResponseTests {
 
     final var ji = JsonIterator.parse(response).skipUntil("result");
     final var block = Block.parse(ji);
-    assertEquals(306538416, block.blockHeight());
-    assertEquals(1742587108, block.blockTime());
+    assertEquals(306538416L, block.blockHeight());
+    assertEquals(1742587108L, block.blockTime());
     assertEquals("4gmejZCH4Hokk3YWmZfKyV1Y1Yj2rkChnejHmEeLSJ3e", block.blockHash());
     assertEquals(328284370, block.parentSlot());
     assertEquals("7q6NkbrNTXnYBA9iS7kHcSDPARbwN5tbG48ZrjWk1czR", block.previousBlockHash());

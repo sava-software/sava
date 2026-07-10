@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.encoding.CompactU16Encoding.*;
 import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
-import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
+import static software.sava.core.tx.TransactionRecord.VERSIONED_BIT_MASK;
 import static software.sava.core.tx.TransactionSkeletonRecord.LEGACY_INVOKED_INDEXES;
 import static software.sava.core.tx.TransactionSkeletonRecord.NO_TABLES;
 

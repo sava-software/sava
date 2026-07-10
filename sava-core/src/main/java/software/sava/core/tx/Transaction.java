@@ -11,14 +11,18 @@ import software.sava.core.encoding.CompactU16Encoding;
 import java.util.*;
 import java.util.function.BiFunction;
 
-import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
+import static software.sava.core.tx.TransactionRecord.mergeAccounts;
 
 public interface Transaction {
 
+  /// @deprecated no longer valid for all transaction versions
+  @Deprecated
   int MAX_SERIALIZED_LENGTH = 1232;
+  /// @deprecated - redundant value, check against the serialized bytes.
+  @Deprecated
   int MAX_BASE_64_ENCODED_LENGTH = 1683;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
@@ -26,44 +30,31 @@ public interface Transaction {
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
 
-  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
+  /// @deprecated internal serialization
+  @Deprecated
+  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = TransactionRecord.MERGE_ACCOUNT_META;
 
   // fee payer, sign, write, read
-  Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
-    if (am1.feePayer()) {
-      return -1;
-    } else if (am2.feePayer()) {
-      return 1;
-    } else if (am1.signer() == am2.signer()) {
-      if (am1.write() == am2.write()) {
-        return 0;
-      } else {
-        return am1.write() ? -1 : 1;
-      }
-    } else {
-      return am1.signer() ? -1 : 1;
-    }
-  };
-  Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
-    if (am1.feePayer()) {
-      return -1;
-    } else if (am2.feePayer()) {
-      return 1;
-    } else if (am1.signer() == am2.signer()) {
-      if (am1.write() == am2.write()) {
-        return am1.invoked() == am2.invoked() ? 0 : am1.invoked() ? -1 : 1;
-      } else {
-        return am1.write() ? -1 : 1;
-      }
-    } else {
-      return am1.signer() ? -1 : 1;
-    }
-  };
+  /// @deprecated internal serialization
+  @Deprecated
+  Comparator<AccountMeta> LEGACY_META_COMPARATOR = TransactionRecord.LEGACY_META_COMPARATOR;
 
-  int MSG_HEADER_LENGTH = 3;
-  int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
-  byte VERSIONED_BIT_MASK = (byte) (1 << 7);
-  int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
+  /// @deprecated internal serialization
+  @Deprecated
+  Comparator<AccountMeta> VO_META_COMPARATOR = TransactionRecord.VO_META_COMPARATOR;
+
+  /// @deprecated internal serialization
+  @Deprecated
+  int MSG_HEADER_LENGTH = TransactionRecord.MSG_HEADER_LENGTH;
+  /// @deprecated internal serialization
+  @Deprecated
+  int VERSIONED_MSG_HEADER_LENGTH = TransactionRecord.VERSIONED_MSG_HEADER_LENGTH;
+  /// @deprecated internal serialization
+  @Deprecated
+  byte VERSIONED_BIT_MASK = TransactionRecord.VERSIONED_BIT_MASK;
+  /// @deprecated internal serialization
+  @Deprecated
+  int BASE_LOOKUP_TABLE_LEN = TransactionRecord.BASE_LOOKUP_TABLE_LEN;
 
   static String getBase58Id(final byte[] signedTransaction) {
     if (signedTransaction[0] == 0) {
@@ -81,42 +72,20 @@ public interface Transaction {
     }
   }
 
+  /// @deprecated internal serialization
+  @Deprecated
   static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, Transaction.LEGACY_META_COMPARATOR);
-    return accountMetas;
+    return TransactionRecord.sortLegacyAccounts(mergedAccounts);
   }
 
   static Transaction createTx(final PublicKey feePayer, final List<Instruction> instructions) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions);
   }
 
-  private static int mergeAccounts(final AccountMeta feePayer,
-                                   final Map<PublicKey, AccountMeta> accounts,
-                                   final List<Instruction> instructions) {
-    final int numInstructions = instructions.size();
-    if (numInstructions == 0) {
-      throw new IllegalArgumentException("No instructions provided");
-    }
-    if (feePayer != null) {
-      accounts.put(feePayer.publicKey(), feePayer);
-    }
-    int serializedInstructionLength = 0;
-    for (final var instruction : instructions) {
-      serializedInstructionLength += instruction.serializedLength();
-      for (final var meta : instruction.accounts()) {
-        accounts.merge(meta.publicKey(), meta, Transaction.MERGE_ACCOUNT_META);
-      }
-      final var programMeta = instruction.programId();
-      accounts.merge(programMeta.publicKey(), programMeta, Transaction.MERGE_ACCOUNT_META);
-    }
-    return serializedInstructionLength;
-  }
-
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
-    return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(accounts));
+    return createTx(instructions, serializedInstructionLength, TransactionRecord.sortLegacyAccounts(accounts));
   }
 
   static Transaction createTx(final AccountMeta feePayer, final Instruction instruction) {
@@ -135,7 +104,7 @@ public interface Transaction {
     }
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
-    return createTx(instructions, serializedInstructionLength, sortV0Accounts(accounts), lookupTable);
+    return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(accounts), lookupTable);
   }
 
   static Transaction createTx(final PublicKey feePayer,
@@ -197,7 +166,7 @@ public interface Transaction {
   static Transaction createTx(final Instruction[] instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts) {
-    return createTx(Arrays.asList(instructions), serializedInstructionLength, sortV0Accounts(mergedAccounts));
+    return createTx(Arrays.asList(instructions), serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts));
   }
 
   static Transaction createTx(final List<Instruction> instructions,
@@ -231,7 +200,7 @@ public interface Transaction {
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int numInstructions = instructions.size();
     final int bufferSize = sigLen
-        + Transaction.MSG_HEADER_LENGTH
+        + TransactionRecord.MSG_HEADER_LENGTH
         + getByteLen(numAccounts) + (numAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(numInstructions) + serializedInstructionLength;
@@ -274,10 +243,10 @@ public interface Transaction {
     );
   }
 
+  /// @deprecated internal serialization
+  @Deprecated
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, Transaction.VO_META_COMPARATOR);
-    return accountMetas;
+    return TransactionRecord.sortV0Accounts(mergedAccounts);
   }
 
   static Transaction createTx(final List<Instruction> instructions,
@@ -285,9 +254,9 @@ public interface Transaction {
                               final Map<PublicKey, AccountMeta> mergedAccounts,
                               final AddressLookupTable lookupTable) {
     if (lookupTable == null) {
-      return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(mergedAccounts));
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortLegacyAccounts(mergedAccounts));
     } else {
-      return createTx(instructions, serializedInstructionLength, sortV0Accounts(mergedAccounts), lookupTable);
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts), lookupTable);
     }
   }
 
@@ -350,11 +319,11 @@ public interface Transaction {
     final int numTableIndexedAccounts = numLookupReads + numLookupWrites;
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
-        + VERSIONED_MSG_HEADER_LENGTH
+        + TransactionRecord.VERSIONED_MSG_HEADER_LENGTH
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + (numTableIndexedAccounts > 0 ? (1 + BASE_LOOKUP_TABLE_LEN + numTableIndexedAccounts) : 1);
+        + (numTableIndexedAccounts > 0 ? (1 + TransactionRecord.BASE_LOOKUP_TABLE_LEN + numTableIndexedAccounts) : 1);
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
@@ -362,7 +331,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = VERSIONED_BIT_MASK;
+    out[i] = TransactionRecord.VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;
@@ -443,9 +412,9 @@ public interface Transaction {
                               final Map<PublicKey, AccountMeta> mergedAccounts,
                               final LookupTableAccountMeta[] tableAccountMetas) {
     if (tableAccountMetas == null || tableAccountMetas.length == 0) {
-      return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(mergedAccounts));
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortLegacyAccounts(mergedAccounts));
     } else {
-      return createTx(instructions, serializedInstructionLength, sortV0Accounts(mergedAccounts), tableAccountMetas);
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts), tableAccountMetas);
     }
   }
 
@@ -526,11 +495,11 @@ public interface Transaction {
 
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
-        + VERSIONED_MSG_HEADER_LENGTH
+        + TransactionRecord.VERSIONED_MSG_HEADER_LENGTH
         + getByteLen(numIncludedAccounts) + (numIncludedAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(instructions.size()) + serializedInstructionLength
-        + (1 + (numTablesWithIndexedAccounts * BASE_LOOKUP_TABLE_LEN) + (numAccounts - numIncludedAccounts));
+        + (1 + (numTablesWithIndexedAccounts * TransactionRecord.BASE_LOOKUP_TABLE_LEN) + (numAccounts - numIncludedAccounts));
 
     final byte[] out = new byte[bufferSize];
     out[0] = (byte) numRequiredSignatures;
@@ -538,7 +507,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = VERSIONED_BIT_MASK;
+    out[i] = TransactionRecord.VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;

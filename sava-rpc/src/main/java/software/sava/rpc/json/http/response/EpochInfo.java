@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
@@ -47,7 +48,11 @@ public record EpochInfo(long absoluteSlot,
       } else if (fieldEquals("slotsInEpoch", buf, offset, len)) {
         slotsInEpoch = ji.readInt();
       } else if (fieldEquals("transactionCount", buf, offset, len)) {
-        transactionCount = ji.readLong();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          transactionCount = ji.readLong();
+        } else {
+          ji.skip();
+        }
       } else {
         ji.skip();
       }

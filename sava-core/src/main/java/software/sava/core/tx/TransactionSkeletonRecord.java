@@ -18,7 +18,7 @@ import static software.sava.core.encoding.CompactU16Encoding.decode;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.tx.Instruction.createInstruction;
 import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
-import static software.sava.core.tx.Transaction.VERSIONED_BIT_MASK;
+import static software.sava.core.tx.TransactionRecord.VERSIONED_BIT_MASK;
 
 record TransactionSkeletonRecord(byte[] data,
                                  int version,

@@ -14,6 +14,7 @@ public record Block(long blockHeight,
                     String blockHash,
                     String previousBlockHash,
                     long parentSlot,
+                    long numRewardPartitions,
                     List<TxReward> rewards,
                     List<String> signatures,
                     List<BlockTx> transactions) {
@@ -31,6 +32,7 @@ public record Block(long blockHeight,
     private String blockHash;
     private String previousBlockHash;
     private long parentSlot;
+    private long numRewardPartitions;
     private List<TxReward> rewards;
     private List<String> signatures;
     private List<BlockTx> transactions;
@@ -45,6 +47,7 @@ public record Block(long blockHeight,
           blockHash,
           previousBlockHash,
           parentSlot,
+          numRewardPartitions,
           rewards == null ? List.of() : rewards,
           signatures == null ? List.of() : signatures,
           transactions == null ? List.of() : transactions
@@ -62,6 +65,12 @@ public record Block(long blockHeight,
       } else if (fieldEquals("blockTime", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {
           blockTime = ji.readLong();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("numRewardPartitions", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          numRewardPartitions = ji.readLong();
         } else {
           ji.skip();
         }
