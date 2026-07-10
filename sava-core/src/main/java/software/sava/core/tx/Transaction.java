@@ -11,7 +11,6 @@ import software.sava.core.encoding.CompactU16Encoding;
 import java.util.*;
 import java.util.function.BiFunction;
 
-import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
@@ -34,29 +33,29 @@ public interface Transaction {
 
   /// @deprecated internal serialization
   @Deprecated
-  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = TxBuilderImpl.MERGE_ACCOUNT_META;
+  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = TransactionRecord.MERGE_ACCOUNT_META;
 
   // fee payer, sign, write, read
   /// @deprecated internal serialization
   @Deprecated
-  Comparator<AccountMeta> LEGACY_META_COMPARATOR = TxBuilderImpl.LEGACY_META_COMPARATOR;
+  Comparator<AccountMeta> LEGACY_META_COMPARATOR = TransactionRecord.LEGACY_META_COMPARATOR;
 
   /// @deprecated internal serialization
   @Deprecated
-  Comparator<AccountMeta> VO_META_COMPARATOR = TxBuilderImpl.VO_META_COMPARATOR;
+  Comparator<AccountMeta> VO_META_COMPARATOR = TransactionRecord.VO_META_COMPARATOR;
 
   /// @deprecated internal serialization
   @Deprecated
-  int MSG_HEADER_LENGTH = 3;
+  int MSG_HEADER_LENGTH = TransactionRecord.MSG_HEADER_LENGTH;
   /// @deprecated internal serialization
   @Deprecated
-  int VERSIONED_MSG_HEADER_LENGTH = 1 + TxBuilderImpl.MSG_HEADER_LENGTH;
+  int VERSIONED_MSG_HEADER_LENGTH = TransactionRecord.VERSIONED_MSG_HEADER_LENGTH;
   /// @deprecated internal serialization
   @Deprecated
-  byte VERSIONED_BIT_MASK = (byte) (1 << 7);
+  byte VERSIONED_BIT_MASK = TransactionRecord.VERSIONED_BIT_MASK;
   /// @deprecated internal serialization
   @Deprecated
-  int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
+  int BASE_LOOKUP_TABLE_LEN = TransactionRecord.BASE_LOOKUP_TABLE_LEN;
 
   static String getBase58Id(final byte[] signedTransaction) {
     final int offset = BaseTransaction.signedIdOffset(signedTransaction);
@@ -71,9 +70,7 @@ public interface Transaction {
   /// @deprecated internal serialization
   @Deprecated
   static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, Transaction.LEGACY_META_COMPARATOR);
-    return accountMetas;
+    return TransactionRecord.sortLegacyAccounts(mergedAccounts);
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
@@ -89,7 +86,7 @@ public interface Transaction {
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
-    return createTx(instructions, serializedInstructionLength, TxBuilderImpl.sortLegacyAccounts(accounts));
+    return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(accounts));
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
@@ -246,7 +243,7 @@ public interface Transaction {
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int numInstructions = instructions.size();
     final int bufferSize = sigLen
-        + TxBuilderImpl.MSG_HEADER_LENGTH
+        + TransactionRecord.MSG_HEADER_LENGTH
         + getByteLen(numAccounts) + (numAccounts << 5)
         + Transaction.BLOCK_HASH_LENGTH
         + getByteLen(numInstructions) + serializedInstructionLength;
@@ -292,9 +289,7 @@ public interface Transaction {
   /// @deprecated internal serialization
   @Deprecated
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, Transaction.VO_META_COMPARATOR);
-    return accountMetas;
+    return TransactionRecord.sortV0Accounts(mergedAccounts);
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
@@ -305,7 +300,7 @@ public interface Transaction {
                               final Map<PublicKey, AccountMeta> mergedAccounts,
                               final AddressLookupTable lookupTable) {
     if (lookupTable == null) {
-      return createTx(instructions, serializedInstructionLength, TxBuilderImpl.sortLegacyAccounts(mergedAccounts));
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortLegacyAccounts(mergedAccounts));
     } else {
       return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts), lookupTable);
     }
@@ -385,7 +380,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = BaseTransaction.VERSIONED_BIT_MASK;
+    out[i] = TransactionRecord.VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;
@@ -475,7 +470,7 @@ public interface Transaction {
                               final Map<PublicKey, AccountMeta> mergedAccounts,
                               final LookupTableAccountMeta[] tableAccountMetas) {
     if (tableAccountMetas == null || tableAccountMetas.length == 0) {
-      return createTx(instructions, serializedInstructionLength, TxBuilderImpl.sortLegacyAccounts(mergedAccounts));
+      return createTx(instructions, serializedInstructionLength, TransactionRecord.sortLegacyAccounts(mergedAccounts));
     } else {
       return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts), tableAccountMetas);
     }
@@ -573,7 +568,7 @@ public interface Transaction {
     int i = sigLen;
 
     // Version
-    out[i] = BaseTransaction.VERSIONED_BIT_MASK;
+    out[i] = TransactionRecord.VERSIONED_BIT_MASK;
 
     // Message Header
     out[++i] = (byte) numRequiredSignatures;
