@@ -5,50 +5,12 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.*;
-import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
-import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 
 final class TxBuilderImpl implements TxBuilder {
 
-  static final BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
-
-  static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
-    if (am1.feePayer()) {
-      return -1;
-    } else if (am2.feePayer()) {
-      return 1;
-    } else if (am1.signer() == am2.signer()) {
-      if (am1.write() == am2.write()) {
-        return 0;
-      } else {
-        return am1.write() ? -1 : 1;
-      }
-    } else {
-      return am1.signer() ? -1 : 1;
-    }
-  };
-
-  static final Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
-    if (am1.feePayer()) {
-      return -1;
-    } else if (am2.feePayer()) {
-      return 1;
-    } else if (am1.signer() == am2.signer()) {
-      if (am1.write() == am2.write()) {
-        return am1.invoked() == am2.invoked() ? 0 : am1.invoked() ? -1 : 1;
-      } else {
-        return am1.write() ? -1 : 1;
-      }
-    } else {
-      return am1.signer() ? -1 : 1;
-    }
-  };
-
   static final int MAX_SERIALIZED_LENGTH_V1 = 4_096;
-  // static final int MAX_BASE64_V1_SIZE = 5_464;
-  static final int MSG_HEADER_LENGTH = 3;
   // SIMD-0385 Transaction V1 format.
   // The version byte that distinguishes a v1 transaction from the legacy and v0 formats.
   static final byte V1_VERSION_BYTE = (byte) 129;
@@ -244,7 +206,7 @@ final class TxBuilderImpl implements TxBuilder {
 
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_V1_ACCOUNTS);
     final int instructionPayloadLength = mergeAccounts(feePayer, accounts, instructions);
-    final var sortedAccounts = sortLegacyAccounts(accounts);
+    final var sortedAccounts = TransactionRecord.sortLegacyAccounts(accounts);
 
     final int numAccounts = sortedAccounts.length;
     if (strict && numAccounts > MAX_V1_ACCOUNTS) {
@@ -296,7 +258,7 @@ final class TxBuilderImpl implements TxBuilder {
     }
 
     final int messageLength = 1 // VersionByte
-        + MSG_HEADER_LENGTH
+        + TransactionRecord.MSG_HEADER_LENGTH
         + V1_CONFIG_MASK_LENGTH
         + Transaction.BLOCK_HASH_LENGTH // LifetimeSpecifier
         + 1 // NumInstructions
@@ -395,12 +357,6 @@ final class TxBuilderImpl implements TxBuilder {
     );
   }
 
-  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, LEGACY_META_COMPARATOR);
-    return accountMetas;
-  }
-
   private static int mergeAccounts(final AccountMeta feePayer,
                                    final Map<PublicKey, AccountMeta> accounts,
                                    final List<Instruction> instructions) {
@@ -414,10 +370,10 @@ final class TxBuilderImpl implements TxBuilder {
     for (final var instruction : instructions) {
       instructionPayloadLength += instruction.accounts().size() + instruction.len();
       for (final var meta : instruction.accounts()) {
-        accounts.merge(meta.publicKey(), meta, MERGE_ACCOUNT_META);
+        accounts.merge(meta.publicKey(), meta, TransactionRecord.MERGE_ACCOUNT_META);
       }
       final var programMeta = instruction.programId();
-      accounts.merge(programMeta.publicKey(), programMeta, MERGE_ACCOUNT_META);
+      accounts.merge(programMeta.publicKey(), programMeta, TransactionRecord.MERGE_ACCOUNT_META);
     }
     return instructionPayloadLength;
   }
