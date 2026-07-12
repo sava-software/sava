@@ -9,6 +9,7 @@ import software.sava.rpc.json.PublicKeyEncoding;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
+import software.sava.rpc.json.http.request.LargestAccountsFilter;
 import software.sava.rpc.json.http.request.RpcEncoding;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
@@ -399,7 +400,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   @Override
   public CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment, final long firstSlot) {
     return sendPostRequest(BLOCK_PRODUCTION, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","firstSlot":%d}]}""",
+                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","range":{"firstSlot":%d}}]}""",
             id.incrementAndGet(), commitment.getValue(), firstSlot
         )
     );
@@ -415,7 +416,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                final PublicKey identity,
                                                                final long firstSlot) {
     return sendPostRequest(BLOCK_PRODUCTION, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","identity":"%s","firstSlot":%d}]}""",
+                {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","identity":"%s","range":{"firstSlot":%d}}]}""",
             id.incrementAndGet(), commitment.getValue(), identity, firstSlot
         )
     );
@@ -618,6 +619,29 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   }
 
   @Override
+  public CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
+                                                                     final SequencedCollection<PublicKey> keys,
+                                                                     final BigInteger minContextSlot) {
+    return sendPostRequest(INFLATION_REWARDS, format("""
+                {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s","minContextSlot":%s}]}""",
+            id.incrementAndGet(), joinKeys(keys), commitment.getValue(), minContextSlot
+        )
+    );
+  }
+
+  @Override
+  public CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
+                                                                     final SequencedCollection<PublicKey> keys,
+                                                                     final long epoch,
+                                                                     final BigInteger minContextSlot) {
+    return sendPostRequest(INFLATION_REWARDS, format("""
+                {"jsonrpc":"2.0","id":%d,"method":"getInflationReward","params":[%s,{"commitment":"%s","epoch":%d,"minContextSlot":%s}]}""",
+            id.incrementAndGet(), joinKeys(keys), commitment.getValue(), epoch, minContextSlot
+        )
+    );
+  }
+
+  @Override
   public CompletableFuture<List<AccountLamports>> getLargestAccounts() {
     return getLargestAccounts(defaultCommitment);
   }
@@ -627,6 +651,21 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     return sendPostRequest(TOP_LAMPORT_ACCOUNTS, format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getLargestAccounts","params":[{"commitment":"%s"}]}""",
             id.incrementAndGet(), commitment.getValue()
+        )
+    );
+  }
+
+  @Override
+  public CompletableFuture<List<AccountLamports>> getLargestAccounts(final LargestAccountsFilter filter) {
+    return getLargestAccounts(defaultCommitment, filter);
+  }
+
+  @Override
+  public CompletableFuture<List<AccountLamports>> getLargestAccounts(final Commitment commitment,
+                                                                     final LargestAccountsFilter filter) {
+    return sendPostRequest(TOP_LAMPORT_ACCOUNTS, format("""
+                {"jsonrpc":"2.0","id":%d,"method":"getLargestAccounts","params":[{"commitment":"%s","filter":"%s"}]}""",
+            id.incrementAndGet(), commitment.getValue(), filter.getValue()
         )
     );
   }
@@ -1195,6 +1234,58 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     );
   }
 
+  @Override
+  public CompletableFuture<List<TxSig>> getSignaturesForAddress(final Commitment commitment,
+                                                                final PublicKey address,
+                                                                final int limit,
+                                                                final String beforeTxSig,
+                                                                final String untilTxSig,
+                                                                final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(256);
+    builder.append("""
+        {"jsonrpc":"2.0","id":""");
+    builder.append(id.incrementAndGet());
+
+    builder.append("""
+        ,"method":"getSignaturesForAddress","params":[""");
+    builder.append('"');
+    builder.append(address.toBase58());
+    builder.append('"');
+
+    builder.append("""
+        ,{"commitment":\"""");
+    builder.append(commitment.getValue());
+    builder.append('"');
+
+    builder.append("""
+        ,"limit":""");
+    builder.append(Math.min(limit, 1_000));
+
+    if (beforeTxSig != null) {
+      builder.append("""
+          ,"before":\"""");
+      builder.append(beforeTxSig);
+      builder.append('"');
+    }
+
+    if (untilTxSig != null) {
+      builder.append("""
+          ,"until":\"""");
+      builder.append(untilTxSig);
+      builder.append('"');
+    }
+
+    if (minContextSlot != null) {
+      builder.append("""
+          ,"minContextSlot":""");
+      builder.append(minContextSlot);
+    }
+
+    builder.append("}]}");
+
+    return sendPostRequest(TX_SIGNATURES, builder.toString());
+  }
+
   private String sigStatusBody(final SequencedCollection<String> signatures, final boolean searchTransactionHistory) {
     final var joined = String.join("\",\"", signatures);
     return format("""
@@ -1465,6 +1556,44 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
             id.incrementAndGet(), commitment.getValue(), validatorVoteAddress.toBase58()
         )
     );
+  }
+
+  @Override
+  public CompletableFuture<VoteAccounts> getVoteAccounts(final Commitment commitment,
+                                                         final PublicKey validatorVoteAddress,
+                                                         final boolean keepUnstakedDelinquents,
+                                                         final BigInteger delinquentSlotDistance) {
+    final var builder = new StringBuilder(256);
+    builder.append("""
+        {"jsonrpc":"2.0","id":""");
+    builder.append(id.incrementAndGet());
+
+    builder.append("""
+        ,"method":"getVoteAccounts","params":[{"commitment":\"""");
+    builder.append(commitment.getValue());
+    builder.append('"');
+
+    if (validatorVoteAddress != null) {
+      builder.append("""
+          ,"votePubkey":\"""");
+      builder.append(validatorVoteAddress.toBase58());
+      builder.append('"');
+    }
+
+    if (keepUnstakedDelinquents) {
+      builder.append("""
+          ,"keepUnstakedDelinquents":true""");
+    }
+
+    if (delinquentSlotDistance != null) {
+      builder.append("""
+          ,"delinquentSlotDistance":""");
+      builder.append(delinquentSlotDistance);
+    }
+
+    builder.append("}]}");
+
+    return sendPostRequest(VOTE_ACCOUNTS, builder.toString());
   }
 
   @Override

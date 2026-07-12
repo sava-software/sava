@@ -6,16 +6,20 @@ import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalInt;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
+/// @param commissionBps Vote account commission in basis points (SIMD-0291), empty when the responding node
+///                      pre-dates this field.
 public record InflationReward(long amount,
                               long effectiveSlot,
                               long epoch,
                               long postBalance,
-                              int commission) {
+                              int commission,
+                              OptionalInt commissionBps) {
 
-  private static final InflationReward ZERO = new InflationReward(0, 0, 0, 0, 0);
+  private static final InflationReward ZERO = new InflationReward(0, 0, 0, 0, 0, OptionalInt.empty());
 
   public static List<InflationReward> parse(final JsonIterator ji) {
     final var rewards = new ArrayList<InflationReward>();
@@ -38,12 +42,20 @@ public record InflationReward(long amount,
     private long epoch;
     private long postBalance;
     private int commission;
+    private int commissionBps = -1;
 
     private Parser() {
     }
 
     private InflationReward create() {
-      return new InflationReward(amount, effectiveSlot, epoch, postBalance, commission);
+      return new InflationReward(
+          amount,
+          effectiveSlot,
+          epoch,
+          postBalance,
+          commission,
+          commissionBps < 0 ? OptionalInt.empty() : OptionalInt.of(commissionBps)
+      );
     }
 
     @Override
@@ -59,6 +71,12 @@ public record InflationReward(long amount,
       } else if (fieldEquals("commission", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {
           commission = ji.readInt();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("commissionBps", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          commissionBps = ji.readInt();
         } else {
           ji.skip();
         }

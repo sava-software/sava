@@ -7,11 +7,15 @@ import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
+/// @param transactionIndex Index of the transaction within its block, empty when the responding node pre-dates
+///                         this field.
 public record TxSig(long slot,
+                    OptionalInt transactionIndex,
                     OptionalLong blockTime,
                     Commitment confirmationStatus,
                     String signature,
@@ -32,6 +36,7 @@ public record TxSig(long slot,
   private static final class Parser implements FieldBufferPredicate {
 
     private long slot;
+    private int transactionIndex = -1;
     private long blockTime;
     private Commitment confirmationStatus;
     private String signature;
@@ -43,6 +48,7 @@ public record TxSig(long slot,
 
     private TxSig create() {
       return new TxSig(slot,
+          transactionIndex < 0 ? OptionalInt.empty() : OptionalInt.of(transactionIndex),
           blockTime <= 0 ? OptionalLong.empty() : OptionalLong.of(blockTime),
           confirmationStatus,
           signature,
@@ -56,6 +62,12 @@ public record TxSig(long slot,
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("slot", buf, offset, len)) {
         this.slot = ji.readLong();
+      } else if (fieldEquals("transactionIndex", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          this.transactionIndex = ji.readInt();
+        } else {
+          ji.skip();
+        }
       } else if (fieldEquals("blockTime", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {
           this.blockTime = ji.readLong();

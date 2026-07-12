@@ -9,6 +9,7 @@ import software.sava.rpc.json.http.response.AccountInfo;
 import software.sava.rpc.json.http.response.ProcessedSlot;
 import software.sava.rpc.json.http.response.TxLogs;
 import software.sava.rpc.json.http.response.TxResult;
+import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,6 +19,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 public interface SolanaRpcWebsocket extends AutoCloseable {
 
@@ -233,6 +235,46 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   boolean slotSubscribe(final Consumer<Subscription<ProcessedSlot>> onSub, final Consumer<ProcessedSlot> consumer);
 
   boolean slotUnsubscribe();
+
+  default boolean rootSubscribe(final Consumer<Long> consumer) {
+    return rootSubscribe(null, consumer);
+  }
+
+  boolean rootSubscribe(final Consumer<Subscription<Long>> onSub, final Consumer<Long> consumer);
+
+  boolean rootUnsubscribe();
+
+  /// Subscribe to a websocket method which is not directly supported by this interface, e.g.
+  /// Helius' transactionSubscribe. Subscriptions are replayed if the connection is re-connected.
+  ///
+  /// @param subscribeMethod    the subscription request method.
+  /// @param unSubscribeMethod  the corresponding un-subscription request method.
+  /// @param notificationMethod the method of the corresponding notification messages.
+  /// @param key                unique key within this notification method, used for
+  ///                           de-duplication and to unsubscribe.
+  /// @param paramsJson         placed within the request params array.
+  /// @param parser             applied positioned at the notification params result value.
+  default <T> boolean subscribe(final String subscribeMethod,
+                                final String unSubscribeMethod,
+                                final String notificationMethod,
+                                final String key,
+                                final String paramsJson,
+                                final Function<JsonIterator, T> parser,
+                                final Consumer<T> consumer) {
+    return subscribe(subscribeMethod, unSubscribeMethod, notificationMethod, key, paramsJson, parser, null, consumer);
+  }
+
+  <T> boolean subscribe(final String subscribeMethod,
+                        final String unSubscribeMethod,
+                        final String notificationMethod,
+                        final String key,
+                        final String paramsJson,
+                        final Function<JsonIterator, T> parser,
+                        final Consumer<Subscription<T>> onSub,
+                        final Consumer<T> consumer);
+
+  /// Unsubscribe from a subscription created via [#subscribe].
+  boolean unsubscribe(final String notificationMethod, final String key);
 
   /// Once closed, this WebSocket is no longer usable.
   @Override

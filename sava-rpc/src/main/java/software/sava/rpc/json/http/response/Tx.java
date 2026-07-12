@@ -1,5 +1,6 @@
 package software.sava.rpc.json.http.response;
 
+import software.sava.core.tx.TransactionSkeleton;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
@@ -16,6 +17,11 @@ public record Tx(long slot,
 
   public boolean isLegacy() {
     return version < 0;
+  }
+
+  /// Deserializes the transaction data on each call, null if no data is present.
+  public TransactionSkeleton skeleton() {
+    return data == null || data.length == 0 ? null : TransactionSkeleton.deserializeSkeleton(data);
   }
 
   public static Tx parse(final JsonIterator ji) {

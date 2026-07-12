@@ -23,6 +23,7 @@ public record ClusterNode(String gossip,
                           String tpuVote,
                           String tvu,
                           String version,
+                          String clientId,
                           long featureSet,
                           int shredVersion) {
 
@@ -55,6 +56,7 @@ public record ClusterNode(String gossip,
     private String tpuVote;
     private String tvu;
     private String version;
+    private String clientId;
     private long featureSet;
     private int shredVersion;
 
@@ -62,7 +64,7 @@ public record ClusterNode(String gossip,
     }
 
     private ClusterNode create() {
-      return new ClusterNode(gossip, pubKey, rpc, pubsub, serveRepair, tpu, tpuForwards, tpuForwardsQuic, tpuQuic, tpuVote, tvu, version, featureSet, shredVersion);
+      return new ClusterNode(gossip, pubKey, rpc, pubsub, serveRepair, tpu, tpuForwards, tpuForwardsQuic, tpuQuic, tpuVote, tvu, version, clientId, featureSet, shredVersion);
     }
 
     @Override
@@ -91,6 +93,8 @@ public record ClusterNode(String gossip,
         tvu = ji.readString();
       } else if (fieldEquals("version", buf, offset, len)) {
         version = ji.readString();
+      } else if (fieldEquals("clientId", buf, offset, len)) {
+        clientId = ji.readString();
       } else if (fieldEquals("featureSet", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {
           featureSet = ji.readLong();

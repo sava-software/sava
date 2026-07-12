@@ -8,6 +8,7 @@ import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.ContextBoolVal;
+import software.sava.rpc.json.http.request.LargestAccountsFilter;
 import software.sava.rpc.json.http.response.*;
 
 import java.math.BigInteger;
@@ -328,9 +329,23 @@ public interface SolanaRpcClient {
                                                               final SequencedCollection<PublicKey> keys,
                                                               final long epoch);
 
+  CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
+                                                              final SequencedCollection<PublicKey> keys,
+                                                              final BigInteger minContextSlot);
+
+  CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
+                                                              final SequencedCollection<PublicKey> keys,
+                                                              final long epoch,
+                                                              final BigInteger minContextSlot);
+
   CompletableFuture<List<AccountLamports>> getLargestAccounts();
 
   CompletableFuture<List<AccountLamports>> getLargestAccounts(final Commitment commitment);
+
+  CompletableFuture<List<AccountLamports>> getLargestAccounts(final LargestAccountsFilter filter);
+
+  CompletableFuture<List<AccountLamports>> getLargestAccounts(final Commitment commitment,
+                                                              final LargestAccountsFilter filter);
 
   CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule();
 
@@ -764,6 +779,13 @@ public interface SolanaRpcClient {
                                                               final int limit,
                                                               final String untilTxSig);
 
+  CompletableFuture<List<TxSig>> getSignaturesForAddress(final Commitment commitment,
+                                                         final PublicKey address,
+                                                         final int limit,
+                                                         final String beforeTxSig,
+                                                         final String untilTxSig,
+                                                         final BigInteger minContextSlot);
+
   default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures) {
     return getSignatureStatuses(signatures, false);
   }
@@ -870,6 +892,11 @@ public interface SolanaRpcClient {
   CompletableFuture<VoteAccounts> getVoteAccounts(final PublicKey validatorVoteAddress);
 
   CompletableFuture<VoteAccounts> getVoteAccounts(final Commitment commitment, final PublicKey validatorVoteAddress);
+
+  CompletableFuture<VoteAccounts> getVoteAccounts(final Commitment commitment,
+                                                  final PublicKey validatorVoteAddress,
+                                                  final boolean keepUnstakedDelinquents,
+                                                  final BigInteger delinquentSlotDistance);
 
   CompletableFuture<ContextBoolVal> isBlockHashValid(final String b58BlockHash);
 

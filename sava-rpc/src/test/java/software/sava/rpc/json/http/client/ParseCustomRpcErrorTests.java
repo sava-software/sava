@@ -92,4 +92,75 @@ final class ParseCustomRpcErrorTests {
       fail(customError.getClass().getSimpleName());
     }
   }
+
+  private static JsonRpcException parseException(final String json) {
+    final var ji = JsonIterator.parse(json);
+    ji.skipUntil("error");
+    return JsonRpcException.parseException(ji, OptionalLong.empty());
+  }
+
+  @Test
+  void testEpochRewardsPeriodActive() {
+    var exception = parseException("""
+        {"jsonrpc":"2.0","error":{"code":-32017,"message":"Epoch rewards period still active at slot 789","data":{"currentBlockHeight":123,"rewardsCompleteBlockHeight":456,"slot":789}},"id":1}"""
+    );
+    assertEquals(-32017, exception.code());
+    if (exception.customError() instanceof RpcCustomError.EpochRewardsPeriodActive(
+        final var slot, final long currentBlockHeight, final long rewardsCompleteBlockHeight
+    )) {
+      assertEquals(OptionalLong.of(789), slot);
+      assertEquals(123, currentBlockHeight);
+      assertEquals(456, rewardsCompleteBlockHeight);
+    } else {
+      fail(exception.customError().getClass().getSimpleName());
+    }
+
+    // Nodes which pre-date the Agave 3.0 data schema omit the slot.
+    exception = parseException("""
+        {"jsonrpc":"2.0","error":{"code":-32017,"message":"Epoch rewards period still active at slot 789","data":{"currentBlockHeight":123,"rewardsCompleteBlockHeight":456}},"id":1}"""
+    );
+    if (exception.customError() instanceof RpcCustomError.EpochRewardsPeriodActive(
+        final var slot, final long currentBlockHeight, final long rewardsCompleteBlockHeight
+    )) {
+      assertTrue(slot.isEmpty());
+      assertEquals(123, currentBlockHeight);
+      assertEquals(456, rewardsCompleteBlockHeight);
+    } else {
+      fail(exception.customError().getClass().getSimpleName());
+    }
+  }
+
+  @Test
+  void testSlotNotEpochBoundary() {
+    final var exception = parseException("""
+        {"jsonrpc":"2.0","error":{"code":-32018,"message":"Rewards cannot be found because slot 150 is not the epoch boundary. This may be due to gap in the queried node's local ledger or long-term storage","data":{"slot":150}},"id":1}"""
+    );
+    assertEquals(-32018, exception.code());
+    if (exception.customError() instanceof RpcCustomError.SlotNotEpochBoundary(final long slot)) {
+      assertEquals(150, slot);
+    } else {
+      fail(exception.customError().getClass().getSimpleName());
+    }
+  }
+
+  @Test
+  void testDataFreeErrorCodes() {
+    var exception = parseException("""
+        {"jsonrpc":"2.0","error":{"code":-32019,"message":"Failed to query long-term storage; please try again"},"id":1}"""
+    );
+    assertEquals(-32019, exception.code());
+    assertInstanceOf(RpcCustomError.LongTermStorageUnreachable.class, exception.customError());
+
+    exception = parseException("""
+        {"jsonrpc":"2.0","error":{"code":-32020,"message":"Transaction 5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW not found"},"id":1}"""
+    );
+    assertEquals(-32020, exception.code());
+    assertInstanceOf(RpcCustomError.FilterTransactionNotFound.class, exception.customError());
+
+    exception = parseException("""
+        {"jsonrpc":"2.0","error":{"code":-32021,"message":"No slot history"},"id":1}"""
+    );
+    assertEquals(-32021, exception.code());
+    assertInstanceOf(RpcCustomError.NoSlotHistory.class, exception.customError());
+  }
 }

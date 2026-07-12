@@ -5,10 +5,12 @@ import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.SequencedCollection;
 
 import static java.util.Objects.requireNonNullElse;
@@ -19,6 +21,7 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record TxSimulation(Context context,
                            TransactionError error,
+                           OptionalLong fee,
                            int loadedAccountsDataSize,
                            List<String> logs,
                            List<Long> preBalances,
@@ -57,6 +60,7 @@ public record TxSimulation(Context context,
   };
 
   private static final OptionalInt NO_BUDGET = OptionalInt.empty();
+  private static final OptionalLong NO_FEE = OptionalLong.empty();
   static final List<String> NO_LOGS = java.util.List.of();
   static final List<AccountInfo<byte[]>> NO_ACCOUNTS = List.of();
   static final List<InnerInstructions> NO_INNER_INSTRUCTIONS = List.of();
@@ -65,6 +69,7 @@ public record TxSimulation(Context context,
 
     private final SequencedCollection<PublicKey> accountPubKeys;
     private TransactionError error;
+    private long fee = -1;
     private int loadedAccountsDataSize;
     private List<String> logs;
     private List<Long> preBalances;
@@ -87,6 +92,7 @@ public record TxSimulation(Context context,
       return new TxSimulation(
           context,
           error,
+          fee < 0 ? NO_FEE : OptionalLong.of(fee),
           loadedAccountsDataSize,
           logs == null || logs.isEmpty() ? NO_LOGS : logs,
           preBalances,
@@ -106,6 +112,12 @@ public record TxSimulation(Context context,
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("err", buf, offset, len)) {
         error = TransactionError.parseError(ji);
+      } else if (fieldEquals("fee", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          fee = ji.readLong();
+        } else {
+          ji.skip();
+        }
       } else if (fieldEquals("loadedAccountsDataSize", buf, offset, len)) {
         loadedAccountsDataSize = ji.readInt();
       } else if (fieldEquals("accounts", buf, offset, len)) {

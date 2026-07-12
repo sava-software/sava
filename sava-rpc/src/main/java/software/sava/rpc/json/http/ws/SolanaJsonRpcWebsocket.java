@@ -55,6 +55,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Map<String, Map<Commitment, Subscription<AccountInfo<byte[]>>>> programSubs;
   private final Set<Consumer<RuntimeException>> exceptionSubs;
   private final AtomicReference<Subscription<ProcessedSlot>> slotSub;
+  private final AtomicReference<Subscription<Long>> rootSub;
+  private final Map<String, Map<String, Subscription<?>>> genericSubs;
   private final Map<BigInteger, Subscription<?>> subscriptionsBySubId;
 
   private final ReentrantLock lock;
@@ -95,6 +97,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.signatureSubs = new ConcurrentHashMap<>();
     this.programSubs = new ConcurrentHashMap<>();
     this.slotSub = new AtomicReference<>();
+    this.rootSub = new AtomicReference<>();
+    this.genericSubs = new ConcurrentHashMap<>();
     this.subscriptionsBySubId = new ConcurrentSkipListMap<>();
     this.exceptionSubs = HashSet.newHashSet(1);
     this.buffer = new char[4_096];
@@ -208,6 +212,15 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     if (slotSub != null) {
       this.pendingSubscriptions.put(slotSub.msgId(), slotSub);
     }
+    final var rootSub = this.rootSub.get();
+    if (rootSub != null) {
+      this.pendingSubscriptions.put(rootSub.msgId(), rootSub);
+    }
+    for (final var subscriptions : this.genericSubs.values()) {
+      for (final var sub : subscriptions.values()) {
+        this.pendingSubscriptions.put(sub.msgId(), sub);
+      }
+    }
     this.pendingUnSubscriptions.clear();
     this.subscriptionsBySubId.clear();
     lockAndHandlePendingSubscriptions(webSocket);
@@ -283,7 +296,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var subId = sub.subId();
     if (subId != null) {
       this.subscriptionsBySubId.remove(subId);
-      final var msg = createUnSubMsg(sub.channel(), subId);
+      final var unSubscribeMethod = sub instanceof GenericSubscription<?> generic
+          ? generic.unSubscribeMethod()
+          : sub.channel().unSubscribe();
+      final var msg = createUnSubMsg(unSubscribeMethod, subId);
       this.pendingUnSubscriptions.put(subId, msg);
     }
   }
@@ -544,6 +560,93 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
   }
 
+  @Override
+  public boolean rootSubscribe(final Consumer<Subscription<Long>> onSub, final Consumer<Long> consumer) {
+    final long msgId = this.msgId.incrementAndGet();
+    final var msg = String.format("""
+        {"jsonrpc":"2.0","id":%d,"method":"%s"}""", msgId, Channel.root.subscribe()
+    );
+    final var rootSub = Subscription.createSubscription(null, Channel.root, Channel.root.name(), msgId, msg, onSub, consumer);
+    if (this.rootSub.compareAndSet(null, rootSub)) {
+      this.pendingSubscriptions.put(msgId, rootSub);
+      lock.lock();
+      try {
+        newSubscription.signal();
+      } finally {
+        lock.unlock();
+      }
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean rootUnsubscribe() {
+    final var rootSub = this.rootSub.getAndSet(null);
+    if (rootSub == null) {
+      return false;
+    } else {
+      this.queueUnsubscribe(rootSub);
+      return true;
+    }
+  }
+
+  @Override
+  public <T> boolean subscribe(final String subscribeMethod,
+                               final String unSubscribeMethod,
+                               final String notificationMethod,
+                               final String key,
+                               final String paramsJson,
+                               final Function<JsonIterator, T> parser,
+                               final Consumer<Subscription<T>> onSub,
+                               final Consumer<T> consumer) {
+    final var subs = this.genericSubs.computeIfAbsent(notificationMethod, _ -> new ConcurrentHashMap<>());
+    if (subs.containsKey(key)) {
+      return false;
+    }
+    final long msgId = this.msgId.incrementAndGet();
+    final var msg = String.format("""
+        {"jsonrpc":"2.0","id":%d,"method":"%s","params":[%s]}""", msgId, subscribeMethod, paramsJson
+    );
+    final var sub = new GenericSubscription<>(unSubscribeMethod, notificationMethod, parser, key, msgId, msg, onSub, consumer);
+    if (subs.putIfAbsent(key, sub) == null) {
+      this.pendingSubscriptions.put(msgId, sub);
+      lock.lock();
+      try {
+        newSubscription.signal();
+      } finally {
+        lock.unlock();
+      }
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean unsubscribe(final String notificationMethod, final String key) {
+    final var subs = this.genericSubs.get(notificationMethod);
+    if (subs != null) {
+      final var sub = subs.remove(key);
+      if (sub != null) {
+        this.queueUnsubscribe(sub);
+        return true;
+      }
+    }
+    final var iterator = this.subscriptionsBySubId.entrySet().iterator();
+    while (iterator.hasNext()) {
+      if (iterator.next().getValue() instanceof GenericSubscription<?> activeSub
+          && activeSub.notificationMethod().equals(notificationMethod)
+          && activeSub.key().equals(key)) {
+        iterator.remove();
+        this.queueUnsubscribe(activeSub);
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static final CharBufferFunction<Channel> METHOD_PARSER = (buf, offset, len) -> {
     if (fieldEquals("accountNotification", buf, offset, len)) {
       return Channel.account;
@@ -555,15 +658,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       return Channel.logs;
     } else if (fieldEquals("slotNotification", buf, offset, len)) {
       return Channel.slot;
+    } else if (fieldEquals("rootNotification", buf, offset, len)) {
+      return Channel.root;
     } else {
       return null;
     }
   };
 
-  private String createUnSubMsg(final Channel channel, final BigInteger subId) {
+  private String createUnSubMsg(final String unSubscribeMethod, final BigInteger subId) {
     return String.format("""
             {"jsonrpc":"2.0","id":%d,"method":"%s","params":[%d]}""",
-        this.msgId.incrementAndGet(), channel.unSubscribe(), subId
+        this.msgId.incrementAndGet(), unSubscribeMethod, subId
     );
   }
 
@@ -585,12 +690,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   private void sendUnSubscription(final WebSocket webSocket,
-                                  final Channel channel,
+                                  final String unSubscribeMethod,
                                   final BigInteger subId) {
     lock.lock();
     try {
       final var msg = this.pendingUnSubscriptions.remove(subId);
-      sendText(webSocket, msg == null ? createUnSubMsg(channel, subId) : msg);
+      sendText(webSocket, msg == null ? createUnSubMsg(unSubscribeMethod, subId) : msg);
       this.lastWrite.set(System.currentTimeMillis());
     } finally {
       lock.unlock();
@@ -609,7 +714,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var subId = ji.readBigInteger();
     @SuppressWarnings("unchecked") final var sub = ((Subscription<T>) this.subscriptionsBySubId.get(subId));
     if (sub == null) {
-      sendUnSubscription(webSocket, channel, subId);
+      sendUnSubscription(webSocket, channel.unSubscribe(), subId);
     } else {
       sub.accept(item);
     }
@@ -628,10 +733,30 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var subId = ji.readBigInteger();
     @SuppressWarnings("unchecked") final var sub = ((Subscription<T>) this.subscriptionsBySubId.get(subId));
     if (sub == null) {
-      sendUnSubscription(webSocket, channel, subId);
+      sendUnSubscription(webSocket, channel.unSubscribe(), subId);
     } else {
       ji.reset(mark);
       sub.accept(factory.apply(sub));
+    }
+  }
+
+  private void publishGeneric(final WebSocket webSocket,
+                              final String notificationMethod,
+                              final JsonIterator ji,
+                              final int paramsMark) {
+    final int resultMark = ji.mark();
+    ji.skip();
+    if (ji.skipUntil("subscription") == null) {
+      ji.reset(paramsMark).skipUntil("subscription");
+    }
+    final var subId = ji.readBigInteger();
+    if (this.subscriptionsBySubId.get(subId) instanceof GenericSubscription<?> generic) {
+      ji.reset(resultMark);
+      generic.parseAndAccept(ji);
+    } else {
+      // Notification methods follow the convention of sharing a common prefix.
+      final var unSubscribeMethod = notificationMethod.replace("Notification", "Unsubscribe");
+      sendUnSubscription(webSocket, unSubscribeMethod, subId);
     }
   }
 
@@ -667,18 +792,36 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           }
         }
       } else {
+        final int methodMark = ji.mark();
         final var channel = ji.applyChars(METHOD_PARSER);
-        if (channel != null) {
+        if (channel == null) {
+          final var notificationMethod = ji.reset(methodMark).readString();
+          if (this.genericSubs.containsKey(notificationMethod)) {
+            ji.skipUntil("params");
+            final int paramsMark = ji.mark();
+            ji.skipUntil("result");
+            publishGeneric(webSocket, notificationMethod, ji, paramsMark);
+          }
+        } else {
           ji.skipUntil("params");
           if (channel == Channel.slot) {
             final var slotSub = this.slotSub.get();
             if (slotSub == null) {
               final var subId = ji.skipUntil("subscription").readBigInteger();
-              sendUnSubscription(webSocket, channel, subId);
+              sendUnSubscription(webSocket, channel.unSubscribe(), subId);
             } else {
               ji.skipUntil("result");
               final var slot = ProcessedSlot.parse(ji);
               slotSub.accept(slot);
+            }
+          } else if (channel == Channel.root) {
+            final var rootSub = this.rootSub.get();
+            if (rootSub == null) {
+              final var subId = ji.skipUntil("subscription").readBigInteger();
+              sendUnSubscription(webSocket, channel.unSubscribe(), subId);
+            } else {
+              ji.skipUntil("result");
+              rootSub.accept(ji.readLong());
             }
           } else {
             final int paramsMark = ji.mark();
@@ -911,5 +1054,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.signatureSubs.clear();
     this.programSubs.clear();
     this.slotSub.set(null);
+    this.rootSub.set(null);
+    this.genericSubs.clear();
   }
 }

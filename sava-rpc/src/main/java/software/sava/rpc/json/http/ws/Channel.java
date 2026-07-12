@@ -5,6 +5,7 @@ public enum Channel {
   account,
   logs,
   program,
+  root,
   signature,
   slot;
 

@@ -13,6 +13,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.zip.ZipInputStream;
 
@@ -239,6 +240,7 @@ final class ParseRpcResponseTests {
     assertEquals("204.16.245.178:8006", first.tpuVote());
     assertEquals("204.16.245.178:8002", first.tvu());
     assertEquals("2.3.7", first.version());
+    assertNull(first.clientId());
     assertEquals(3640012085L, first.featureSet());
     assertEquals(50093, first.shredVersion());
     final var last = nodes.getLast();
@@ -256,6 +258,19 @@ final class ParseRpcResponseTests {
     assertEquals("2.2.20", last.version());
     assertEquals(3073396398L, last.featureSet());
     assertEquals(50093, last.shredVersion());
+  }
+
+  @Test
+  void getClusterNodesWithClientId() {
+    final var ji = JsonIterator.parse("""
+        {"jsonrpc":"2.0","result":[{"clientId":"Agave","featureSet":3640012085,"gossip":"204.16.245.178:8001","pubkey":"5QyArdEMku24pjd14LVfNq9oTsPLZPC1AzNrgZDyiJ73","pubsub":null,"rpc":null,"serveRepair":"204.16.245.178:8013","shredVersion":50093,"tpu":"204.16.245.178:8004","tpuForwards":"204.16.245.178:8005","tpuForwardsQuic":"204.16.245.178:8011","tpuQuic":"204.16.245.178:8010","tpuVote":"204.16.245.178:8006","tvu":"204.16.245.178:8002","version":"3.0.4"}],"id":1}"""
+    ).skipUntil("result");
+    final var nodes = ClusterNode.parse(ji);
+    assertEquals(1, nodes.size());
+    final var node = nodes.getFirst();
+    assertEquals("Agave", node.clientId());
+    assertEquals("3.0.4", node.version());
+    assertEquals(PublicKey.fromBase58Encoded("5QyArdEMku24pjd14LVfNq9oTsPLZPC1AzNrgZDyiJ73"), node.publicKey());
   }
 
   @Test
@@ -359,6 +374,7 @@ final class ParseRpcResponseTests {
     final var first = rewards.getFirst();
     assertEquals(555195168L, first.amount());
     assertEquals(5, first.commission());
+    assertTrue(first.commissionBps().isEmpty());
     assertEquals(361584000L, first.effectiveSlot());
     assertEquals(836L, first.epoch());
     assertEquals(5685405695L, first.postBalance());
@@ -459,7 +475,8 @@ final class ParseRpcResponseTests {
               "err": null,
               "memo": null,
               "signature": "576BepPoQS74PwoLiBzTUBoSqjhZe72S7KXgWPwokjm7TKxatp8jAerHsq6rnZ7dZQXUJ7WoLkuJZ2qAHoFTQL9U",
-              "slot": 325301549
+              "slot": 325301549,
+              "transactionIndex": 25
             },
             {
               "blockTime": 1740856237,
@@ -493,6 +510,7 @@ final class ParseRpcResponseTests {
     assertNull(signature.memo());
     assertEquals("576BepPoQS74PwoLiBzTUBoSqjhZe72S7KXgWPwokjm7TKxatp8jAerHsq6rnZ7dZQXUJ7WoLkuJZ2qAHoFTQL9U", signature.signature());
     assertEquals(325301549, signature.slot());
+    assertEquals(OptionalInt.of(25), signature.transactionIndex());
 
     signature = signatures.getLast();
     assertEquals(OptionalLong.of(1737853408), signature.blockTime());
@@ -501,6 +519,7 @@ final class ParseRpcResponseTests {
     assertNull(signature.memo());
     assertEquals("4eQyc8UQsCGcxiFbdSVx9oxAdLYyyuyqzgbsg77MPgA4PDPKxzKN4tyyttjNp8GfVVjYrHYna54uddJ2ygbAonNu", signature.signature());
     assertEquals(316386176, signature.slot());
+    assertTrue(signature.transactionIndex().isEmpty());
   }
 
   @Test
@@ -833,6 +852,7 @@ final class ParseRpcResponseTests {
     final var cFirst = current.getFirst();
     assertEquals(11465289069670L, cFirst.activatedStake());
     assertEquals(100, cFirst.commission());
+    assertTrue(cFirst.inflationRewardsCommissionBps().isEmpty());
     assertTrue(cFirst.epochVoteAccount());
     assertEquals(361641764L, cFirst.lastVote());
     assertEquals(361641733L, cFirst.rootSlot());

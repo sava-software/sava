@@ -7,14 +7,21 @@ import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalInt;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
+/// @param commission                    Before SIMD-0291 activation, the native commission percentage. After
+///                                      activation, derived from [#inflationRewardsCommissionBps()] with
+///                                      `min(ceilDiv(bps, 100), 255)`.
+/// @param inflationRewardsCommissionBps Commission in basis points, empty when the responding node pre-dates
+///                                      this field.
 public record VoteAccount(PublicKey voteKey,
                           PublicKey nodeKey,
                           long activatedStake,
                           boolean epochVoteAccount,
                           int commission,
+                          OptionalInt inflationRewardsCommissionBps,
                           long lastVote,
                           List<EpochCredits> epochCredits,
                           long rootSlot) {
@@ -47,6 +54,7 @@ public record VoteAccount(PublicKey voteKey,
     private long activatedStake;
     private boolean epochVoteAccount;
     private int commission;
+    private int inflationRewardsCommissionBps = -1;
     private long lastVote;
     private List<EpochCredits> epochCredits;
     private long rootSlot;
@@ -55,7 +63,17 @@ public record VoteAccount(PublicKey voteKey,
     }
 
     private VoteAccount create() {
-      return new VoteAccount(votePubKey, nodePubKey, activatedStake, epochVoteAccount, commission, lastVote, epochCredits, rootSlot);
+      return new VoteAccount(
+          votePubKey,
+          nodePubKey,
+          activatedStake,
+          epochVoteAccount,
+          commission,
+          inflationRewardsCommissionBps < 0 ? OptionalInt.empty() : OptionalInt.of(inflationRewardsCommissionBps),
+          lastVote,
+          epochCredits,
+          rootSlot
+      );
     }
 
     @Override
@@ -70,6 +88,8 @@ public record VoteAccount(PublicKey voteKey,
         epochVoteAccount = ji.readBoolean();
       } else if (fieldEquals("commission", buf, offset, len)) {
         commission = ji.readInt();
+      } else if (fieldEquals("inflationRewardsCommissionBps", buf, offset, len)) {
+        inflationRewardsCommissionBps = ji.readInt();
       } else if (fieldEquals("lastVote", buf, offset, len)) {
         lastVote = ji.readLong();
       } else if (fieldEquals("epochCredits", buf, offset, len)) {

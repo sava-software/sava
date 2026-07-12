@@ -16,9 +16,18 @@ final class JsonRpcValueResponseParser<R> extends BaseGenericJsonRpcResponsePars
 
   @Override
   protected R parseResponse(final HttpResponse<?> httpResponse, final byte[] body, final JsonIterator ji) {
-    ji.skipUntil("context");
-    final var context = Context.parse(ji);
-    ji.skipUntil("value");
+    // The Photon compression indexer serves value before context, the Solana RPC context first.
+    final int resultMark = ji.mark();
+    final Context context;
+    if (ji.skipUntil("context") == null) {
+      context = null;
+      ji.reset(resultMark);
+    } else {
+      context = Context.parse(ji);
+    }
+    if (ji.skipUntil("value") == null) {
+      ji.reset(resultMark).skipUntil("value");
+    }
     return parser.apply(ji, context);
   }
 }

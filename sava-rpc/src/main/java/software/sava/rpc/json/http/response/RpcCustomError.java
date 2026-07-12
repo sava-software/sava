@@ -7,8 +7,30 @@ import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-// https://github.com/solana-labs/solana/blob/27eff8408b7223bb3c4ab70523f8a8dca3ca6645/rpc-client-api/src/custom_error.rs#L29
-public sealed interface RpcCustomError permits RpcCustomError.BlockCleanedUp, RpcCustomError.BlockNotAvailable, RpcCustomError.BlockStatusNotAvailableYet, RpcCustomError.KeyExcludedFromSecondaryIndex, RpcCustomError.LongTermStorageSlotSkipped, RpcCustomError.MinContextSlotNotReached, RpcCustomError.NoSnapshot, RpcCustomError.NodeUnhealthy, RpcCustomError.ScanError, RpcCustomError.SendTransactionPreflightFailure, RpcCustomError.SlotSkipped, RpcCustomError.TransactionHistoryNotAvailable, RpcCustomError.TransactionPrecompileVerificationFailure, RpcCustomError.TransactionSignatureLenMismatch, RpcCustomError.TransactionSignatureVerificationFailure, RpcCustomError.Unknown, RpcCustomError.UnsupportedTransactionVersion {
+// https://github.com/anza-xyz/agave/blob/master/rpc-client-api/src/custom_error.rs
+public sealed interface RpcCustomError permits
+    RpcCustomError.BlockCleanedUp,
+    RpcCustomError.BlockNotAvailable,
+    RpcCustomError.BlockStatusNotAvailableYet,
+    RpcCustomError.EpochRewardsPeriodActive,
+    RpcCustomError.FilterTransactionNotFound,
+    RpcCustomError.KeyExcludedFromSecondaryIndex,
+    RpcCustomError.LongTermStorageSlotSkipped,
+    RpcCustomError.LongTermStorageUnreachable,
+    RpcCustomError.MinContextSlotNotReached,
+    RpcCustomError.NoSlotHistory,
+    RpcCustomError.NoSnapshot,
+    RpcCustomError.NodeUnhealthy,
+    RpcCustomError.ScanError,
+    RpcCustomError.SendTransactionPreflightFailure,
+    RpcCustomError.SlotNotEpochBoundary,
+    RpcCustomError.SlotSkipped,
+    RpcCustomError.TransactionHistoryNotAvailable,
+    RpcCustomError.TransactionPrecompileVerificationFailure,
+    RpcCustomError.TransactionSignatureLenMismatch,
+    RpcCustomError.TransactionSignatureVerificationFailure,
+    RpcCustomError.Unknown,
+    RpcCustomError.UnsupportedTransactionVersion {
 
   static RpcCustomError parseError(final int code) {
     return switch (code) {
@@ -25,6 +47,9 @@ public sealed interface RpcCustomError permits RpcCustomError.BlockCleanedUp, Rp
       case -32013 -> TransactionSignatureLenMismatch.INSTANCE;
       case -32014 -> BlockStatusNotAvailableYet.INSTANCE;
       case -32015 -> UnsupportedTransactionVersion.INSTANCE;
+      case -32019 -> LongTermStorageUnreachable.INSTANCE;
+      case -32020 -> FilterTransactionNotFound.INSTANCE;
+      case -32021 -> NoSlotHistory.INSTANCE;
       default -> Unknown.INSTANCE;
     };
   }
@@ -47,6 +72,8 @@ public sealed interface RpcCustomError permits RpcCustomError.BlockCleanedUp, Rp
       case -32002 -> new SendTransactionPreflightFailure(TxSimulation.parse(ji));
       case -32005 -> NodeUnhealthy.parseRecord(ji);
       case -32016 -> MinContextSlotNotReached.parseRecord(ji);
+      case -32017 -> EpochRewardsPeriodActive.parseRecord(ji);
+      case -32018 -> SlotNotEpochBoundary.parseRecord(ji);
       default -> {
         ji.skip();
         yield parseError(intCode);
@@ -177,5 +204,92 @@ public sealed interface RpcCustomError permits RpcCustomError.BlockCleanedUp, Rp
         return true;
       }
     }
+  }
+
+  /// @param slot empty when responding nodes pre-date the Agave 3.0 data schema.
+  record EpochRewardsPeriodActive(OptionalLong slot,
+                                  long currentBlockHeight,
+                                  long rewardsCompleteBlockHeight) implements RpcCustomError {
+
+    static EpochRewardsPeriodActive parseRecord(final JsonIterator ji) {
+      final var parser = new Parser();
+      ji.testObject(parser);
+      return parser.createRecord();
+    }
+
+    private static final class Parser implements FieldBufferPredicate {
+
+      private long slot = Long.MIN_VALUE;
+      private long currentBlockHeight;
+      private long rewardsCompleteBlockHeight;
+
+      private Parser() {
+      }
+
+      EpochRewardsPeriodActive createRecord() {
+        return new EpochRewardsPeriodActive(
+            slot < 0 ? OptionalLong.empty() : OptionalLong.of(slot),
+            currentBlockHeight,
+            rewardsCompleteBlockHeight
+        );
+      }
+
+      @Override
+      public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+        if (fieldEquals("slot", buf, offset, len)) {
+          slot = ji.readLong();
+        } else if (fieldEquals("currentBlockHeight", buf, offset, len)) {
+          currentBlockHeight = ji.readLong();
+        } else if (fieldEquals("rewardsCompleteBlockHeight", buf, offset, len)) {
+          rewardsCompleteBlockHeight = ji.readLong();
+        } else {
+          ji.skip();
+        }
+        return true;
+      }
+    }
+  }
+
+  record SlotNotEpochBoundary(long slot) implements RpcCustomError {
+
+    static SlotNotEpochBoundary parseRecord(final JsonIterator ji) {
+      final var parser = new Parser();
+      ji.testObject(parser);
+      return parser.createRecord();
+    }
+
+    private static final class Parser implements FieldBufferPredicate {
+
+      private long slot;
+
+      private Parser() {
+      }
+
+      SlotNotEpochBoundary createRecord() {
+        return new SlotNotEpochBoundary(slot);
+      }
+
+      @Override
+      public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
+        if (fieldEquals("slot", buf, offset, len)) {
+          slot = ji.readLong();
+        } else {
+          ji.skip();
+        }
+        return true;
+      }
+    }
+  }
+
+  record LongTermStorageUnreachable() implements RpcCustomError {
+    static final RpcCustomError.LongTermStorageUnreachable INSTANCE = new RpcCustomError.LongTermStorageUnreachable();
+  }
+
+  record FilterTransactionNotFound() implements RpcCustomError {
+    static final RpcCustomError.FilterTransactionNotFound INSTANCE = new RpcCustomError.FilterTransactionNotFound();
+  }
+
+  record NoSlotHistory() implements RpcCustomError {
+    static final RpcCustomError.NoSlotHistory INSTANCE = new RpcCustomError.NoSlotHistory();
   }
 }
