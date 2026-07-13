@@ -70,10 +70,12 @@ public record InflationReward(long amount,
       } else if (fieldEquals("postBalance", buf, offset, len)) {
         postBalance = ji.readLong();
       } else if (fieldEquals("commission", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          commission = ji.readInt();
-        } else {
+        // Nodes serve either the percentage or the basis points, which take precedence regardless
+        // of the order in which they are served.
+        if (commissionBps || ji.whatIsNext() != ValueType.NUMBER) {
           ji.skip();
+        } else {
+          commission = ji.readInt();
         }
       } else if (fieldEquals("commissionBps", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {

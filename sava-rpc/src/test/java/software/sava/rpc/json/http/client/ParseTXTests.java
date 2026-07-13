@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.client;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
+import software.sava.rpc.json.http.response.BlockTx;
 import software.sava.rpc.json.http.response.Tx;
 import systems.comodal.jsoniter.JsonIterator;
 
@@ -441,5 +442,50 @@ final class ParseTXTests {
     assertEquals(tokenProgram, tokenBalance.programId());
     assertEquals(new BigInteger("677876788560"), tokenBalance.amount());
     assertEquals(9, tokenBalance.decimals());
+  }
+
+  @Test
+  void testParseTXWithoutMeta() {
+    final var jsonResponse = """
+        {
+          "jsonrpc":"2.0",
+          "result":{
+            "blockTime":1732156970,
+            "meta":null,
+            "slot":302649801,
+            "transaction":["AXEEVAlzkqo=","base64"],
+            "version":0
+          },
+          "id":1732198313176
+        }""";
+
+    final var ji = JsonIterator.parse(jsonResponse);
+    ji.skipUntil("result");
+    final var tx = Tx.parse(ji);
+
+    assertNull(tx.meta());
+    assertEquals(302649801L, tx.slot());
+    assertEquals(1732156970L, tx.blockTime().getAsLong());
+    assertArrayEquals(Base64.getDecoder().decode("AXEEVAlzkqo="), tx.data());
+  }
+
+  @Test
+  void testParseBlockTXWithoutMeta() {
+    final var jsonResponse = """
+        {
+          "jsonrpc":"2.0",
+          "result":{
+            "meta":null,
+            "transaction":["AXEEVAlzkqo=","base64"]
+          },
+          "id":1732198313176
+        }""";
+
+    final var ji = JsonIterator.parse(jsonResponse);
+    ji.skipUntil("result");
+    final var tx = BlockTx.parse(ji);
+
+    assertNull(tx.meta());
+    assertArrayEquals(Base64.getDecoder().decode("AXEEVAlzkqo="), tx.data());
   }
 }

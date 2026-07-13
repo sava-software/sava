@@ -32,6 +32,10 @@ public interface Subscription<T> extends Consumer<T>, Runnable {
 
   Channel channel();
 
+  default String unSubscribeMethod() {
+    return channel().unSubscribe();
+  }
+
   Commitment commitment();
 
   String key();

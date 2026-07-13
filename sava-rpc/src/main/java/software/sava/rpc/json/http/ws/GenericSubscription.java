@@ -25,7 +25,8 @@ final class GenericSubscription<T> extends RootSubscription<T> {
     this.parser = parser;
   }
 
-  String unSubscribeMethod() {
+  @Override
+  public String unSubscribeMethod() {
     return unSubscribeMethod;
   }
 

@@ -5,15 +5,19 @@ import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
+/// @param transactionIndex Index of the transaction within its block, empty when the responding node does not
+///                         serve this field.
 public record Tx(long slot,
                  OptionalLong blockTime,
                  TxMeta meta,
                  byte[] data,
-                 int version) {
+                 int version,
+                 OptionalInt transactionIndex) {
 
   public boolean isLegacy() {
     return version < 0;
@@ -37,6 +41,7 @@ public record Tx(long slot,
     private TxMeta meta;
     private byte[] data;
     private int version = Integer.MIN_VALUE;
+    private int transactionIndex = -1;
 
     private Parser() {
     }
@@ -47,7 +52,8 @@ public record Tx(long slot,
           blockTime <= 0 ? OptionalLong.empty() : OptionalLong.of(blockTime),
           meta,
           data,
-          version
+          version,
+          transactionIndex < 0 ? OptionalInt.empty() : OptionalInt.of(transactionIndex)
       );
     }
 
@@ -62,7 +68,9 @@ public record Tx(long slot,
           ji.skip();
         }
       } else if (fieldEquals("meta", buf, offset, len)) {
-        this.meta = TxMeta.parse(ji);
+        if (!ji.readNull()) {
+          this.meta = TxMeta.parse(ji);
+        }
       } else if (fieldEquals("transaction", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.ARRAY) {
           ji.openArray();
@@ -74,6 +82,12 @@ public record Tx(long slot,
       } else if (fieldEquals("version", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {
           this.version = ji.readInt();
+        } else {
+          ji.skip();
+        }
+      } else if (fieldEquals("transactionIndex", buf, offset, len)) {
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          this.transactionIndex = ji.readInt();
         } else {
           ji.skip();
         }

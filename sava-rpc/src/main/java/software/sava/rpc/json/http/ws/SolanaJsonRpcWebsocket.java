@@ -296,10 +296,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var subId = sub.subId();
     if (subId != null) {
       this.subscriptionsBySubId.remove(subId);
-      final var unSubscribeMethod = sub instanceof GenericSubscription<?> generic
-          ? generic.unSubscribeMethod()
-          : sub.channel().unSubscribe();
-      final var msg = createUnSubMsg(unSubscribeMethod, subId);
+      final var msg = createUnSubMsg(sub.unSubscribeMethod(), subId);
       this.pendingUnSubscriptions.put(subId, msg);
     }
   }

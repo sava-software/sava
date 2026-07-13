@@ -280,6 +280,29 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertTrue(inflationReward.commissionBps());
   }
 
+  /// JSON object members are unordered: the basis points take precedence over the percentage
+  /// whichever is served first.
+  @Test
+  void getInflationRewardPrefersCommissionBasisPoints() {
+    final var request = """
+        {"jsonrpc":"2.0","id":306,"method":"getInflationReward","params":[["CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1"],{"commitment":"confirmed"}]}""";
+    final var votePubKey = PublicKey.fromBase58Encoded("CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1");
+
+    registerRequest(request, """
+        {"jsonrpc":"2.0","result":[{"amount":1854511658,"commission":5,"commissionBps":500,"effectiveSlot":338256000,"epoch":782,"postBalance":2178854057}],"id":1}"""
+    );
+    var inflationReward = rpcClient.getInflationReward(List.of(votePubKey)).join().getFirst();
+    assertEquals(500, inflationReward.commission());
+    assertTrue(inflationReward.commissionBps());
+
+    registerRequest(request, """
+        {"jsonrpc":"2.0","result":[{"amount":1854511658,"commissionBps":500,"commission":5,"effectiveSlot":338256000,"epoch":782,"postBalance":2178854057}],"id":1}"""
+    );
+    inflationReward = rpcClient.getInflationReward(List.of(votePubKey)).join().getFirst();
+    assertEquals(500, inflationReward.commission());
+    assertTrue(inflationReward.commissionBps());
+  }
+
   /// Recorded against mainnet on 2026-07-13 for the largest staked validator.
   @Test
   void getInflationRewardWithEpochAndMinContextSlot() {
@@ -925,6 +948,30 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
         PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
     ).join();
     validateTokenAccounts(accounts);
+  }
+
+  /// Recorded against the public mainnet node on 2026-07-13, which serves the transaction index.
+  @Test
+  void getTransactionWithTransactionIndex() {
+    final var txSignature = "49aroTSh9ehQ4q5WXXwLWorGcJXmpUkf8ty5nWfjXc6HoB1Grq45nRNxi5ngtRhN7zb9fGnVKM8FvKF9gg5hy8ca";
+
+    registerRequest("""
+        {"jsonrpc":"2.0","id":911,"method":"getTransaction","params":["%s",{"commitment":"confirmed","maxSupportedTransactionVersion":0,"encoding":"base64"}]}""".formatted(txSignature), """
+        {"jsonrpc":"2.0","result":{"blockTime":1783958450,"meta":{"computeUnitsConsumed":2100,"costUnits":3465,"err":null,"fee":5000,"innerInstructions":[],"loadedAddresses":{"readonly":[],"writable":[]},"logMessages":["Program Vote111111111111111111111111111111111111111 invoke [1]","Program Vote111111111111111111111111111111111111111 success"],"postBalances":[35696986359,370164402,1],"postTokenBalances":[],"preBalances":[35696991359,370164402,1],"preTokenBalances":[],"rewards":[],"status":{"Ok":null}},"slot":432674372,"transaction":["AZ10DEU4Cx/7Wz0hfgSBv611o/M0IbBBiHEz1+u8Def5X5olVQBPCJwAU7vAe3cHAWgJCBFZlkT5F3y6lqKfjwsBAAEDG/DgbsI0C9boBnk4XisMmoQA7OtSuLN0M3UeIQzH3GTsrOfsoxxvoBrDjsS+XKKxY6f1+u+wvdkfXobqS0TzIwdhSB01dHS7fE12JOvTvbPYNV5z0RBD/A2jU4AAAAAAuBYPDxl6rC7XQsWlhL08FOLnN+4cFCZIP9ZUVS7jJUwBAgIBAJQBDgAAACQWyhkAAAAAHwEfAR4BHQEcARsBGgEZARgBFwEWARUBFAETARIBEQEQAQ8BDgENAQwBCwEKAQkBCAEHAQYBBQEEAQMBAgEBhDS9Ak3W+EXJYB7nN8pC8/9LHbmVTRk2Zw58n7nYC78BswtVagAAAACE2G8ZeCyZEzWLLSFSoYHv4I8HDiH47L/BH7C9cJJg3g==","base64"],"transactionIndex":1981,"version":"legacy"},"id":1}"""
+    );
+
+    final var tx = rpcClient.getTransaction(txSignature).join();
+
+    assertEquals(432_674_372L, tx.slot());
+    assertEquals(1_783_958_450L, tx.blockTime().orElseThrow());
+    assertEquals(OptionalInt.of(1_981), tx.transactionIndex());
+    assertTrue(tx.isLegacy());
+    assertEquals(5_000L, tx.meta().fee());
+    assertEquals(2_100, tx.meta().computeUnitsConsumed());
+
+    final var skeleton = tx.skeleton();
+    assertEquals(txSignature, skeleton.id());
+    assertEquals(1, skeleton.numSignatures());
   }
 
   @Test
