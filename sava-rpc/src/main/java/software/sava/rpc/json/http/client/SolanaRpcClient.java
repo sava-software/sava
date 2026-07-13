@@ -340,12 +340,17 @@ public interface SolanaRpcClient {
                                                               final long epoch,
                                                               final BigInteger minContextSlot);
 
+  /// Requires a scan over all accounts, which is expensive enough that RPC providers commonly
+  /// disable this method. Expect an error response unless the node is known to serve it.
   CompletableFuture<List<AccountLamports>> getLargestAccounts();
 
+  /// @see #getLargestAccounts()
   CompletableFuture<List<AccountLamports>> getLargestAccounts(final Commitment commitment);
 
+  /// @see #getLargestAccounts()
   CompletableFuture<List<AccountLamports>> getLargestAccounts(final LargestAccountsFilter filter);
 
+  /// @see #getLargestAccounts()
   CompletableFuture<List<AccountLamports>> getLargestAccounts(final Commitment commitment,
                                                               final LargestAccountsFilter filter);
 

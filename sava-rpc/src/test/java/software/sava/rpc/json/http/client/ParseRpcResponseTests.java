@@ -374,7 +374,7 @@ final class ParseRpcResponseTests {
     final var first = rewards.getFirst();
     assertEquals(555195168L, first.amount());
     assertEquals(5, first.commission());
-    assertTrue(first.commissionBps().isEmpty());
+    assertFalse(first.commissionBps());
     assertEquals(361584000L, first.effectiveSlot());
     assertEquals(836L, first.epoch());
     assertEquals(5685405695L, first.postBalance());

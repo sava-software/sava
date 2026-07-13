@@ -6,20 +6,21 @@ import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.OptionalInt;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-/// @param commissionBps Vote account commission in basis points (SIMD-0291), empty when the responding node
-///                      pre-dates this field.
+/// @param commission    Vote account commission when the reward was credited, in basis points if
+///                      [#commissionBps()], otherwise a percentage.
+/// @param commissionBps True if the commission is in basis points (SIMD-0291). Nodes which serve it only
+///                      serve the percentage as null.
 public record InflationReward(long amount,
                               long effectiveSlot,
                               long epoch,
                               long postBalance,
                               int commission,
-                              OptionalInt commissionBps) {
+                              boolean commissionBps) {
 
-  private static final InflationReward ZERO = new InflationReward(0, 0, 0, 0, 0, OptionalInt.empty());
+  private static final InflationReward ZERO = new InflationReward(0, 0, 0, 0, 0, false);
 
   public static List<InflationReward> parse(final JsonIterator ji) {
     final var rewards = new ArrayList<InflationReward>();
@@ -42,7 +43,7 @@ public record InflationReward(long amount,
     private long epoch;
     private long postBalance;
     private int commission;
-    private int commissionBps = -1;
+    private boolean commissionBps;
 
     private Parser() {
     }
@@ -54,7 +55,7 @@ public record InflationReward(long amount,
           epoch,
           postBalance,
           commission,
-          commissionBps < 0 ? OptionalInt.empty() : OptionalInt.of(commissionBps)
+          commissionBps
       );
     }
 
@@ -76,7 +77,8 @@ public record InflationReward(long amount,
         }
       } else if (fieldEquals("commissionBps", buf, offset, len)) {
         if (ji.whatIsNext() == ValueType.NUMBER) {
-          commissionBps = ji.readInt();
+          commission = ji.readInt();
+          commissionBps = true;
         } else {
           ji.skip();
         }

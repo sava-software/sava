@@ -8,6 +8,8 @@ import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.LargestAccountsFilter;
 import software.sava.rpc.json.http.response.AccountInfo;
 import software.sava.rpc.json.http.response.Context;
+import software.sava.rpc.json.http.response.IxError;
+import software.sava.rpc.json.http.response.TransactionError;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -215,8 +217,9 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(1, inflationRewards.size());
     var inflationReward = inflationRewards.getFirst();
     assertEquals(1854511658, inflationReward.amount());
-    assertEquals(5, inflationReward.commission());
-    assertEquals(OptionalInt.of(500), inflationReward.commissionBps());
+    // Basis points supersede the percentage.
+    assertEquals(500, inflationReward.commission());
+    assertTrue(inflationReward.commissionBps());
     assertEquals(338256000, inflationReward.effectiveSlot());
     assertEquals(782, inflationReward.epoch());
     assertEquals(2178854057L, inflationReward.postBalance());
@@ -234,7 +237,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     inflationReward = inflationRewards.getFirst();
     assertEquals(1940761929, inflationReward.amount());
     assertEquals(5, inflationReward.commission());
-    assertTrue(inflationReward.commissionBps().isEmpty());
+    assertFalse(inflationReward.commissionBps());
     assertEquals(337824000, inflationReward.effectiveSlot());
     assertEquals(781, inflationReward.epoch());
     assertEquals(1967836329L, inflationReward.postBalance());
@@ -250,18 +253,87 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     ).join();
     assertEquals(1, inflationRewards.size());
     assertEquals(782, inflationRewards.getFirst().epoch());
+  }
 
+  /// Recorded against devnet on 2026-07-13, where SIMD-0291 is active: the commission is served
+  /// only in basis points.
+  @Test
+  void getInflationRewardWithCommissionBasisPoints() {
     registerRequest("""
-        {"jsonrpc":"2.0","id":304,"method":"getInflationReward","params":[["BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g"],{"commitment":"confirmed","epoch":781,"minContextSlot":338256000}]}""", """
-        {"jsonrpc":"2.0","result":[{"amount":1940761929,"commission":5,"effectiveSlot":337824000,"epoch":781,"postBalance":1967836329}],"id":1746563243748}"""
+        {"jsonrpc":"2.0","id":305,"method":"getInflationReward","params":[["vgcDar2pryHvMgPkKaZfh8pQy4BJxv7SpwUG7zinWjG"],{"commitment":"finalized","epoch":1100}]}""", """
+        {"jsonrpc":"2.0","result":[{"amount":51726733407728,"commission":null,"commissionBps":9500,"effectiveSlot":475632000,"epoch":1100,"postBalance":23722174330619752}],"id":1}"""
     );
 
-    inflationRewards = rpcClient.getInflationReward(Commitment.CONFIRMED, List.of(
-            PublicKey.fromBase58Encoded("BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g")
-        ), 781, BigInteger.valueOf(338256000)
+    final var inflationRewards = rpcClient.getInflationReward(Commitment.FINALIZED, List.of(
+            PublicKey.fromBase58Encoded("vgcDar2pryHvMgPkKaZfh8pQy4BJxv7SpwUG7zinWjG")
+        ), 1_100
     ).join();
+
     assertEquals(1, inflationRewards.size());
-    assertEquals(781, inflationRewards.getFirst().epoch());
+    final var inflationReward = inflationRewards.getFirst();
+    assertEquals(1_100, inflationReward.epoch());
+    assertEquals(475_632_000L, inflationReward.effectiveSlot());
+    assertEquals(51_726_733_407_728L, inflationReward.amount());
+    assertEquals(23_722_174_330_619_752L, inflationReward.postBalance());
+    // The percentage is served as null by nodes which serve basis points.
+    assertEquals(9_500, inflationReward.commission());
+    assertTrue(inflationReward.commissionBps());
+  }
+
+  /// Recorded against mainnet on 2026-07-13 for the largest staked validator.
+  @Test
+  void getInflationRewardWithEpochAndMinContextSlot() {
+    registerRequest("""
+        {"jsonrpc":"2.0","id":304,"method":"getInflationReward","params":[["CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1"],{"commitment":"finalized","epoch":1000,"minContextSlot":1}]}""", """
+        {"jsonrpc":"2.0","id":1783954356076,"result":[{"epoch":1000,"effectiveSlot":432432000,"amount":342915536456,"postBalance":5851653580287,"commission":7}]}"""
+    );
+
+    final var inflationRewards = rpcClient.getInflationReward(Commitment.FINALIZED, List.of(
+            PublicKey.fromBase58Encoded("CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1")
+        ), 1_000, BigInteger.ONE
+    ).join();
+
+    assertEquals(1, inflationRewards.size());
+    final var inflationReward = inflationRewards.getFirst();
+    assertEquals(1_000, inflationReward.epoch());
+    assertEquals(432_432_000L, inflationReward.effectiveSlot());
+    assertEquals(342_915_536_456L, inflationReward.amount());
+    assertEquals(5_851_653_580_287L, inflationReward.postBalance());
+    assertEquals(7, inflationReward.commission());
+    assertFalse(inflationReward.commissionBps());
+  }
+
+  @Test
+  void unorderedContextAndValue() {
+    final var account = PublicKey.fromBase58Encoded("BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g");
+    final var request = """
+        {"jsonrpc":"2.0","id":701,"method":"getBalance","params":["BDn3HiXMTym7ZQofWFxDb7ZGQX6GomQzJYKfytTAqd5g",{"commitment":"confirmed"}]}""";
+
+    // Solana RPC nodes serve the context first.
+    registerRequest(request, """
+        {"jsonrpc":"2.0","result":{"context":{"slot":432480512,"apiVersion":"2.1.9"},"value":123456},"id":1}"""
+    );
+    var lamports = rpcClient.getBalance(account).join();
+    assertEquals(432480512L, lamports.context().slot());
+    assertEquals("2.1.9", lamports.context().apiVersion());
+    assertEquals(123456, lamports.lamports());
+
+    // JSON object members are unordered, e.g. the compression indexer's getValidityProof.
+    registerRequest(request, """
+        {"jsonrpc":"2.0","result":{"value":123456,"context":{"slot":432480512,"apiVersion":"2.1.9"}},"id":1}"""
+    );
+    lamports = rpcClient.getBalance(account).join();
+    assertEquals(432480512L, lamports.context().slot());
+    assertEquals("2.1.9", lamports.context().apiVersion());
+    assertEquals(123456, lamports.lamports());
+
+    // Unknown fields are skipped regardless of their position.
+    registerRequest(request, """
+        {"jsonrpc":"2.0","result":{"unknown":{"value":1},"value":123456,"context":{"slot":432480512}},"id":1}"""
+    );
+    lamports = rpcClient.getBalance(account).join();
+    assertEquals(432480512L, lamports.context().slot());
+    assertEquals(123456, lamports.lamports());
   }
 
   @Test
@@ -278,27 +350,37 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(999974, account.lamports());
   }
 
+  /// Recorded against mainnet on 2026-07-13 for the largest staked validator.
   @Test
   void getVoteAccountsWithDelinquentParams() {
     registerRequest("""
-        {"jsonrpc":"2.0","id":501,"method":"getVoteAccounts","params":[{"commitment":"confirmed","votePubkey":"3ZT31jkAGhUaw8jsy4bTknwBMP8i4Eueh52By4zXcsVw","keepUnstakedDelinquents":true,"delinquentSlotDistance":100}]}""", """
-        {"jsonrpc":"2.0","result":{"current":[{"commission":1,"inflationRewardsCommissionBps":50,"epochVoteAccount":true,"epochCredits":[[1,64,0],[2,192,64]],"nodePubkey":"B97CCUW3AEZFGy6uUg6zUdnNYvnVq5VG8PUtb2HayTDD","lastVote":147,"activatedStake":42,"votePubkey":"3ZT31jkAGhUaw8jsy4bTknwBMP8i4Eueh52By4zXcsVw","rootSlot":100}],"delinquent":[]},"id":1}"""
+        {"jsonrpc":"2.0","id":501,"method":"getVoteAccounts","params":[{"commitment":"confirmed","votePubkey":"CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1","keepUnstakedDelinquents":true,"delinquentSlotDistance":128}]}""", """
+        {"jsonrpc":"2.0","result":{"current":[{"activatedStake":16395628327252359,"commission":7,"epochCredits":[[997,2287361651,2280478188],[998,2294237959,2287361651],[999,2301133228,2294237959],[1000,2308040079,2301133228],[1001,2311757453,2308040079]],"epochVoteAccount":true,"inflationRewardsCommissionBps":700,"lastVote":432664432,"nodePubkey":"Fd7btgySsrjuo25CJCj7oE7VPMyezDhnx7pZkj2v69Nk","rootSlot":432664401,"votePubkey":"CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1"}],"delinquent":[]},"id":1783954356074}"""
     );
 
     final var voteAccounts = rpcClient.getVoteAccounts(
         Commitment.CONFIRMED,
-        PublicKey.fromBase58Encoded("3ZT31jkAGhUaw8jsy4bTknwBMP8i4Eueh52By4zXcsVw"),
+        PublicKey.fromBase58Encoded("CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1"),
         true,
-        BigInteger.valueOf(100)
+        BigInteger.valueOf(128)
     ).join();
 
     assertTrue(voteAccounts.delinquent().isEmpty());
     assertEquals(1, voteAccounts.current().size());
     final var voteAccount = voteAccounts.current().getFirst();
-    assertEquals("3ZT31jkAGhUaw8jsy4bTknwBMP8i4Eueh52By4zXcsVw", voteAccount.voteKey().toBase58());
-    assertEquals(42, voteAccount.activatedStake());
-    assertEquals(1, voteAccount.commission());
-    assertEquals(OptionalInt.of(50), voteAccount.inflationRewardsCommissionBps());
+    assertEquals("CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1", voteAccount.voteKey().toBase58());
+    assertEquals("Fd7btgySsrjuo25CJCj7oE7VPMyezDhnx7pZkj2v69Nk", voteAccount.nodeKey().toBase58());
+    assertEquals(16_395_628_327_252_359L, voteAccount.activatedStake());
+    assertTrue(voteAccount.epochVoteAccount());
+    assertEquals(7, voteAccount.commission());
+    assertEquals(OptionalInt.of(700), voteAccount.inflationRewardsCommissionBps());
+    assertEquals(432_664_432L, voteAccount.lastVote());
+    assertEquals(432_664_401L, voteAccount.rootSlot());
+    assertEquals(5, voteAccount.epochCredits().size());
+    final var epochCredits = voteAccount.epochCredits().getLast();
+    assertEquals(1_001, epochCredits.epoch());
+    assertEquals(2_311_757_453L, epochCredits.credits());
+    assertEquals(2_308_040_079L, epochCredits.previousCredits());
   }
 
   @Test
@@ -317,6 +399,63 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
         BigInteger.valueOf(1000)
     ).join();
     assertTrue(signatures.isEmpty());
+  }
+
+  /// Recorded against mainnet on 2026-07-13. Optional parameters are omitted from the request,
+  /// and the transactions of the response failed.
+  @Test
+  void getSignaturesForAddressWithoutOptionalParams() {
+    registerRequest("""
+        {"jsonrpc":"2.0","id":602,"method":"getSignaturesForAddress","params":["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",{"commitment":"confirmed","limit":2}]}""", """
+        {"jsonrpc":"2.0","id":1783954356075,"result":[{"signature":"37WCFMoxTUHGp7TtRYLcZFKiv984i6gKzEWUMh7mMJM5CWTHvjmgZHycJBxQkEF8ULfnNouHy4M24XYx3beBCQXE","slot":432664433,"err":{"InstructionError":[3,{"Custom":1}]},"memo":null,"blockTime":1783954355,"confirmationStatus":"confirmed"},{"signature":"3gXKAM4fjZn9uWr2kyKtFwNYwXateenhqrPo6LczbL3iZETEiYxKaMqEKhSz4mXFT4SvTYC8FpEAmnCxNNprF8Mi","slot":432664433,"err":{"InstructionError":[3,{"Custom":1}]},"memo":null,"blockTime":1783954355,"confirmationStatus":"confirmed"}]}"""
+    );
+
+    final var signatures = rpcClient.getSignaturesForAddress(
+        Commitment.CONFIRMED,
+        PublicKey.fromBase58Encoded("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"),
+        2,
+        null,
+        null,
+        null
+    ).join();
+
+    assertEquals(2, signatures.size());
+    final var signature = signatures.getFirst();
+    assertEquals("37WCFMoxTUHGp7TtRYLcZFKiv984i6gKzEWUMh7mMJM5CWTHvjmgZHycJBxQkEF8ULfnNouHy4M24XYx3beBCQXE", signature.signature());
+    assertEquals(432_664_433L, signature.slot());
+    assertEquals(1_783_954_355L, signature.blockTime().orElseThrow());
+    assertEquals(Commitment.CONFIRMED, signature.confirmationStatus());
+    assertNull(signature.memo());
+
+    final var instructionError = assertInstanceOf(TransactionError.InstructionError.class, signature.transactionError());
+    assertEquals(3, instructionError.ixIndex());
+    final var customError = assertInstanceOf(IxError.Custom.class, instructionError.ixError());
+    assertEquals(1, customError.error());
+
+    // Not served by every node, e.g. providers which index signatures themselves.
+    assertTrue(signature.transactionIndex().isEmpty());
+  }
+
+  /// Recorded against the public mainnet node on 2026-07-13, which serves the transaction index.
+  @Test
+  void getSignaturesForAddressWithTransactionIndex() {
+    registerRequest("""
+        {"jsonrpc":"2.0","id":603,"method":"getSignaturesForAddress","params":["Vote111111111111111111111111111111111111111",{"commitment":"confirmed","limit":2}]}""", """
+        {"jsonrpc":"2.0","result":[{"blockTime":1783956442,"confirmationStatus":"confirmed","err":null,"memo":null,"signature":"syquLMPbA3Td2BCBxTkRgjUtwEJhpxUyBXcS6Pczf4zW1AXKWMARUDoRdGvVXGvH2rsFYqFBWgd6cjre8L4uFH5","slot":432669498,"transactionIndex":1236},{"blockTime":1783956442,"confirmationStatus":"confirmed","err":null,"memo":null,"signature":"2wGjjWacyNDcDTJoD6wvMcnEmq9Fvwx22RvnCf1AA8Uc71GTEc3FdYpndEA3BW49xa3D6zh4NtAMVZSpLJyFZxjg","slot":432669498,"transactionIndex":1235}],"id":1}"""
+    );
+
+    final var signatures = rpcClient.getSignaturesForAddress(
+        Commitment.CONFIRMED,
+        PublicKey.fromBase58Encoded("Vote111111111111111111111111111111111111111"),
+        2
+    ).join();
+
+    assertEquals(2, signatures.size());
+    final var signature = signatures.getFirst();
+    assertEquals(432_669_498L, signature.slot());
+    assertEquals(OptionalInt.of(1_236), signature.transactionIndex());
+    assertNull(signature.transactionError());
+    assertEquals(OptionalInt.of(1_235), signatures.getLast().transactionIndex());
   }
 
   @Test
@@ -946,5 +1085,40 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(88849814690250L, accountInfo.lamports());
     assertEquals(PublicKey.fromBase58Encoded("11111111111111111111111111111111"), accountInfo.owner());
     assertEquals(0, accountInfo.data().length);
+  }
+
+  /// Recorded against mainnet on 2026-07-13 for a transfer from an account which does not exist,
+  /// so that the simulation fails after the fee has been calculated.
+  @Test
+  void simulateTransactionFee() {
+    final var base64EncodedTx = "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQABAmoQJvXCV0OtQtVcSFYzSXjxKrsq5sRZWAyjJvJLYbCUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHRRSqRZDlaKAY9RCS5PmuqXWTvzSw+3fRICsCPPPnjkBAQIBAAwCAAAAAAAAAAAAAAA=";
+
+    registerRequest("""
+        {"jsonrpc":"2.0","id":994,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"innerInstructions":false,"commitment":"confirmed"}]}""".formatted(base64EncodedTx), """
+        {"jsonrpc":"2.0","result":{"context":{"apiVersion":"4.1.0","slot":432669465},"value":{"accounts":null,"err":{"InstructionError":[0,"MissingAccount"]},"fee":5000,"innerInstructions":null,"loadedAccountsDataSize":149,"loadedAddresses":{"readonly":[],"writable":[]},"logs":["Program 11111111111111111111111111111111 invoke [1]","Program 11111111111111111111111111111111 failed: An account required by the instruction is missing"],"postBalances":[670405298219,1],"postTokenBalances":[],"preBalances":[670405303219,1],"preTokenBalances":[],"replacementBlockhash":{"blockhash":"37QF9uWpdH6H7PnqC5UxELtbHov7TNyaywgWjni7iKqH","lastValidBlockHeight":410737748},"returnData":null,"unitsConsumed":150}},"id":1}"""
+    );
+
+    final var simulation = rpcClient.simulateTransaction(Commitment.CONFIRMED, base64EncodedTx, true, false).join();
+
+    // The fee is calculated even though the simulation failed.
+    assertEquals(OptionalLong.of(5_000), simulation.fee());
+    assertEquals(OptionalInt.of(150), simulation.unitsConsumed());
+    assertEquals(149, simulation.loadedAccountsDataSize());
+    assertEquals(432_669_465L, simulation.context().slot());
+    assertEquals("4.1.0", simulation.context().apiVersion());
+
+    final var instructionError = assertInstanceOf(TransactionError.InstructionError.class, simulation.error());
+    assertEquals(0, instructionError.ixIndex());
+    assertInstanceOf(IxError.MissingAccount.class, instructionError.ixError());
+
+    assertEquals(List.of(670_405_303_219L, 1L), simulation.preBalances());
+    assertEquals(List.of(670_405_298_219L, 1L), simulation.postBalances());
+    assertTrue(simulation.preTokenBalances().isEmpty());
+    assertTrue(simulation.postTokenBalances().isEmpty());
+    assertEquals(2, simulation.logs().size());
+
+    final var replacementBlockHash = simulation.replacementBlockHash();
+    assertEquals("37QF9uWpdH6H7PnqC5UxELtbHov7TNyaywgWjni7iKqH", replacementBlockHash.blockhash());
+    assertEquals(410_737_748L, replacementBlockHash.lastValidBlockHeight());
   }
 }
