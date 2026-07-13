@@ -76,4 +76,28 @@ public final class SolanaRpcClientBuilder {
     this.defaultCommitment = defaultCommitment;
     return this;
   }
+
+  public URI endpoint() {
+    return endpoint;
+  }
+
+  public HttpClient httpClient() {
+    return httpClient;
+  }
+
+  public Duration requestTimeout() {
+    return requestTimeout;
+  }
+
+  public UnaryOperator<HttpRequest.Builder> extendRequest() {
+    return extendRequest;
+  }
+
+  public BiPredicate<HttpResponse<?>, byte[]> testResponse() {
+    return testResponse;
+  }
+
+  public Commitment defaultCommitment() {
+    return defaultCommitment;
+  }
 }

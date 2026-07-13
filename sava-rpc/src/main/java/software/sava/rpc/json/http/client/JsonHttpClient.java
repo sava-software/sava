@@ -146,6 +146,10 @@ public abstract class JsonHttpClient {
     return this.httpClient;
   }
 
+  public final Duration defaultRequestTimeout() {
+    return this.requestTimeout;
+  }
+
   @Deprecated
   protected <R> Function<HttpResponse<byte[]>, R> wrapParser(final Function<HttpResponse<byte[]>, R> parser) {
     return applyResponse == null ? parser : response ->
