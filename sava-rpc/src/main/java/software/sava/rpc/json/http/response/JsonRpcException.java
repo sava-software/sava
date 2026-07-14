@@ -51,14 +51,14 @@ public final class JsonRpcException extends RuntimeException {
     return customError;
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public List<String> logs() {
     return customError instanceof RpcCustomError.SendTransactionPreflightFailure(final TxSimulation simulation)
         ? simulation.logs()
         : NO_LOGS;
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public long numSlotsBehind() {
     return customError instanceof RpcCustomError.NodeUnhealthy(final OptionalLong numSlotsBehind)
         ? numSlotsBehind.orElse(Integer.MIN_VALUE)

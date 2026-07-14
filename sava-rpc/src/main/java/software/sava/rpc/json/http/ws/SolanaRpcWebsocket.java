@@ -302,14 +302,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder reConnectDelay(final long reConnectDelay);
 
-    @Deprecated
+    @Deprecated(forRemoval = true)
     default Builder reConnect(final long reConnect) {
       return reConnectDelay(reConnect);
     }
 
     Builder pingDelay(final long pingDelay);
 
-    @Deprecated
+    @Deprecated(forRemoval = true)
     default Builder writeOrPingDelay(final long writeOrPingDelay) {
       return pingDelay(writeOrPingDelay);
     }

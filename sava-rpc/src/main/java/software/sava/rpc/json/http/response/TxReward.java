@@ -19,7 +19,7 @@ public record TxReward(PublicKey publicKey,
                        RewardType rewardType,
                        int commission) {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public String pubKey() {
     return publicKey.toString();
   }

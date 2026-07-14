@@ -11,7 +11,7 @@ import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record InnerIx(@Deprecated String program, // Part of JSON parsed response which is not supported.
+public record InnerIx(@Deprecated(forRemoval = true) String program, // Part of JSON parsed response which is not supported.
                       PublicKey programId,
                       int stackHeight,
                       List<PublicKey> accounts,

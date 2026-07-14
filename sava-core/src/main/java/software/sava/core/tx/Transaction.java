@@ -18,11 +18,11 @@ import static software.sava.core.tx.TransactionRecord.mergeAccounts;
 
 public interface Transaction {
 
-  /// @deprecated no longer valid for all transaction versions
+  /// @deprecated no longer valid for all transaction versions once v1 transactions are activated.
   @Deprecated
   int MAX_SERIALIZED_LENGTH = 1232;
   /// @deprecated - redundant value, check against the serialized bytes.
-  @Deprecated
+  @Deprecated(forRemoval = true)
   int MAX_BASE_64_ENCODED_LENGTH = 1683;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
@@ -31,29 +31,29 @@ public interface Transaction {
   int BLOCKS_UNTIL_FINALIZED = 32;
 
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = TransactionRecord.MERGE_ACCOUNT_META;
 
   // fee payer, sign, write, read
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   Comparator<AccountMeta> LEGACY_META_COMPARATOR = TransactionRecord.LEGACY_META_COMPARATOR;
 
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   Comparator<AccountMeta> VO_META_COMPARATOR = TransactionRecord.VO_META_COMPARATOR;
 
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   int MSG_HEADER_LENGTH = TransactionRecord.MSG_HEADER_LENGTH;
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   int VERSIONED_MSG_HEADER_LENGTH = TransactionRecord.VERSIONED_MSG_HEADER_LENGTH;
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   byte VERSIONED_BIT_MASK = TransactionRecord.VERSIONED_BIT_MASK;
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   int BASE_LOOKUP_TABLE_LEN = TransactionRecord.BASE_LOOKUP_TABLE_LEN;
 
   static String getBase58Id(final byte[] signedTransaction) {
@@ -73,7 +73,7 @@ public interface Transaction {
   }
 
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
     return TransactionRecord.sortLegacyAccounts(mergedAccounts);
   }
@@ -244,7 +244,7 @@ public interface Transaction {
   }
 
   /// @deprecated internal serialization
-  @Deprecated
+  @Deprecated(forRemoval = true)
   static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
     return TransactionRecord.sortV0Accounts(mergedAccounts);
   }

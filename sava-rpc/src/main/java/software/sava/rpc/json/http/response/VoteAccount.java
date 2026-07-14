@@ -26,12 +26,12 @@ public record VoteAccount(PublicKey voteKey,
                           List<EpochCredits> epochCredits,
                           long rootSlot) {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public String votePubKey() {
     return voteKey.toBase58();
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public String nodePubKey() {
     return nodeKey.toBase58();
   }

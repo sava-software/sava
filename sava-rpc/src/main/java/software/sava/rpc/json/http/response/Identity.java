@@ -9,7 +9,7 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record Identity(PublicKey identityKey) {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public String identity() {
     return identityKey.toString();
   }

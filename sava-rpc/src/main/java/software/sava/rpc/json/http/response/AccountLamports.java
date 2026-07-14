@@ -12,7 +12,7 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record AccountLamports(Context context, PublicKey addressKey, long lamports) {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public String address() {
     return addressKey.toString();
   }

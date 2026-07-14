@@ -17,7 +17,7 @@ public record AccountTokenAmount(Context context,
                                  BigInteger amount,
                                  int decimals) implements DecimalIntegerAmount {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public String address() {
     return addressKey.toString();
   }

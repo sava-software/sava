@@ -38,12 +38,12 @@ public abstract class JsonRpcHttpClient extends JsonHttpClient {
     return new FullContextJsonRpcResponseParser<>(parser);
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final Function<JsonIterator, R> parser) {
     return new JsonRpcBytesResultParseController<>(parser);
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   protected static <R> Function<HttpResponse<byte[]>, R> applyResponseResult(final BiFunction<HttpResponse<byte[]>, JsonIterator, R> parser) {
     return new JsonRpcBytesResponseController<>(parser);
   }

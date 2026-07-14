@@ -16,7 +16,7 @@ public record Supply(Context context,
                      long nonCirculating,
                      List<PublicKey> nonCirculatingAccountKeys) {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public List<String> nonCirculatingAccounts() {
     return nonCirculatingAccountKeys.stream()
         .map(PublicKey::toBase58)

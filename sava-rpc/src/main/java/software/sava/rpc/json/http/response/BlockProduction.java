@@ -16,7 +16,7 @@ public record BlockProduction(Context context,
                               long firstSlot,
                               long lastSlot) {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public Map<String, ValidatorLeaderInfo> leaderInfo() {
     final var leaderInfo = HashMap.<String, ValidatorLeaderInfo>newHashMap(leaderInfoMap.size());
     for (final var entry : leaderInfoMap.entrySet()) {

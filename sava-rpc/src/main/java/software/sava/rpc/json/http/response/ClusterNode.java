@@ -27,7 +27,7 @@ public record ClusterNode(String gossip,
                           long featureSet,
                           int shredVersion) {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public String pubKey() {
     return publicKey.toString();
   }

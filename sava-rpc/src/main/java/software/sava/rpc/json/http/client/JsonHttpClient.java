@@ -24,7 +24,7 @@ public abstract class JsonHttpClient {
   protected final HttpClient httpClient;
   protected final Duration requestTimeout;
   protected final UnaryOperator<HttpRequest.Builder> extendRequest;
-  @Deprecated
+  @Deprecated(forRemoval = true)
   protected final Predicate<HttpResponse<byte[]>> applyResponse;
   protected final BiPredicate<HttpResponse<?>, byte[]> testResponse;
 
@@ -48,12 +48,12 @@ public abstract class JsonHttpClient {
     this(endpoint, httpClient, requestTimeout, null, null, null);
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final Function<JsonIterator, R> parser) {
     return new JsonBytesResponseController<>(parser);
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final BiFunction<byte[], JsonIterator, R> parser) {
     return new KeepJsonResponseController<>(parser);
   }
@@ -150,7 +150,7 @@ public abstract class JsonHttpClient {
     return this.requestTimeout;
   }
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   protected <R> Function<HttpResponse<byte[]>, R> wrapParser(final Function<HttpResponse<byte[]>, R> parser) {
     return applyResponse == null ? parser : response ->
         applyResponse.test(response) ? parser.apply(response) : null;

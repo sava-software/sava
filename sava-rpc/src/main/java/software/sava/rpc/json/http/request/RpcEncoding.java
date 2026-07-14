@@ -5,7 +5,7 @@ import systems.comodal.jsoniter.JsonIterator;
 
 public enum RpcEncoding {
 
-  @Deprecated
+  @Deprecated(forRemoval = true)
   base58,
   base64,
   base64_zstd("base64+zstd");
