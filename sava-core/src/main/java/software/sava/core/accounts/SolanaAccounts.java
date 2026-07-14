@@ -3,47 +3,13 @@ package software.sava.core.accounts;
 import software.sava.core.accounts.meta.AccountMeta;
 
 import static software.sava.core.accounts.PublicKey.fromBase58Encoded;
-import static software.sava.core.accounts.meta.AccountMeta.createInvoked;
-import static software.sava.core.accounts.meta.AccountMeta.createRead;
 
 public interface SolanaAccounts {
 
-  SolanaAccounts MAIN_NET = createAddressConstants(
-      "11111111111111111111111111111111",
-      "Config1111111111111111111111111111111111111",
-      "Stake11111111111111111111111111111111111111",
-      "StakeConfig11111111111111111111111111111111",
-      "Vote111111111111111111111111111111111111111",
-      "AddressLookupTab1e1111111111111111111111111",
-      "BPFLoaderUpgradeab1e11111111111111111111111",
-      "Ed25519SigVerify111111111111111111111111111",
-      "KeccakSecp256k11111111111111111111111111111",
-      "ZkTokenProof1111111111111111111111111111111",
-      "ZkE1Gama1Proof11111111111111111111111111111",
-      "So11111111111111111111111111111111111111112",
-      "ComputeBudget111111111111111111111111111111",
-      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-      "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "TkupDoNseygccBCjSsrSpMccjwHfTYwcrjpnDSrFDhC",
-      "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo",
-      "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
-      "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",
-      "shmem4EWT2sPdVGvTZCzXXRAURL9G5vpPxNwSeKhHUL",
-      "Feat1YXHhH6t1juaWF74WLcfv4XoNocjXA6sPWHNgAse",
-      "SysvarC1ock11111111111111111111111111111111",
-      "SysvarEpochSchedu1e111111111111111111111111",
-      "SysvarFees111111111111111111111111111111111",
-      "Sysvar1nstructions1111111111111111111111111",
-      "SysvarRecentB1ockHashes11111111111111111111",
-      "SysvarRent111111111111111111111111111111111",
-      "SysvarS1otHashes111111111111111111111111111",
-      "SysvarS1otHistory11111111111111111111111111",
-      "SysvarStakeHistory1111111111111111111111111",
-      "SysvarEpochRewards1111111111111111111111111",
-      "SysvarLastRestartS1ot1111111111111111111111"
-  );
+  /// Every builder field defaults to its main-net address, see [SolanaAccountsBuilder].
+  SolanaAccounts MAIN_NET = SolanaAccountsBuilder.builder().create();
 
+  @Deprecated(forRemoval = true)
   static SolanaAccounts createAddressConstants(
       // Native
       final PublicKey systemProgram,
@@ -82,98 +48,44 @@ public interface SolanaAccounts {
       final PublicKey stakeHistorySysVar,
       final PublicKey epochRewardsSysVar,
       final PublicKey lastRestartSlotSysVar) {
-    return new SolanaAccountsRecord(
-        // Native
-        systemProgram,
-        createInvoked(systemProgram),
-        createRead(systemProgram),
-        configProgram,
-        createInvoked(configProgram),
-        createRead(configProgram),
-        stakeProgram,
-        createInvoked(stakeProgram),
-        createRead(stakeProgram),
-        stakeConfig,
-        createRead(stakeConfig),
-        voteProgram,
-        createInvoked(voteProgram),
-        createRead(voteProgram),
-        addressLookupTableProgram,
-        createInvoked(addressLookupTableProgram),
-        createRead(addressLookupTableProgram),
-        bPFLoaderProgram,
-        createInvoked(bPFLoaderProgram),
-        createRead(bPFLoaderProgram),
-        systemEd25519Program,
-        createInvoked(systemEd25519Program),
-        createRead(systemEd25519Program),
-        secp256k1Program,
-        createInvoked(secp256k1Program),
-        createRead(secp256k1Program),
-        zKTokenProofProgram,
-        createInvoked(zKTokenProofProgram),
-        createRead(zKTokenProofProgram),
-        zkElGamalProofProgram,
-        createInvoked(zkElGamalProofProgram),
-        createRead(zkElGamalProofProgram),
-        // Mint
-        wrappedSolTokenMint,
-        createRead(wrappedSolTokenMint),
-        // Common
-        computeBudgetProgram,
-        createInvoked(computeBudgetProgram),
-        tokenProgram,
-        createInvoked(tokenProgram),
-        createRead(tokenProgram),
-        associatedTokenAccountProgram,
-        createInvoked(associatedTokenAccountProgram),
-        createRead(associatedTokenAccountProgram),
-        token2022Program,
-        createInvoked(token2022Program),
-        createRead(token2022Program),
-        tokenUpgradeProgram,
-        createInvoked(tokenUpgradeProgram),
-        createRead(tokenUpgradeProgram),
-        memoProgram,
-        createInvoked(memoProgram),
-        createRead(memoProgram),
-        createInvoked(memoProgramV2),
-        createRead(memoProgramV2),
-        nameServiceProgram,
-        createInvoked(nameServiceProgram),
-        createRead(nameServiceProgram),
-        sharedMemoryProgram,
-        createInvoked(sharedMemoryProgram),
-        createRead(sharedMemoryProgram),
-        featureProposalProgram,
-        createInvoked(featureProposalProgram),
-        createRead(featureProposalProgram),
-        // Sysvar
-        clockSysVar,
-        createRead(clockSysVar),
-        epochScheduleSysVar,
-        createRead(epochScheduleSysVar),
-        feesSysVar,
-        createRead(feesSysVar),
-        instructionsSysVar,
-        createRead(instructionsSysVar),
-        recentBlockhashesSysVar,
-        createRead(recentBlockhashesSysVar),
-        rentSysVar,
-        createRead(rentSysVar),
-        slotHashesSysVar,
-        createRead(slotHashesSysVar),
-        slotHistorySysVar,
-        createRead(slotHistorySysVar),
-        stakeHistorySysVar,
-        createRead(stakeHistorySysVar),
-        epochRewardsSysVar,
-        createRead(epochRewardsSysVar),
-        lastRestartSlotSysVar,
-        createRead(lastRestartSlotSysVar)
-    );
+    return SolanaAccountsBuilder.builder()
+        .systemProgram(systemProgram)
+        .configProgram(configProgram)
+        .stakeProgram(stakeProgram)
+        .stakeConfig(stakeConfig)
+        .voteProgram(voteProgram)
+        .addressLookupTableProgram(addressLookupTableProgram)
+        .bPFLoaderProgram(bPFLoaderProgram)
+        .ed25519Program(systemEd25519Program)
+        .secp256k1Program(secp256k1Program)
+        .zKTokenProofProgram(zKTokenProofProgram)
+        .zkElGamalProofProgram(zkElGamalProofProgram)
+        .wrappedSolTokenMint(wrappedSolTokenMint)
+        .computeBudgetProgram(computeBudgetProgram)
+        .tokenProgram(tokenProgram)
+        .associatedTokenAccountProgram(associatedTokenAccountProgram)
+        .token2022Program(token2022Program)
+        .tokenUpgradeProgram(tokenUpgradeProgram)
+        .memoProgram(memoProgram)
+        .memoProgramV2(memoProgramV2)
+        .nameServiceProgram(nameServiceProgram)
+        .sharedMemoryProgram(sharedMemoryProgram)
+        .featureProposalProgram(featureProposalProgram)
+        .clockSysVar(clockSysVar)
+        .epochScheduleSysVar(epochScheduleSysVar)
+        .feesSysVar(feesSysVar)
+        .instructionsSysVar(instructionsSysVar)
+        .recentBlockhashesSysVar(recentBlockhashesSysVar)
+        .rentSysVar(rentSysVar)
+        .slotHashesSysVar(slotHashesSysVar)
+        .slotHistorySysVar(slotHistorySysVar)
+        .stakeHistorySysVar(stakeHistorySysVar)
+        .epochRewardsSysVar(epochRewardsSysVar)
+        .lastRestartSlotSysVar(lastRestartSlotSysVar)
+        .create();
   }
 
+  @Deprecated(forRemoval = true)
   static SolanaAccounts createAddressConstants(
       // Native
       final String systemProgram,
@@ -227,8 +139,8 @@ public interface SolanaAccounts {
         fromBase58Encoded(zkElGamalProofProgram),
         // Mint
         fromBase58Encoded(wrappedSolTokenMint),
-        fromBase58Encoded(computeBudgetProgram),
         // Common
+        fromBase58Encoded(computeBudgetProgram),
         fromBase58Encoded(tokenProgram),
         fromBase58Encoded(associatedTokenAccountProgram),
         fromBase58Encoded(token2022Program),
@@ -293,11 +205,13 @@ public interface SolanaAccounts {
 
   AccountMeta invokedMemoProgram();
 
+  AccountMeta readMemoProgram();
+
+  PublicKey memoProgramV2();
+
   AccountMeta invokedMemoProgramV2();
 
   AccountMeta readMemoProgramV2();
-
-  AccountMeta readMemoProgram();
 
   PublicKey nameServiceProgram();
 
@@ -316,6 +230,13 @@ public interface SolanaAccounts {
   AccountMeta invokedFeatureProposalProgram();
 
   AccountMeta readFeatureProposalProgram();
+
+  /// Burn address, transferred lamports are removed from circulation at the end of the
+  /// slot. Note that only lamport balances are burned, do not transfer tokens or other
+  /// account state.
+  PublicKey incinerator();
+
+  AccountMeta writeIncinerator();
 
   // Native
 
@@ -371,6 +292,12 @@ public interface SolanaAccounts {
 
   AccountMeta readSecp256k1Program();
 
+  PublicKey secp256r1Program();
+
+  AccountMeta invokedSecp256r1Program();
+
+  AccountMeta readSecp256r1Program();
+
   PublicKey zKTokenProofProgram();
 
   AccountMeta invokedZKTokenProofProgram();
@@ -384,6 +311,11 @@ public interface SolanaAccounts {
   AccountMeta readZkElGamalProofProgram();
 
   // Sysvar
+
+  /// Owner of the sysvar accounts.
+  PublicKey sysvarOwner();
+
+  AccountMeta readSysvarOwner();
 
   PublicKey clockSysVar();
 

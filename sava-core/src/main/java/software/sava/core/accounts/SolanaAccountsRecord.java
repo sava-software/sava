@@ -3,7 +3,7 @@ package software.sava.core.accounts;
 import software.sava.core.accounts.meta.AccountMeta;
 
 record SolanaAccountsRecord(
-    // Common
+    // Native
     PublicKey systemProgram,
     AccountMeta invokedSystemProgram,
     AccountMeta readSystemProgram,
@@ -30,12 +30,17 @@ record SolanaAccountsRecord(
     PublicKey secp256k1Program,
     AccountMeta invokedSecp256k1Program,
     AccountMeta readSecp256k1Program,
+    PublicKey secp256r1Program,
+    AccountMeta invokedSecp256r1Program,
+    AccountMeta readSecp256r1Program,
     PublicKey zKTokenProofProgram,
     AccountMeta invokedZKTokenProofProgram,
     AccountMeta readZKTokenProofProgram,
     PublicKey zkElGamalProofProgram,
     AccountMeta invokedZkElGamalProofProgram,
     AccountMeta readZkElGamalProofProgram,
+    PublicKey incinerator,
+    AccountMeta writeIncinerator,
     // Mint
     PublicKey wrappedSolTokenMint,
     AccountMeta readWrappedSolTokenMint,
@@ -57,6 +62,7 @@ record SolanaAccountsRecord(
     PublicKey memoProgram,
     AccountMeta invokedMemoProgram,
     AccountMeta readMemoProgram,
+    PublicKey memoProgramV2,
     AccountMeta invokedMemoProgramV2,
     AccountMeta readMemoProgramV2,
     PublicKey nameServiceProgram,
@@ -69,6 +75,8 @@ record SolanaAccountsRecord(
     AccountMeta invokedFeatureProposalProgram,
     AccountMeta readFeatureProposalProgram,
     // Sysvar
+    PublicKey sysvarOwner,
+    AccountMeta readSysvarOwner,
     PublicKey clockSysVar,
     AccountMeta readClockSysVar,
     PublicKey epochScheduleSysVar,

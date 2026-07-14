@@ -23,6 +23,7 @@ final class SolanaAccountsTests {
     assertAddress("BPFLoaderUpgradeab1e11111111111111111111111", accounts.bPFLoaderProgram());
     assertAddress("Ed25519SigVerify111111111111111111111111111", accounts.ed25519Program());
     assertAddress("KeccakSecp256k11111111111111111111111111111", accounts.secp256k1Program());
+    assertAddress("Secp256r1SigVerify1111111111111111111111111", accounts.secp256r1Program());
     assertAddress("ZkTokenProof1111111111111111111111111111111", accounts.zKTokenProofProgram());
     assertAddress("ZkE1Gama1Proof11111111111111111111111111111", accounts.zkElGamalProofProgram());
     assertAddress("So11111111111111111111111111111111111111112", accounts.wrappedSolTokenMint());
@@ -31,11 +32,14 @@ final class SolanaAccountsTests {
     assertAddress("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", accounts.associatedTokenAccountProgram());
     assertAddress("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", accounts.token2022Program());
     assertAddress("TkupDoNseygccBCjSsrSpMccjwHfTYwcrjpnDSrFDhC", accounts.tokenUpgradeProgram());
+    assertAddress("1nc1nerator11111111111111111111111111111111", accounts.incinerator());
     assertAddress("Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo", accounts.memoProgram());
+    assertAddress("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr", accounts.memoProgramV2());
     assertAddress("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX", accounts.nameServiceProgram());
     assertAddress("shmem4EWT2sPdVGvTZCzXXRAURL9G5vpPxNwSeKhHUL", accounts.sharedMemoryProgram());
     assertAddress("Feat1YXHhH6t1juaWF74WLcfv4XoNocjXA6sPWHNgAse", accounts.featureProposalProgram());
 
+    assertAddress("Sysvar1111111111111111111111111111111111111", accounts.sysvarOwner());
     assertAddress("SysvarC1ock11111111111111111111111111111111", accounts.clockSysVar());
     assertAddress("SysvarEpochSchedu1e111111111111111111111111", accounts.epochScheduleSysVar());
     assertAddress("SysvarFees111111111111111111111111111111111", accounts.feesSysVar());
@@ -47,5 +51,24 @@ final class SolanaAccountsTests {
     assertAddress("SysvarStakeHistory1111111111111111111111111", accounts.stakeHistorySysVar());
     assertAddress("SysvarEpochRewards1111111111111111111111111", accounts.epochRewardsSysVar());
     assertAddress("SysvarLastRestartS1ot1111111111111111111111", accounts.lastRestartSlotSysVar());
+  }
+
+  @Test
+  void builderDefaultsAndOverrides() {
+    final var forkedTokenProgram = "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo";
+    final var accounts = SolanaAccountsBuilder.builder()
+        .tokenProgram(forkedTokenProgram)
+        .create();
+
+    assertAddress(forkedTokenProgram, accounts.tokenProgram());
+    assertAddress(forkedTokenProgram, accounts.invokedTokenProgram().publicKey().toBase58());
+    // Everything else retains its main-net default.
+    assertEquals(SolanaAccounts.MAIN_NET.systemProgram(), accounts.systemProgram());
+    assertEquals(SolanaAccounts.MAIN_NET.token2022Program(), accounts.token2022Program());
+    assertEquals(SolanaAccounts.MAIN_NET.clockSysVar(), accounts.clockSysVar());
+  }
+
+  private static void assertAddress(final String expected, final String actual) {
+    assertEquals(expected, actual);
   }
 }
