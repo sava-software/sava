@@ -103,6 +103,9 @@ public record ConfidentialTransferAccount(boolean approved,
     data[i] = (byte) (approved ? 1 : 0);
     ++i;
 
+    elgamalPubkey.write(data, i);
+    i += ELGAMAL_PUBKEY_LEN;
+
     System.arraycopy(pendingBalanceLo, 0, data, i, pendingBalanceLo.length);
     i += pendingBalanceLo.length;
     System.arraycopy(pendingBalanceHi, 0, data, i, pendingBalanceHi.length);

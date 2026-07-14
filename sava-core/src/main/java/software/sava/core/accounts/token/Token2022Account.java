@@ -4,6 +4,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.extensions.AccountType;
 import software.sava.core.accounts.token.extensions.ExtensionType;
 import software.sava.core.accounts.token.extensions.TokenExtension;
+import software.sava.core.accounts.token.extensions.TokenExtensions;
 import software.sava.core.serial.Serializable;
 
 import java.util.Map;
@@ -13,7 +14,7 @@ import static software.sava.core.accounts.token.Token2022.parseAccountType;
 
 public record Token2022Account(TokenAccount tokenAccount,
                                AccountType type,
-                               Map<ExtensionType, TokenExtension> extensions) implements Serializable {
+                               Map<ExtensionType, TokenExtension> extensions) implements TokenExtensions, Serializable {
 
   public static final BiFunction<PublicKey, byte[], Token2022Account> FACTORY = Token2022Account::read;
 
@@ -31,7 +32,7 @@ public record Token2022Account(TokenAccount tokenAccount,
 
   @Override
   public int l() {
-    int l = tokenAccount.l() + (extensions.size() * Integer.BYTES);
+    int l = tokenAccount.l() + 1 + (extensions.size() * Integer.BYTES);
     for (final var extension : extensions.values()) {
       l += extension.l();
     }
@@ -41,6 +42,8 @@ public record Token2022Account(TokenAccount tokenAccount,
   @Override
   public int write(final byte[] data, final int offset) {
     int i = offset + tokenAccount.write(data, offset);
+    data[i] = (byte) type.ordinal();
+    ++i;
     for (final var extension : extensions.values()) {
       i += TokenExtension.write(extension, data, i);
     }

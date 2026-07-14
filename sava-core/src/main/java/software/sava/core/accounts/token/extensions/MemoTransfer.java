@@ -4,6 +4,10 @@ public record MemoTransfer(boolean requireIncomingTransferAmount) implements Acc
 
   public static final int BYTES = 1;
 
+  public boolean requireIncomingTransferMemos() {
+    return requireIncomingTransferAmount;
+  }
+
   public static MemoTransfer read(final byte[] data, final int offset) {
     if (data == null || data.length == 0) {
       return null;

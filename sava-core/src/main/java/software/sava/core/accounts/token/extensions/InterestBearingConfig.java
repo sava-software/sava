@@ -14,6 +14,10 @@ public record InterestBearingConfig(PublicKey rateAuthority,
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + Long.BYTES + Short.BYTES + Long.BYTES + Short.BYTES;
 
+  public long initializationTimestamp() {
+    return unixTimestamp;
+  }
+
   public static InterestBearingConfig read(final byte[] data, final int offset) {
     if (data == null || data.length == 0) {
       return null;

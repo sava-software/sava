@@ -55,7 +55,7 @@ public record TransferFeeConfig(PublicKey transferFeeConfigAuthority,
   public int write(final byte[] data, final int offset) {
     transferFeeConfigAuthority.write(data, offset);
     int i = offset + PUBLIC_KEY_LENGTH;
-    withdrawWithheldAuthority.write(data, offset);
+    withdrawWithheldAuthority.write(data, i);
     i += PUBLIC_KEY_LENGTH;
     ByteUtil.putInt64LE(data, i, withheldAmount);
     i += Long.BYTES;

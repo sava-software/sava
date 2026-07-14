@@ -6,6 +6,7 @@ import software.sava.core.encoding.ByteUtil;
 
 import java.util.Map;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
@@ -33,17 +34,17 @@ public record TokenMetadata(PublicKey updateAuthority,
 
     final int nameLength = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
-    final var name = new String(data, i, nameLength);
+    final var name = new String(data, i, nameLength, UTF_8);
     i += nameLength;
 
     final int symbolLength = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
-    final var symbol = new String(data, i, symbolLength);
+    final var symbol = new String(data, i, symbolLength, UTF_8);
     i += symbolLength;
 
     final int uriLength = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
-    final var uri = new String(data, i, uriLength);
+    final var uri = new String(data, i, uriLength, UTF_8);
     i += uriLength;
 
     final int numExtras = ByteUtil.getInt32LE(data, i);
@@ -57,11 +58,11 @@ public record TokenMetadata(PublicKey updateAuthority,
       for (int m = 0, l; m < numExtras; ++m) {
         l = ByteUtil.getInt32LE(data, i);
         i += Integer.BYTES;
-        final var key = new String(data, i, l);
+        final var key = new String(data, i, l, UTF_8);
         i += l;
         l = ByteUtil.getInt32LE(data, i);
         i += Integer.BYTES;
-        final var val = new String(data, i, l);
+        final var val = new String(data, i, l, UTF_8);
         i += l;
         entries[m] = Map.entry(key, val);
       }
@@ -85,18 +86,14 @@ public record TokenMetadata(PublicKey updateAuthority,
   @Override
   public int l() {
     final int additionalMetaDataLength = Integer.BYTES
-        + (Long.BYTES * additionalMetadata.size())
         + additionalMetadata.entrySet().stream()
-        .mapToInt(entry -> entry.getKey().length() + entry.getValue().length())
+        .mapToInt(entry -> Borsh.len(entry.getKey()) + Borsh.len(entry.getValue()))
         .sum();
     return PUBLIC_KEY_LENGTH
         + PUBLIC_KEY_LENGTH
-        + Integer.BYTES
-        + name.length()
-        + Integer.BYTES
-        + symbol.length()
-        + Integer.BYTES
-        + uri.length()
+        + Borsh.len(name)
+        + Borsh.len(symbol)
+        + Borsh.len(uri)
         + additionalMetaDataLength;
   }
 

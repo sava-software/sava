@@ -11,7 +11,7 @@ import java.util.function.BiFunction;
 
 public record Token2022(Mint mint,
                         AccountType accountType,
-                        Map<ExtensionType, TokenExtension> extensions) implements Serializable {
+                        Map<ExtensionType, TokenExtension> extensions) implements TokenExtensions, Serializable {
 
   private static final int PADDING_AFTER_MINT = 83;
 
@@ -26,7 +26,10 @@ public record Token2022(Mint mint,
         throw new IllegalStateException("Unsupported Token 2022 extension ordinal " + extensionType);
       }
       if (extensionType == 0) {
-        return Map.of(ExtensionType.Uninitialized, Uninitialized.INSTANCE);
+        // Trailing zeroed padding, e.g. re-allocated but not yet initialized extension space.
+        return extensions.isEmpty()
+            ? Map.of(ExtensionType.Uninitialized, Uninitialized.INSTANCE)
+            : extensions;
       }
       i += Short.BYTES;
       final int length = ByteUtil.getInt16LE(data, i);
@@ -54,9 +57,9 @@ public record Token2022(Mint mint,
         case MetadataPointer -> MetadataPointer.read(data, i);
         case TokenMetadata -> TokenMetadata.read(data, i);
         case GroupPointer -> GroupPointer.read(data, i);
-        case TokenGroup -> TokenGroup.INSTANCE;
+        case TokenGroup -> TokenGroup.read(data, i);
         case GroupMemberPointer -> GroupMemberPointer.read(data, i);
-        case TokenGroupMember -> TokenGroupMember.INSTANCE;
+        case TokenGroupMember -> TokenGroupMember.read(data, i);
         case ConfidentialMintBurn -> ConfidentialMintBurn.read(data, i);
         case ScaledUiAmount -> ScaledUiAmountConfig.read(data, i);
         case Pausable -> PausableConfig.read(data, i);

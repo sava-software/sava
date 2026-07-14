@@ -18,6 +18,7 @@
 !/release-please-config.json
 !/sava-*/
 !/settings.gradle.kts
+!AGENTS.md
 
 # Re-apply ignores within included directories.
 .gradle
