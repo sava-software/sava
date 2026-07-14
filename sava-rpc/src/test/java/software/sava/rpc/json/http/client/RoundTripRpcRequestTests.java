@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.client;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.TokenAccount;
+import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.LargestAccountsFilter;
@@ -970,7 +971,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(2_100, tx.meta().computeUnitsConsumed());
 
     final var skeleton = tx.skeleton();
-    assertEquals(txSignature, skeleton.id());
+    assertEquals(txSignature, Objects.requireNonNull(skeleton).id());
     assertEquals(1, skeleton.numSignatures());
   }
 
@@ -1167,5 +1168,59 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     final var replacementBlockHash = simulation.replacementBlockHash();
     assertEquals("37QF9uWpdH6H7PnqC5UxELtbHov7TNyaywgWjni7iKqH", replacementBlockHash.blockhash());
     assertEquals(410_737_748L, replacementBlockHash.lastValidBlockHeight());
+  }
+
+  @Test
+  void getProgramAccounts() {
+    final var programId = PublicKey.fromBase58Encoded("GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc");
+    final var filters = List.of(
+        Filter.createMemCompFilter(8, PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112")),
+        Filter.createDataSizeFilter(8200)
+    );
+
+    registerRequest("""
+        {"jsonrpc":"2.0","id":1001,"method":"getProgramAccounts","params":["GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc",{"withContext":true,"encoding":"base64","commitment":"finalized","minContextSlot":1000,"dataSlice":{"length":32,"offset":88},"filters":[{"memcmp":{"offset":8,"bytes":"So11111111111111111111111111111111111111112"}},{"dataSize":8200}]}]}""", """
+        {"jsonrpc":"2.0","id":1755900035918,"result":{"context":{"slot":361843021,"apiVersion":"2.2.7"},"value":[{"pubkey":"5EhqyiKivRyyhK4wHALghpXUEPSAbV6DRFuNzfpTHbv","account":{"lamports":57962880,"data":["CR5z0XpVJtRI5Ymupa/nwizWHFtmqGpCerJiMJUU5Vw=","base64"],"owner":"GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc","executable":false,"rentEpoch":18446744073709551615,"space":8200}}]}}"""
+    );
+
+    var accounts = rpcClient.getProgramAccounts(
+        programId,
+        Commitment.FINALIZED,
+        1000,
+        filters,
+        32, 88
+    ).join();
+
+    assertEquals(1, accounts.size());
+    var account = accounts.getFirst();
+    assertEquals(new Context(361843021L, "2.2.7"), account.context());
+    assertEquals("5EhqyiKivRyyhK4wHALghpXUEPSAbV6DRFuNzfpTHbv", account.pubKey().toBase58());
+    assertEquals(programId, account.owner());
+    final byte[] data = account.data();
+    assertEquals(32, data.length);
+    assertEquals("cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij", PublicKey.readPubKey(data).toBase58());
+
+    registerRequest("""
+            {"jsonrpc":"2.0","id":1002,"method":"getProgramAccounts","params":["GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc",{"withContext":true,"encoding":"base64","commitment":"confirmed","filters":[{"memcmp":{"offset":8,"bytes":"So11111111111111111111111111111111111111112"}},{"dataSize":8200}]}]}""",
+        readFileString("getProgramAccounts.json")
+    );
+
+    accounts = rpcClient.getProgramAccounts(programId, filters).join();
+
+    assertEquals(35, accounts.size());
+    account = accounts.getFirst();
+    assertEquals("5EhqyiKivRyyhK4wHALghpXUEPSAbV6DRFuNzfpTHbv", account.pubKey().toBase58());
+    assertEquals(8200, account.space());
+    assertEquals(account.space(), account.data().length);
+    assertEquals("GpTDuQvx5XjEELJvJi3sdgz9XEQoWpF3tQpwYBGjmUDx", accounts.getLast().pubKey().toBase58());
+
+    // No filters, no minContextSlot and no data slice.
+    registerRequest("""
+        {"jsonrpc":"2.0","id":1003,"method":"getProgramAccounts","params":["GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc",{"withContext":true,"encoding":"base64","commitment":"confirmed"}]}""", """
+        {"jsonrpc":"2.0","id":1755900035919,"result":{"context":{"slot":361843021,"apiVersion":"2.2.7"},"value":[]}}"""
+    );
+
+    accounts = rpcClient.getProgramAccounts(programId).join();
+    assertTrue(accounts.isEmpty());
   }
 }

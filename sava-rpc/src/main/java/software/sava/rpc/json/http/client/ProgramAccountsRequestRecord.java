@@ -46,39 +46,10 @@ record ProgramAccountsRequestRecord<T>(Duration requestTimeout,
     builder.append(Objects.requireNonNullElse(this.commitment, defaultCommitment).getValue());
     builder.append('"');
 
-    if (minContextSlot != null) {
-      builder.append("""
-          ,"minContextSlot":""");
-      builder.append(minContextSlot);
-    }
-
-    if (dataSliceLength != 0) {
-      builder.append("""
-          ,"dataSlice":{"length":""");
-      builder.append(dataSliceLength);
-      builder.append("""
-          ,"offset":""");
-      builder.append(dataSliceOffset);
-      builder.append('}');
-    }
-
-    if (numFilters == 0) {
-      builder.append("}]}");
-    } else {
-      builder.append("""
-          ,"filters":[""");
-      final var iterator = filters.iterator();
-      for (Filter filter; ; ) {
-        filter = iterator.next();
-        builder.append(filter.toJson());
-        if (iterator.hasNext()) {
-          builder.append(',');
-        } else {
-          break;
-        }
-      }
-      builder.append("]}]}");
-    }
+    BaseSolanaJsonRpcClient.appendMinContextSlot(builder, minContextSlot);
+    BaseSolanaJsonRpcClient.appendDataSlice(builder, dataSliceLength, dataSliceOffset);
+    BaseSolanaJsonRpcClient.appendFilters(builder, filters);
+    builder.append("}]}");
 
     return builder.toString();
   }

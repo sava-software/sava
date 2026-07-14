@@ -246,21 +246,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     builder.append(commitment.getValue());
     builder.append('"');
 
-    if (minContextSlot != null) {
-      builder.append("""
-          ,"minContextSlot":""");
-      builder.append(minContextSlot);
-    }
+    appendMinContextSlot(builder, minContextSlot);
 
-    if (length != 0) {
-      builder.append("""
-          ,"dataSlice":{"length":""");
-      builder.append(length);
-      builder.append("""
-          ,"offset":""");
-      builder.append(offset);
-      builder.append('}');
-    }
+    appendDataSlice(builder, length, offset);
 
     builder.append("}]}");
 
@@ -583,12 +571,6 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   @Override
   public CompletableFuture<List<InflationReward>> getInflationReward(final SequencedCollection<PublicKey> keys) {
     return getInflationReward(defaultCommitment, keys);
-  }
-
-  private String joinKeys(final SequencedCollection<PublicKey> keys) {
-    return keys == null || keys.isEmpty() ? "[]" : keys.stream()
-        .map(PublicKey::toBase58)
-        .collect(Collectors.joining("\",\"", "[\"", "\"]"));
   }
 
   @Override
@@ -915,21 +897,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     builder.append(commitment.getValue());
     builder.append('"');
 
-    if (minContextSlot != null) {
-      builder.append("""
-          ,"minContextSlot":""");
-      builder.append(minContextSlot);
-    }
+    appendMinContextSlot(builder, minContextSlot);
 
-    if (length != 0) {
-      builder.append("""
-          ,"dataSlice":{"length":""");
-      builder.append(length);
-      builder.append("""
-          ,"offset":""");
-      builder.append(offset);
-      builder.append('}');
-    }
+    appendDataSlice(builder, length, offset);
 
     builder.append("}]}");
 
@@ -1275,11 +1245,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
       builder.append('"');
     }
 
-    if (minContextSlot != null) {
-      builder.append("""
-          ,"minContextSlot":""");
-      builder.append(minContextSlot);
-    }
+    appendMinContextSlot(builder, minContextSlot);
 
     builder.append("}]}");
 
