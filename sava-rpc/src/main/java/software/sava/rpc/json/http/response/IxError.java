@@ -378,6 +378,9 @@ public sealed interface IxError permits
       return Immutable.INSTANCE;
     } else if (fieldEquals("IncorrectAuthority", buf, offset, len)) {
       return IncorrectAuthority.INSTANCE;
+    } else if (fieldEquals("BorshIoError", buf, offset, len)) {
+      // Unit variant as of solana-sdk v3; the String payload only appears in historical data.
+      return new BorshIoError(null);
     } else if (fieldEquals("AccountNotRentExempt", buf, offset, len)) {
       return AccountNotRentExempt.INSTANCE;
     } else if (fieldEquals("InvalidAccountOwner", buf, offset, len)) {

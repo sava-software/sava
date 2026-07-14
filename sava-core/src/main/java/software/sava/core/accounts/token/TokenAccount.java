@@ -114,7 +114,10 @@ public record TokenAccount(PublicKey address,
     i += Long.BYTES;
     ByteUtil.putInt32LE(data, i, delegateOption);
     i += Integer.BYTES;
-    i += delegate.write(data, i);
+    if (delegate != null) {
+      delegate.write(data, i);
+    }
+    i += PUBLIC_KEY_LENGTH;
     data[i] = (byte) state.ordinal();
     ++i;
     ByteUtil.putInt32LE(data, i, isNativeOption);
@@ -125,7 +128,10 @@ public record TokenAccount(PublicKey address,
     i += Long.BYTES;
     ByteUtil.putInt32LE(data, i, closeAuthorityOption);
     i += Integer.BYTES;
-    i += closeAuthority.write(data, i);
+    if (closeAuthority != null) {
+      closeAuthority.write(data, i);
+    }
+    i += PUBLIC_KEY_LENGTH;
     return i - offset;
   }
 

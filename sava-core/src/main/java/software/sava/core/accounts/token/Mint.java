@@ -52,18 +52,22 @@ public record Mint(PublicKey address,
 
   @Override
   public int write(final byte[] data, final int offset) {
-    if (mintAuthority != null) {
-      ByteUtil.putInt32LE(data, 0, 1);
-      mintAuthority.write(data, Integer.BYTES);
+    if (mintAuthority == null) {
+      ByteUtil.putInt32LE(data, offset, 0);
+    } else {
+      ByteUtil.putInt32LE(data, offset, 1);
+      mintAuthority.write(data, offset + Integer.BYTES);
     }
-    int i = Integer.BYTES + PUBLIC_KEY_LENGTH;
+    int i = offset + Integer.BYTES + PUBLIC_KEY_LENGTH;
     ByteUtil.putInt64LE(data, i, supply);
     i += Long.BYTES;
     data[i] = (byte) decimals;
     ++i;
     data[i] = (byte) (initialized ? 1 : 0);
     ++i;
-    if (freezeAuthority != null) {
+    if (freezeAuthority == null) {
+      ByteUtil.putInt32LE(data, i, 0);
+    } else {
       ByteUtil.putInt32LE(data, i, 1);
       freezeAuthority.write(data, i + Integer.BYTES);
     }

@@ -26,6 +26,13 @@ comparing.
 
 Repo-relative paths below are prefixed with the repo name (e.g. `agave:rpc/src/rpc.rs`).
 
+Related sava project: **idl-clients** (`git@github.com:sava-software/idl-clients.git`). Its
+`idl-clients-spl` module holds generated clients and account types for the SPL/native
+programs (token, token-2022, system, stake, compute-budget, associated-token,
+address-lookup-table, memo, stake-pool, precompiles) — including `Multisig` and
+instruction builders. Before adding "core" program functionality to this repo, check
+whether it already exists there; only sync it here if this repo already models it.
+
 Agave's `sdk/` directory is a stub; most type definitions now live in the solana-sdk repo
 or SPL interface crates, with exact versions pinned in agave's root `Cargo.toml` (search
 the crate name). When a struct

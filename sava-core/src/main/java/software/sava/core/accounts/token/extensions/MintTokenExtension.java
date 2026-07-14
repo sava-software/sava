@@ -2,7 +2,6 @@ package software.sava.core.accounts.token.extensions;
 
 public sealed interface MintTokenExtension extends TokenExtension permits
     ConfidentialMintBurn,
-    ConfidentialTransferFeeAmount,
     ConfidentialTransferFeeConfig,
     ConfidentialTransferMint,
     DefaultAccountState,
@@ -19,7 +18,6 @@ public sealed interface MintTokenExtension extends TokenExtension permits
     TokenGroup,
     TokenGroupMember,
     TokenMetadata,
-    TransferFeeAmount,
     TransferFeeConfig,
     TransferHook,
     Uninitialized {
