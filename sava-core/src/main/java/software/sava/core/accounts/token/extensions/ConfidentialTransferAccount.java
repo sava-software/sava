@@ -3,6 +3,9 @@ package software.sava.core.accounts.token.extensions;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 import static software.sava.core.zk.ElGamal.*;
 
 public record ConfidentialTransferAccount(boolean approved,
@@ -134,5 +137,52 @@ public record ConfidentialTransferAccount(boolean approved,
   @Override
   public int l() {
     return BYTES;
+  }
+
+  @Override
+  public boolean equals(final Object o) {
+    return o instanceof ConfidentialTransferAccount other
+        && approved == other.approved
+        && Objects.equals(elgamalPubkey, other.elgamalPubkey)
+        && Arrays.equals(pendingBalanceLo, other.pendingBalanceLo)
+        && Arrays.equals(pendingBalanceHi, other.pendingBalanceHi)
+        && Arrays.equals(availableBalance, other.availableBalance)
+        && Arrays.equals(decryptableAvailableBalance, other.decryptableAvailableBalance)
+        && allowConfidentialCredits == other.allowConfidentialCredits
+        && allowNonConfidentialCredits == other.allowNonConfidentialCredits
+        && pendingBalanceCreditCounter == other.pendingBalanceCreditCounter
+        && maximumPendingBalanceCreditCounter == other.maximumPendingBalanceCreditCounter
+        && expectedPendingBalanceCreditCounter == other.expectedPendingBalanceCreditCounter
+        && actualPendingBalanceCreditCounter == other.actualPendingBalanceCreditCounter;
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Boolean.hashCode(approved);
+    result = 31 * result + Objects.hashCode(elgamalPubkey);
+    result = 31 * result + Arrays.hashCode(pendingBalanceLo);
+    result = 31 * result + Arrays.hashCode(pendingBalanceHi);
+    result = 31 * result + Arrays.hashCode(availableBalance);
+    result = 31 * result + Arrays.hashCode(decryptableAvailableBalance);
+    result = 31 * result + Boolean.hashCode(allowConfidentialCredits);
+    result = 31 * result + Boolean.hashCode(allowNonConfidentialCredits);
+    result = 31 * result + Long.hashCode(pendingBalanceCreditCounter);
+    result = 31 * result + Long.hashCode(maximumPendingBalanceCreditCounter);
+    result = 31 * result + Long.hashCode(expectedPendingBalanceCreditCounter);
+    result = 31 * result + Long.hashCode(actualPendingBalanceCreditCounter);
+    return result;
+  }
+
+  @Override
+  public String toString() {
+    return "ConfidentialTransferAccount[approved=" + approved
+        + ", elgamalPubkey=" + elgamalPubkey
+        + ", allowConfidentialCredits=" + allowConfidentialCredits
+        + ", allowNonConfidentialCredits=" + allowNonConfidentialCredits
+        + ", pendingBalanceCreditCounter=" + pendingBalanceCreditCounter
+        + ", maximumPendingBalanceCreditCounter=" + maximumPendingBalanceCreditCounter
+        + ", expectedPendingBalanceCreditCounter=" + expectedPendingBalanceCreditCounter
+        + ", actualPendingBalanceCreditCounter=" + actualPendingBalanceCreditCounter
+        + ']';
   }
 }

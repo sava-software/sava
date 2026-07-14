@@ -2,6 +2,9 @@ package software.sava.core.accounts.token.extensions;
 
 import software.sava.core.accounts.PublicKey;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 import static software.sava.core.zk.ElGamal.*;
 
 public record ConfidentialMintBurn(byte[] confidentialSupply,
@@ -61,5 +64,28 @@ public record ConfidentialMintBurn(byte[] confidentialSupply,
   @Override
   public int l() {
     return BYTES;
+  }
+
+  @Override
+  public boolean equals(final Object o) {
+    return o instanceof ConfidentialMintBurn other
+        && Arrays.equals(confidentialSupply, other.confidentialSupply)
+        && Arrays.equals(decryptableSupply, other.decryptableSupply)
+        && Objects.equals(supplyElGamalPubKey, other.supplyElGamalPubKey)
+        && Arrays.equals(pendingBurn, other.pendingBurn);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Arrays.hashCode(confidentialSupply);
+    result = 31 * result + Arrays.hashCode(decryptableSupply);
+    result = 31 * result + Objects.hashCode(supplyElGamalPubKey);
+    result = 31 * result + Arrays.hashCode(pendingBurn);
+    return result;
+  }
+
+  @Override
+  public String toString() {
+    return "ConfidentialMintBurn[supplyElGamalPubKey=" + supplyElGamalPubKey + ']';
   }
 }

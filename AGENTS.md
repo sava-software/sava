@@ -45,10 +45,11 @@ types. Pinned versions worth checking on each sync: `spl-token-interface`,
 ## Token-2022 extensions
 
 Java: `sava-core/src/main/java/software/sava/core/accounts/token/`
-- `extensions/ExtensionType.java` — enum of all 29 extension types, ordinals 0
-  (`Uninitialized`) through 28 (`PermissionedBurn`). **Must stay ordinal-aligned with the
-  Rust `ExtensionType` enum**; new SPL extensions are appended, so new Java entries must be
-  appended in the same order.
+- `extensions/ExtensionType.java` — DEPRECATED enum of all 29 on-chain extension types,
+  ordinals 0 (`Uninitialized`) through 28 (`PermissionedBurn`); it duplicates the sealed
+  `TokenExtension` hierarchy, which is the migration target. While it exists it **must
+  stay ordinal-aligned with the Rust `ExtensionType` enum**: new SPL extensions are
+  appended, so new Java entries must be appended in the same order.
 - `extensions/*.java` — one record per extension with a static `read(data, offset)` and a
   `write(data, offset)`/`l()` pair. Variable-length extensions
   (`ConfidentialTransferFeeConfig`, `ConfidentialTransferFeeAmount`) take an end bound in
@@ -184,18 +185,67 @@ Existing sava-core tests: `tx/TransactionSerializationTests.java`,
 `borsh/BorshTests.java`, `ecnoding/CompactU16EncodingTest.java`, `ecnoding/Base58Tests.java`,
 plus the token extension tests above.
 
+## Alpenglow (upcoming consensus replacement)
+
+Alpenglow (SIMD-0326 Votor consensus, plus SIMD-0357 VAT, SIMD-0384 migration, SIMD-0387
+BLS vote keys, SIMD-0388 BLS syscalls — all in Review as of 2026-07) replaces TowerBFT and
+PoH with off-chain BLS-signed votes and finalization certificates. Feature gates exist in
+agave (`alpenglow` = `a1p3RiCfMmzm5jgCva97UUNwUiVLq5EJhtusRWHDBsp`) but are NOT activated.
+**Policy: do not implement Alpenglow-specific surfaces until activation on main-net is
+likely** (per project owner).
+
+What changes for this library when it activates:
+- `getAgGenesisCert` RPC (`agave:rpc/src/rpc.rs`) returns the genesis handoff certificate:
+  `WireBlockCertMessage { block: {slot, blockId}, signature: BLS agg sig + validator rank
+  bitmap }` (`agave:votor-messages/src/wire.rs`).
+- jsonParsed vote accounts (`agave:account-decoder/src/parse_vote.rs`) gain
+  `bls_pubkey_compressed` (48-byte BLS key, bs58) and the SIMD-0185 v4 commission/collector
+  fields; `prior_voters` is always empty; the on-chain `votes` list empties out since
+  consensus votes move off-chain.
+- `voteSubscribe` stops reflecting consensus (it watches on-chain vote transactions, which
+  cease); optimistic-confirmation reporting is suspended during migration and superseded by
+  fast (80%, one round) / slow (60%, two rounds) finalization certificates.
+- New vote instruction `VoteAuthorize::VoterWithBLS` (48-byte pubkey + 96-byte
+  proof-of-possession over `"ALPENGLOW" || vote_pubkey || bls_pubkey`); BLS verification
+  adds 34,500 CUs and the vote program leaves static builtin cost modeling.
+- VAT (SIMD-0357): 1.6 SOL/epoch deducted from each vote account and burned; active
+  validator set capped at 2,000.
+
+Explicitly unchanged: all sysvar layouts (Clock, EpochSchedule, EpochRewards, Rent,
+StakeHistory, SlotHashes, LastRestartSlot), the transaction wire format,
+recent-blockhash expiry, user transaction fees, and `RewardType`. Canonical sources:
+`agave:votor-messages/src/` (wire format, certificates, migration phases) and the SIMD
+files in the solana-improvement-documents repo.
+
 ## Known gaps / candidate work
 
-- HTTP RPC: `getAgGenesisCert` not implemented.
-- WebSocket: no typed wrappers for `slotsUpdatesSubscribe`, `blockSubscribe`,
-  `voteSubscribe`.
-- `SolanaAccounts` omits some reserved keys agave lists: `bpf_loader_deprecated`,
-  `loader_v4`, `secp256r1_program`, `native_loader`, `sysvar::rewards`.
-- Sysvar decoders exist only for Clock and EpochRewards; Rent, EpochSchedule, StakeHistory,
-  SlotHashes, SlotHistory, LastRestartSlot are address constants only (see
-  `parse_sysvar.rs` for layouts if adding).
-- No unit tests for: Clock/EpochRewards layouts, base Mint/TokenAccount parsing,
-  `SolanaAccounts` ID values, `Filter` JSON output, Multisig accounts (not modeled).
+- Token-2022 extension parsing is Set based: `Token2022`/`Token2022Account` hold
+  `Set<TokenExtension> tokenExtensions` including `UnknownTokenExtension(type, data)`
+  entries for extensions newer than the library, so parsing survives new SPL releases,
+  callers keep the raw data, and unknown extensions round-trip through `write`. Users
+  iterate the Set and switch on the sealed type. The deprecated `extensions()` method
+  builds a `Map<ExtensionType, TokenExtension>` dynamically, dropping unknown entries
+  since they cannot be keyed by the enum. Append new `ExtensionType` entries promptly so
+  the dispatch switch parses them typed; a future release drops the map method and enum.
+- HTTP RPC: `getAgGenesisCert` not implemented (deliberate — see Alpenglow above).
+- WebSocket: typed wrappers for `slotsUpdatesSubscribe`, `blockSubscribe`, and
+  `voteSubscribe` are deliberately omitted — public RPC infrastructure does not support
+  those subscriptions, and `voteSubscribe` is obsolete under Alpenglow. The generic
+  `SolanaRpcWebsocket.subscribe(...)` passthrough is the intended mechanism for
+  provider-specific or unsupported methods; see the sava-software/helius-sdk repo
+  (`software.sava.helius.ws.HeliusRpcWebsocket` wrapping Helius' `transactionSubscribe`)
+  for a real-world example. Do not add typed wrappers without a supporting provider.
+- `SolanaAccounts` deliberately omits deprecated/dormant reserved keys
+  (`bpf_loader_deprecated`, `bpf_loader` v2, `loader_v4`, `native_loader`, `feature`,
+  `incinerator`, `sysvar::rewards`) — do not add without need.
+- Sysvar decoders: Clock and EpochRewards are public; Rent, EpochSchedule, StakeHistory,
+  SlotHashes, LastRestartSlot are package-private (make public on demand). SlotHistory
+  (131KB bit-vector) is not modeled. Fixture-backed tests in
+  `sava-core/src/test/java/software/sava/core/accounts/sysvar/SysvarTests.java`.
+- Multisig is not modeled here (generated type lives in idl-clients-spl).
+- Live parser drift check: `DRIFT_CHECK=true ./gradlew :sava-rpc:test --tests
+  '*LiveMainNetDriftCheck'` exercises the production parsers against current main-net
+  responses; rate-limited methods are skipped and reported.
 - Compute-budget instruction builders live outside sava-core; constants reference
   `agave:compute-budget/src/compute_budget_limits.rs` and
   `solana-sdk:compute-budget-interface/` (watch SIMD-0268 default changes).
@@ -208,8 +258,9 @@ plus the token extension tests above.
    repositories above — and `git pull` existing clones before comparing.
 2. Diff the relevant canonical file(s) above against the Java mirror.
 3. For token extensions: compare `parse_token_extension.rs`'s match against
-   `ExtensionType.java`; add the record, dispatch case, `TokenExtensions` accessor, and a
-   round-trip test (plus a real fixture when available).
+   `ExtensionType.java`; add the record to the sealed `TokenExtension` hierarchy, the
+   enum entry and dispatch case, and a round-trip test (plus a real fixture when
+   available).
 4. For RPC methods: compare `rpc.rs` registrations against `SolanaJsonRpcClient.java`
    literals; add interface method, request builder, response record + parser, and a
    `RoundTripRpcRequestTests` case.

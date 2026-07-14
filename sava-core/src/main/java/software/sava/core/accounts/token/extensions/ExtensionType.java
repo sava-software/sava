@@ -1,5 +1,10 @@
 package software.sava.core.accounts.token.extensions;
 
+/// Deprecated, duplicates the sealed [TokenExtension] type hierarchy. Parse extensions
+/// via [software.sava.core.accounts.token.Token2022#parseExtensions] which returns a
+/// `Set<TokenExtension>` including [UnknownTokenExtension] entries for extensions
+/// released after this enum was last synced.
+@Deprecated(forRemoval = true)
 public enum ExtensionType {
 
   /// Used as padding if the account size would otherwise be 355, same as a multisig

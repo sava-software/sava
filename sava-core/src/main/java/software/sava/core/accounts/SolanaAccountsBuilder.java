@@ -20,7 +20,6 @@ public final class SolanaAccountsBuilder {
   private PublicKey secp256r1Program = fromBase58Encoded("Secp256r1SigVerify1111111111111111111111111");
   private PublicKey zKTokenProofProgram = fromBase58Encoded("ZkTokenProof1111111111111111111111111111111");
   private PublicKey zkElGamalProofProgram = fromBase58Encoded("ZkE1Gama1Proof11111111111111111111111111111");
-  private PublicKey incinerator = fromBase58Encoded("1nc1nerator11111111111111111111111111111111");
   // Mint
   private PublicKey wrappedSolTokenMint = fromBase58Encoded("So11111111111111111111111111111111111111112");
   // Common
@@ -93,8 +92,6 @@ public final class SolanaAccountsBuilder {
         zkElGamalProofProgram,
         createInvoked(zkElGamalProofProgram),
         createRead(zkElGamalProofProgram),
-        incinerator,
-        createWrite(incinerator),
         // Mint
         wrappedSolTokenMint,
         createRead(wrappedSolTokenMint),
@@ -262,15 +259,6 @@ public final class SolanaAccountsBuilder {
 
   public SolanaAccountsBuilder zkElGamalProofProgram(final String zkElGamalProofProgram) {
     return zkElGamalProofProgram(fromBase58Encoded(zkElGamalProofProgram));
-  }
-
-  public SolanaAccountsBuilder incinerator(final PublicKey incinerator) {
-    this.incinerator = incinerator;
-    return this;
-  }
-
-  public SolanaAccountsBuilder incinerator(final String incinerator) {
-    return incinerator(fromBase58Encoded(incinerator));
   }
 
   public SolanaAccountsBuilder wrappedSolTokenMint(final PublicKey wrappedSolTokenMint) {

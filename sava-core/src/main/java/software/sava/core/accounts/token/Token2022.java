@@ -5,35 +5,36 @@ import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
-import java.util.EnumMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.BiFunction;
 
 public record Token2022(Mint mint,
                         AccountType accountType,
-                        Map<ExtensionType, TokenExtension> extensions) implements TokenExtensions, Serializable {
+                        Set<TokenExtension> tokenExtensions) implements Serializable {
 
   private static final int PADDING_AFTER_MINT = 83;
 
   public static final BiFunction<PublicKey, byte[], Token2022> FACTORY = Token2022::read;
 
-  static Map<ExtensionType, TokenExtension> parseExtensions(final byte[] data, final int offset) {
-    final var extensions = new EnumMap<ExtensionType, TokenExtension>(ExtensionType.class);
+  public static Set<TokenExtension> parseExtensions(final byte[] data, final int offset) {
+    final var extensions = new LinkedHashSet<TokenExtension>();
     final var extensionTypes = ExtensionType.values();
     for (int i = offset; i < data.length; ) {
       final int extensionType = ByteUtil.getInt16LE(data, i);
-      if (extensionType >= extensionTypes.length) {
-        throw new IllegalStateException("Unsupported Token 2022 extension ordinal " + extensionType);
-      }
       if (extensionType == 0) {
         // Trailing zeroed padding, e.g. re-allocated but not yet initialized extension space.
-        return extensions.isEmpty()
-            ? Map.of(ExtensionType.Uninitialized, Uninitialized.INSTANCE)
-            : extensions;
+        return extensions.isEmpty() ? Set.of(Uninitialized.INSTANCE) : extensions;
       }
       i += Short.BYTES;
       final int length = ByteUtil.getInt16LE(data, i);
       i += Short.BYTES;
+      if (extensionType >= extensionTypes.length) {
+        // Extension released after ExtensionType was last synced, pass the raw data back
+        // to the user.
+        extensions.add(new UnknownTokenExtension(extensionType, Arrays.copyOfRange(data, i, i + length)));
+        i += length;
+        continue;
+      }
       final var type = extensionTypes[extensionType];
       final var extensionData = switch (type) {
         case Uninitialized -> Uninitialized.INSTANCE;
@@ -67,11 +68,26 @@ public record Token2022(Mint mint,
         case PermissionedBurn -> PermissionedBurnConfig.read(data, i);
       };
       if (extensionData != null) {
-        extensions.put(type, extensionData);
+        extensions.add(extensionData);
       }
       i += length;
     }
     return extensions;
+  }
+
+  /// Deprecated with [ExtensionType], use [#parseExtensions] which includes
+  /// [UnknownTokenExtension] entries for extensions released after [ExtensionType] was
+  /// last synced. Unknown extensions are dropped here as they cannot be keyed by
+  /// [ExtensionType].
+  @Deprecated(forRemoval = true)
+  static Map<ExtensionType, TokenExtension> parseExtensionsMap(final Set<TokenExtension> extensions) {
+    final var extensionMap = new EnumMap<ExtensionType, TokenExtension>(ExtensionType.class);
+    for (final var extension : extensions) {
+      if (!(extension instanceof UnknownTokenExtension)) {
+        extensionMap.put(extension.extensionType(), extension);
+      }
+    }
+    return extensionMap;
   }
 
   static AccountType parseAccountType(final byte[] data, final int offset) {
@@ -88,14 +104,21 @@ public record Token2022(Mint mint,
     int i = Mint.BYTES + PADDING_AFTER_MINT;
     final var accountType = parseAccountType(data, i);
     ++i;
-    final var extensions = parseExtensions(data, i);
-    return new Token2022(mint, accountType, extensions);
+    return new Token2022(mint, accountType, parseExtensions(data, i));
+  }
+
+  /// Deprecated with [ExtensionType], use [#tokenExtensions()] and switch on the sealed
+  /// [TokenExtension] type. Built dynamically on each call, [UnknownTokenExtension]
+  /// entries are dropped since they cannot be keyed by [ExtensionType].
+  @Deprecated(forRemoval = true)
+  public Map<ExtensionType, TokenExtension> extensions() {
+    return parseExtensionsMap(tokenExtensions);
   }
 
   @Override
   public int l() {
-    int l = Mint.BYTES + PADDING_AFTER_MINT + 1 + (extensions.size() * Integer.BYTES);
-    for (final var extension : extensions.values()) {
+    int l = Mint.BYTES + PADDING_AFTER_MINT + 1 + (tokenExtensions.size() * Integer.BYTES);
+    for (final var extension : tokenExtensions) {
       l += extension.l();
     }
     return l;
@@ -106,7 +129,7 @@ public record Token2022(Mint mint,
     int i = offset + mint.write(data, offset) + PADDING_AFTER_MINT;
     data[i] = (byte) accountType.ordinal();
     ++i;
-    for (final var extension : extensions.values()) {
+    for (final var extension : tokenExtensions) {
       i += TokenExtension.write(extension, data, i);
     }
     return i - offset;

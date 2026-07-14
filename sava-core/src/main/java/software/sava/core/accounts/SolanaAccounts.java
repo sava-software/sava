@@ -231,13 +231,6 @@ public interface SolanaAccounts {
 
   AccountMeta readFeatureProposalProgram();
 
-  /// Burn address, transferred lamports are removed from circulation at the end of the
-  /// slot. Note that only lamport balances are burned, do not transfer tokens or other
-  /// account state.
-  PublicKey incinerator();
-
-  AccountMeta writeIncinerator();
-
   // Native
 
   PublicKey systemProgram();
@@ -256,8 +249,11 @@ public interface SolanaAccounts {
 
   AccountMeta invokedStakeProgram();
 
+  /// Deprecated upstream, the stake config account is no longer used by the stake program.
+  @Deprecated
   PublicKey stakeConfig();
 
+  @Deprecated
   AccountMeta readStakeConfig();
 
   AccountMeta readStakeProgram();
@@ -298,10 +294,14 @@ public interface SolanaAccounts {
 
   AccountMeta readSecp256r1Program();
 
+  /// Deprecated upstream, superseded by [#zkElGamalProofProgram()].
+  @Deprecated
   PublicKey zKTokenProofProgram();
 
+  @Deprecated
   AccountMeta invokedZKTokenProofProgram();
 
+  @Deprecated
   AccountMeta readZKTokenProofProgram();
 
   PublicKey zkElGamalProofProgram();
@@ -325,16 +325,23 @@ public interface SolanaAccounts {
 
   AccountMeta readEpochScheduleSysVar();
 
+  /// Deprecated upstream, the Fees sysvar is no longer updated by the runtime.
+  @Deprecated
   PublicKey feesSysVar();
 
+  @Deprecated
   AccountMeta readFeesSysVar();
 
   PublicKey instructionsSysVar();
 
   AccountMeta readInstructionsSysVar();
 
+  /// Deprecated upstream, the RecentBlockhashes sysvar is no longer updated by the
+  /// runtime, use the getLatestBlockhash RPC method.
+  @Deprecated
   PublicKey recentBlockhashesSysVar();
 
+  @Deprecated
   AccountMeta readRecentBlockhashesSysVar();
 
   PublicKey rentSysVar();

@@ -39,8 +39,6 @@ record SolanaAccountsRecord(
     PublicKey zkElGamalProofProgram,
     AccountMeta invokedZkElGamalProofProgram,
     AccountMeta readZkElGamalProofProgram,
-    PublicKey incinerator,
-    AccountMeta writeIncinerator,
     // Mint
     PublicKey wrappedSolTokenMint,
     AccountMeta readWrappedSolTokenMint,

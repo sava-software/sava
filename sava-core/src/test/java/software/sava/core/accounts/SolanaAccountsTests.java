@@ -32,7 +32,6 @@ final class SolanaAccountsTests {
     assertAddress("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", accounts.associatedTokenAccountProgram());
     assertAddress("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", accounts.token2022Program());
     assertAddress("TkupDoNseygccBCjSsrSpMccjwHfTYwcrjpnDSrFDhC", accounts.tokenUpgradeProgram());
-    assertAddress("1nc1nerator11111111111111111111111111111111", accounts.incinerator());
     assertAddress("Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo", accounts.memoProgram());
     assertAddress("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr", accounts.memoProgramV2());
     assertAddress("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX", accounts.nameServiceProgram());
