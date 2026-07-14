@@ -80,7 +80,7 @@ public record TxSig(long slot,
         this.memo = ji.readString();
       } else if (fieldEquals("signature", buf, offset, len)) {
         this.signature = ji.readString();
-      } else if (fieldEquals("err", buf, offset, len)) {
+      } else if (fieldEquals("err", buf, offset, len) || fieldEquals("error", buf, offset, len)) {
         this.error = TransactionError.parseError(ji);
       } else {
         ji.skip();
