@@ -20,8 +20,8 @@ comparing.
   `transaction`, `clock`, `epoch-rewards`, `short-vec`, `address-lookup-table-interface`,
   `compute-budget-interface`, and friends.
 - **solana-com** — `https://github.com/solana-foundation/solana-com` — solana.com docs; RPC
-  method pages at `content/docs/en/rpc/http/*.mdx` and
-  `content/docs/en/rpc/websocket/*.mdx` (canonical request/response examples in
+  method pages at `apps/docs/content/docs/en/rpc/http/*.mdx` and
+  `apps/docs/content/docs/en/rpc/websocket/*.mdx` (canonical request/response examples in
   `jsonc !response` blocks).
 
 Repo-relative paths below are prefixed with the repo name (e.g. `agave:rpc/src/rpc.rs`).
@@ -252,18 +252,53 @@ files in the solana-improvement-documents repo.
 - Watch for larger-transaction SIMDs: `Transaction.MAX_SERIALIZED_LENGTH=1232` and
   `MAX_ACCOUNTS=64` are already deprecated as not valid for all future versions.
 
+## Last verified sync points
+
+Each row records the reference repo commit the mirrored surfaces were last verified
+against, and which surfaces that verification covered. Future syncs only need to review
+`git diff <hash>..HEAD -- <watched paths>` in the reference clone — plus a full pass over
+any surface NOT listed in the scope. **Update the row (hash, date, scope) whenever a sync
+completes.**
+
+| Repo | Commit | Date | Verified scope |
+|---|---|---|---|
+| agave | `e9a538e726` | 2026-07-14 | Token-2022 extensions (`account-decoder/src/parse_token_extension.rs`, `account-decoder-client-types/src/token.rs`), HTTP RPC method set (`rpc/src/rpc.rs`), pubsub methods (`rpc/src/rpc_pubsub.rs`), request/response shapes (`rpc-client-types/src/{config,response}.rs`), custom error codes (`rpc-client-api/src/custom_error.rs`), reserved accounts (`reserved-account-keys/src/lib.rs`), sysvar layouts (`account-decoder/src/parse_sysvar.rs`), `transaction-status-client-types/src/lib.rs` enums |
+| solana-sdk | `4fb3a9a3` | 2026-07-14 | `transaction-error/`, `instruction-error/` (all variants), `sdk-ids/` (address constants) |
+| solana-com | `7719729df` | 2026-07-14 | Documented HTTP/WebSocket method lists (`apps/docs/content/docs/en/rpc/`) confirmed to match the implemented client surface |
+| solana-improvement-documents | `05f2ae9` | 2026-07-14 | Alpenglow SIMDs 0326/0357/0384/0387/0388 read for the Alpenglow section above |
+
+Example diff commands, scoped to the watched paths:
+
+```shell
+git -C <agave-clone> diff e9a538e726..HEAD -- \
+  account-decoder/src/parse_token_extension.rs \
+  account-decoder-client-types/src/token.rs \
+  account-decoder/src/parse_sysvar.rs \
+  rpc/src/rpc.rs rpc/src/rpc_pubsub.rs \
+  rpc-client-types/src/config.rs rpc-client-types/src/response.rs \
+  rpc-client-api/src/custom_error.rs \
+  reserved-account-keys/src/lib.rs \
+  transaction-status-client-types/src/lib.rs
+
+git -C <solana-sdk-clone> diff 4fb3a9a3..HEAD -- \
+  transaction-error/ instruction-error/ sdk-ids/
+```
+
 ## Sync task checklist
 
 1. Locate (ask the user) or clone the reference repo(s) the task needs — see Reference
    repositories above — and `git pull` existing clones before comparing.
-2. Diff the relevant canonical file(s) above against the Java mirror.
-3. For token extensions: compare `parse_token_extension.rs`'s match against
+2. Diff the reference clone against its "Last verified sync points" hash, scoped to the
+   watched paths; only changes in the diff (plus surfaces outside the verified scope) need
+   review. Update the sync-point row when done.
+3. Diff the relevant canonical file(s) above against the Java mirror.
+4. For token extensions: compare `parse_token_extension.rs`'s match against
    `ExtensionType.java`; add the record to the sealed `TokenExtension` hierarchy, the
    enum entry and dispatch case, and a round-trip test (plus a real fixture when
    available).
-4. For RPC methods: compare `rpc.rs` registrations against `SolanaJsonRpcClient.java`
+5. For RPC methods: compare `rpc.rs` registrations against `SolanaJsonRpcClient.java`
    literals; add interface method, request builder, response record + parser, and a
    `RoundTripRpcRequestTests` case.
-5. For errors: check `agave:rpc-client-api/src/custom_error.rs` for codes past `-32021`
+6. For errors: check `agave:rpc-client-api/src/custom_error.rs` for codes past `-32021`
    and `solana-sdk:transaction-error/` for new variants.
-6. Run `./gradlew :sava-core:test :sava-rpc:test` (integration tests via `integ.sh`).
+7. Run `./gradlew :sava-core:test :sava-rpc:test` (integration tests via `integ.sh`).
