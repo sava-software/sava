@@ -1,5 +1,12 @@
 # Changelog
 
+## [25.6.1](https://github.com/sava-software/sava/compare/25.6.0...25.6.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* **core:** handle BigInteger size and signed overflow issues in ByteUtil ([3eccc12](https://github.com/sava-software/sava/commit/3eccc122378fe917f18df7a0a9b1816a5fdfbc8e))
+
 ## [25.6.0](https://github.com/sava-software/sava/compare/25.5.0...25.6.0) (2026-07-14)
 
 
