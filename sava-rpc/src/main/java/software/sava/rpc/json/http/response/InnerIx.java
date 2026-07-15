@@ -1,7 +1,6 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.encoding.Base58;
 import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
@@ -52,7 +51,7 @@ public record InnerIx(@Deprecated(forRemoval = true) String program, // Part of 
         }
         this.accounts = List.copyOf(accounts);
       } else if (fieldEquals("data", buf, offset, len)) {
-        data = Base58.decode(ji.readString());
+        data = ji.applyChars(JsonUtil.DECODE_BASE58);
       } else {
         ji.skip();
       }

@@ -2,12 +2,15 @@ package software.sava.rpc.json.http.response;
 
 import software.sava.core.encoding.Base58;
 import software.sava.rpc.json.http.request.RpcEncoding;
+import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 public final class JsonUtil {
 
   private static final System.Logger logger = System.getLogger(JsonUtil.class.getName());
+
+  public static final CharBufferFunction<byte[]> DECODE_BASE58 = Base58::decode;
 
   public static byte[] parseEncodedData(final JsonIterator ji) {
     final var next = ji.whatIsNext();
@@ -27,7 +30,7 @@ public final class JsonUtil {
         final int mark2 = ji.mark();
         ji.reset(mark);
         final byte[] decodedData = switch (encoding) {
-          case base58 -> Base58.decode(ji.readString());
+          case base58 -> ji.applyChars(DECODE_BASE58);
           case base64, base64_zstd -> ji.decodeBase64String();
           case null -> new byte[0];
         };

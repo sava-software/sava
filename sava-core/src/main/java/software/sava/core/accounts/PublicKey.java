@@ -175,8 +175,9 @@ public interface PublicKey extends Comparable<PublicKey> {
   }
 
   static PublicKey fromBase58Encoded(final String base58) {
-    final byte[] publicKey = Base58.decode(base58);
-    return createPubKey(publicKey);
+    final byte[] publicKey = new byte[PUBLIC_KEY_LENGTH];
+    Base58.decode(base58, publicKey);
+    return new PublicKeyBytes(publicKey);
   }
 
   static PublicKey fromBase58Encoded(final char[] base58) {
@@ -184,8 +185,16 @@ public interface PublicKey extends Comparable<PublicKey> {
   }
 
   static PublicKey fromBase58Encoded(final char[] base58, final int from, final int len) {
-    final byte[] publicKey = Base58.decode(base58, from, len);
-    return createPubKey(publicKey);
+    final byte[] publicKey = new byte[PUBLIC_KEY_LENGTH];
+    Base58.decode(base58, from, len, publicKey);
+    return new PublicKeyBytes(publicKey);
+  }
+
+  /// Decodes a base58 encoded key from ASCII text held in a byte array, e.g. a raw JSON or wire buffer.
+  static PublicKey fromBase58Encoded(final byte[] base58, final int from, final int len) {
+    final byte[] publicKey = new byte[PUBLIC_KEY_LENGTH];
+    Base58.decode(base58, from, len, publicKey);
+    return new PublicKeyBytes(publicKey);
   }
 
   static PublicKey fromBase64Encoded(final String base64) {

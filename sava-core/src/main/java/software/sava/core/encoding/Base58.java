@@ -16,12 +16,12 @@ public final class Base58 {
   }
 
   public static boolean isBase58(final char c) {
-    return Arrays.binarySearch(ALPHABET, c) >= 0;
+    return c < INDEXES.length && INDEXES[c] >= 0;
   }
 
   public static boolean isBase58(final String str) {
-    for (final char c : str.toCharArray()) {
-      if (!isBase58(c)) {
+    for (int i = 0, len = str.length(); i < len; ++i) {
+      if (!isBase58(str.charAt(i))) {
         return false;
       }
     }
@@ -29,10 +29,8 @@ public final class Base58 {
   }
 
   public static int nonBase58(final String str) {
-    final char[] chars = str.toCharArray();
-    for (int i = 0; i < chars.length; ++i) {
-      final char c = chars[i];
-      if (Arrays.binarySearch(ALPHABET, c) < 0) {
+    for (int i = 0, len = str.length(); i < len; ++i) {
+      if (!isBase58(str.charAt(i))) {
         return i;
       }
     }
@@ -79,6 +77,107 @@ public final class Base58 {
     return outputStart;
   }
 
+  private static final int[] POW_58 = {1, 58, 3_364, 195_112, 11_316_496, 656_356_768};
+
+  private static int digit(final int c, final int position) {
+    if (c < INDEXES.length) {
+      final int digit = INDEXES[c];
+      if (digit >= 0) {
+        return digit;
+      }
+    }
+    throw new IllegalArgumentException("Illegal character " + c + " at position " + position);
+  }
+
+  private static int limbsLength(final int numDigits) {
+    // 5858/1000 > log2(58), +1 rounds the bit bound up, so the limb count never under-allocates.
+    return (int) ((numDigits * 5_858L / 1_000 + 1 + 31) >> 5);
+  }
+
+  private static int mulAdd(final int[] limbs, final int used, final int mult, final int add) {
+    long carry = add;
+    for (int i = 0; i < used; ++i) {
+      final long product = (limbs[i] & 0xFFFF_FFFFL) * mult + carry;
+      limbs[i] = (int) product;
+      carry = product >>> 32;
+    }
+    if (carry != 0) {
+      limbs[used] = (int) carry;
+      return used + 1;
+    }
+    return used;
+  }
+
+  private static int toLimbs(final char[] input, int i, final int to, final int[] limbs) {
+    int used = 0;
+    while (i < to) {
+      int chunk = digit(input[i], i);
+      int numDigits = 1;
+      for (++i; numDigits < 5 && i < to; ++numDigits, ++i) {
+        chunk = chunk * 58 + digit(input[i], i);
+      }
+      used = mulAdd(limbs, used, POW_58[numDigits], chunk);
+    }
+    return used;
+  }
+
+  private static int toLimbs(final String input, int i, final int to, final int[] limbs) {
+    int used = 0;
+    while (i < to) {
+      int chunk = digit(input.charAt(i), i);
+      int numDigits = 1;
+      for (++i; numDigits < 5 && i < to; ++numDigits, ++i) {
+        chunk = chunk * 58 + digit(input.charAt(i), i);
+      }
+      used = mulAdd(limbs, used, POW_58[numDigits], chunk);
+    }
+    return used;
+  }
+
+  private static int toLimbs(final byte[] input, int i, final int to, final int[] limbs) {
+    int used = 0;
+    while (i < to) {
+      int chunk = digit(input[i] & 0xFF, i);
+      int numDigits = 1;
+      for (++i; numDigits < 5 && i < to; ++numDigits, ++i) {
+        chunk = chunk * 58 + digit(input[i] & 0xFF, i);
+      }
+      used = mulAdd(limbs, used, POW_58[numDigits], chunk);
+    }
+    return used;
+  }
+
+  private static void writeLimbs(final int[] limbs, final int used, final int topBytes, final byte[] out, int o) {
+    final int top = limbs[used - 1];
+    for (int shift = (topBytes - 1) << 3; shift >= 0; shift -= 8) {
+      out[o++] = (byte) (top >>> shift);
+    }
+    for (int i = used - 2; i >= 0; --i) {
+      final int limb = limbs[i];
+      out[o++] = (byte) (limb >>> 24);
+      out[o++] = (byte) (limb >>> 16);
+      out[o++] = (byte) (limb >>> 8);
+      out[o++] = (byte) limb;
+    }
+  }
+
+  private static byte[] toBytes(final int[] limbs, final int used, final int zeros) {
+    final int topBytes = (39 - Integer.numberOfLeadingZeros(limbs[used - 1])) >> 3;
+    final byte[] out = new byte[zeros + ((used - 1) << 2) + topBytes];
+    writeLimbs(limbs, used, topBytes, out, zeros);
+    return out;
+  }
+
+  private static void toBytes(final int[] limbs, final int used, final int zeros, final byte[] out) {
+    final int topBytes = (39 - Integer.numberOfLeadingZeros(limbs[used - 1])) >> 3;
+    final int len = zeros + ((used - 1) << 2) + topBytes;
+    if (len != out.length) {
+      throw new IllegalArgumentException("Decoded " + len + " bytes, expected " + out.length);
+    }
+    Arrays.fill(out, 0, zeros, (byte) 0);
+    writeLimbs(limbs, used, topBytes, out, zeros);
+  }
+
   public static byte[] decode(final char[] input) {
     return decode(input, 0, input.length);
   }
@@ -87,48 +186,77 @@ public final class Base58 {
     if (len == 0) {
       return new byte[0];
     }
-
-    final byte[] input58 = new byte[len];
-    for (int i = from, i58 = 0; i58 < len; ++i, ++i58) {
-      final int c = Character.codePointAt(input, i);
-      try {
-        final int digit = INDEXES[c];
-        if (digit >= 0) {
-          input58[i58] = (byte) digit;
-          continue;
-        }
-      } catch (final ArrayIndexOutOfBoundsException ex) {
-        // throw below
-      }
-      throw new IllegalArgumentException("Illegal character " + c + " at position " + i);
-    }
-
-    int zeros = 0;
-    while (input58[zeros] == 0) {
-      if (++zeros == len) {
-        return input58;
+    final int to = from + len;
+    int i = from;
+    while (input[i] == ENCODED_ZERO) {
+      if (++i == to) {
+        return new byte[len];
       }
     }
+    final int[] limbs = new int[limbsLength(to - i)];
+    final int used = toLimbs(input, i, to, limbs);
+    return toBytes(limbs, used, i - from);
+  }
 
-    final byte[] decoded = new byte[len];
-    int outputStart = len;
-    for (int inputStart = zeros; ; ) {
-      decoded[--outputStart] = divMod(input58, inputStart, 58, 256);
-      if (input58[inputStart] == 0) {
-        if (++inputStart == len) {
-          break;
-        }
+  /// Decodes directly into `out`, which must exactly fit the decoded value.
+  ///
+  /// @throws IllegalArgumentException if the input contains a non base58 character or the decoded length does not equal `out.length`.
+  public static void decode(final char[] input, final int from, final int len, final byte[] out) {
+    final int to = from + len;
+    int i = from;
+    while (i < to && input[i] == ENCODED_ZERO) {
+      ++i;
+    }
+    if (i == to) {
+      if (len != out.length) {
+        throw new IllegalArgumentException("Decoded " + len + " bytes, expected " + out.length);
+      }
+      Arrays.fill(out, (byte) 0);
+      return;
+    }
+    final int[] limbs = new int[limbsLength(to - i)];
+    final int used = toLimbs(input, i, to, limbs);
+    toBytes(limbs, used, i - from, out);
+  }
+
+  /// Decodes base58 ASCII text held in a byte array, e.g. a raw JSON or wire buffer.
+  ///
+  /// @throws IllegalArgumentException if the input contains a non base58 character.
+  public static byte[] decode(final byte[] input, final int from, final int len) {
+    if (len == 0) {
+      return new byte[0];
+    }
+    final int to = from + len;
+    int i = from;
+    while (input[i] == ENCODED_ZERO) {
+      if (++i == to) {
+        return new byte[len];
       }
     }
+    final int[] limbs = new int[limbsLength(to - i)];
+    final int used = toLimbs(input, i, to, limbs);
+    return toBytes(limbs, used, i - from);
+  }
 
-    while (outputStart < len && decoded[outputStart] == 0) {
-      ++outputStart;
+  /// Decodes base58 ASCII text directly into `out`, which must exactly fit the decoded value.
+  ///
+  /// @throws IllegalArgumentException if the input contains a non base58 character or the decoded length does not equal `out.length`.
+  public static void decode(final byte[] input, final int from, final int len, final byte[] out) {
+    final int to = from + len;
+    int i = from;
+    while (i < to && input[i] == ENCODED_ZERO) {
+      ++i;
     }
-
-    final int start = outputStart - zeros;
-    final byte[] zeroPadded = new byte[len - start];
-    System.arraycopy(decoded, start, zeroPadded, 0, zeroPadded.length);
-    return zeroPadded;
+    if (i == to) {
+      if (len != out.length) {
+        throw new IllegalArgumentException("Decoded " + len + " bytes, expected " + out.length);
+      }
+      Arrays.fill(out, (byte) 0);
+      return;
+    }
+    final int[] limbs = new int[limbsLength(to - i)];
+    final int used = toLimbs(input, i, to, limbs);
+    toBytes(limbs, used, i - from, out);
   }
 
   public static byte[] decode(final String input) {
@@ -136,49 +264,36 @@ public final class Base58 {
     if (len == 0) {
       return new byte[0];
     }
-
-    final byte[] input58 = new byte[len];
-    final var codePoints = input.codePoints().iterator();
-    for (int i = 0; i < len; ++i) {
-      final int c = codePoints.next();
-      try {
-        final int digit = INDEXES[c];
-        if (digit >= 0) {
-          input58[i] = (byte) digit;
-          continue;
-        }
-      } catch (final ArrayIndexOutOfBoundsException ex) {
-        // throw below
-      }
-      throw new IllegalArgumentException("Illegal character " + c + " at position " + i);
-    }
-
-    int zeros = 0;
-    while (input58[zeros] == 0) {
-      if (++zeros == len) {
-        return input58;
+    int i = 0;
+    while (input.charAt(i) == ENCODED_ZERO) {
+      if (++i == len) {
+        return new byte[len];
       }
     }
+    final int[] limbs = new int[limbsLength(len - i)];
+    final int used = toLimbs(input, i, len, limbs);
+    return toBytes(limbs, used, i);
+  }
 
-    final byte[] decoded = new byte[len];
-    int outputStart = len;
-    for (int inputStart = zeros; ; ) {
-      decoded[--outputStart] = divMod(input58, inputStart, 58, 256);
-      if (input58[inputStart] == 0) {
-        if (++inputStart == len) {
-          break;
-        }
+  /// Decodes directly into `out`, which must exactly fit the decoded value.
+  ///
+  /// @throws IllegalArgumentException if the input contains a non base58 character or the decoded length does not equal `out.length`.
+  public static void decode(final String input, final byte[] out) {
+    final int len = input.length();
+    int i = 0;
+    while (i < len && input.charAt(i) == ENCODED_ZERO) {
+      ++i;
+    }
+    if (i == len) {
+      if (len != out.length) {
+        throw new IllegalArgumentException("Decoded " + len + " bytes, expected " + out.length);
       }
+      Arrays.fill(out, (byte) 0);
+      return;
     }
-
-    while (outputStart < len && decoded[outputStart] == 0) {
-      ++outputStart;
-    }
-
-    final int start = outputStart - zeros;
-    final byte[] zeroPadded = new byte[len - start];
-    System.arraycopy(decoded, start, zeroPadded, 0, zeroPadded.length);
-    return zeroPadded;
+    final int[] limbs = new int[limbsLength(len - i)];
+    final int used = toLimbs(input, i, len, limbs);
+    toBytes(limbs, used, i, out);
   }
 
   static byte divMod(final byte[] number, final int firstDigit, final int base, final int divisor) {
