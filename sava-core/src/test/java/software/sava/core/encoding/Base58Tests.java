@@ -1,7 +1,6 @@
-package software.sava.core.ecnoding;
+package software.sava.core.encoding;
 
 import org.junit.jupiter.api.Test;
-import software.sava.core.encoding.Base58;
 
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;

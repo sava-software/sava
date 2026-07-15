@@ -1,7 +1,6 @@
-package software.sava.core.ecnoding;
+package software.sava.core.encoding;
 
 import org.junit.jupiter.api.Test;
-import software.sava.core.encoding.CompactU16Encoding;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;

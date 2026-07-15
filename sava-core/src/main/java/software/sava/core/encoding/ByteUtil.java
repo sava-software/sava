@@ -73,17 +73,29 @@ public final class ByteUtil {
                              final int offset,
                              final BigInteger val,
                              final int byteSize) {
-    int j = offset;
     final byte[] be = val.toByteArray();
-    for (int i = be.length - 1; i >= 0; --i, ++j) {
+    int msb = 0;
+    if (be.length > byteSize) {
+      // toByteArray() prepends a zero byte for magnitudes with the top bit
+      // set; it carries no value and must not spill past the field.
+      if (be.length == byteSize + 1 && be[0] == 0) {
+        msb = 1;
+      } else {
+        throw new IllegalArgumentException(String.format(
+            "%s does not fit in %d bytes.", val, byteSize
+        ));
+      }
+    }
+    int j = offset;
+    for (int i = be.length - 1; i >= msb; --i, ++j) {
       data[j] = be[i];
     }
-    if (be.length < byteSize) {
-      final int to = offset + byteSize;
-      final byte zero = (byte) (val.signum() < 0 ? -1 : 0);
-      for (; j < to; ++j) {
-        data[j] = zero;
-      }
+    final int to = offset + byteSize;
+    if (j < to) {
+      final byte fill = (byte) (val.signum() < 0 ? -1 : 0);
+      do {
+        data[j] = fill;
+      } while (++j < to);
     }
     return byteSize;
   }
@@ -97,7 +109,11 @@ public final class ByteUtil {
   }
 
   private static BigInteger getUIntLE(final byte[] data, final int offset, final int byteSize) {
-    return getIntLE(data, offset, byteSize);
+    final byte[] be = new byte[byteSize];
+    for (int i = 0, o = offset + (byteSize - 1); i < be.length; ++i, --o) {
+      be[i] = data[o];
+    }
+    return new BigInteger(1, be);
   }
 
   public static int putInt128LE(final byte[] data, final int offset, final BigInteger val) {
@@ -150,7 +166,7 @@ public final class ByteUtil {
 
   public static byte[] reverse(final byte[] bytes, final int offset, final int len) {
     final byte[] reversed = new byte[len];
-    for (int i = offset, j = (offset + len) - 1; j >= offset; ++i, --j) {
+    for (int i = offset + len - 1, j = 0; j < len; --i, ++j) {
       reversed[j] = bytes[i];
     }
     return reversed;
