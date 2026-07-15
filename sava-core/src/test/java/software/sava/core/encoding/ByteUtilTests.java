@@ -18,7 +18,7 @@ final class ByteUtilTests {
     final byte[] write = new byte[32];
     for (int i = 0; i < 16; ++i) {
       Arrays.fill(write, (byte) 0x5A);
-      ByteUtil.putInt128LE(write, i, expected);
+      assertEquals(16, ByteUtil.putInt128LE(write, i, expected));
       assertEquals(expected, ByteUtil.getInt128LE(write, i));
       assertEquals(expected.mod(TWO_POW_128), ByteUtil.getUInt128LE(write, i));
       assertContained(write, i, 16);
@@ -29,7 +29,7 @@ final class ByteUtilTests {
     final byte[] write = new byte[64];
     for (int i = 0; i < 32; ++i) {
       Arrays.fill(write, (byte) 0x5A);
-      ByteUtil.putInt256LE(write, i, expected);
+      assertEquals(32, ByteUtil.putInt256LE(write, i, expected));
       assertEquals(expected, ByteUtil.getInt256LE(write, i));
       assertEquals(expected.mod(TWO_POW_256), ByteUtil.getUInt256LE(write, i));
       assertContained(write, i, 32);
@@ -102,6 +102,12 @@ final class ByteUtilTests {
     assertThrows(IllegalArgumentException.class, () -> ByteUtil.putInt256LE(write, 0, TWO_POW_256));
     assertThrows(IllegalArgumentException.class,
         () -> ByteUtil.putInt256LE(write, 0, BigInteger.TWO.pow(255).negate().subtract(BigInteger.ONE)));
+
+    // more than one byte over the field: toByteArray() yields byteSize + 2 or more,
+    // including a leading zero sign byte, which must not be misread as the exact-fit case
+    assertThrows(IllegalArgumentException.class, () -> ByteUtil.putInt128LE(write, 0, BigInteger.TWO.pow(135)));
+    assertThrows(IllegalArgumentException.class, () -> ByteUtil.putInt128LE(write, 0, BigInteger.TWO.pow(200)));
+    assertThrows(IllegalArgumentException.class, () -> ByteUtil.putInt256LE(write, 0, BigInteger.TWO.pow(263)));
   }
 
   @Test
@@ -125,6 +131,8 @@ final class ByteUtilTests {
       for (final short val : new short[]{0, 1, -1, 0x12_34, Short.MIN_VALUE, Short.MAX_VALUE}) {
         ByteUtil.putInt16LE(data, offset, val);
         assertEquals(val, ByteUtil.getInt16LE(data, offset));
+        // scramble between overloads so the int delegate is observed writing
+        ByteUtil.putInt16LE(data, offset, (short) ~val);
         ByteUtil.putInt16LE(data, offset, (int) val);
         assertEquals(val, ByteUtil.getInt16LE(data, offset));
       }
@@ -156,6 +164,8 @@ final class ByteUtilTests {
       }) {
         ByteUtil.putFloat32LE(data, offset, val);
         assertEquals(Float.floatToIntBits(val), Float.floatToIntBits(ByteUtil.getFloat32LE(data, offset)));
+        // scramble between overloads so the double delegate is observed writing
+        ByteUtil.putInt32LE(data, offset, ~Float.floatToIntBits(val));
         ByteUtil.putFloat32LE(data, offset, (double) val);
         assertEquals(Float.floatToIntBits(val), Float.floatToIntBits(ByteUtil.getFloat32LE(data, offset)));
       }
@@ -168,6 +178,47 @@ final class ByteUtilTests {
         assertEquals(Double.doubleToLongBits(val), Double.doubleToLongBits(ByteUtil.getFloat64LE(data, offset)));
       }
     }
+  }
+
+  @Test
+  void testIndexOf() {
+    final byte[] data = {1, 2, 3, 4, 2, 3, 5};
+    final byte[] sub = {2, 3};
+
+    assertEquals(1, ByteUtil.indexOf(data, sub));
+    assertEquals(1, ByteUtil.indexOf(data, 0, sub));
+    assertEquals(1, ByteUtil.indexOf(data, 1, sub));
+    assertEquals(4, ByteUtil.indexOf(data, 2, sub));
+    assertEquals(4, ByteUtil.indexOf(data, 4, sub));
+    assertEquals(-1, ByteUtil.indexOf(data, 5, sub));
+    assertEquals(-1, ByteUtil.indexOf(data, new byte[]{3, 2}));
+    assertEquals(-1, ByteUtil.indexOf(data, new byte[]{2, 3, 9}));
+
+    // match at the very end
+    assertEquals(5, ByteUtil.indexOf(data, new byte[]{3, 5}));
+    // the end bound is exclusive of matches extending past it
+    assertEquals(-1, ByteUtil.indexOf(data, 0, 6, new byte[]{3, 5}, 0, 2));
+    assertEquals(5, ByteUtil.indexOf(data, 0, 7, new byte[]{3, 5}, 0, 2));
+
+    // sub-range of the needle
+    assertEquals(1, ByteUtil.indexOf(data, 0, data.length, new byte[]{9, 2, 3, 4, 9}, 1, 4));
+    assertEquals(1, ByteUtil.indexOf(data, 0, new byte[]{9, 2, 3}, 1));
+
+    // an empty needle matches at the start index
+    assertEquals(0, ByteUtil.indexOf(data, new byte[0]));
+    assertEquals(3, ByteUtil.indexOf(data, 3, new byte[0]));
+  }
+
+  @Test
+  void testFixedLength() {
+    assertArrayEquals(new byte[]{1, 2, 0, 0}, ByteUtil.fixedLength(new byte[]{1, 2}, 4));
+    final byte[] exact = {1, 2, 3};
+    assertSame(exact, ByteUtil.fixedLength(exact, 3));
+    assertThrows(IllegalArgumentException.class, () -> ByteUtil.fixedLength(new byte[5], 4));
+
+    assertArrayEquals(new byte[]{'a', 'b', 0, 0}, ByteUtil.fixedLength("ab", 4));
+    assertArrayEquals(new byte[]{'a', 'b'}, ByteUtil.fixedLength("ab", 2, java.nio.charset.StandardCharsets.US_ASCII));
+    assertThrows(IllegalArgumentException.class, () -> ByteUtil.fixedLength("abcde", 4));
   }
 
   @Test

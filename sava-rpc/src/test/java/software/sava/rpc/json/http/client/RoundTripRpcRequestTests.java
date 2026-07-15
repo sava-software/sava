@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.rpc.Filter;
+import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.LargestAccountsFilter;
@@ -972,6 +973,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
 
     final var skeleton = tx.skeleton();
     assertEquals(txSignature, Objects.requireNonNull(skeleton).id());
+    assertEquals(txSignature, Transaction.getBase58Id(tx.data()));
     assertEquals(1, skeleton.numSignatures());
   }
 

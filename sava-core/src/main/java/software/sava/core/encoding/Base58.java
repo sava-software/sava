@@ -336,11 +336,15 @@ public final class Base58 {
     return outputStart;
   }
 
+  /// Completes an encoding started by [#beginMutableEncode(byte[], int, char[])] into `output`,
+  /// which may hold stale content from previous encodings: only characters written by this call
+  /// are ever read back.
   public static int continueMutableEncode(final byte[] input,
                                           int leadingZeroes,
                                           int inputStart,
                                           int outputStart,
                                           final char[] output) {
+    final int writtenFrom = outputStart;
     while (inputStart < input.length) {
       --outputStart;
       output[outputStart] = ALPHABET[divMod(input, inputStart, 256, 58)];
@@ -349,7 +353,7 @@ public final class Base58 {
       }
     }
 
-    while (outputStart < output.length && output[outputStart] == ENCODED_ZERO) {
+    while (outputStart < writtenFrom && output[outputStart] == ENCODED_ZERO) {
       ++outputStart;
     }
 

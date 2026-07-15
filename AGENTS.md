@@ -182,8 +182,48 @@ Enum mirrors in this package: `RewardType` and the confirmation status strings m
 
 Existing sava-core tests: `tx/TransactionSerializationTests.java`,
 `accounts/lookup/AddressLookupTableTests.java`, `accounts/PublicKeyTest.java`,
-`borsh/BorshTests.java`, `ecnoding/CompactU16EncodingTest.java`, `ecnoding/Base58Tests.java`,
-plus the token extension tests above.
+`borsh/BorshTests.java`, `encoding/CompactU16EncodingTest.java`, `encoding/Base58Tests.java`,
+`encoding/ByteUtilTests.java`, `encoding/JexTests.java`, plus the token extension tests above.
+
+## Encoding hardening (sava-core `encoding/`)
+
+`Base58`, `ByteUtil`, `CompactU16Encoding`, and `Jex` back money-critical byte handling
+(addresses, transaction ids, wire lengths, fixed-width fields). Their tests follow a
+differential-oracle convention — round-trip tests alone cannot catch a bug shared by an
+encoder/decoder pair, so each suite checks against an independent reference. Keep the
+convention when extending them:
+
+- `Base58Tests` — cross-validated against an in-test `BigInteger` reference codec, Bitcoin
+  Core's `base58_encode_decode.json` vectors, and known Solana program addresses (hex ↔
+  base58). Includes adversarial 31/33-byte values that pin the exact-fit length check —
+  base58 has no checksum, so that throw is the only guard against a corrupted address
+  decoding to a different valid destination.
+- `JexTests` — every entry-point family cross-validated against `java.util.HexFormat`.
+- `CompactU16EncodingTest` — exhaustive sweep of every value through every entry point,
+  plus the canonical byte vectors from `solana-sdk:short-vec/src/lib.rs`
+  (`test_short_vec_encode_decode`).
+- Decode-into tests use dirty (non-zero) output buffers so dropped writes are observable.
+- Randomized tests seed a `Random` from `SecureRandom` and embed the seed in failure
+  messages; replay a failure by pinning the seed.
+
+Verification tasks (not part of `test`; run whenever these classes change):
+
+- `./gradlew :sava-core:pitestEncoding` — PIT mutation testing of the four classes against
+  their tests; report in `sava-core/build/reports/pitest`. Baseline 2026-07-15: 1063
+  mutations, 98% killed, 0 without coverage; the 25 survivors were individually verified
+  equivalent (limb over-allocation, dead defensive strip loops, chunk sizing). Any new
+  survivor must be either killed with a test or classified equivalent with a reason.
+- `./gradlew :sava-core:fuzzBase58 -PmaxFuzzTime=<seconds>` — Jazzer coverage-guided
+  fuzzing of `Base58Fuzz` (decode/encode round-trip, canonicality, and rejection
+  invariants); the corpus persists in `sava-core/build/fuzz/base58-corpus`, so runs
+  accumulate.
+
+Tooling constraints (also explained by comments in `sava-core/build.gradle.kts`): PIT
+1.19.1 and Jazzer 0.24.0 cannot read Java 25 class files, so the `compileForPitest` task
+recompiles main+test sources at `--release 21` into `build/mutation-classes`, which both
+tools consume — drop that workaround once the tools support class-file major 69. PIT
+silently discards classpath roots whose path contains the string "pitest"; do not rename
+`mutation-classes` to anything containing it.
 
 ## Alpenglow (upcoming consensus replacement)
 
@@ -251,6 +291,19 @@ files in the solana-improvement-documents repo.
   `solana-sdk:compute-budget-interface/` (watch SIMD-0268 default changes).
 - Watch for larger-transaction SIMDs: `Transaction.MAX_SERIALIZED_LENGTH=1232` and
   `MAX_ACCOUNTS=64` are already deprecated as not valid for all future versions.
+- `CompactU16Encoding.decode`/`getByteLen(byte[], int)` are lenient where agave's
+  deserializer (`solana-sdk:short-vec/` `visit_byte`) is strict: agave rejects alias
+  encodings (zero continuation bytes), a continuation bit on byte three, and decoded
+  values overflowing a u16, while sava decodes whatever the bytes say (an unmasked third
+  byte can even yield a negative length). Relevant when parsing untrusted wire data.
+  The encoder-side max was corrected from `0x3ffff` to `0xffff` on 2026-07-15 — the old
+  bound silently truncated 65_536..262_143 to their low 16 bits of digits (65_536
+  encoded to the same bytes as 0).
+- `Jex.decodeChecked(byte[]/ByteBuffer)` throws `ArrayIndexOutOfBoundsException` instead
+  of `IllegalArgumentException` for negative (non-ASCII) input bytes; the char-based
+  variants report correctly. Fix deferred (2026-07-15): read the byte as unsigned
+  (`chars[c] & 0xFF`) so 128..255 fail the `> MAX_CHAR` check — an exception-type change,
+  held back from patch releases per project owner.
 
 ## Last verified sync points
 

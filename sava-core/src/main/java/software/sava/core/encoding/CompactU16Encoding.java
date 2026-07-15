@@ -5,7 +5,9 @@ public final class CompactU16Encoding {
   private static final int SIGNED_BYTE_MASK = 0b1000_0000;
 
   private static final int MAX_TWO_BYTE_LEN = 0x3fff; // 16,383, 2^14-1
-  private static final int MAX_VALUE = 0x3ffff; // 262,143
+  // u16 max: the third byte only carries bits 14-15, so greater values are not representable.
+  // agave errors on serializing lengths above this and on decoded values that overflow a u16.
+  private static final int MAX_VALUE = 0xffff; // 65,535
 
   public static boolean signedByte(final int bite) {
     return (bite & SIGNED_BYTE_MASK) == SIGNED_BYTE_MASK;
