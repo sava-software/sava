@@ -8,6 +8,14 @@ testModuleInfo {
 }
 
 hardening {
+  mutation.register("ed25519") {
+    targetClasses = listOf(
+      "software.sava.core.crypto.ed25519.Ed25519Util",
+      "software.sava.core.crypto.ed25519.Scalar25519",
+      "software.sava.core.crypto.ed25519.Codec"
+    )
+    targetTests = "software.sava.core.crypto.ed25519.*Test*"
+  }
   mutation.register("encoding") {
     targetClasses = listOf(
       "software.sava.core.encoding.Base58",
