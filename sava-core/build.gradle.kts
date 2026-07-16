@@ -37,5 +37,8 @@ hardening {
     // transactions cap at 1232 bytes on-chain; a little headroom lets the fuzzer probe
     // over-long inputs without wasting executions on the megabyte tail
     maxLen = 1500
+    // real legacy + versioned(lookup-table) transactions: the header/offset/length
+    // agreement can't be reached from scratch by a mutator
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/txSkeleton")
   }
 }

@@ -26,6 +26,20 @@ final class CompactU16EncodingTest {
   }
 
   @Test
+  void decodeMalformedThreeByteStaysU16() {
+    // a malformed three-byte length whose high byte has bits beyond 14-15 set must not
+    // sign-extend into a negative or overflowing value: it stays within [0, 65535].
+    for (final byte high : new byte[]{(byte) 0xFF, (byte) 0x80, 0x7F, 0x04, 0x03}) {
+      final byte[] malformed = {(byte) 0xFF, (byte) 0xFF, high};
+      final int decoded = CompactU16Encoding.decode(malformed, 0);
+      assertTrue(decoded >= 0 && decoded <= 0xffff, "decoded out of u16 range: " + decoded);
+      assertEquals(((high & 0x03) << 14) | 0x3FFF, decoded);
+    }
+    // the all-ones case that surfaced the bug: [0xFF,0xFF,0xFF] previously decoded to -1.
+    assertEquals(0xFFFF, CompactU16Encoding.decode(new byte[]{(byte) 0xFF, (byte) 0xFF, (byte) 0xFF}, 0));
+  }
+
+  @Test
   void testAgaveVectors() {
     // https://github.com/anza-xyz/solana-sdk short-vec/src/lib.rs test_short_vec_encode_decode
     final int[][] vectors = {

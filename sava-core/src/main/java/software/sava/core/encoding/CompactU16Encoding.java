@@ -75,7 +75,10 @@ public final class CompactU16Encoding {
     if ((b0 & SIGNED_BYTE_MASK) == SIGNED_BYTE_MASK) {
       final byte b1 = out[off + 1];
       if ((b1 & SIGNED_BYTE_MASK) == SIGNED_BYTE_MASK) {
-        return (out[off + 2] << 14) | ((b1 & 0x7F) << 7) | (b0 & 0x7F);
+        // the third byte carries only bits 14-15; masking to those keeps the result a
+        // u16 in [0, 65535]. Without it a malformed high byte sign-extends to a negative
+        // or overflowing length that never trips a bounds check downstream.
+        return ((out[off + 2] & 0x03) << 14) | ((b1 & 0x7F) << 7) | (b0 & 0x7F);
       } else {
         return (b1 << 7) | (b0 & 0x7F);
       }

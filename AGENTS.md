@@ -185,6 +185,54 @@ Existing sava-core tests: `tx/TransactionSerializationTests.java`,
 `borsh/BorshTests.java`, `encoding/CompactU16EncodingTest.java`, `encoding/Base58Tests.java`,
 `encoding/ByteUtilTests.java`, `encoding/JexTests.java`, plus the token extension tests above.
 
+## Transaction hardening (sava-core `tx/`)
+
+Transaction wire parsing is the widest untrusted-input surface in the library (RPC
+responses, user-pasted base64). Malformed-input contract: **garbage in → `RuntimeException`
+out**. `TransactionSkeleton.deserializeSkeleton` and the parse methods walk raw offsets and
+may throw `IllegalArgumentException`, `ArrayIndexOutOfBoundsException`, or
+`NegativeArraySizeException` on hostile bytes; callers must not assume otherwise. Nothing
+guarantees a *typed* rejection — see the `CompactU16Encoding.decode` leniency gap below.
+
+- `./gradlew :sava-core:pitestTx` — PIT over `TransactionSkeleton`,
+  `TransactionSkeletonRecord`, `TransactionRecord`, `InstructionRecord`. Baseline
+  2026-07-16: 497 mutations, 93% killed, 93% test strength, 99% line coverage, **1**
+  without coverage (down from 183) — `TransactionRecord.setBlockHash`'s non-`TransactionRecord`
+  branch, unreachable without a foreign `Transaction` implementation. The 36 survivors are
+  mostly offset arithmetic that a length assertion cannot distinguish; treat any *new*
+  no-coverage entry as a gap to close.
+- `./gradlew :sava-core:fuzzTxSkeleton -PmaxFuzzTime=<seconds>` — Jazzer over
+  `TransactionSkeletonFuzz`: tolerates any `RuntimeException` from deserialization and the
+  parsers, so what it hunts is what the contract forbids — hangs, memory exhaustion, and
+  any non-`RuntimeException` throwable — plus the cross-method invariants that must hold
+  whenever a parse fully succeeds (signer accounts vs signer keys; the signer + non-signer
+  partition of the included accounts; `parseProgramAccounts` vs each instruction's
+  `programId`; a non-negative `serializedInstructionsLength`; `numAccounts` vs the header
+  counts). The versioned lookup-table `parseAccounts(Map)` path — a second offset walker
+  the no-table paths never reach — is driven with synthetic 256-entry tables so any in-band
+  byte index resolves and the length check stays sound. Committed seeds live in
+  `src/test/resources/fuzz/txSkeleton` (real legacy + versioned/lookup-table transactions),
+  wired via the plugin's `seedCorpus` property; seeding lifts starting coverage 176 → 275
+  edges. **A structured-format fuzzer is near-useless unseeded** — the header, offsets, and
+  lengths must all agree before any body-walking runs, which a from-scratch mutator never
+  reaches; always seed from real fixtures. The writable corpus persists in
+  `build/fuzz/txSkeleton-corpus`. Worst-case allocation from a hostile header is bounded
+  (~16MB, then AIOOBE) — verified under a 512MB heap, so a large fuzzer RSS is Jazzer's own
+  sizing, not a per-input bomb.
+
+Tests: `TransactionSerializationTests` (round trips against real main-net transactions),
+`TransactionSkeletonParseTests` (each narrow parse accessor cross-checked against the broad
+`parseAccounts`/`parseInstructions` views), `InstructionBuildingTests` (account appends,
+`beginsWith` including slice bounds, instruction splicing, size limit),
+`TransactionSigningTests` (bulk and indexed signing cross-checked against one-by-one
+signing). Prefer extending these over adding new fixtures — the cross-method invariant is
+what catches offset bugs, and it has found two real ones: `serializedInstructionsLength`
+never skipped the program-index byte, and (once the fuzzer was seeded) it returned a
+negative length on a malformed compact-u16 because `CompactU16Encoding.decode`
+sign-extended a three-byte length's high byte — no bounds check ever tripped, so the
+garbage-in → exception-out contract was silently violated (both fixed 2026-07-16; the
+decode fix masks the third byte to bits 14-15).
+
 ## Encoding hardening (sava-core `encoding/`)
 
 `Base58`, `ByteUtil`, `CompactU16Encoding`, and `Jex` back money-critical byte handling
@@ -226,6 +274,17 @@ provided by the shared `software.sava.build.feature.hardening` convention plugin
   with the String reference path, plus canonicality and rejection invariants. Input length
   is capped (`maxLen = 256` — the codec is O(n²) and all interesting boundaries are
   small); the corpus persists in `sava-core/build/fuzz/base58-corpus`, so runs accumulate.
+
+Adding a fuzz target: give it a class with `public static void fuzzerTestOneInput(byte[])`
+and no Jazzer imports (so it compiles with the regular test sources), register it in the
+`hardening { fuzz.register("<name>") { ... } }` block with `targetClass`, an optional
+`maxLen`, and — for any structured format — a `seedCorpus` directory of committed seed
+inputs (`layout.projectDirectory.dir("src/test/resources/fuzz/<name>")`, one file per
+input). The plugin passes `seedCorpus` to libFuzzer as a trailing read-only corpus:
+replayed every run, but only newly interesting inputs are written back to the writable
+`build/fuzz/<name>-corpus`. Omit `seedCorpus` only when every prefix of the input is
+already valid (e.g. a raw codec like Base58); leaving a structured target seedless is the
+single most common reason a fuzzer plateaus at low coverage.
 
 Tooling notes (also explained by comments in the hardening plugin): the plugin recompiles
 the main and test sources into one plain, module-info-free classpath root per tool —
@@ -304,14 +363,32 @@ files in the solana-improvement-documents repo.
   `solana-sdk:compute-budget-interface/` (watch SIMD-0268 default changes).
 - Watch for larger-transaction SIMDs: `Transaction.MAX_SERIALIZED_LENGTH=1232` and
   `MAX_ACCOUNTS=64` are already deprecated as not valid for all future versions.
-- `CompactU16Encoding.decode`/`getByteLen(byte[], int)` are lenient where agave's
+- `CompactU16Encoding.decode`/`getByteLen(byte[], int)` are still lenient where agave's
   deserializer (`solana-sdk:short-vec/` `visit_byte`) is strict: agave rejects alias
-  encodings (zero continuation bytes), a continuation bit on byte three, and decoded
-  values overflowing a u16, while sava decodes whatever the bytes say (an unmasked third
-  byte can even yield a negative length). Relevant when parsing untrusted wire data.
-  The encoder-side max was corrected from `0x3ffff` to `0xffff` on 2026-07-15 — the old
-  bound silently truncated 65_536..262_143 to their low 16 bits of digits (65_536
+  encodings (zero continuation bytes) and a continuation bit on byte three, while sava
+  decodes whatever the bytes say. `decode` no longer overflows a u16, though: since
+  2026-07-15 it masks the third byte to bits 14-15, so the result is always in
+  `[0, 65535]` (a fuzz-found regression where an unmasked third byte yielded a negative
+  length that then flowed into `serializedInstructionsLength`). Adopting agave's *strict*
+  rejection (throw on a non-canonical encoding) is a deliberate non-goal for now — it would
+  change a hot, mutation-tested primitive's contract from lenient-decode to
+  reject-and-throw; do it only with the full pitest + fuzz re-verification, not as a
+  drive-by. The encoder-side max was corrected from `0x3ffff` to `0xffff` on 2026-07-15 —
+  the old bound silently truncated 65_536..262_143 to their low 16 bits of digits (65_536
   encoded to the same bytes as 0).
+- A legacy header carries no invoked indexes, so `parseAccounts()` types every read-only
+  account `createRead` — the **account array** never marks programs invoked for legacy
+  transactions (only the versioned path consults `invokedIndexes`; the legacy branch of
+  `deserializeSkeleton` stores `LEGACY_INVOKED_INDEXES` and never collects them). The
+  instruction accessors compensate: all four (`parseInstructions`,
+  `parseInstructionsWithoutAccounts`, `filterInstructions`,
+  `filterInstructionsWithoutAccounts`) mark an instruction's `programId` invoked, so their
+  results are mutually `equals` — pinned by `legacyProgramAccountsAreInvoked`. Do not
+  "simplify" `parseInstructions` back to reusing the account-array meta: it silently
+  reintroduces the disagreement, and because `VO_META_COMPARATOR` ranks invoked accounts
+  ahead of other read-only ones, a transaction rebuilt via
+  `Transaction.createTx(feePayer, parseLegacyInstructions())` would order its accounts
+  differently.
 - `Jex.decodeChecked(byte[]/ByteBuffer)` throws `ArrayIndexOutOfBoundsException` instead
   of `IllegalArgumentException` for negative (non-ASCII) input bytes; the char-based
   variants report correctly. Fix deferred (2026-07-15): read the byte as unsigned
