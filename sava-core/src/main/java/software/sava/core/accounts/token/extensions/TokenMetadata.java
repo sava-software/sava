@@ -54,6 +54,11 @@ public record TokenMetadata(PublicKey updateAuthority,
     if (numExtras == 0) {
       additionalMetadata = Map.of();
     } else {
+      // each entry needs at least two u32 length prefixes; validating the count against
+      // the bytes actually present bounds the allocation below against a corrupt count
+      if (numExtras > ((data.length - i) >> 3)) {
+        throw new IllegalArgumentException("Invalid additional metadata count: " + numExtras);
+      }
       final var entries = new Map.Entry[numExtras];
       for (int m = 0, l; m < numExtras; ++m) {
         l = ByteUtil.getInt32LE(data, i);

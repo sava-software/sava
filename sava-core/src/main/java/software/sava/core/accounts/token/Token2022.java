@@ -20,15 +20,23 @@ public record Token2022(Mint mint,
     final var extensions = new LinkedHashSet<TokenExtension>();
     final var extensionTypes = ExtensionType.values();
     for (int i = offset; i < data.length; ) {
-      final int extensionType = ByteUtil.getInt16LE(data, i);
+      final int extensionType = ByteUtil.getInt16LE(data, i) & 0xFFFF;
       if (extensionType == 0) {
         // Trailing zeroed padding, e.g. re-allocated but not yet initialized extension space.
         return extensions.isEmpty() ? Set.of(Uninitialized.INSTANCE) : extensions;
       }
       i += Short.BYTES;
-      final int length = ByteUtil.getInt16LE(data, i);
+      final int length = ByteUtil.getInt16LE(data, i) & 0xFFFF;
       i += Short.BYTES;
       if (extensionType >= extensionTypes.length) {
+        if (i + length > data.length) {
+          // copyOfRange would silently zero-pad the fabricated tail; corrupt lengths must
+          // throw here the same as they do for known extensions
+          throw new IndexOutOfBoundsException(String.format(
+              "Unknown extension %d claims %d bytes, but only %d remain.",
+              extensionType, length, data.length - i
+          ));
+        }
         // Extension released after ExtensionType was last synced, pass the raw data back
         // to the user.
         extensions.add(new UnknownTokenExtension(extensionType, Arrays.copyOfRange(data, i, i + length)));

@@ -38,11 +38,24 @@ hardening {
     )
     targetTests = "software.sava.core.tx.*Test*,software.sava.core.accounts.lookup.*Test*"
   }
+  mutation.register("token2022") {
+    targetClasses = listOf("software.sava.core.accounts.token.*")
+    targetTests = "software.sava.core.token.*Test*"
+  }
   fuzz.register("base58") {
     targetClass = "software.sava.core.encoding.Base58Fuzz"
     // every interesting Base58 boundary lives in small inputs; beyond this the O(n^2)
     // codec only burns executions per second
     maxLen = 256
+  }
+  fuzz.register("token2022") {
+    targetClass = "software.sava.core.token.Token2022Fuzz"
+    // real mints with metadata run a few hundred bytes; every TLV boundary case lives in
+    // small inputs
+    maxLen = 2048
+    // the PYUSD mint (8 extensions incl. TokenMetadata) and a confidential token account:
+    // a from-scratch mutator would take a long time to assemble a valid TLV chain
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/token2022")
   }
   fuzz.register("txSkeleton") {
     targetClass = "software.sava.core.tx.TransactionSkeletonFuzz"

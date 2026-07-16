@@ -7,11 +7,57 @@ import software.sava.core.accounts.token.Token2022;
 import software.sava.core.accounts.token.Token2022Account;
 import software.sava.core.accounts.token.extensions.*;
 
+import java.time.Duration;
 import java.util.Base64;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ParseExtensionsTests {
+
+  @Test
+  void unsignedTypeAndLength() {
+    // type and length are u16 on-chain; read as signed i16 a length of 0xFFFC walked the
+    // TLV cursor backwards and looped forever, and a type >= 0x8000 indexed the
+    // ExtensionType values with a negative ordinal instead of falling back to
+    // UnknownTokenExtension
+    final var looped = assertTimeoutPreemptively(
+        Duration.ofSeconds(5),
+        // ImmutableOwner claiming length 0xFFFC: the claim overshoots the end of the data,
+        // which ends the walk after the extension parses
+        () -> Token2022.parseExtensions(new byte[]{7, 0, (byte) 0xFC, (byte) 0xFF}, 0)
+    );
+    assertEquals(Set.of(ImmutableOwner.INSTANCE), looped);
+
+    final var unknown = Token2022.parseExtensions(new byte[]{0, (byte) 0x80, 2, 0, (byte) 0xAB, (byte) 0xCD}, 0);
+    assertEquals(1, unknown.size());
+    final var extension = assertInstanceOf(UnknownTokenExtension.class, unknown.iterator().next());
+    assertEquals(0x8000, extension.type());
+    assertEquals(0x8000, extension.ordinal());
+    assertArrayEquals(new byte[]{(byte) 0xAB, (byte) 0xCD}, extension.data());
+  }
+
+  @Test
+  void unknownExtensionLengthBeyondDataEnd() {
+    // an unknown extension claiming one byte more than remains must throw like known
+    // extensions do, not fabricate a zero-padded tail via copyOfRange
+    final byte[] data = {0, (byte) 0x80, 3, 0, (byte) 0xAB, (byte) 0xCD};
+    final var exception = assertThrows(IndexOutOfBoundsException.class, () -> Token2022.parseExtensions(data, 0));
+    assertEquals("Unknown extension 32768 claims 3 bytes, but only 2 remain.", exception.getMessage());
+  }
+
+  @Test
+  void corruptAdditionalMetadataCount() {
+    // updateAuthority + mint + empty name/symbol/uri, then a count claiming far more
+    // entries than the remaining bytes could hold; the reader must reject the count
+    // instead of allocating an entry array sized by attacker-controlled account data
+    final byte[] data = new byte[32 + 32 + 4 + 4 + 4 + 4];
+    data[32 + 32 + 4 + 4 + 4] = (byte) 0xFF;
+    data[32 + 32 + 4 + 4 + 4 + 1] = (byte) 0xFF;
+    data[32 + 32 + 4 + 4 + 4 + 2] = (byte) 0xFF;
+    data[32 + 32 + 4 + 4 + 4 + 3] = 0x7F;
+    assertThrows(IllegalArgumentException.class, () -> TokenMetadata.read(data, 0));
+  }
 
   @Test
   void confidentialTokenAccount() {
