@@ -53,7 +53,7 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
     final int numAccounts = numAccounts();
     final var accounts = new PublicKey[numAccounts];
     final var distinctAccounts = HashMap.<PublicKey, Integer>newHashMap(numAccounts);
-    for (int i = 0, from = LOOKUP_TABLE_META_SIZE, to = data.length; from < to; ++i, from += PUBLIC_KEY_LENGTH) {
+    for (int i = 0, from = LOOKUP_TABLE_META_SIZE; i < numAccounts; ++i, from += PUBLIC_KEY_LENGTH) {
       final var pubKey = readPubKey(data, from);
       distinctAccounts.putIfAbsent(pubKey, i);
       accounts[i] = pubKey;
@@ -75,7 +75,7 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
   public Set<PublicKey> uniqueAccounts() {
     final int numAccounts = numAccounts();
     final var distinctAccounts = HashSet.<PublicKey>newHashSet(numAccounts);
-    for (int i = 0, from = LOOKUP_TABLE_META_SIZE, to = data.length; from < to; ++i, from += PUBLIC_KEY_LENGTH) {
+    for (int i = 0, from = LOOKUP_TABLE_META_SIZE; i < numAccounts; ++i, from += PUBLIC_KEY_LENGTH) {
       distinctAccounts.add(readPubKey(data, from));
     }
     return distinctAccounts;
@@ -97,7 +97,8 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
     for (int from = LOOKUP_TABLE_META_SIZE, to = from + PUBLIC_KEY_LENGTH, numAccounts = numAccounts(), i = 0; i < numAccounts; ++i) {
       if (Arrays.equals(
           bytes, 0, PUBLIC_KEY_LENGTH,
-          data, from, to)) {
+          data, from, to
+      )) {
         return i;
       }
       from = to;
@@ -123,7 +124,7 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
   @Override
   protected String keysToString() {
-    final int to = data.length;
+    final int to = LOOKUP_TABLE_META_SIZE + (numAccounts() << 5);
     return IntStream.iterate(LOOKUP_TABLE_META_SIZE, i -> i < to, i -> i + PUBLIC_KEY_LENGTH)
         .mapToObj(i -> readPubKey(data, i))
         .map(PublicKey::toBase58)

@@ -3,7 +3,9 @@ package software.sava.core.tx;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Objects;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE_META_SIZE;
@@ -16,9 +18,11 @@ import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE
 /// throwable — and this harness adds the cross-method structural invariants that must hold
 /// whenever a parse fully succeeds.
 ///
-/// Seeded from real legacy and versioned (lookup-table) transactions under
-/// src/test/resources/fuzz/txSkeleton — the header, offsets, and lengths must all agree
-/// before any body-walking runs, so a from-scratch mutator never reaches these paths.
+/// Seeded from real legacy and versioned (lookup-table) transactions plus a real
+/// lookup-table account under src/test/resources/fuzz/txSkeleton — the header, offsets, and
+/// lengths must all agree before any body-walking runs, so a from-scratch mutator never
+/// reaches these paths. Every input is also fed to [AddressLookupTable#read] (see
+/// [#fuzzLookupTable]), the other untrusted account-data parser on the versioned path.
 ///
 /// Deliberately free of Jazzer imports so it compiles with the regular test sources.
 ///
@@ -26,6 +30,119 @@ import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE
 public final class TransactionSkeletonFuzz {
 
   public static void fuzzerTestOneInput(final byte[] data) {
+    fuzzLookupTable(data);
+    fuzzSkeleton(data);
+  }
+
+  private static final PublicKey TABLE_ADDRESS = PublicKey.createPubKey(new byte[PUBLIC_KEY_LENGTH]);
+
+  /// AddressLookupTable.read consumes untrusted account data (RPC responses) and versioned
+  /// transaction parsing resolves indexes through the result, so it shares this harness and
+  /// its seed corpus (alt_account is a real mainnet table). Same malformed-input contract as
+  /// the skeleton. When a parse succeeds, the eager reverse-lookup view and the lazy overlay
+  /// view walk the same bytes by different code paths and must agree on every accessor.
+  private static void fuzzLookupTable(final byte[] data) {
+    final AddressLookupTable table;
+    try {
+      table = AddressLookupTable.read(TABLE_ADDRESS, data);
+    } catch (final RuntimeException tolerated) {
+      return;
+    }
+    if (table == null) {
+      if (data.length != 0) {
+        throw new AssertionError("read returned null for non-empty data");
+      }
+      return;
+    }
+
+    final int numAccounts = table.numAccounts();
+    if (numAccounts != (data.length - LOOKUP_TABLE_META_SIZE) >> 5) {
+      throw new AssertionError("numAccounts != floor((length - meta) / 32)");
+    }
+    if (table.length() != data.length) {
+      throw new AssertionError("length != data.length");
+    }
+    if (table.withReverseLookup() != table) {
+      throw new AssertionError("withReverseLookup on an indexed table is not identity");
+    }
+
+    final var overlay = AddressLookupTable.readWithoutReverseLookup(TABLE_ADDRESS, data);
+    if (overlay.numAccounts() != numAccounts
+        || overlay.length() != data.length
+        || !Arrays.equals(overlay.discriminator(), table.discriminator())
+        || overlay.deactivationSlot() != table.deactivationSlot()
+        || overlay.lastExtendedSlot() != table.lastExtendedSlot()
+        || overlay.lastExtendedSlotStartIndex() != table.lastExtendedSlotStartIndex()
+        || !Objects.equals(overlay.authority(), table.authority())
+        || overlay.isActive() != table.isActive()) {
+      throw new AssertionError("overlay view disagrees with indexed view on metadata");
+    }
+    if (!overlay.withReverseLookup().equals(table)) {
+      throw new AssertionError("overlay.withReverseLookup() != read(...)");
+    }
+
+    final var unique = table.uniqueAccounts();
+    if (!unique.equals(overlay.uniqueAccounts())
+        || table.numUniqueAccounts() != unique.size()
+        || overlay.numUniqueAccounts() != unique.size()) {
+      throw new AssertionError("unique account views disagree");
+    }
+
+    for (int i = 0; i < numAccounts; ++i) {
+      final var key = table.account(i);
+      if (!key.equals(overlay.account(i))) {
+        throw new AssertionError("account " + i + " disagrees between views");
+      }
+      if (!unique.contains(key)) {
+        throw new AssertionError("account " + i + " missing from uniqueAccounts");
+      }
+      final int index = table.indexOf(key);
+      // indexOf resolves to the first occurrence of a duplicated key
+      if (index < 0 || index > i || !table.account(index).equals(key)) {
+        throw new AssertionError("indexOf(account(" + i + ")) = " + index);
+      }
+      if (overlay.indexOf(key) != index) {
+        throw new AssertionError("overlay.indexOf disagrees at " + i);
+      }
+      if (!table.containKey(key) || !overlay.containKey(key)) {
+        throw new AssertionError("containKey false for account " + i);
+      }
+      if (table.indexOfOrThrow(key) != (byte) index || overlay.indexOfOrThrow(key) != (byte) index) {
+        throw new AssertionError("indexOfOrThrow disagrees with indexOf at " + i);
+      }
+    }
+
+    // a key absent from the table must be reported missing by both views
+    final byte[] probeBytes = new byte[PUBLIC_KEY_LENGTH];
+    if (numAccounts > 0) {
+      System.arraycopy(data, LOOKUP_TABLE_META_SIZE, probeBytes, 0, PUBLIC_KEY_LENGTH);
+    }
+    probeBytes[0] ^= 1;
+    final var probe = PublicKey.createPubKey(probeBytes);
+    final boolean present = unique.contains(probe);
+    if ((table.indexOf(probe) >= 0) != present
+        || (overlay.indexOf(probe) >= 0) != present
+        || table.containKey(probe) != present
+        || overlay.containKey(probe) != present) {
+      throw new AssertionError("membership of probe key disagrees with uniqueAccounts");
+    }
+    if (!present) {
+      try {
+        table.indexOfOrThrow(probe);
+        throw new AssertionError("indexOfOrThrow returned for a missing key");
+      } catch (final IllegalStateException expectedContract) {
+      }
+    }
+
+    // write copies the account data back out verbatim
+    final byte[] out = new byte[data.length + 2];
+    final int written = table.write(out, 1);
+    if (written != data.length || !Arrays.equals(out, 1, 1 + written, data, 0, data.length)) {
+      throw new AssertionError("write did not round-trip the account data");
+    }
+  }
+
+  private static void fuzzSkeleton(final byte[] data) {
     final TransactionSkeleton skeleton;
     try {
       skeleton = TransactionSkeleton.deserializeSkeleton(data);

@@ -30,9 +30,13 @@ hardening {
       "software.sava.core.tx.TransactionSkeleton",
       "software.sava.core.tx.TransactionSkeletonRecord",
       "software.sava.core.tx.TransactionRecord",
-      "software.sava.core.tx.InstructionRecord"
+      "software.sava.core.tx.InstructionRecord",
+      "software.sava.core.accounts.lookup.AddressLookupTable",
+      "software.sava.core.accounts.lookup.AddressLookupTableRoot",
+      "software.sava.core.accounts.lookup.AddressLookupTableOverlay",
+      "software.sava.core.accounts.lookup.AddressLookupTableWithReverseLookup"
     )
-    targetTests = "software.sava.core.tx.*Test*"
+    targetTests = "software.sava.core.tx.*Test*,software.sava.core.accounts.lookup.*Test*"
   }
   fuzz.register("base58") {
     targetClass = "software.sava.core.encoding.Base58Fuzz"
