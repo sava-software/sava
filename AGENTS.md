@@ -206,24 +206,37 @@ convention when extending them:
 - Randomized tests seed a `Random` from `SecureRandom` and embed the seed in failure
   messages; replay a failure by pinning the seed.
 
-Verification tasks (not part of `test`; run whenever these classes change):
+Verification tasks (not part of `test`; run whenever these classes change). Both are
+provided by the shared `software.sava.build.feature.hardening` convention plugin
+(sava-build repo) and configured via the `hardening {}` block in
+`sava-core/build.gradle.kts`:
 
 - `./gradlew :sava-core:pitestEncoding` — PIT mutation testing of the four classes against
-  their tests; report in `sava-core/build/reports/pitest`. Baseline 2026-07-15: 1063
-  mutations, 98% killed, 0 without coverage; the 25 survivors were individually verified
-  equivalent (limb over-allocation, dead defensive strip loops, chunk sizing). Any new
-  survivor must be either killed with a test or classified equivalent with a reason.
+  their tests; report in `sava-core/build/reports/pitest/encoding`. Baseline (2026-07-15,
+  re-verified 2026-07-16 on Java 25 bytecode with the same result): 1063 mutations, 98%
+  detected (a timed-out mutant — an induced infinite loop — counts as detected), 0 without
+  coverage; the 25 survivors were individually verified equivalent (limb over-allocation,
+  dead defensive strip loops, chunk sizing) and are identical at both bytecode levels.
+  Any new survivor must be either killed with a test or classified equivalent with a
+  reason.
 - `./gradlew :sava-core:fuzzBase58 -PmaxFuzzTime=<seconds>` — Jazzer coverage-guided
-  fuzzing of `Base58Fuzz` (decode/encode round-trip, canonicality, and rejection
-  invariants); the corpus persists in `sava-core/build/fuzz/base58-corpus`, so runs
-  accumulate.
+  fuzzing of `Base58Fuzz`, a differential harness: every decode variant (String, char[],
+  ASCII byte[], the decode-into forms against dirty buffers) and every encode variant
+  (slice, mutableEncode, the begin/continue split at a fuzzer-chosen point) must agree
+  with the String reference path, plus canonicality and rejection invariants. Input length
+  is capped (`maxLen = 256` — the codec is O(n²) and all interesting boundaries are
+  small); the corpus persists in `sava-core/build/fuzz/base58-corpus`, so runs accumulate.
 
-Tooling constraints (also explained by comments in `sava-core/build.gradle.kts`): PIT
-1.19.1 and Jazzer 0.24.0 cannot read Java 25 class files, so the `compileForPitest` task
-recompiles main+test sources at `--release 21` into `build/mutation-classes`, which both
-tools consume — drop that workaround once the tools support class-file major 69. PIT
-silently discards classpath roots whose path contains the string "pitest"; do not rename
-`mutation-classes` to anything containing it.
+Tooling notes (also explained by comments in the hardening plugin): the plugin recompiles
+the main and test sources into one plain, module-info-free classpath root per tool —
+`compileForPitest` at `hardening.mutationBytecodeRelease` into `build/mutation-classes`
+and `compileForFuzz` at `hardening.bytecodeRelease` into `build/fuzz-classes`, both
+defaulting to 25. Current PIT and Jazzer read Java 25 class files; the per-tool releases
+exist to be lowered the next time either tool's bundled ASM lags a new class-file version
+(when a tool silently loses instrumentation, Jazzer's symptom is flat `cov:` with "no
+interesting inputs"). Tool versions default from sava-build's `gradle/libs.versions.toml`
+so Dependabot keeps them current. PIT silently discards classpath roots whose path
+contains the string "pitest"; do not rename `mutation-classes` to anything containing it.
 
 ## Alpenglow (upcoming consensus replacement)
 
