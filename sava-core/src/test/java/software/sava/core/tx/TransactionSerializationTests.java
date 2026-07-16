@@ -276,6 +276,17 @@ final class TransactionSerializationTests {
     assertEquals(skeleton.version(), transaction.version());
     assertEquals(skeleton.numSigners(), transaction.numSigners());
 
+    // the skeleton's table-aware createTransaction overloads must land on the same
+    // transaction as building it by hand from the parsed instructions
+    final var fromTableMetas = skeleton.createTransaction(lookupTableMetas);
+    assertEquals(feePayer.publicKey(), fromTableMetas.feePayer().publicKey());
+    assertEquals(transaction.instructions(), fromTableMetas.instructions());
+    assertArrayEquals(skeleton.data(), fromTableMetas.serialized());
+    assertArrayEquals(
+        fromTableMetas.serialized(),
+        skeleton.createTransaction(accountMetas, lookupTableMetas).serialized()
+    );
+
     final var instructions2 = transaction.instructions();
     assertEquals(instructions.length, instructions2.size());
 

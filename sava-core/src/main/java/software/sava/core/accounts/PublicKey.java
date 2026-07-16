@@ -159,6 +159,14 @@ public interface PublicKey extends Comparable<PublicKey> {
   }
 
   static PublicKey readPubKey(final byte[] bytes, final int offset) {
+    // Arrays.copyOfRange zero-pads past the end of the source, which would silently
+    // fabricate a key from truncated data
+    if (bytes.length - offset < PUBLIC_KEY_LENGTH) {
+      throw new IndexOutOfBoundsException(String.format(
+          "Public key needs %d bytes at offset %d, but only %d are available.",
+          PUBLIC_KEY_LENGTH, offset, bytes.length - offset
+      ));
+    }
     return new PublicKeyBytes(Arrays.copyOfRange(bytes, offset, offset + PublicKey.PUBLIC_KEY_LENGTH));
   }
 

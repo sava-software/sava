@@ -34,6 +34,21 @@ final class PublicKeyTest {
   }
 
   @Test
+  public void readPubKeyRejectsTruncatedData() {
+    final byte[] data = new byte[PublicKey.PUBLIC_KEY_LENGTH + 7];
+    data[7 + PublicKey.PUBLIC_KEY_LENGTH - 1] = 1;
+
+    final var key = PublicKey.readPubKey(data, 7);
+    final byte[] expected = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    expected[PublicKey.PUBLIC_KEY_LENGTH - 1] = 1;
+    assertArrayEquals(expected, key.toByteArray());
+
+    assertThrows(IndexOutOfBoundsException.class, () -> PublicKey.readPubKey(data, 8));
+    assertThrows(IndexOutOfBoundsException.class, () -> PublicKey.readPubKey(new byte[PublicKey.PUBLIC_KEY_LENGTH - 1], 0));
+    assertThrows(IndexOutOfBoundsException.class, () -> PublicKey.readPubKey(new byte[0], 0));
+  }
+
+  @Test
   public void equals() {
     final var key = PublicKey.fromBase58Encoded("11111111111111111111111111111111");
     assertNotEquals(key, PublicKey.fromBase58Encoded("11111111111111111111111111111112"));

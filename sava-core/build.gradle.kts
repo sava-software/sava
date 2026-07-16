@@ -17,10 +17,25 @@ hardening {
     )
     targetTests = "software.sava.core.encoding.*Test*"
   }
+  mutation.register("tx") {
+    targetClasses = listOf(
+      "software.sava.core.tx.TransactionSkeleton",
+      "software.sava.core.tx.TransactionSkeletonRecord",
+      "software.sava.core.tx.TransactionRecord",
+      "software.sava.core.tx.InstructionRecord"
+    )
+    targetTests = "software.sava.core.tx.*Test*"
+  }
   fuzz.register("base58") {
     targetClass = "software.sava.core.encoding.Base58Fuzz"
     // every interesting Base58 boundary lives in small inputs; beyond this the O(n^2)
     // codec only burns executions per second
     maxLen = 256
+  }
+  fuzz.register("txSkeleton") {
+    targetClass = "software.sava.core.tx.TransactionSkeletonFuzz"
+    // transactions cap at 1232 bytes on-chain; a little headroom lets the fuzzer probe
+    // over-long inputs without wasting executions on the megabyte tail
+    maxLen = 1500
   }
 }

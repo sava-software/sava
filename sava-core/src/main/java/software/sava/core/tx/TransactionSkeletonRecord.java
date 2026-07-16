@@ -145,6 +145,8 @@ record TransactionSkeletonRecord(byte[] data,
     int serializedInstructionsLength = 0;
     int o = instructionsOffset;
     for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
+      o += getByteLen(data, o); // program index
+
       numAccounts = decode(data, o);
       o += getByteLen(data, o);
       o += numAccounts;
@@ -227,11 +229,19 @@ record TransactionSkeletonRecord(byte[] data,
     return accounts;
   }
 
+  /// An instruction's program is invoked by definition, but a legacy `parseAccounts()` has
+  /// no invoked indexes to consult and types every read-only account as [AccountMeta#createRead];
+  /// mark it here so this agrees with [#filterInstructions]. Any writable use of the same
+  /// account is recovered by [Instruction#mergeAccounts] when a transaction is rebuilt.
+  private static AccountMeta invokedProgramAccount(final AccountMeta account) {
+    return account.invoked() ? account : createInvoked(account.publicKey());
+  }
+
   @Override
   public Instruction[] parseInstructions(final AccountMeta[] accounts) {
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, accountIndex; i < numInstructions; ++i) {
-      final var programAccount = accounts[decode(data, o)];
+      final var programAccount = invokedProgramAccount(accounts[decode(data, o)]);
       o += getByteLen(data, o);
 
       numIxAccounts = decode(data, o);

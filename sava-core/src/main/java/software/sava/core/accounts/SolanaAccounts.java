@@ -250,10 +250,8 @@ public interface SolanaAccounts {
   AccountMeta invokedStakeProgram();
 
   /// Deprecated upstream, the stake config account is no longer used by the stake program.
-  @Deprecated
   PublicKey stakeConfig();
 
-  @Deprecated
   AccountMeta readStakeConfig();
 
   AccountMeta readStakeProgram();
