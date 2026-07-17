@@ -128,6 +128,24 @@ Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
 - Golden fixtures: `sava-rpc/src/test/resources/rpc_response_data/*.json(.zip)` — real
   agave responses (getBlock, getProgramAccounts, getVoteAccounts, …). These detect response
   shape drift; refresh them from a live node when agave changes a shape.
+- `./gradlew :sava-rpc:pitestResponses` — PIT over the response package (sava-rpc has its
+  own `hardening {}` block). Baseline 2026-07-17: 903 mutations, **98% detected, 1 without
+  coverage**, driven from 72%/143 by `response/ParseResponseFieldTests` — synthetic
+  whitebox JSON per record asserting every field (the tests live inside the target
+  package, kept out of the mutation set via the suite's `excludedClasses`). Techniques
+  that matter here: a trailing decoy field of the same JSON type with a different value
+  kills always-match dispatch mutants; a leading unknown field kills stop-iteration
+  mutants; zero-value probes pin the `< 0` absent-sentinels; `assertSame` pins sentinel
+  identity. The 15 remaining are classified equivalent (int-clamp boundaries, unsigned
+  reinterpret at zero, logging/capacity). Fixed 2026-07-17 after the first baseline:
+  `TxStatus.parse`'s nil-status dedup compared `whatIsNext()` against Java null instead of
+  `ValueType.NULL` and so never fired, and `TxSimulation.unitsConsumed` read an unguarded
+  `readInt` where `fee` skips non-numbers. Known parser quirks, pinned not changed:
+  `JsonUtil.parseEncodedData`'s single-element-array branch always throws (real providers
+  send `[data, encoding]` pairs); `BlockCommitment` keeps its doubled buffer when a
+  commitment array exceeds 32 entries. A JSON fuzz harness would add little at this
+  strength — revisit only if the parsers start accepting deeper provider-controlled
+  structures.
 
 ## WebSocket API
 
@@ -373,6 +391,9 @@ exist to be lowered the next time either tool's bundled ASM lags a new class-fil
 interesting inputs"). Tool versions default from sava-build's `gradle/libs.versions.toml`
 so Dependabot keeps them current. PIT silently discards classpath roots whose path
 contains the string "pitest"; do not rename `mutation-classes` to anything containing it.
+When test classes live inside a targeted package glob, list them in the suite's
+`excludedClasses` — PIT otherwise mutates the tests themselves, and assertion-removal
+mutants in tests survive and corrupt the score.
 
 ## Ed25519 hardening (sava-core `crypto/ed25519/`)
 

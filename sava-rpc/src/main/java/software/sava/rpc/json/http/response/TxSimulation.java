@@ -140,7 +140,11 @@ public record TxSimulation(Context context,
       } else if (fieldEquals("postTokenBalances", buf, offset, len)) {
         this.postTokenBalances = TokenBalance.parseBalances(ji);
       } else if (fieldEquals("unitsConsumed", buf, offset, len)) {
-        unitsConsumed = ji.readInt();
+        if (ji.whatIsNext() == ValueType.NUMBER) {
+          unitsConsumed = ji.readInt();
+        } else {
+          ji.skip();
+        }
       } else if (fieldEquals("returnData", buf, offset, len)) {
         ji.testObject(this, RETURN_DATA_PARSER);
       } else if (fieldEquals("innerInstructions", buf, offset, len)) {

@@ -33,7 +33,7 @@ public record TxStatus(Context context,
       final var signature = iterator.next();
 
       final TxStatus sigStatus;
-      if (ji.whatIsNext() == null) {
+      if (ji.whatIsNext() == ValueType.NULL) {
         ji.skip();
         if (nil == null) {
           nil = new TxStatus(context, 0, OptionalInt.empty(), null, null);
