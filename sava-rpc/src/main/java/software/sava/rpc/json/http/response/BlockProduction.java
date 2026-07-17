@@ -16,15 +16,6 @@ public record BlockProduction(Context context,
                               long firstSlot,
                               long lastSlot) {
 
-  @Deprecated(forRemoval = true)
-  public Map<String, ValidatorLeaderInfo> leaderInfo() {
-    final var leaderInfo = HashMap.<String, ValidatorLeaderInfo>newHashMap(leaderInfoMap.size());
-    for (final var entry : leaderInfoMap.entrySet()) {
-      leaderInfo.put(entry.getKey().toBase58(), entry.getValue());
-    }
-    return leaderInfo;
-  }
-
   public static BlockProduction parse(final JsonIterator ji, final Context context) {
     final var parser = new Parser(context);
     ji.testObject(parser);

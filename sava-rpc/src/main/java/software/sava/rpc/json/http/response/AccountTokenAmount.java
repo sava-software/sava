@@ -17,11 +17,6 @@ public record AccountTokenAmount(Context context,
                                  BigInteger amount,
                                  int decimals) implements DecimalIntegerAmount {
 
-  @Deprecated(forRemoval = true)
-  public String address() {
-    return addressKey.toString();
-  }
-
   public static List<AccountTokenAmount> parse(final JsonIterator ji, final Context context) {
     final var accounts = new ArrayList<AccountTokenAmount>();
     while (ji.readArray()) {

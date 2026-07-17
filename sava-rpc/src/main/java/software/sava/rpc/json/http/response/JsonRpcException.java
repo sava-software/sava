@@ -3,11 +3,9 @@ package software.sava.rpc.json.http.response;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
 
-import static software.sava.rpc.json.http.response.TxSimulation.NO_LOGS;
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public final class JsonRpcException extends RuntimeException {
@@ -49,20 +47,6 @@ public final class JsonRpcException extends RuntimeException {
 
   public RpcCustomError customError() {
     return customError;
-  }
-
-  @Deprecated(forRemoval = true)
-  public List<String> logs() {
-    return customError instanceof RpcCustomError.SendTransactionPreflightFailure(final TxSimulation simulation)
-        ? simulation.logs()
-        : NO_LOGS;
-  }
-
-  @Deprecated(forRemoval = true)
-  public long numSlotsBehind() {
-    return customError instanceof RpcCustomError.NodeUnhealthy(final OptionalLong numSlotsBehind)
-        ? numSlotsBehind.orElse(Integer.MIN_VALUE)
-        : Integer.MIN_VALUE;
   }
 
   private static final class Parser implements FieldBufferPredicate {

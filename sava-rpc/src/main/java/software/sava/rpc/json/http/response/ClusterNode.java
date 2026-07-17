@@ -27,11 +27,6 @@ public record ClusterNode(String gossip,
                           long featureSet,
                           int shredVersion) {
 
-  @Deprecated(forRemoval = true)
-  public String pubKey() {
-    return publicKey.toString();
-  }
-
   public static List<ClusterNode> parse(final JsonIterator ji) {
     final var nodes = new ArrayList<ClusterNode>();
     while (ji.readArray()) {

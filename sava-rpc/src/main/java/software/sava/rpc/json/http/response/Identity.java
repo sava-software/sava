@@ -9,11 +9,6 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record Identity(PublicKey identityKey) {
 
-  @Deprecated(forRemoval = true)
-  public String identity() {
-    return identityKey.toString();
-  }
-
   public static Identity parse(final JsonIterator ji) {
     final var parser = new Parser();
     ji.testObject(parser);

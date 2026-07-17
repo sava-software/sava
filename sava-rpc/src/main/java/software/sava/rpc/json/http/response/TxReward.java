@@ -19,11 +19,6 @@ public record TxReward(PublicKey publicKey,
                        RewardType rewardType,
                        int commission) {
 
-  @Deprecated(forRemoval = true)
-  public String pubKey() {
-    return publicKey.toString();
-  }
-
   public static TxReward parse(final JsonIterator ji) {
     final var parser = new Parser();
     ji.testObject(parser);

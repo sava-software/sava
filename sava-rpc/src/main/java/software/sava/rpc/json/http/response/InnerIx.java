@@ -10,8 +10,7 @@ import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-public record InnerIx(@Deprecated(forRemoval = true) String program, // Part of JSON parsed response which is not supported.
-                      PublicKey programId,
+public record InnerIx(PublicKey programId,
                       int stackHeight,
                       List<PublicKey> accounts,
                       byte[] data) {
@@ -24,7 +23,6 @@ public record InnerIx(@Deprecated(forRemoval = true) String program, // Part of 
 
   private static final class Parser implements FieldBufferPredicate {
 
-    private String program;
     private PublicKey programId;
     private int stackHeight;
     private List<PublicKey> accounts;
@@ -32,15 +30,13 @@ public record InnerIx(@Deprecated(forRemoval = true) String program, // Part of 
 
     private InnerIx create() {
       return new InnerIx(
-          program, programId, stackHeight, accounts, data
+          programId, stackHeight, accounts, data
       );
     }
 
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("program", buf, offset, len)) {
-        program = ji.readString();
-      } else if (fieldEquals("programId", buf, offset, len)) {
+      if (fieldEquals("programId", buf, offset, len)) {
         programId = PublicKeyEncoding.parseBase58Encoded(ji);
       } else if (fieldEquals("stackHeight", buf, offset, len)) {
         stackHeight = ji.readInt();

@@ -26,16 +26,6 @@ public record VoteAccount(PublicKey voteKey,
                           List<EpochCredits> epochCredits,
                           long rootSlot) {
 
-  @Deprecated(forRemoval = true)
-  public String votePubKey() {
-    return voteKey.toBase58();
-  }
-
-  @Deprecated(forRemoval = true)
-  public String nodePubKey() {
-    return nodeKey.toBase58();
-  }
-
   static List<VoteAccount> parse(final JsonIterator ji) {
     final var voteAccounts = new ArrayList<VoteAccount>();
     while (ji.readArray()) {

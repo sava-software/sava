@@ -73,7 +73,6 @@ final class ParseResponseFieldTests {
     final var ix = InnerIx.parseIX(ji("""
         {"program":"spl-token","programId":"%s","stackHeight":2,
         "accounts":["%s","%s"],"data":"%s","future":1}""".formatted(KEY_1, KEY_1, KEY_2, data)));
-    assertEquals("spl-token", ix.program());
     assertEquals(key(KEY_1), ix.programId());
     assertEquals(2, ix.stackHeight());
     assertEquals(List.of(key(KEY_1), key(KEY_2)), ix.accounts());
@@ -276,8 +275,6 @@ final class ParseResponseFieldTests {
     assertEquals(OptionalLong.of(7), exception.retryAfterSeconds());
     final var unhealthy = assertInstanceOf(RpcCustomError.NodeUnhealthy.class, exception.customError());
     assertEquals(OptionalLong.of(42), unhealthy.numSlotsBehind());
-    assertEquals(42, exception.numSlotsBehind());
-    assertEquals(List.of(), exception.logs());
 
     // without a data payload the custom error falls back to the code mapping
     final var noData = JsonRpcException.parseException(ji("""
@@ -285,11 +282,11 @@ final class ParseResponseFieldTests {
     assertEquals(-32007, noData.code());
     assertTrue(noData.retryAfterSeconds().isEmpty());
     assertSame(RpcCustomError.SlotSkipped.INSTANCE, noData.customError());
-    assertEquals(Integer.MIN_VALUE, noData.numSlotsBehind());
 
     final var preflight = JsonRpcException.parseException(ji("""
         {"code":-32002,"message":"preflight","data":{"logs":["Program log: fail"]}}"""), null);
-    assertEquals(List.of("Program log: fail"), preflight.logs());
+    final var failure = assertInstanceOf(RpcCustomError.SendTransactionPreflightFailure.class, preflight.customError());
+    assertEquals(List.of("Program log: fail"), failure.simulation().logs());
   }
 
   @Test
@@ -342,7 +339,6 @@ final class ParseResponseFieldTests {
     final var node = nodes.getFirst();
     assertEquals("g:8001", node.gossip());
     assertEquals(key(KEY_1), node.publicKey());
-    assertEquals(KEY_1, node.pubKey());
     assertEquals("r:8899", node.rpc());
     assertEquals("p:8900", node.pubsub());
     assertEquals("s:8010", node.serveRepair());
@@ -379,14 +375,6 @@ final class ParseResponseFieldTests {
     final var u64 = new Lamports(CONTEXT, -1);
     assertEquals(new BigInteger("18446744073709551615"), u64.amount());
     assertEquals(-1, u64.asLong());
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  void feeCalculator() {
-    final var feeCalculator = FeeCalculator.parse(ji("""
-        {"lamportsPerSignature":5000,"future":0}"""));
-    assertEquals(5000, feeCalculator.lamportsPerSignature());
   }
 
   @Test
@@ -463,7 +451,6 @@ final class ParseResponseFieldTests {
     assertEquals(1, block.rewards().size());
     final var reward = block.rewards().getFirst();
     assertEquals(key(KEY_1), reward.publicKey());
-    assertEquals(KEY_1, reward.pubKey());
     assertEquals(11, reward.lamports());
     assertEquals(22, reward.postBalance());
     assertEquals(software.sava.rpc.json.http.response.RewardType.VOTING, reward.rewardType());
@@ -617,36 +604,6 @@ final class ParseResponseFieldTests {
     assertEquals(6, epochInfo.transactionCount());
     assertEquals(0, EpochInfo.parse(ji("""
         {"transactionCount":null}""")).transactionCount());
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  void parsedAccountData() {
-    final var tokenAccount = ParsedAccountData.parse(ji("""
-        {"program":"%s","space":165,"parsed":{"type":"account","info":{"isNative":false,"mint":"%s",
-        "owner":"%s","freezeAuthority":"%s","mintAuthority":"%s","isInitialized":true,"state":"initialized",
-        "tokenAmount":{"amount":"88","decimals":6},"addresses":["%s"],"future":0},"future":1},"future":2}"""
-        .formatted(KEY_1, KEY_2, KEY_1, KEY_2, KEY_1, KEY_2)), CONTEXT);
-    assertEquals(key(KEY_1), tokenAccount.program());
-    assertEquals(165, tokenAccount.space());
-    assertEquals("account", tokenAccount.type());
-    assertFalse(tokenAccount.isNative());
-    assertEquals(key(KEY_2), tokenAccount.mint());
-    assertEquals(key(KEY_1), tokenAccount.owner());
-    assertEquals(key(KEY_2), tokenAccount.freezeAuthority());
-    assertEquals(key(KEY_1), tokenAccount.mintAuthority());
-    assertEquals(Boolean.TRUE, tokenAccount.isInitialized());
-    assertEquals("initialized", tokenAccount.state());
-    assertEquals(BigInteger.valueOf(88), tokenAccount.tokenAmount().amount());
-    assertEquals(6, tokenAccount.tokenAmount().decimals());
-    assertEquals(List.of(key(KEY_2)), tokenAccount.addresses());
-
-    // mint accounts report supply and decimals without a tokenAmount object
-    final var mint = ParsedAccountData.parse(ji("""
-        {"parsed":{"type":"mint","info":{"decimals":9,"supply":"1000"}}}"""), CONTEXT);
-    assertEquals("mint", mint.type());
-    assertEquals(BigInteger.valueOf(1000), mint.tokenAmount().amount());
-    assertEquals(9, mint.tokenAmount().decimals());
   }
 
   @Test
@@ -832,47 +789,8 @@ final class ParseResponseFieldTests {
 
     assertEquals(List.of(), Block.parse(ji("{}")).rewards());
 
-    final var feeCalculator = FeeCalculator.parse(ji("""
-        {"future":0,"lamportsPerSignature":42}"""));
-    assertEquals(42, feeCalculator.lamportsPerSignature());
-
     final var txResult = TxResult.parseResult(ji("""
         {"future":0,"err":"AccountInUse"}"""), CONTEXT);
     assertEquals("AccountInUse", txResult.error().getClass().getSimpleName());
-
-    // the token-amount fallback needs both a supply and a non-negative decimals
-    final var supplyOnly = ParsedAccountData.parse(ji("""
-        {"parsed":{"type":"mint","info":{"supply":"5"}}}"""), CONTEXT);
-    assertNull(supplyOnly.tokenAmount());
-    final var decimalsOnly = ParsedAccountData.parse(ji("""
-        {"parsed":{"type":"mint","info":{"decimals":3}}}"""), CONTEXT);
-    assertNull(decimalsOnly.tokenAmount());
-    final var parsedWins = ParsedAccountData.parse(ji("""
-        {"parsed":{"type":"account","info":{"tokenAmount":{"amount":"7","decimals":2},"decimals":9,"supply":"1000"}}}"""), CONTEXT);
-    assertEquals(BigInteger.valueOf(7), parsedWins.tokenAmount().amount());
-    assertEquals(2, parsedWins.tokenAmount().decimals());
-    final var zeroDecimals = ParsedAccountData.parse(ji("""
-        {"parsed":{"type":"mint","info":{"decimals":0,"supply":"6"}}}"""), CONTEXT);
-    assertEquals(BigInteger.valueOf(6), zeroDecimals.tokenAmount().amount());
-    assertEquals(0, zeroDecimals.tokenAmount().decimals());
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  void deprecatedKeyAccessors() {
-    assertEquals(KEY_1, new AccountLamports(CONTEXT, key(KEY_1), 5).address());
-    assertEquals(KEY_1, new AccountTokenAmount(CONTEXT, key(KEY_1), BigInteger.TWO, 6).address());
-    assertEquals(KEY_1, new Identity(key(KEY_1)).identity());
-    assertEquals(List.of(KEY_1, KEY_2), new Supply(CONTEXT, 9, 8, 1, List.of(key(KEY_1), key(KEY_2))).nonCirculatingAccounts());
-    assertEquals(KEY_1, new TxReward(key(KEY_1), 1, 2, null, 3).pubKey());
-    final var voteAccount = new VoteAccount(
-        key(KEY_1), key(KEY_2), 4, true, 5,
-        OptionalInt.empty(), 6, List.of(new EpochCredits(1, 2, 3)), 7
-    );
-    assertEquals(KEY_1, voteAccount.votePubKey());
-    assertEquals(KEY_2, voteAccount.nodePubKey());
-    final var leaderInfo = new ValidatorLeaderInfo(10, 9);
-    final var production = new BlockProduction(CONTEXT, Map.of(key(KEY_1), leaderInfo), 5, 6);
-    assertEquals(Map.of(KEY_1, leaderInfo), production.leaderInfo());
   }
 }

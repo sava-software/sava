@@ -16,13 +16,6 @@ public record Supply(Context context,
                      long nonCirculating,
                      List<PublicKey> nonCirculatingAccountKeys) {
 
-  @Deprecated(forRemoval = true)
-  public List<String> nonCirculatingAccounts() {
-    return nonCirculatingAccountKeys.stream()
-        .map(PublicKey::toBase58)
-        .toList();
-  }
-
   public static Supply parse(final JsonIterator ji, final Context context) {
     final var parser = new Parser(context);
     ji.testObject(parser);
