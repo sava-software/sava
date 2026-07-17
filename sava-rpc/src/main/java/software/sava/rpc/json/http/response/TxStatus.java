@@ -2,13 +2,12 @@ package software.sava.rpc.json.http.response;
 
 import software.sava.rpc.json.http.client.SolanaRpcClient;
 import software.sava.rpc.json.http.request.Commitment;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.util.*;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 public record TxStatus(Context context,
                        long slot,
@@ -41,7 +40,7 @@ public record TxStatus(Context context,
         sigStatus = nil;
       } else {
         final var parser = new Parser();
-        ji.testObject(parser);
+        ji.testObject(Parser.FIELDS, parser);
         sigStatus = parser.create(context);
       }
 
@@ -54,13 +53,13 @@ public record TxStatus(Context context,
     final var statuses = new ArrayList<TxStatus>(SolanaRpcClient.MAX_SIG_STATUS);
     while (ji.readArray()) {
       final var parser = new Parser();
-      ji.testObject(parser);
+      ji.testObject(Parser.FIELDS, parser);
       statuses.add(parser.create(context));
     }
     return statuses;
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate {
 
     private long slot;
     private int confirmations = -1;
@@ -77,22 +76,27 @@ public record TxStatus(Context context,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "slot",
+        "confirmations",
+        "err",
+        "confirmationStatus"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("slot", buf, offset, len)) {
-        this.slot = ji.readLong();
-      } else if (fieldEquals("confirmations", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          this.confirmations = ji.readInt();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> this.slot = ji.readLong();
+        case 1 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            this.confirmations = ji.readInt();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("err", buf, offset, len)) {
-        this.error = TransactionError.parseError(ji);
-      } else if (fieldEquals("confirmationStatus", buf, offset, len)) {
-        this.confirmationStatus = ji.applyChars(Commitment.PARSER);
-      } else {
-        ji.skip();
+        case 2 -> this.error = TransactionError.parseError(ji);
+        case 3 -> this.confirmationStatus = ji.applyChars(Commitment.PARSER);
+        default -> ji.skip();
       }
       return true;
     }

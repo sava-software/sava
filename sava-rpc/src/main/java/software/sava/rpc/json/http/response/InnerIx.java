@@ -2,13 +2,12 @@ package software.sava.rpc.json.http.response;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.PublicKeyEncoding;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.ArrayList;
 import java.util.List;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record InnerIx(PublicKey programId,
                       int stackHeight,
@@ -16,40 +15,38 @@ public record InnerIx(PublicKey programId,
                       byte[] data) {
 
   static InnerIx parseIX(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<InnerIx> {
 
     private PublicKey programId;
     private int stackHeight;
     private List<PublicKey> accounts;
     private byte[] data;
 
-    private InnerIx create() {
+    @Override
+    public InnerIx get() {
       return new InnerIx(
           programId, stackHeight, accounts, data
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "programId",
+        "stackHeight",
+        "accounts",
+        "data"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("programId", buf, offset, len)) {
-        programId = PublicKeyEncoding.parseBase58Encoded(ji);
-      } else if (fieldEquals("stackHeight", buf, offset, len)) {
-        stackHeight = ji.readInt();
-      } else if (fieldEquals("accounts", buf, offset, len)) {
-        final var accounts = new ArrayList<PublicKey>();
-        while (ji.readArray()) {
-          accounts.add(PublicKeyEncoding.parseBase58Encoded(ji));
-        }
-        this.accounts = List.copyOf(accounts);
-      } else if (fieldEquals("data", buf, offset, len)) {
-        data = ji.applyChars(JsonUtil.DECODE_BASE58);
-      } else {
-        ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> programId = PublicKeyEncoding.parseBase58Encoded(ji);
+        case 1 -> stackHeight = ji.readInt();
+        case 2 -> this.accounts = List.copyOf(ji.readList(PublicKeyEncoding::parseBase58Encoded));
+        case 3 -> data = ji.applyChars(JsonUtil.DECODE_BASE58);
+        default -> ji.skip();
       }
       return true;
     }

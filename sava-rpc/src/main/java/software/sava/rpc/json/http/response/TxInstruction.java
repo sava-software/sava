@@ -1,13 +1,13 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record TxInstruction(int programIdIndex,
                             int[] accountIndices,
@@ -15,20 +15,14 @@ public record TxInstruction(int programIdIndex,
                             int stackHeight) {
 
   public static TxInstruction parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
   public static List<TxInstruction> parseInstructions(final JsonIterator ji) {
-    final var instructions = new ArrayList<TxInstruction>();
-    while (ji.readArray()) {
-      instructions.add(TxInstruction.parse(ji));
-    }
-    return instructions;
+    return ji.readList(TxInstruction::parse);
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<TxInstruction> {
 
     private int programIdIndex;
     private int[] accountIndices;
@@ -39,7 +33,8 @@ public record TxInstruction(int programIdIndex,
       super();
     }
 
-    private TxInstruction create() {
+    @Override
+    public TxInstruction get() {
       return new TxInstruction(
           programIdIndex,
           accountIndices,
@@ -48,26 +43,33 @@ public record TxInstruction(int programIdIndex,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "programIdIndex",
+        "accounts",
+        "data",
+        "stackHeight"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("programIdIndex", buf, offset, len)) {
-        programIdIndex = ji.readInt();
-      } else if (fieldEquals("accounts", buf, offset, len)) {
-        final var indices = new ArrayList<Integer>();
-        while (ji.readArray()) {
-          indices.add(ji.readInt());
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> programIdIndex = ji.readInt();
+        case 1 -> {
+          final var indices = new ArrayList<Integer>();
+          while (ji.readArray()) {
+            indices.add(ji.readInt());
+          }
+          accountIndices = indices.stream().mapToInt(Integer::intValue).toArray();
         }
-        accountIndices = indices.stream().mapToInt(Integer::intValue).toArray();
-      } else if (fieldEquals("data", buf, offset, len)) {
-        b58Data = ji.readString();
-      } else if (fieldEquals("stackHeight", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          stackHeight = ji.readInt();
-        } else {
-          ji.skip();
+        case 2 -> b58Data = ji.readString();
+        case 3 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            stackHeight = ji.readInt();
+          } else {
+            ji.skip();
+          }
         }
-      } else {
-        ji.skip();
+        default -> ji.skip();
       }
       return true;
     }

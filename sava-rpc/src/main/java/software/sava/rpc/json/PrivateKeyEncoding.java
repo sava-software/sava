@@ -5,6 +5,7 @@ import software.sava.core.accounts.Signer;
 import software.sava.core.encoding.Base58;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.nio.charset.StandardCharsets;
@@ -22,20 +23,22 @@ public enum PrivateKeyEncoding {
   base58PrivateKey,
   base58KeyPair;
 
-  private static final CharBufferFunction<PrivateKeyEncoding> JSON_PARSER = (buf, offset, len) -> {
-    if (fieldEquals("jsonKeyPairArray", buf, offset, len)) {
-      return PrivateKeyEncoding.jsonKeyPairArray;
-    } else if (fieldEquals("base64PrivateKey", buf, offset, len)) {
-      return PrivateKeyEncoding.base64PrivateKey;
-    } else if (fieldEquals("base64KeyPair", buf, offset, len)) {
-      return PrivateKeyEncoding.base64KeyPair;
-    } else if (fieldEquals("base58PrivateKey", buf, offset, len)) {
-      return PrivateKeyEncoding.base58PrivateKey;
-    } else if (fieldEquals("base58KeyPair", buf, offset, len)) {
-      return PrivateKeyEncoding.base58KeyPair;
-    } else {
-      throw new IllegalArgumentException(new String(buf, offset, len) + " private key encoding is not supported.");
-    }
+  private static final FieldMatcher ENCODINGS = FieldMatcher.of(
+      "jsonKeyPairArray",
+      "base64PrivateKey",
+      "base64KeyPair",
+      "base58PrivateKey",
+      "base58KeyPair"
+  );
+
+  private static final CharBufferFunction<PrivateKeyEncoding> JSON_PARSER = (buf, offset, len) -> switch (ENCODINGS.match(buf, offset, len)) {
+    case 0 -> PrivateKeyEncoding.jsonKeyPairArray;
+    case 1 -> PrivateKeyEncoding.base64PrivateKey;
+    case 2 -> PrivateKeyEncoding.base64KeyPair;
+    case 3 -> PrivateKeyEncoding.base58PrivateKey;
+    case 4 -> PrivateKeyEncoding.base58KeyPair;
+    default ->
+        throw new IllegalArgumentException(new String(buf, offset, len) + " private key encoding is not supported.");
   };
 
   public static Signer fromJsonArray(final JsonIterator ji) {

@@ -2,13 +2,13 @@ package software.sava.rpc.json.http.response;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.PublicKeyEncoding;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record Supply(Context context,
                      long total,
@@ -17,12 +17,10 @@ public record Supply(Context context,
                      List<PublicKey> nonCirculatingAccountKeys) {
 
   public static Supply parse(final JsonIterator ji, final Context context) {
-    final var parser = new Parser(context);
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser(context));
   }
 
-  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
+  private static final class Parser extends RootBuilder implements FieldIndexPredicate, Supplier<Supply> {
 
     private long total;
     private long circulating;
@@ -33,32 +31,38 @@ public record Supply(Context context,
       super(context);
     }
 
-    private Supply create() {
+    @Override
+    public Supply get() {
       return new Supply(context, total, circulating, nonCirculating,
           nonCirculatingAccounts == null ? List.of() : nonCirculatingAccounts
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "total",
+        "circulating",
+        "nonCirculating",
+        "nonCirculatingAccounts"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("total", buf, offset, len)) {
-        total = ji.readLong();
-      } else if (fieldEquals("circulating", buf, offset, len)) {
-        circulating = ji.readLong();
-      } else if (fieldEquals("nonCirculating", buf, offset, len)) {
-        nonCirculating = ji.readLong();
-      } else if (fieldEquals("nonCirculatingAccounts", buf, offset, len)) {
-        if (ji.readArray()) {
-          final var accounts = new ArrayList<PublicKey>();
-          do {
-            accounts.add(PublicKeyEncoding.parseBase58Encoded(ji));
-          } while (ji.readArray());
-          nonCirculatingAccounts = accounts;
-        } else {
-          nonCirculatingAccounts = List.of();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> total = ji.readLong();
+        case 1 -> circulating = ji.readLong();
+        case 2 -> nonCirculating = ji.readLong();
+        case 3 -> {
+          if (ji.readArray()) {
+            final var accounts = new ArrayList<PublicKey>();
+            do {
+              accounts.add(PublicKeyEncoding.parseBase58Encoded(ji));
+            } while (ji.readArray());
+            nonCirculatingAccounts = accounts;
+          } else {
+            nonCirculatingAccounts = List.of();
+          }
         }
-      } else {
-        ji.skip();
+        default -> ji.skip();
       }
       return true;
     }

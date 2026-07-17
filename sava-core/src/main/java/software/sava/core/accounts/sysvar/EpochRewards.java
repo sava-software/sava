@@ -7,7 +7,7 @@ import software.sava.core.encoding.ByteUtil;
 import java.math.BigInteger;
 import java.util.function.BiFunction;
 
-// https://github.com/anza-xyz/agave/blob/df27fb3a7386f0d2cc64df81c46a09ab79b18ba0/sdk/epoch-rewards/src/lib.rs#L26
+// https://github.com/anza-xyz/solana-sdk/blob/master/epoch-rewards/src/lib.rs
 public record EpochRewards(PublicKey address,
                            long distributionStartingBlockHeight,
                            long numPartitions,

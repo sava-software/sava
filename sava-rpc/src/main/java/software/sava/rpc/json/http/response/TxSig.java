@@ -1,7 +1,8 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.rpc.json.http.request.Commitment;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
@@ -9,8 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 /// @param transactionIndex Index of the transaction within its block, empty when the responding node pre-dates
 ///                         this field.
@@ -25,15 +25,12 @@ public record TxSig(long slot,
   public static List<TxSig> parseSignatures(final JsonIterator ji) {
     final var signatures = new ArrayList<TxSig>(2_048);
     while (ji.readArray()) {
-      final var parser = new Parser();
-      ji.testObject(parser);
-      final var signature = parser.create();
-      signatures.add(signature);
+      signatures.add(ji.parseObject(Parser.FIELDS, new Parser()));
     }
     return signatures;
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<TxSig> {
 
     private long slot;
     private int transactionIndex = -1;
@@ -46,7 +43,8 @@ public record TxSig(long slot,
     private Parser() {
     }
 
-    private TxSig create() {
+    @Override
+    public TxSig get() {
       return new TxSig(slot,
           transactionIndex < 0 ? OptionalInt.empty() : OptionalInt.of(transactionIndex),
           blockTime <= 0 ? OptionalLong.empty() : OptionalLong.of(blockTime),
@@ -57,33 +55,40 @@ public record TxSig(long slot,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "slot",
+        "transactionIndex",
+        "blockTime",
+        "confirmationStatus",
+        "memo",
+        "signature",
+        "err",
+        "error"
+    );
 
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("slot", buf, offset, len)) {
-        this.slot = ji.readLong();
-      } else if (fieldEquals("transactionIndex", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          this.transactionIndex = ji.readInt();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> this.slot = ji.readLong();
+        case 1 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            this.transactionIndex = ji.readInt();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("blockTime", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          this.blockTime = ji.readLong();
-        } else {
-          ji.skip();
+        case 2 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            this.blockTime = ji.readLong();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("confirmationStatus", buf, offset, len)) {
-        this.confirmationStatus = ji.applyChars(Commitment.PARSER);
-      } else if (fieldEquals("memo", buf, offset, len)) {
-        this.memo = ji.readString();
-      } else if (fieldEquals("signature", buf, offset, len)) {
-        this.signature = ji.readString();
-      } else if (fieldEquals("err", buf, offset, len) || fieldEquals("error", buf, offset, len)) {
-        this.error = TransactionError.parseError(ji);
-      } else {
-        ji.skip();
+        case 3 -> this.confirmationStatus = ji.applyChars(Commitment.PARSER);
+        case 4 -> this.memo = ji.readString();
+        case 5 -> this.signature = ji.readString();
+        case 6, 7 -> this.error = TransactionError.parseError(ji);
+        default -> ji.skip();
       }
       return true;
     }

@@ -7,6 +7,7 @@ import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.CharBufferFunction;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.math.BigInteger;
@@ -29,7 +30,6 @@ import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.joining;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
 final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebsocket, Runnable {
 
@@ -644,22 +644,23 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return false;
   }
 
-  private static final CharBufferFunction<Channel> METHOD_PARSER = (buf, offset, len) -> {
-    if (fieldEquals("accountNotification", buf, offset, len)) {
-      return Channel.account;
-    } else if (fieldEquals("signatureNotification", buf, offset, len)) {
-      return Channel.signature;
-    } else if (fieldEquals("programNotification", buf, offset, len)) {
-      return Channel.program;
-    } else if (fieldEquals("logsNotification", buf, offset, len)) {
-      return Channel.logs;
-    } else if (fieldEquals("slotNotification", buf, offset, len)) {
-      return Channel.slot;
-    } else if (fieldEquals("rootNotification", buf, offset, len)) {
-      return Channel.root;
-    } else {
-      return null;
-    }
+  private static final FieldMatcher METHODS = FieldMatcher.of(
+      "accountNotification",
+      "signatureNotification",
+      "programNotification",
+      "logsNotification",
+      "slotNotification",
+      "rootNotification"
+  );
+
+  private static final CharBufferFunction<Channel> METHOD_PARSER = (buf, offset, len) -> switch (METHODS.match(buf, offset, len)) {
+    case 0 -> Channel.account;
+    case 1 -> Channel.signature;
+    case 2 -> Channel.program;
+    case 3 -> Channel.logs;
+    case 4 -> Channel.slot;
+    case 5 -> Channel.root;
+    default -> null;
   };
 
   private String createUnSubMsg(final String unSubscribeMethod, final BigInteger subId) {

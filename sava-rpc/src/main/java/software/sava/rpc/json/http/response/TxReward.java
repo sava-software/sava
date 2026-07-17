@@ -3,14 +3,14 @@ package software.sava.rpc.json.http.response;
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.CharBufferFunction;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 import static systems.comodal.jsoniter.JsonIterator.fieldEqualsIgnoreCase;
 
 public record TxReward(PublicKey publicKey,
@@ -20,17 +20,11 @@ public record TxReward(PublicKey publicKey,
                        int commission) {
 
   public static TxReward parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
   public static List<TxReward> parseRewards(final JsonIterator ji) {
-    final var rewards = new ArrayList<TxReward>();
-    while (ji.readArray()) {
-      rewards.add(parse(ji));
-    }
-    return rewards;
+    return ji.readList(TxReward::parse);
   }
 
   private static final CharBufferFunction<RewardType> REWARD_TYPE_PARSER = (buf, offset, len) -> {
@@ -47,7 +41,7 @@ public record TxReward(PublicKey publicKey,
     }
   };
 
-  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
+  private static final class Parser extends RootBuilder implements FieldIndexPredicate, Supplier<TxReward> {
 
     private PublicKey pubKey;
     private long lamports;
@@ -59,28 +53,34 @@ public record TxReward(PublicKey publicKey,
       super(null);
     }
 
-    private TxReward create() {
+    @Override
+    public TxReward get() {
       return new TxReward(pubKey, lamports, postBalance, rewardType, commission);
     }
-    
+
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "commission",
+        "pubkey",
+        "rewardType",
+        "lamports",
+        "postBalance"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("commission", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          commission = ji.readInt();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            commission = ji.readInt();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("pubkey", buf, offset, len)) {
-        pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
-      } else if (fieldEquals("rewardType", buf, offset, len)) {
-        rewardType = ji.applyChars(REWARD_TYPE_PARSER);
-      } else if (fieldEquals("lamports", buf, offset, len)) {
-        lamports = ji.readLong();
-      } else if (fieldEquals("postBalance", buf, offset, len)) {
-        postBalance = ji.readLong();
-      } else {
-        ji.skip();
+        case 1 -> pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
+        case 2 -> rewardType = ji.applyChars(REWARD_TYPE_PARSER);
+        case 3 -> lamports = ji.readLong();
+        case 4 -> postBalance = ji.readLong();
+        default -> ji.skip();
       }
       return true;
     }

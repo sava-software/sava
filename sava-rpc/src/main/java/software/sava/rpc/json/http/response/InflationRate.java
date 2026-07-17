@@ -1,19 +1,18 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record InflationRate(long epoch, double foundation, double total, double validator) {
 
   public static InflationRate parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<InflationRate> {
 
     private long epoch;
     private double foundation;
@@ -23,22 +22,26 @@ public record InflationRate(long epoch, double foundation, double total, double 
     private Parser() {
     }
 
-    private InflationRate create() {
+    @Override
+    public InflationRate get() {
       return new InflationRate(epoch, foundation, total, validator);
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "epoch",
+        "foundation",
+        "total",
+        "validator"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("epoch", buf, offset, len)) {
-        epoch = ji.readLong();
-      } else if (fieldEquals("foundation", buf, offset, len)) {
-        foundation = ji.readDouble();
-      } else if (fieldEquals("total", buf, offset, len)) {
-        total = ji.readDouble();
-      } else if (fieldEquals("validator", buf, offset, len)) {
-        validator = ji.readDouble();
-      } else {
-        ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> epoch = ji.readLong();
+        case 1 -> foundation = ji.readDouble();
+        case 2 -> total = ji.readDouble();
+        case 3 -> validator = ji.readDouble();
+        default -> ji.skip();
       }
       return true;
     }

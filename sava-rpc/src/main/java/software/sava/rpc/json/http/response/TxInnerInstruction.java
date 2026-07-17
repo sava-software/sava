@@ -3,7 +3,6 @@ package software.sava.rpc.json.http.response;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -17,11 +16,7 @@ public record TxInnerInstruction(int index, List<TxInstruction> instructions) {
   }
 
   public static List<TxInnerInstruction> parseInstructions(final JsonIterator ji) {
-    final var instructions = new ArrayList<TxInnerInstruction>();
-    while (ji.readArray()) {
-      instructions.add(parse(ji));
-    }
-    return instructions;
+    return ji.readList(TxInnerInstruction::parse);
   }
 
   private static final class Parser implements FieldBufferPredicate {

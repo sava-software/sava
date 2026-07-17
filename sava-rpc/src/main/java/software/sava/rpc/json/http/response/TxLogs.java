@@ -3,7 +3,6 @@ package software.sava.rpc.json.http.response;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -37,11 +36,7 @@ public record TxLogs(Context context, String signature, TransactionError error, 
       } else if (fieldEquals("err", buf, offset, len)) {
         error = TransactionError.parseError(ji);
       } else if (fieldEquals("logs", buf, offset, len)) {
-        final var logs = new ArrayList<String>();
-        while (ji.readArray()) {
-          logs.add(ji.readString());
-        }
-        this.logs = logs;
+        this.logs = ji.readList(JsonIterator::readString);
       } else {
         ji.skip();
       }

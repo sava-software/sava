@@ -2,14 +2,14 @@ package software.sava.rpc.json.http.response;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.PublicKeyEncoding;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 /// @param commission                    Before SIMD-0291 activation, the native commission percentage. After
 ///                                      activation, derived from [#inflationRewardsCommissionBps()] with
@@ -29,15 +29,13 @@ public record VoteAccount(PublicKey voteKey,
   static List<VoteAccount> parse(final JsonIterator ji) {
     final var voteAccounts = new ArrayList<VoteAccount>();
     while (ji.readArray()) {
-      final var parser = new Parser();
-      ji.testObject(parser);
-      voteAccounts.add(parser.create());
+      voteAccounts.add(ji.parseObject(Parser.FIELDS, new Parser()));
     }
     return voteAccounts;
   }
 
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<VoteAccount> {
 
     private PublicKey votePubKey;
     private PublicKey nodePubKey;
@@ -52,7 +50,8 @@ public record VoteAccount(PublicKey voteKey,
     private Parser() {
     }
 
-    private VoteAccount create() {
+    @Override
+    public VoteAccount get() {
       return new VoteAccount(
           votePubKey,
           nodePubKey,
@@ -66,28 +65,31 @@ public record VoteAccount(PublicKey voteKey,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "votePubkey",
+        "nodePubkey",
+        "activatedStake",
+        "epochVoteAccount",
+        "commission",
+        "inflationRewardsCommissionBps",
+        "lastVote",
+        "epochCredits",
+        "rootSlot"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("votePubkey", buf, offset, len)) {
-        votePubKey = PublicKeyEncoding.parseBase58Encoded(ji);
-      } else if (fieldEquals("nodePubkey", buf, offset, len)) {
-        nodePubKey = PublicKeyEncoding.parseBase58Encoded(ji);
-      } else if (fieldEquals("activatedStake", buf, offset, len)) {
-        activatedStake = ji.readLong();
-      } else if (fieldEquals("epochVoteAccount", buf, offset, len)) {
-        epochVoteAccount = ji.readBoolean();
-      } else if (fieldEquals("commission", buf, offset, len)) {
-        commission = ji.readInt();
-      } else if (fieldEquals("inflationRewardsCommissionBps", buf, offset, len)) {
-        inflationRewardsCommissionBps = ji.readInt();
-      } else if (fieldEquals("lastVote", buf, offset, len)) {
-        lastVote = ji.readLong();
-      } else if (fieldEquals("epochCredits", buf, offset, len)) {
-        epochCredits = EpochCredits.parse(ji);
-      } else if (fieldEquals("rootSlot", buf, offset, len)) {
-        rootSlot = ji.readLong();
-      } else {
-        ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> votePubKey = PublicKeyEncoding.parseBase58Encoded(ji);
+        case 1 -> nodePubKey = PublicKeyEncoding.parseBase58Encoded(ji);
+        case 2 -> activatedStake = ji.readLong();
+        case 3 -> epochVoteAccount = ji.readBoolean();
+        case 4 -> commission = ji.readInt();
+        case 5 -> inflationRewardsCommissionBps = ji.readInt();
+        case 6 -> lastVote = ji.readLong();
+        case 7 -> epochCredits = EpochCredits.parse(ji);
+        case 8 -> rootSlot = ji.readLong();
+        default -> ji.skip();
       }
       return true;
     }

@@ -6,7 +6,8 @@ import software.sava.core.util.DecimalIntegerAmount;
 import software.sava.core.util.LamportDecimal;
 import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
@@ -55,7 +56,7 @@ public record AccountInfo<T>(PublicKey pubKey,
                                          final Context context,
                                          final BiFunction<PublicKey, byte[], T> factory) {
     final var parser = new Parser(context, publicKey);
-    ji.testObject(parser);
+    ji.testObject(Parser.FIELDS, parser);
     return parser.create(factory);
   }
 
@@ -69,7 +70,7 @@ public record AccountInfo<T>(PublicKey pubKey,
       final var key = iterator.next();
       if (ji.whatIsNext() == ValueType.OBJECT) {
         final var parser = new Parser(context, key);
-        ji.testObject(parser);
+        ji.testObject(Parser.FIELDS, parser);
         accounts.add(parser.create(factory));
       } else {
         ji.skip();
@@ -88,7 +89,7 @@ public record AccountInfo<T>(PublicKey pubKey,
       final var key = iterator.next();
       if (ji.whatIsNext() == ValueType.OBJECT) {
         final var parser = new Parser(context, key);
-        ji.testObject(parser);
+        ji.testObject(Parser.FIELDS, parser);
         accounts.add(parser.create(factory));
       } else {
         ji.skip();
@@ -119,7 +120,7 @@ public record AccountInfo<T>(PublicKey pubKey,
 
   private static final ContextFieldBufferPredicate<Parser> PARSER = (parser, buf, offset, len, ji) -> {
     if (fieldEquals("account", buf, offset, len)) {
-      ji.testObject(parser);
+      ji.testObject(Parser.FIELDS, parser);
     } else if (fieldEquals("pubkey", buf, offset, len)) {
       parser.pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
     } else {
@@ -128,7 +129,7 @@ public record AccountInfo<T>(PublicKey pubKey,
     return true;
   };
 
-  private static final class Parser extends RootBuilder implements FieldBufferPredicate {
+  private static final class Parser extends RootBuilder implements FieldIndexPredicate {
 
     private PublicKey pubKey;
     private boolean executable;
@@ -151,27 +152,34 @@ public record AccountInfo<T>(PublicKey pubKey,
       return new AccountInfo<>(pubKey, context, executable, lamports, owner, rentEpoch, space, factory.apply(pubKey, data));
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "data",
+        "executable",
+        "lamports",
+        "owner",
+        "rentEpoch",
+        "space"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("data", buf, offset, len)) {
-        final var next = ji.whatIsNext();
-        data = parseEncodedData(ji, next);
-      } else if (fieldEquals("executable", buf, offset, len)) {
-        executable = ji.readBoolean();
-      } else if (fieldEquals("lamports", buf, offset, len)) {
-        lamports = ji.readLong();
-      } else if (fieldEquals("owner", buf, offset, len)) {
-        owner = PublicKeyEncoding.parseBase58Encoded(ji);
-      } else if (fieldEquals("rentEpoch", buf, offset, len)) {
-        rentEpoch = ji.readBigInteger();
-      } else if (fieldEquals("space", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          space = ji.readInt();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> {
+          final var next = ji.whatIsNext();
+          data = parseEncodedData(ji, next);
         }
-      } else {
-        ji.skip();
+        case 1 -> executable = ji.readBoolean();
+        case 2 -> lamports = ji.readLong();
+        case 3 -> owner = PublicKeyEncoding.parseBase58Encoded(ji);
+        case 4 -> rentEpoch = ji.readBigInteger();
+        case 5 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            space = ji.readInt();
+          } else {
+            ji.skip();
+          }
+        }
+        default -> ji.skip();
       }
       return true;
     }

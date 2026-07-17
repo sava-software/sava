@@ -5,7 +5,6 @@ import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,10 +37,7 @@ public record LoadedAddresses(List<PublicKey> readonly, List<PublicKey> writable
     }
 
     private static List<PublicKey> parseKeys(final JsonIterator ji) {
-      final var keys = new ArrayList<PublicKey>();
-      while (ji.readArray()) {
-        keys.add(PublicKeyEncoding.parseBase58Encoded(ji));
-      }
+      final var keys = ji.readList(PublicKeyEncoding::parseBase58Encoded);
       return keys.isEmpty() ? NO_KEYS : keys;
     }
 

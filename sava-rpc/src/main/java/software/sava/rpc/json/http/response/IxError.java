@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.FieldBufferFunction;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -291,118 +292,123 @@ public sealed interface IxError permits
     };
   }
 
-  CharBufferFunction<IxError> PARSER = (buf, offset, len) -> {
-    if (fieldEquals("GenericError", buf, offset, len)) {
-      return GenericError.INSTANCE;
-    } else if (fieldEquals("InvalidArgument", buf, offset, len)) {
-      return InvalidArgument.INSTANCE;
-    } else if (fieldEquals("InvalidInstructionData", buf, offset, len)) {
-      return InvalidInstructionData.INSTANCE;
-    } else if (fieldEquals("InvalidAccountData", buf, offset, len)) {
-      return InvalidAccountData.INSTANCE;
-    } else if (fieldEquals("AccountDataTooSmall", buf, offset, len)) {
-      return AccountDataTooSmall.INSTANCE;
-    } else if (fieldEquals("InsufficientFunds", buf, offset, len)) {
-      return InsufficientFunds.INSTANCE;
-    } else if (fieldEquals("IncorrectProgramId", buf, offset, len)) {
-      return IncorrectProgramId.INSTANCE;
-    } else if (fieldEquals("MissingRequiredSignature", buf, offset, len)) {
-      return MissingRequiredSignature.INSTANCE;
-    } else if (fieldEquals("AccountAlreadyInitialized", buf, offset, len)) {
-      return AccountAlreadyInitialized.INSTANCE;
-    } else if (fieldEquals("UninitializedAccount", buf, offset, len)) {
-      return UninitializedAccount.INSTANCE;
-    } else if (fieldEquals("UnbalancedInstruction", buf, offset, len)) {
-      return UnbalancedInstruction.INSTANCE;
-    } else if (fieldEquals("ModifiedProgramId", buf, offset, len)) {
-      return ModifiedProgramId.INSTANCE;
-    } else if (fieldEquals("ExternalAccountLamportSpend", buf, offset, len)) {
-      return ExternalAccountLamportSpend.INSTANCE;
-    } else if (fieldEquals("ExternalAccountDataModified", buf, offset, len)) {
-      return ExternalAccountDataModified.INSTANCE;
-    } else if (fieldEquals("ReadonlyLamportChange", buf, offset, len)) {
-      return ReadonlyLamportChange.INSTANCE;
-    } else if (fieldEquals("ReadonlyDataModified", buf, offset, len)) {
-      return ReadonlyDataModified.INSTANCE;
-    } else if (fieldEquals("DuplicateAccountIndex", buf, offset, len)) {
-      return DuplicateAccountIndex.INSTANCE;
-    } else if (fieldEquals("ExecutableModified", buf, offset, len)) {
-      return ExecutableModified.INSTANCE;
-    } else if (fieldEquals("RentEpochModified", buf, offset, len)) {
-      return RentEpochModified.INSTANCE;
-    } else if (fieldEquals("NotEnoughAccountKeys", buf, offset, len)) {
-      return NotEnoughAccountKeys.INSTANCE;
-    } else if (fieldEquals("AccountDataSizeChanged", buf, offset, len)) {
-      return AccountDataSizeChanged.INSTANCE;
-    } else if (fieldEquals("AccountNotExecutable", buf, offset, len)) {
-      return AccountNotExecutable.INSTANCE;
-    } else if (fieldEquals("AccountBorrowFailed", buf, offset, len)) {
-      return AccountBorrowFailed.INSTANCE;
-    } else if (fieldEquals("AccountBorrowOutstanding", buf, offset, len)) {
-      return AccountBorrowOutstanding.INSTANCE;
-    } else if (fieldEquals("DuplicateAccountOutOfSync", buf, offset, len)) {
-      return DuplicateAccountOutOfSync.INSTANCE;
-    } else if (fieldEquals("InvalidError", buf, offset, len)) {
-      return InvalidError.INSTANCE;
-    } else if (fieldEquals("ExecutableDataModified", buf, offset, len)) {
-      return ExecutableDataModified.INSTANCE;
-    } else if (fieldEquals("ExecutableLamportChange", buf, offset, len)) {
-      return ExecutableLamportChange.INSTANCE;
-    } else if (fieldEquals("ExecutableAccountNotRentExempt", buf, offset, len)) {
-      return ExecutableAccountNotRentExempt.INSTANCE;
-    } else if (fieldEquals("UnsupportedProgramId", buf, offset, len)) {
-      return UnsupportedProgramId.INSTANCE;
-    } else if (fieldEquals("CallDepth", buf, offset, len)) {
-      return CallDepth.INSTANCE;
-    } else if (fieldEquals("MissingAccount", buf, offset, len)) {
-      return MissingAccount.INSTANCE;
-    } else if (fieldEquals("ReentrancyNotAllowed", buf, offset, len)) {
-      return ReentrancyNotAllowed.INSTANCE;
-    } else if (fieldEquals("MaxSeedLengthExceeded", buf, offset, len)) {
-      return MaxSeedLengthExceeded.INSTANCE;
-    } else if (fieldEquals("InvalidSeeds", buf, offset, len)) {
-      return InvalidSeeds.INSTANCE;
-    } else if (fieldEquals("InvalidRealloc", buf, offset, len)) {
-      return InvalidRealloc.INSTANCE;
-    } else if (fieldEquals("ComputationalBudgetExceeded", buf, offset, len)) {
-      return ComputationalBudgetExceeded.INSTANCE;
-    } else if (fieldEquals("PrivilegeEscalation", buf, offset, len)) {
-      return PrivilegeEscalation.INSTANCE;
-    } else if (fieldEquals("ProgramEnvironmentSetupFailure", buf, offset, len)) {
-      return ProgramEnvironmentSetupFailure.INSTANCE;
-    } else if (fieldEquals("ProgramFailedToComplete", buf, offset, len)) {
-      return ProgramFailedToComplete.INSTANCE;
-    } else if (fieldEquals("ProgramFailedToCompile", buf, offset, len)) {
-      return ProgramFailedToCompile.INSTANCE;
-    } else if (fieldEquals("Immutable", buf, offset, len)) {
-      return Immutable.INSTANCE;
-    } else if (fieldEquals("IncorrectAuthority", buf, offset, len)) {
-      return IncorrectAuthority.INSTANCE;
-    } else if (fieldEquals("BorshIoError", buf, offset, len)) {
+  // Variant indices follow ERRORS' declaration order.
+  FieldMatcher ERRORS = FieldMatcher.of(
+      "GenericError",
+      "InvalidArgument",
+      "InvalidInstructionData",
+      "InvalidAccountData",
+      "AccountDataTooSmall",
+      "InsufficientFunds",
+      "IncorrectProgramId",
+      "MissingRequiredSignature",
+      "AccountAlreadyInitialized",
+      "UninitializedAccount",
+      "UnbalancedInstruction",
+      "ModifiedProgramId",
+      "ExternalAccountLamportSpend",
+      "ExternalAccountDataModified",
+      "ReadonlyLamportChange",
+      "ReadonlyDataModified",
+      "DuplicateAccountIndex",
+      "ExecutableModified",
+      "RentEpochModified",
+      "NotEnoughAccountKeys",
+      "AccountDataSizeChanged",
+      "AccountNotExecutable",
+      "AccountBorrowFailed",
+      "AccountBorrowOutstanding",
+      "DuplicateAccountOutOfSync",
+      "InvalidError",
+      "ExecutableDataModified",
+      "ExecutableLamportChange",
+      "ExecutableAccountNotRentExempt",
+      "UnsupportedProgramId",
+      "CallDepth",
+      "MissingAccount",
+      "ReentrancyNotAllowed",
+      "MaxSeedLengthExceeded",
+      "InvalidSeeds",
+      "InvalidRealloc",
+      "ComputationalBudgetExceeded",
+      "PrivilegeEscalation",
+      "ProgramEnvironmentSetupFailure",
+      "ProgramFailedToComplete",
+      "ProgramFailedToCompile",
+      "Immutable",
+      "IncorrectAuthority",
+      "BorshIoError",
+      "AccountNotRentExempt",
+      "InvalidAccountOwner",
+      "ArithmeticOverflow",
+      "UnsupportedSysvar",
+      "IllegalOwner",
+      "MaxAccountsDataAllocationsExceeded",
+      "MaxAccountsExceeded",
+      "MaxInstructionTraceLengthExceeded",
+      "BuiltinProgramsMustConsumeComputeUnits"
+  );
+
+  IxError[] VARIANTS = {
+      GenericError.INSTANCE,
+      InvalidArgument.INSTANCE,
+      InvalidInstructionData.INSTANCE,
+      InvalidAccountData.INSTANCE,
+      AccountDataTooSmall.INSTANCE,
+      InsufficientFunds.INSTANCE,
+      IncorrectProgramId.INSTANCE,
+      MissingRequiredSignature.INSTANCE,
+      AccountAlreadyInitialized.INSTANCE,
+      UninitializedAccount.INSTANCE,
+      UnbalancedInstruction.INSTANCE,
+      ModifiedProgramId.INSTANCE,
+      ExternalAccountLamportSpend.INSTANCE,
+      ExternalAccountDataModified.INSTANCE,
+      ReadonlyLamportChange.INSTANCE,
+      ReadonlyDataModified.INSTANCE,
+      DuplicateAccountIndex.INSTANCE,
+      ExecutableModified.INSTANCE,
+      RentEpochModified.INSTANCE,
+      NotEnoughAccountKeys.INSTANCE,
+      AccountDataSizeChanged.INSTANCE,
+      AccountNotExecutable.INSTANCE,
+      AccountBorrowFailed.INSTANCE,
+      AccountBorrowOutstanding.INSTANCE,
+      DuplicateAccountOutOfSync.INSTANCE,
+      InvalidError.INSTANCE,
+      ExecutableDataModified.INSTANCE,
+      ExecutableLamportChange.INSTANCE,
+      ExecutableAccountNotRentExempt.INSTANCE,
+      UnsupportedProgramId.INSTANCE,
+      CallDepth.INSTANCE,
+      MissingAccount.INSTANCE,
+      ReentrancyNotAllowed.INSTANCE,
+      MaxSeedLengthExceeded.INSTANCE,
+      InvalidSeeds.INSTANCE,
+      InvalidRealloc.INSTANCE,
+      ComputationalBudgetExceeded.INSTANCE,
+      PrivilegeEscalation.INSTANCE,
+      ProgramEnvironmentSetupFailure.INSTANCE,
+      ProgramFailedToComplete.INSTANCE,
+      ProgramFailedToCompile.INSTANCE,
+      Immutable.INSTANCE,
+      IncorrectAuthority.INSTANCE,
       // Unit variant as of solana-sdk v3; the String payload only appears in historical data.
-      return new BorshIoError(null);
-    } else if (fieldEquals("AccountNotRentExempt", buf, offset, len)) {
-      return AccountNotRentExempt.INSTANCE;
-    } else if (fieldEquals("InvalidAccountOwner", buf, offset, len)) {
-      return InvalidAccountOwner.INSTANCE;
-    } else if (fieldEquals("ArithmeticOverflow", buf, offset, len)) {
-      return ArithmeticOverflow.INSTANCE;
-    } else if (fieldEquals("UnsupportedSysvar", buf, offset, len)) {
-      return UnsupportedSysvar.INSTANCE;
-    } else if (fieldEquals("IllegalOwner", buf, offset, len)) {
-      return IllegalOwner.INSTANCE;
-    } else if (fieldEquals("MaxAccountsDataAllocationsExceeded", buf, offset, len)) {
-      return MaxAccountsDataAllocationsExceeded.INSTANCE;
-    } else if (fieldEquals("MaxAccountsExceeded", buf, offset, len)) {
-      return MaxAccountsExceeded.INSTANCE;
-    } else if (fieldEquals("MaxInstructionTraceLengthExceeded", buf, offset, len)) {
-      return MaxInstructionTraceLengthExceeded.INSTANCE;
-    } else if (fieldEquals("BuiltinProgramsMustConsumeComputeUnits", buf, offset, len)) {
-      return BuiltinProgramsMustConsumeComputeUnits.INSTANCE;
-    } else {
-      final var type = new String(buf, offset, len);
-      return new Unknown(type);
-    }
+      new BorshIoError(null),
+      AccountNotRentExempt.INSTANCE,
+      InvalidAccountOwner.INSTANCE,
+      ArithmeticOverflow.INSTANCE,
+      UnsupportedSysvar.INSTANCE,
+      IllegalOwner.INSTANCE,
+      MaxAccountsDataAllocationsExceeded.INSTANCE,
+      MaxAccountsExceeded.INSTANCE,
+      MaxInstructionTraceLengthExceeded.INSTANCE,
+      BuiltinProgramsMustConsumeComputeUnits.INSTANCE
+  };
+
+  CharBufferFunction<IxError> PARSER = (buf, offset, len) -> {
+    final int i = ERRORS.match(buf, offset, len);
+    return i < 0 ? new Unknown(new String(buf, offset, len)) : VARIANTS[i];
   };
 
   FieldBufferFunction<IxError> OBJECT_PARSER = (buf, offset, len, ji) -> {

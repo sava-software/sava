@@ -2,11 +2,10 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.FieldBufferFunction;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
-
-// See https://github.com/anza-xyz/agave/blob/7cb2b8a04a7d35711759d3fa4b636fdd6992ebf1/sdk/transaction-error/src/lib.rs#L17
+// See https://github.com/anza-xyz/solana-sdk/blob/master/transaction-error/src/lib.rs
 public sealed interface TransactionError permits
     TransactionError.AccountInUse,
     TransactionError.AccountLoadedTwice,
@@ -219,104 +218,122 @@ public sealed interface TransactionError permits
     };
   }
 
-  CharBufferFunction<TransactionError> PARSER = (buf, offset, len) -> {
-    if (fieldEquals("AccountInUse", buf, offset, len)) {
-      return AccountInUse.INSTANCE;
-    } else if (fieldEquals("AccountLoadedTwice", buf, offset, len)) {
-      return AccountLoadedTwice.INSTANCE;
-    } else if (fieldEquals("AccountNotFound", buf, offset, len)) {
-      return AccountNotFound.INSTANCE;
-    } else if (fieldEquals("ProgramAccountNotFound", buf, offset, len)) {
-      return ProgramAccountNotFound.INSTANCE;
-    } else if (fieldEquals("InsufficientFundsForFee", buf, offset, len)) {
-      return InsufficientFundsForFee.INSTANCE;
-    } else if (fieldEquals("InvalidAccountForFee", buf, offset, len)) {
-      return InvalidAccountForFee.INSTANCE;
-    } else if (fieldEquals("AlreadyProcessed", buf, offset, len)) {
-      return AlreadyProcessed.INSTANCE;
-    } else if (fieldEquals("BlockhashNotFound", buf, offset, len)) {
-      return BlockhashNotFound.INSTANCE;
-    } else if (fieldEquals("CallChainTooDeep", buf, offset, len)) {
-      return CallChainTooDeep.INSTANCE;
-    } else if (fieldEquals("MissingSignatureForFee", buf, offset, len)) {
-      return MissingSignatureForFee.INSTANCE;
-    } else if (fieldEquals("InvalidAccountIndex", buf, offset, len)) {
-      return InvalidAccountIndex.INSTANCE;
-    } else if (fieldEquals("SignatureFailure", buf, offset, len)) {
-      return SignatureFailure.INSTANCE;
-    } else if (fieldEquals("InvalidProgramForExecution", buf, offset, len)) {
-      return InvalidProgramForExecution.INSTANCE;
-    } else if (fieldEquals("SanitizeFailure", buf, offset, len)) {
-      return SanitizeFailure.INSTANCE;
-    } else if (fieldEquals("ClusterMaintenance", buf, offset, len)) {
-      return ClusterMaintenance.INSTANCE;
-    } else if (fieldEquals("AccountBorrowOutstanding", buf, offset, len)) {
-      return AccountBorrowOutstanding.INSTANCE;
-    } else if (fieldEquals("WouldExceedMaxBlockCostLimit", buf, offset, len)) {
-      return WouldExceedMaxBlockCostLimit.INSTANCE;
-    } else if (fieldEquals("UnsupportedVersion", buf, offset, len)) {
-      return UnsupportedVersion.INSTANCE;
-    } else if (fieldEquals("InvalidWritableAccount", buf, offset, len)) {
-      return InvalidWritableAccount.INSTANCE;
-    } else if (fieldEquals("WouldExceedMaxAccountCostLimit", buf, offset, len)) {
-      return WouldExceedMaxAccountCostLimit.INSTANCE;
-    } else if (fieldEquals("WouldExceedAccountDataBlockLimit", buf, offset, len)) {
-      return WouldExceedAccountDataBlockLimit.INSTANCE;
-    } else if (fieldEquals("TooManyAccountLocks", buf, offset, len)) {
-      return TooManyAccountLocks.INSTANCE;
-    } else if (fieldEquals("AddressLookupTableNotFound", buf, offset, len)) {
-      return AddressLookupTableNotFound.INSTANCE;
-    } else if (fieldEquals("InvalidAddressLookupTableOwner", buf, offset, len)) {
-      return InvalidAddressLookupTableOwner.INSTANCE;
-    } else if (fieldEquals("InvalidAddressLookupTableData", buf, offset, len)) {
-      return InvalidAddressLookupTableData.INSTANCE;
-    } else if (fieldEquals("InvalidAddressLookupTableIndex", buf, offset, len)) {
-      return InvalidAddressLookupTableIndex.INSTANCE;
-    } else if (fieldEquals("InvalidRentPayingAccount", buf, offset, len)) {
-      return InvalidRentPayingAccount.INSTANCE;
-    } else if (fieldEquals("WouldExceedMaxVoteCostLimit", buf, offset, len)) {
-      return WouldExceedMaxVoteCostLimit.INSTANCE;
-    } else if (fieldEquals("WouldExceedAccountDataTotalLimit", buf, offset, len)) {
-      return WouldExceedAccountDataTotalLimit.INSTANCE;
-    } else if (fieldEquals("MaxLoadedAccountsDataSizeExceeded", buf, offset, len)) {
-      return MaxLoadedAccountsDataSizeExceeded.INSTANCE;
-    } else if (fieldEquals("InvalidLoadedAccountsDataSizeLimit", buf, offset, len)) {
-      return InvalidLoadedAccountsDataSizeLimit.INSTANCE;
-    } else if (fieldEquals("ResanitizationNeeded", buf, offset, len)) {
-      return ResanitizationNeeded.INSTANCE;
-    } else if (fieldEquals("UnbalancedTransaction", buf, offset, len)) {
-      return UnbalancedTransaction.INSTANCE;
-    } else if (fieldEquals("ProgramCacheHitMaxLimit", buf, offset, len)) {
-      return ProgramCacheHitMaxLimit.INSTANCE;
-    } else if (fieldEquals("CommitCancelled", buf, offset, len)) {
-      return CommitCancelled.INSTANCE;
-    } else {
-      final var type = new String(buf, offset, len);
-      return new Unknown(type);
-    }
+  // Variant indices follow ERRORS' declaration order.
+  FieldMatcher ERRORS = FieldMatcher.of(
+      "AccountInUse",
+      "AccountLoadedTwice",
+      "AccountNotFound",
+      "ProgramAccountNotFound",
+      "InsufficientFundsForFee",
+      "InvalidAccountForFee",
+      "AlreadyProcessed",
+      "BlockhashNotFound",
+      "CallChainTooDeep",
+      "MissingSignatureForFee",
+      "InvalidAccountIndex",
+      "SignatureFailure",
+      "InvalidProgramForExecution",
+      "SanitizeFailure",
+      "ClusterMaintenance",
+      "AccountBorrowOutstanding",
+      "WouldExceedMaxBlockCostLimit",
+      "UnsupportedVersion",
+      "InvalidWritableAccount",
+      "WouldExceedMaxAccountCostLimit",
+      "WouldExceedAccountDataBlockLimit",
+      "TooManyAccountLocks",
+      "AddressLookupTableNotFound",
+      "InvalidAddressLookupTableOwner",
+      "InvalidAddressLookupTableData",
+      "InvalidAddressLookupTableIndex",
+      "InvalidRentPayingAccount",
+      "WouldExceedMaxVoteCostLimit",
+      "WouldExceedAccountDataTotalLimit",
+      "MaxLoadedAccountsDataSizeExceeded",
+      "InvalidLoadedAccountsDataSizeLimit",
+      "ResanitizationNeeded",
+      "UnbalancedTransaction",
+      "ProgramCacheHitMaxLimit",
+      "CommitCancelled"
+  );
+
+  TransactionError[] VARIANTS = {
+      AccountInUse.INSTANCE,
+      AccountLoadedTwice.INSTANCE,
+      AccountNotFound.INSTANCE,
+      ProgramAccountNotFound.INSTANCE,
+      InsufficientFundsForFee.INSTANCE,
+      InvalidAccountForFee.INSTANCE,
+      AlreadyProcessed.INSTANCE,
+      BlockhashNotFound.INSTANCE,
+      CallChainTooDeep.INSTANCE,
+      MissingSignatureForFee.INSTANCE,
+      InvalidAccountIndex.INSTANCE,
+      SignatureFailure.INSTANCE,
+      InvalidProgramForExecution.INSTANCE,
+      SanitizeFailure.INSTANCE,
+      ClusterMaintenance.INSTANCE,
+      AccountBorrowOutstanding.INSTANCE,
+      WouldExceedMaxBlockCostLimit.INSTANCE,
+      UnsupportedVersion.INSTANCE,
+      InvalidWritableAccount.INSTANCE,
+      WouldExceedMaxAccountCostLimit.INSTANCE,
+      WouldExceedAccountDataBlockLimit.INSTANCE,
+      TooManyAccountLocks.INSTANCE,
+      AddressLookupTableNotFound.INSTANCE,
+      InvalidAddressLookupTableOwner.INSTANCE,
+      InvalidAddressLookupTableData.INSTANCE,
+      InvalidAddressLookupTableIndex.INSTANCE,
+      InvalidRentPayingAccount.INSTANCE,
+      WouldExceedMaxVoteCostLimit.INSTANCE,
+      WouldExceedAccountDataTotalLimit.INSTANCE,
+      MaxLoadedAccountsDataSizeExceeded.INSTANCE,
+      InvalidLoadedAccountsDataSizeLimit.INSTANCE,
+      ResanitizationNeeded.INSTANCE,
+      UnbalancedTransaction.INSTANCE,
+      ProgramCacheHitMaxLimit.INSTANCE,
+      CommitCancelled.INSTANCE
   };
 
+  CharBufferFunction<TransactionError> PARSER = (buf, offset, len) -> {
+    final int i = ERRORS.match(buf, offset, len);
+    return i < 0 ? new Unknown(new String(buf, offset, len)) : VARIANTS[i];
+  };
+
+  FieldMatcher OBJECT_ERRORS = FieldMatcher.of(
+      "InstructionError",
+      "InsufficientFundsForRent",
+      "ProgramExecutionTemporarilyRestricted",
+      "DuplicateInstruction"
+  );
+
   FieldBufferFunction<TransactionError> OBJECT_PARSER = (buf, offset, len, ji) -> {
-    if (fieldEquals("InstructionError", buf, offset, len)) {
-      final int index = ji.openArray().readInt();
-      ji.continueArray();
-      final var error = IxError.parseError(ji);
-      ji.skipRestOfArray();
-      return new InstructionError(index, error);
-    } else if (fieldEquals("InsufficientFundsForRent", buf, offset, len)) {
-      final int accountIndex = ji.skipUntil("account_index").readInt();
-      ji.skipRestOfObject();
-      return new InsufficientFundsForRent(accountIndex);
-    } else if (fieldEquals("ProgramExecutionTemporarilyRestricted", buf, offset, len)) {
-      final int accountIndex = ji.skipUntil("account_index").readInt();
-      ji.skipRestOfObject();
-      return new ProgramExecutionTemporarilyRestricted(accountIndex);
-    } else if (fieldEquals("DuplicateInstruction", buf, offset, len)) {
-      return new DuplicateInstruction(ji.readInt());
-    } else {
-      final var type = new String(buf, offset, len);
-      ji.skip();
-      return new Unknown(type);
+    switch (OBJECT_ERRORS.match(buf, offset, len)) {
+      case 0 -> {
+        final int index = ji.openArray().readInt();
+        ji.continueArray();
+        final var error = IxError.parseError(ji);
+        ji.skipRestOfArray();
+        return new InstructionError(index, error);
+      }
+      case 1 -> {
+        final int accountIndex = ji.skipUntil("account_index").readInt();
+        ji.skipRestOfObject();
+        return new InsufficientFundsForRent(accountIndex);
+      }
+      case 2 -> {
+        final int accountIndex = ji.skipUntil("account_index").readInt();
+        ji.skipRestOfObject();
+        return new ProgramExecutionTemporarilyRestricted(accountIndex);
+      }
+      case 3 -> {
+        return new DuplicateInstruction(ji.readInt());
+      }
+      default -> {
+        final var type = new String(buf, offset, len);
+        ji.skip();
+        return new Unknown(type);
+      }
     }
   };
 }

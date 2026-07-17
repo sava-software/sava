@@ -1,9 +1,10 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record EpochSchedule(long firstNormalEpoch,
                             long firstNormalSlot,
@@ -12,12 +13,10 @@ public record EpochSchedule(long firstNormalEpoch,
                             boolean warmup) {
 
   public static EpochSchedule parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<EpochSchedule> {
 
     private long firstNormalEpoch;
     private long firstNormalSlot;
@@ -28,24 +27,28 @@ public record EpochSchedule(long firstNormalEpoch,
     private Parser() {
     }
 
-    private EpochSchedule create() {
+    @Override
+    public EpochSchedule get() {
       return new EpochSchedule(firstNormalEpoch, firstNormalSlot, leaderScheduleSlotOffset, slotsPerEpoch, warmup);
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "firstNormalEpoch",
+        "firstNormalSlot",
+        "leaderScheduleSlotOffset",
+        "slotsPerEpoch",
+        "warmup"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("firstNormalEpoch", buf, offset, len)) {
-        firstNormalEpoch = ji.readLong();
-      } else if (fieldEquals("firstNormalSlot", buf, offset, len)) {
-        firstNormalSlot = ji.readLong();
-      } else if (fieldEquals("leaderScheduleSlotOffset", buf, offset, len)) {
-        leaderScheduleSlotOffset = ji.readLong();
-      } else if (fieldEquals("slotsPerEpoch", buf, offset, len)) {
-        slotsPerEpoch = ji.readInt();
-      } else if (fieldEquals("warmup", buf, offset, len)) {
-        warmup = ji.readBoolean();
-      } else {
-        ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> firstNormalEpoch = ji.readLong();
+        case 1 -> firstNormalSlot = ji.readLong();
+        case 2 -> leaderScheduleSlotOffset = ji.readLong();
+        case 3 -> slotsPerEpoch = ji.readInt();
+        case 4 -> warmup = ji.readBoolean();
+        default -> ji.skip();
       }
       return true;
     }

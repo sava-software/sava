@@ -1,14 +1,14 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.tx.TransactionSkeleton;
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.util.OptionalInt;
 import java.util.OptionalLong;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 /// @param transactionIndex Index of the transaction within its block, empty when the responding node does not
 ///                         serve this field.
@@ -29,12 +29,10 @@ public record Tx(long slot,
   }
 
   public static Tx parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<Tx> {
 
     private long slot;
     private long blockTime;
@@ -46,7 +44,8 @@ public record Tx(long slot,
     private Parser() {
     }
 
-    private Tx create() {
+    @Override
+    public Tx get() {
       return new Tx(
           slot,
           blockTime <= 0 ? OptionalLong.empty() : OptionalLong.of(blockTime),
@@ -57,42 +56,55 @@ public record Tx(long slot,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "slot",
+        "blockTime",
+        "meta",
+        "transaction",
+        "version",
+        "transactionIndex"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("slot", buf, offset, len)) {
-        this.slot = ji.readLong();
-      } else if (fieldEquals("blockTime", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          this.blockTime = ji.readLong();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> this.slot = ji.readLong();
+        case 1 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            this.blockTime = ji.readLong();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("meta", buf, offset, len)) {
-        if (!ji.readNull()) {
-          this.meta = TxMeta.parse(ji);
+        case 2 -> {
+          if (!ji.readNull()) {
+            this.meta = TxMeta.parse(ji);
+          }
         }
-      } else if (fieldEquals("transaction", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.ARRAY) {
-          ji.openArray();
-          this.data = ji.decodeBase64String();
-          ji.skipRestOfArray();
-        } else {
-          ji.skip();
+        case 3 -> {
+          if (ji.whatIsNext() == ValueType.ARRAY) {
+            ji.openArray();
+            this.data = ji.decodeBase64String();
+            ji.skipRestOfArray();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("version", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          this.version = ji.readInt();
-        } else {
-          ji.skip();
+        case 4 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            this.version = ji.readInt();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("transactionIndex", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          this.transactionIndex = ji.readInt();
-        } else {
-          ji.skip();
+        case 5 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            this.transactionIndex = ji.readInt();
+          } else {
+            ji.skip();
+          }
         }
-      } else {
-        ji.skip();
+        default -> ji.skip();
       }
       return true;
     }

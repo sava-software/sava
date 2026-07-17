@@ -1,13 +1,13 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 /// @param commission    Vote account commission when the reward was credited, in basis points if
 ///                      [#commissionBps()], otherwise a percentage.
@@ -28,15 +28,13 @@ public record InflationReward(long amount,
       if (ji.readNull()) {
         rewards.add(ZERO);
       } else {
-        final var parser = new Parser();
-        ji.testObject(parser);
-        rewards.add(parser.create());
+        rewards.add(ji.parseObject(Parser.FIELDS, new Parser()));
       }
     }
     return rewards;
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<InflationReward> {
 
     private long amount;
     private long effectiveSlot;
@@ -48,7 +46,8 @@ public record InflationReward(long amount,
     private Parser() {
     }
 
-    private InflationReward create() {
+    @Override
+    public InflationReward get() {
       return new InflationReward(
           amount,
           effectiveSlot,
@@ -59,33 +58,40 @@ public record InflationReward(long amount,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "amount",
+        "effectiveSlot",
+        "epoch",
+        "postBalance",
+        "commission",
+        "commissionBps"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("amount", buf, offset, len)) {
-        amount = ji.readLong();
-      } else if (fieldEquals("effectiveSlot", buf, offset, len)) {
-        effectiveSlot = ji.readLong();
-      } else if (fieldEquals("epoch", buf, offset, len)) {
-        epoch = ji.readLong();
-      } else if (fieldEquals("postBalance", buf, offset, len)) {
-        postBalance = ji.readLong();
-      } else if (fieldEquals("commission", buf, offset, len)) {
-        // Nodes serve either the percentage or the basis points, which take precedence regardless
-        // of the order in which they are served.
-        if (commissionBps || ji.whatIsNext() != ValueType.NUMBER) {
-          ji.skip();
-        } else {
-          commission = ji.readInt();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> amount = ji.readLong();
+        case 1 -> effectiveSlot = ji.readLong();
+        case 2 -> epoch = ji.readLong();
+        case 3 -> postBalance = ji.readLong();
+        case 4 -> {
+          // Nodes serve either the percentage or the basis points, which take precedence regardless
+          // of the order in which they are served.
+          if (commissionBps || ji.whatIsNext() != ValueType.NUMBER) {
+            ji.skip();
+          } else {
+            commission = ji.readInt();
+          }
         }
-      } else if (fieldEquals("commissionBps", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          commission = ji.readInt();
-          commissionBps = true;
-        } else {
-          ji.skip();
+        case 5 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            commission = ji.readInt();
+            commissionBps = true;
+          } else {
+            ji.skip();
+          }
         }
-      } else {
-        ji.skip();
+        default -> ji.skip();
       }
       return true;
     }

@@ -1,13 +1,13 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record Block(long blockHeight,
                     long blockTime,
@@ -20,12 +20,10 @@ public record Block(long blockHeight,
                     List<BlockTx> transactions) {
 
   public static Block parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<Block> {
 
     private long blockHeight;
     private long blockTime;
@@ -40,7 +38,8 @@ public record Block(long blockHeight,
     private Parser() {
     }
 
-    private Block create() {
+    @Override
+    public Block get() {
       return new Block(
           blockHeight,
           blockTime,
@@ -54,48 +53,61 @@ public record Block(long blockHeight,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "blockHeight",
+        "blockTime",
+        "numRewardPartitions",
+        "blockhash",
+        "previousBlockhash",
+        "parentSlot",
+        "rewards",
+        "signatures",
+        "transactions"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("blockHeight", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          blockHeight = ji.readLong();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            blockHeight = ji.readLong();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("blockTime", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          blockTime = ji.readLong();
-        } else {
-          ji.skip();
+        case 1 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            blockTime = ji.readLong();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("numRewardPartitions", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          numRewardPartitions = ji.readLong();
-        } else {
-          ji.skip();
+        case 2 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            numRewardPartitions = ji.readLong();
+          } else {
+            ji.skip();
+          }
         }
-      } else if (fieldEquals("blockhash", buf, offset, len)) {
-        blockHash = ji.readString();
-      } else if (fieldEquals("previousBlockhash", buf, offset, len)) {
-        previousBlockHash = ji.readString();
-      } else if (fieldEquals("parentSlot", buf, offset, len)) {
-        parentSlot = ji.readLong();
-      } else if (fieldEquals("rewards", buf, offset, len)) {
-        rewards = TxReward.parseRewards(ji);
-      } else if (fieldEquals("signatures", buf, offset, len)) {
-        final var signatures = new ArrayList<String>(2_048);
-        while (ji.readArray()) {
-          signatures.add(ji.readString());
+        case 3 -> blockHash = ji.readString();
+        case 4 -> previousBlockHash = ji.readString();
+        case 5 -> parentSlot = ji.readLong();
+        case 6 -> rewards = TxReward.parseRewards(ji);
+        case 7 -> {
+          final var signatures = new ArrayList<String>(2_048);
+          while (ji.readArray()) {
+            signatures.add(ji.readString());
+          }
+          this.signatures = signatures;
         }
-        this.signatures = signatures;
-      } else if (fieldEquals("transactions", buf, offset, len)) {
-        final var transactions = new ArrayList<BlockTx>(2_048);
-        while (ji.readArray()) {
-          transactions.add(BlockTx.parse(ji));
+        case 8 -> {
+          final var transactions = new ArrayList<BlockTx>(2_048);
+          while (ji.readArray()) {
+            transactions.add(BlockTx.parse(ji));
+          }
+          this.transactions = transactions;
         }
-        this.transactions = transactions;
-      } else {
-        ji.skip();
+        default -> ji.skip();
       }
       return true;
     }

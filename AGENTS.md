@@ -551,7 +551,11 @@ git -C <solana-sdk-clone> diff 4fb3a9a3..HEAD -- \
 2. Diff the reference clone against its "Last verified sync points" hash, scoped to the
    watched paths; only changes in the diff (plus surfaces outside the verified scope) need
    review. Update the sync-point row when done.
-3. Diff the relevant canonical file(s) above against the Java mirror.
+3. Diff the relevant canonical file(s) above against the Java mirror. If the Java file
+   carries an in-source upstream link, check it still resolves on the canonical repo's
+   default branch — link `blob/master` paths, not pinned commits (commit pinning lives in
+   the sync-point table above); a link into agave's old `sdk/` tree means the crate moved
+   to the solana-sdk repo.
 4. For token extensions: compare `parse_token_extension.rs`'s match against
    `ExtensionType.java`; add the record to the sealed `TokenExtension` hierarchy, the
    enum entry and dispatch case, and a round-trip test (plus a real fixture when

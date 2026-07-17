@@ -1,9 +1,10 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record InflationGovernor(double foundation,
                                 double foundationTerm,
@@ -12,12 +13,10 @@ public record InflationGovernor(double foundation,
                                 double terminal) {
 
   public static InflationGovernor parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<InflationGovernor> {
 
     private double foundation;
     private double foundationTerm;
@@ -28,24 +27,28 @@ public record InflationGovernor(double foundation,
     private Parser() {
     }
 
-    private InflationGovernor create() {
+    @Override
+    public InflationGovernor get() {
       return new InflationGovernor(foundation, foundationTerm, initial, taper, terminal);
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "foundation",
+        "foundationTerm",
+        "initial",
+        "taper",
+        "terminal"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("foundation", buf, offset, len)) {
-        foundation = ji.readDouble();
-      } else if (fieldEquals("foundationTerm", buf, offset, len)) {
-        foundationTerm = ji.readDouble();
-      } else if (fieldEquals("initial", buf, offset, len)) {
-        initial = ji.readDouble();
-      } else if (fieldEquals("taper", buf, offset, len)) {
-        taper = ji.readDouble();
-      } else if (fieldEquals("terminal", buf, offset, len)) {
-        terminal = ji.readDouble();
-      } else {
-        ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> foundation = ji.readDouble();
+        case 1 -> foundationTerm = ji.readDouble();
+        case 2 -> initial = ji.readDouble();
+        case 3 -> taper = ji.readDouble();
+        case 4 -> terminal = ji.readDouble();
+        default -> ji.skip();
       }
       return true;
     }

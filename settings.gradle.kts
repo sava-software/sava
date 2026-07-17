@@ -36,4 +36,4 @@ javaModules {
   }
 }
 
-//includeBuild("../json-iterator")
+includeBuild("../json-iterator")

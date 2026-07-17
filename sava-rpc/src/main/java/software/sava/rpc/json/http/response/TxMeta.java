@@ -1,12 +1,11 @@
 package software.sava.rpc.json.http.response;
 
-import systems.comodal.jsoniter.FieldBufferPredicate;
+import systems.comodal.jsoniter.FieldIndexPredicate;
+import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.ArrayList;
 import java.util.List;
-
-import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
+import java.util.function.Supplier;
 
 public record TxMeta(TransactionError error,
                      int computeUnitsConsumed,
@@ -23,20 +22,14 @@ public record TxMeta(TransactionError error,
                      List<TxReward> rewards) {
 
   public static TxMeta parse(final JsonIterator ji) {
-    final var parser = new Parser();
-    ji.testObject(parser);
-    return parser.create();
+    return ji.parseObject(Parser.FIELDS, new Parser());
   }
 
   static List<Long> parseLamportBalances(final JsonIterator ji) {
-    final var balances = new ArrayList<Long>();
-    while (ji.readArray()) {
-      balances.add(ji.readLong());
-    }
-    return balances;
+    return ji.readList(JsonIterator::readLong);
   }
 
-  private static final class Parser implements FieldBufferPredicate {
+  private static final class Parser implements FieldIndexPredicate, Supplier<TxMeta> {
 
     private TransactionError error;
     private int computeUnitsConsumed;
@@ -55,7 +48,8 @@ public record TxMeta(TransactionError error,
     private Parser() {
     }
 
-    private TxMeta create() {
+    @Override
+    public TxMeta get() {
       return new TxMeta(
           error,
           computeUnitsConsumed,
@@ -73,40 +67,39 @@ public record TxMeta(TransactionError error,
       );
     }
 
+    private static final FieldMatcher FIELDS = FieldMatcher.of(
+        "err",
+        "computeUnitsConsumed",
+        "costUnits",
+        "fee",
+        "preBalances",
+        "postBalances",
+        "preTokenBalances",
+        "postTokenBalances",
+        "innerInstructions",
+        "loadedAddresses",
+        "returnData",
+        "logMessages",
+        "rewards"
+    );
+
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("err", buf, offset, len)) {
-        this.error = TransactionError.parseError(ji);
-      } else if (fieldEquals("computeUnitsConsumed", buf, offset, len)) {
-        this.computeUnitsConsumed = ji.readInt();
-      } else if (fieldEquals("costUnits", buf, offset, len)) {
-        this.costUnits = ji.readLong();
-      } else if (fieldEquals("fee", buf, offset, len)) {
-        this.fee = ji.readLong();
-      } else if (fieldEquals("preBalances", buf, offset, len)) {
-        this.preBalances = parseLamportBalances(ji);
-      } else if (fieldEquals("postBalances", buf, offset, len)) {
-        this.postBalances = parseLamportBalances(ji);
-      } else if (fieldEquals("preTokenBalances", buf, offset, len)) {
-        this.preTokenBalances = TokenBalance.parseBalances(ji);
-      } else if (fieldEquals("postTokenBalances", buf, offset, len)) {
-        this.postTokenBalances = TokenBalance.parseBalances(ji);
-      } else if (fieldEquals("innerInstructions", buf, offset, len)) {
-        this.innerInstructions = TxInnerInstruction.parseInstructions(ji);
-      } else if (fieldEquals("loadedAddresses", buf, offset, len)) {
-        this.loadedAddresses = LoadedAddresses.parse(ji);
-      } else if (fieldEquals("returnData", buf, offset, len)) {
-        this.returnData = TxReturnData.parse(ji);
-      } else if (fieldEquals("logMessages", buf, offset, len)) {
-        final var logMessages = new ArrayList<String>();
-        while (ji.readArray()) {
-          logMessages.add(ji.readString());
-        }
-        this.logMessages = logMessages;
-      } else if (fieldEquals("rewards", buf, offset, len)) {
-        this.rewards = TxReward.parseRewards(ji);
-      } else {
-        ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> this.error = TransactionError.parseError(ji);
+        case 1 -> this.computeUnitsConsumed = ji.readInt();
+        case 2 -> this.costUnits = ji.readLong();
+        case 3 -> this.fee = ji.readLong();
+        case 4 -> this.preBalances = parseLamportBalances(ji);
+        case 5 -> this.postBalances = parseLamportBalances(ji);
+        case 6 -> this.preTokenBalances = TokenBalance.parseBalances(ji);
+        case 7 -> this.postTokenBalances = TokenBalance.parseBalances(ji);
+        case 8 -> this.innerInstructions = TxInnerInstruction.parseInstructions(ji);
+        case 9 -> this.loadedAddresses = LoadedAddresses.parse(ji);
+        case 10 -> this.returnData = TxReturnData.parse(ji);
+        case 11 -> this.logMessages = ji.readList(JsonIterator::readString);
+        case 12 -> this.rewards = TxReward.parseRewards(ji);
+        default -> ji.skip();
       }
       return true;
     }
