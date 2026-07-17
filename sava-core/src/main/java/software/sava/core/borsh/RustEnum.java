@@ -8,6 +8,7 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
+@Deprecated(forRemoval = true) // unused in sava; consumer projects use their generated RustEnum
 public interface RustEnum extends Borsh {
 
   int ordinal();
