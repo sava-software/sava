@@ -1,5 +1,17 @@
 # Changelog
 
+## [25.7.0](https://github.com/sava-software/sava/compare/25.6.1...25.7.0) (2026-07-17)
+
+
+### Features
+
+* **core/encoding:** enhance Base58 fuzzing, tooling, and verification workflows ([37b4874](https://github.com/sava-software/sava/commit/37b48747444c914d7decb34c7471c9f52f8ef61d))
+
+
+### Miscellaneous Chores
+
+* release 25.7.0 ([54c0395](https://github.com/sava-software/sava/commit/54c0395f681f41c5df731c438f779f9f46d55f70))
+
 ## [25.6.1](https://github.com/sava-software/sava/compare/25.6.0...25.6.1) (2026-07-15)
 
 
