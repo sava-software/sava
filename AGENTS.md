@@ -49,15 +49,24 @@ Java: `sava-core/src/main/java/software/sava/core/accounts/token/`
   ordinals 0 (`Uninitialized`) through 28 (`PermissionedBurn`); it duplicates the sealed
   `TokenExtension` hierarchy, which is the migration target. While it exists it **must
   stay ordinal-aligned with the Rust `ExtensionType` enum**: new SPL extensions are
-  appended, so new Java entries must be appended in the same order.
+  appended, so new Java entries must be appended in the same order. The live model is the
+  `Set<TokenExtension>` on `Token2022`/`Token2022Account`: users iterate it and switch on
+  the sealed type; `UnknownTokenExtension(type, data)` entries keep parsing alive across
+  new SPL releases and round-trip through `write`. The deprecated `extensions()` map
+  drops unknown entries since they cannot be keyed by the enum; a future release removes
+  the map method and the enum. Append new enum entries promptly so the dispatch switch
+  parses new extensions typed.
 - `extensions/*.java` — one record per extension with a static `read(data, offset)` and a
   `write(data, offset)`/`l()` pair. Variable-length extensions
   (`ConfidentialTransferFeeConfig`, `ConfidentialTransferFeeAmount`) take an end bound in
   `read`.
 - `Token2022.java` — mint parsing: base `Mint` (82 bytes) + 83 bytes padding + 1 accountType
-  byte, then TLV entries (`u16 LE type`, `u16 LE length`, payload). The extension dispatch
-  switch must be exhaustive; a zeroed type terminates parsing (trailing re-allocated but
-  uninitialized space) while retaining extensions already parsed.
+  byte, then TLV entries (`u16 LE type`, `u16 LE length`, payload — both read unsigned).
+  The extension dispatch switch must be exhaustive; a zeroed type terminates parsing
+  (trailing re-allocated but uninitialized space) while retaining extensions already
+  parsed; a type past the enum yields `UnknownTokenExtension`; an unknown extension whose
+  claimed length overshoots the data end throws `IndexOutOfBoundsException` like known
+  extensions do. See Token-2022 hardening below.
 - `Token2022Account.java` — token account parsing: base `TokenAccount` (165 bytes) + 1
   accountType byte, then TLV entries.
 
@@ -83,7 +92,13 @@ Tests: `sava-core/src/test/java/software/sava/core/token/extensions/`
   `Token2022`/`Token2022Account`, asserting `write(data, 0) == l()`; plus UTF-8 metadata and
   trailing-padding behavior. **Add every new extension here.**
 - `ParseExtensionsTests.java` — real mainnet base64 fixtures (PYUSD mint, confidential token
-  account). Prefer adding real account fixtures when a new extension ships on mainnet.
+  account) plus malformed-input regressions (signed-length loop, corrupt metadata counts,
+  overshooting unknown lengths). Prefer adding real account fixtures when a new extension
+  ships on mainnet.
+- `ExtensionEdgeCaseTests.java` — the mutation-testing backstop: null/empty guards on every
+  reader, boolean-polarity round trips, per-field equals/hashCode variants for the five
+  hand-written-equality classes, enum-boundary ordinals, option-gated fields, dirty-buffer
+  writes, `TokenAccount` filters.
 
 ## HTTP RPC API
 
@@ -177,11 +192,13 @@ Enum mirrors in this package: `RewardType` and the confirmation status strings m
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
 | `accounts/PublicKey.java` | PDA derivation (`MAX_SEED_LENGTH=32`, `MAX_SEEDS=16`, `"ProgramDerivedAddress"` marker, off-curve check) | `solana-sdk:pubkey/` |
+| `crypto/ed25519/Ed25519Util.java` | ed25519 decompression verdict backing the PDA off-curve check, plus public-key derivation for `Signer` | TweetNaCl/curve25519-dalek `decompress` semantics per `solana-sdk:pubkey/` `is_on_curve` — see Ed25519 hardening below |
 | `borsh/Borsh.java`, `borsh/RustEnum.java` | borsh spec: u32-prefixed strings/vecs, 1-byte Option tags, enum discriminants | `borsh` crate spec as used by agave/SPL |
 | `programs/Discriminator.java` | 8-byte Anchor sighash, 4-byte native enum tags | Anchor framework convention (not agave) |
 
 Existing sava-core tests: `tx/TransactionSerializationTests.java`,
 `accounts/lookup/AddressLookupTableTests.java`, `accounts/PublicKeyTest.java`,
+`crypto/ed25519/Ed25519UtilTests.java`, `token/TokenStateRoundTripTests.java`,
 `borsh/BorshTests.java`, `encoding/CompactU16EncodingTest.java`, `encoding/Base58Tests.java`,
 `encoding/ByteUtilTests.java`, `encoding/JexTests.java`, plus the token extension tests above.
 
@@ -195,30 +212,27 @@ may throw `IllegalArgumentException`, `ArrayIndexOutOfBoundsException`, or
 guarantees a *typed* rejection — see the `CompactU16Encoding.decode` leniency gap below.
 
 - `./gradlew :sava-core:pitestTx` — PIT over `TransactionSkeleton`,
-  `TransactionSkeletonRecord`, `TransactionRecord`, `InstructionRecord`. Baseline
-  2026-07-16: 497 mutations, 93% killed, 93% test strength, 99% line coverage, **1**
-  without coverage (down from 183) — `TransactionRecord.setBlockHash`'s non-`TransactionRecord`
-  branch, unreachable without a foreign `Transaction` implementation. The 36 survivors are
-  mostly offset arithmetic that a length assertion cannot distinguish; treat any *new*
-  no-coverage entry as a gap to close.
+  `TransactionSkeletonRecord`, `TransactionRecord`, `InstructionRecord`, and the four
+  `accounts/lookup/AddressLookupTable*` classes (folded in 2026-07-16 — versioned skeleton
+  parsing consumes tables, and they parse the same untrusted account data). Baseline
+  2026-07-16: 634 mutations, 94% detected, **1** without coverage —
+  `TransactionRecord.setBlockHash`'s non-`TransactionRecord` branch, unreachable without a
+  foreign `Transaction` implementation. The lookup-table classes stand at zero unkilled;
+  the 38 survivors in the tx classes are mostly offset arithmetic that a length assertion
+  cannot distinguish; treat any *new* no-coverage entry as a gap to close.
 - `./gradlew :sava-core:fuzzTxSkeleton -PmaxFuzzTime=<seconds>` — Jazzer over
   `TransactionSkeletonFuzz`: tolerates any `RuntimeException` from deserialization and the
   parsers, so what it hunts is what the contract forbids — hangs, memory exhaustion, and
-  any non-`RuntimeException` throwable — plus the cross-method invariants that must hold
-  whenever a parse fully succeeds (signer accounts vs signer keys; the signer + non-signer
-  partition of the included accounts; `parseProgramAccounts` vs each instruction's
-  `programId`; a non-negative `serializedInstructionsLength`; `numAccounts` vs the header
-  counts). The versioned lookup-table `parseAccounts(Map)` path — a second offset walker
-  the no-table paths never reach — is driven with synthetic 256-entry tables so any in-band
-  byte index resolves and the length check stays sound. Committed seeds live in
-  `src/test/resources/fuzz/txSkeleton` (real legacy + versioned/lookup-table transactions),
-  wired via the plugin's `seedCorpus` property; seeding lifts starting coverage 176 → 275
-  edges. **A structured-format fuzzer is near-useless unseeded** — the header, offsets, and
-  lengths must all agree before any body-walking runs, which a from-scratch mutator never
-  reaches; always seed from real fixtures. The writable corpus persists in
-  `build/fuzz/txSkeleton-corpus`. Worst-case allocation from a hostile header is bounded
-  (~16MB, then AIOOBE) — verified under a 512MB heap, so a large fuzzer RSS is Jazzer's own
-  sizing, not a per-input bomb.
+  any non-`RuntimeException` throwable — plus cross-method invariants that must hold
+  whenever a parse fully succeeds, including a differential check of
+  `AddressLookupTable.read` between its eager reverse-lookup and lazy overlay views
+  (the harness's class doc enumerates the invariants; the overlay differential found the
+  loop-bound bug pinned by `danglingBytesAreFloored`). Committed seeds live in
+  `src/test/resources/fuzz/txSkeleton` (real legacy + versioned/lookup-table transactions,
+  plus `alt_account`, a real mainnet lookup table), wired via the plugin's `seedCorpus`
+  property; the writable corpus persists in `build/fuzz/txSkeleton-corpus`. Worst-case
+  allocation from a hostile header is bounded (~16MB, then AIOOBE) — verified under a
+  512MB heap, so a large fuzzer RSS is Jazzer's own sizing, not a per-input bomb.
 
 Tests: `TransactionSerializationTests` (round trips against real main-net transactions),
 `TransactionSkeletonParseTests` (each narrow parse accessor cross-checked against the broad
@@ -227,11 +241,40 @@ Tests: `TransactionSerializationTests` (round trips against real main-net transa
 `TransactionSigningTests` (bulk and indexed signing cross-checked against one-by-one
 signing). Prefer extending these over adding new fixtures — the cross-method invariant is
 what catches offset bugs, and it has found two real ones: `serializedInstructionsLength`
-never skipped the program-index byte, and (once the fuzzer was seeded) it returned a
-negative length on a malformed compact-u16 because `CompactU16Encoding.decode`
-sign-extended a three-byte length's high byte — no bounds check ever tripped, so the
-garbage-in → exception-out contract was silently violated (both fixed 2026-07-16; the
-decode fix masks the third byte to bits 14-15).
+skipping the program-index byte, and `CompactU16Encoding.decode` sign-extending a
+three-byte length into a negative value that no bounds check ever caught (both fixed
+2026-07-16).
+
+## Token-2022 hardening (sava-core `accounts/token/`)
+
+The TLV walker and 29 extension readers parse untrusted account data fetched over RPC;
+same malformed-input contract as transactions: **garbage in → `RuntimeException` out**.
+Fuzzing this surface (2026-07-16) found and fixed three parsing defects, each pinned by a
+regression in `ParseExtensionsTests`:
+
+- the u16 TLV type/length were read *signed* — a negative length walked the cursor
+  backwards into an infinite loop, and a type ≥ `0x8000` crashed instead of reaching the
+  `UnknownTokenExtension` escape hatch; the `& 0xFFFF` masks in `parseExtensions` are
+  load-bearing.
+- `TokenMetadata.read` sized `new Map.Entry[numExtras]` from the wire before any bounds
+  check, and `OutOfMemoryError` is not a `RuntimeException`; counts exceeding the
+  remaining bytes now throw `IllegalArgumentException` (negative counts keep throwing
+  `NegativeArraySizeException` — exception types deliberately unchanged).
+- an unknown extension's length overshooting the data end throws
+  `IndexOutOfBoundsException` like known extensions do, instead of zero-padding a
+  fabricated tail.
+
+Verification tasks:
+
+- `./gradlew :sava-core:pitestToken2022` — PIT over `software.sava.core.accounts.token.*`
+  against the `software.sava.core.token.*` tests. Baseline 2026-07-16: 688 mutations, 97%
+  detected, 0 without coverage; the 21 survivors are classified equivalent (mostly
+  `31 * h + x` hashCode operator swaps only exact-hash assertions could kill).
+- `./gradlew :sava-core:fuzzToken2022 -PmaxFuzzTime=<seconds>` — Jazzer over
+  `Token2022Fuzz` (its class doc has the details): whenever a parse fully succeeds,
+  re-serializing must consume exactly `l()` bytes and re-parse equal. Seeds in
+  `src/test/resources/fuzz/token2022` are the PYUSD mint and confidential token account
+  from `ParseExtensionsTests`; `maxLen = 2048`.
 
 ## Encoding hardening (sava-core `encoding/`)
 
@@ -260,13 +303,11 @@ provided by the shared `software.sava.build.feature.hardening` convention plugin
 `sava-core/build.gradle.kts`:
 
 - `./gradlew :sava-core:pitestEncoding` — PIT mutation testing of the four classes against
-  their tests; report in `sava-core/build/reports/pitest/encoding`. Baseline (2026-07-15,
-  re-verified 2026-07-16 on Java 25 bytecode with the same result): 1063 mutations, 98%
-  detected (a timed-out mutant — an induced infinite loop — counts as detected), 0 without
-  coverage; the 25 survivors were individually verified equivalent (limb over-allocation,
-  dead defensive strip loops, chunk sizing) and are identical at both bytecode levels.
-  Any new survivor must be either killed with a test or classified equivalent with a
-  reason.
+  their tests; report in `sava-core/build/reports/pitest/encoding`. Baseline (2026-07-16,
+  Java 25 bytecode): 1064 mutations, 98% detected (a timed-out mutant — an induced
+  infinite loop — counts as detected), 0 without coverage; the 25 survivors were
+  individually verified equivalent. Any new survivor must be either killed with a test or
+  classified equivalent with a reason.
 - `./gradlew :sava-core:fuzzBase58 -PmaxFuzzTime=<seconds>` — Jazzer coverage-guided
   fuzzing of `Base58Fuzz`, a differential harness: every decode variant (String, char[],
   ASCII byte[], the decode-into forms against dirty buffers) and every encode variant
@@ -296,6 +337,33 @@ exist to be lowered the next time either tool's bundled ASM lags a new class-fil
 interesting inputs"). Tool versions default from sava-build's `gradle/libs.versions.toml`
 so Dependabot keeps them current. PIT silently discards classpath roots whose path
 contains the string "pitest"; do not rename `mutation-classes` to anything containing it.
+
+## Ed25519 hardening (sava-core `crypto/ed25519/`)
+
+`Ed25519Util.isNotOnCurve` gates PDA derivation (`PublicKey.findProgramAddress` rejects
+on-curve candidates) and `generatePublicKey` backs `Signer` and the vanity workers — a
+wrong verdict on either side is money-critical. The decompression semantics are
+TweetNaCl/curve25519-dalek's, and therefore Solana's (`solana-sdk:pubkey/`
+`is_on_curve`): mask the sign bit, reduce y mod p, decompress — small-order points and
+the 19 non-canonical encodings (y ≥ p) are ON curve. This deliberately diverges from
+BouncyCastle's `validatePublicKeyPartial`, which pre-rejects y ∈ {0, 1, p−1, the two
+order-8 y values} and anything non-canonical; any BC-based differential must exclude that
+set. Do not "fix" the divergence — it would change which PDAs derive.
+
+Tests (`Ed25519UtilTests`) follow the differential-oracle convention with two independent
+references: BouncyCastle `org.bouncycastle.math.ec.rfc8032.Ed25519` (decompression
+verdicts on canonical points; key generation against random and structured seeds plus the
+RFC 8032 §7.1 vectors) and an in-test `BigInteger` Euler-criterion oracle covering the
+full input domain, including the torsion points and non-canonical encodings BC refuses to
+judge.
+
+- `./gradlew :sava-core:pitestEd25519` — PIT over `Ed25519Util`, `Scalar25519`, `Codec`.
+  Baseline 2026-07-16: 940 mutations, 99% detected, 0 without coverage; the 11 survivors
+  are equivalent-in-context (defensive carry passes and dead stores no input reachable
+  through the public API can distinguish; two degrade a 256-bit equality to 128 bits,
+  unkillable without a crafted collision).
+- No fuzz target: inputs are fixed 32-byte arrays, so the random differential coverage
+  already does what a fuzzer would.
 
 ## Alpenglow (upcoming consensus replacement)
 
@@ -331,14 +399,6 @@ files in the solana-improvement-documents repo.
 
 ## Known gaps / candidate work
 
-- Token-2022 extension parsing is Set based: `Token2022`/`Token2022Account` hold
-  `Set<TokenExtension> tokenExtensions` including `UnknownTokenExtension(type, data)`
-  entries for extensions newer than the library, so parsing survives new SPL releases,
-  callers keep the raw data, and unknown extensions round-trip through `write`. Users
-  iterate the Set and switch on the sealed type. The deprecated `extensions()` method
-  builds a `Map<ExtensionType, TokenExtension>` dynamically, dropping unknown entries
-  since they cannot be keyed by the enum. Append new `ExtensionType` entries promptly so
-  the dispatch switch parses them typed; a future release drops the map method and enum.
 - HTTP RPC: `getAgGenesisCert` not implemented (deliberate — see Alpenglow above).
 - WebSocket: typed wrappers for `slotsUpdatesSubscribe`, `blockSubscribe`, and
   `voteSubscribe` are deliberately omitted — public RPC infrastructure does not support
@@ -366,16 +426,11 @@ files in the solana-improvement-documents repo.
 - `CompactU16Encoding.decode`/`getByteLen(byte[], int)` are still lenient where agave's
   deserializer (`solana-sdk:short-vec/` `visit_byte`) is strict: agave rejects alias
   encodings (zero continuation bytes) and a continuation bit on byte three, while sava
-  decodes whatever the bytes say. `decode` no longer overflows a u16, though: since
-  2026-07-15 it masks the third byte to bits 14-15, so the result is always in
-  `[0, 65535]` (a fuzz-found regression where an unmasked third byte yielded a negative
-  length that then flowed into `serializedInstructionsLength`). Adopting agave's *strict*
-  rejection (throw on a non-canonical encoding) is a deliberate non-goal for now — it would
-  change a hot, mutation-tested primitive's contract from lenient-decode to
-  reject-and-throw; do it only with the full pitest + fuzz re-verification, not as a
-  drive-by. The encoder-side max was corrected from `0x3ffff` to `0xffff` on 2026-07-15 —
-  the old bound silently truncated 65_536..262_143 to their low 16 bits of digits (65_536
-  encoded to the same bytes as 0).
+  decodes whatever the bytes say (the third byte is masked to bits 14-15, so the result
+  is always in `[0, 65535]`). Adopting agave's *strict* rejection (throw on a
+  non-canonical encoding) is a deliberate non-goal for now — it would change a hot,
+  mutation-tested primitive's contract from lenient-decode to reject-and-throw; do it
+  only with the full pitest + fuzz re-verification, not as a drive-by.
 - A legacy header carries no invoked indexes, so `parseAccounts()` types every read-only
   account `createRead` — the **account array** never marks programs invoked for legacy
   transactions (only the versioned path consults `invokedIndexes`; the legacy branch of
@@ -389,6 +444,11 @@ files in the solana-improvement-documents repo.
   ahead of other read-only ones, a transaction rebuilt via
   `Transaction.createTx(feePayer, parseLegacyInstructions())` would order its accounts
   differently.
+- `TokenAccount.read` has no null/empty-data guard — it NPEs where every other `FACTORY`
+  reader (`Mint.read`, `Token2022.read`, `Token2022Account.read`,
+  `AddressLookupTable.read`) returns null. Flagged 2026-07-16, deliberately unchanged —
+  adding the guard is a behavior-visible change (NPE → null) for callers that relied on
+  the throw.
 - `Jex.decodeChecked(byte[]/ByteBuffer)` throws `ArrayIndexOutOfBoundsException` instead
   of `IllegalArgumentException` for negative (non-ASCII) input bytes; the char-based
   variants report correctly. Fix deferred (2026-07-15): read the byte as unsigned
