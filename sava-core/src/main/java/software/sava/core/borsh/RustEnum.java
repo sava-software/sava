@@ -8,7 +8,6 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
-@Deprecated(forRemoval = true) // unused in sava; consumer projects use their generated RustEnum
 public interface RustEnum extends Borsh {
 
   int ordinal();
@@ -137,7 +136,7 @@ public interface RustEnum extends Borsh {
     BigInteger val();
 
     default int l() {
-      return 129;
+      return 17;
     }
 
     default int write(final byte[] data, final int offset) {
@@ -150,7 +149,7 @@ public interface RustEnum extends Borsh {
     BigInteger val();
 
     default int l() {
-      return 257;
+      return 33;
     }
 
     default int write(final byte[] data, final int offset) {

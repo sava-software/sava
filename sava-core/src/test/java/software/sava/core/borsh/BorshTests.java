@@ -121,7 +121,7 @@ final class BorshTests {
         elementsPerArray,
         vectorArray,
         BigInteger::new,
-        (val, _vectorArray, from) -> ByteUtil.putInt128LE(_vectorArray, from, val)
+        (val, target, from) -> ByteUtil.putInt128LE(target, from, val)
     );
 
     // verify read/write arrays
@@ -612,7 +612,7 @@ final class BorshTests {
         dataTypeByteLength,
         vectorArray,
         BigInteger::new,
-        (val, _vectorArray, from) -> ByteUtil.putInt256LE(_vectorArray, from, val)
+        (val, target, from) -> ByteUtil.putInt256LE(target, from, val)
     );
 
     // verify read/write arrays

@@ -8,6 +8,17 @@ testModuleInfo {
 }
 
 hardening {
+  mutation.register("borsh") {
+    // nested-class globs keep the test classes out while covering Borsh.Enum and the
+    // RustEnum variant interfaces
+    targetClasses = listOf(
+      "software.sava.core.borsh.Borsh",
+      "software.sava.core.borsh.Borsh\$*",
+      "software.sava.core.borsh.RustEnum",
+      "software.sava.core.borsh.RustEnum\$*"
+    )
+    targetTests = "software.sava.core.borsh.*Test*"
+  }
   mutation.register("ed25519") {
     targetClasses = listOf(
       "software.sava.core.crypto.ed25519.Ed25519Util",
@@ -47,6 +58,12 @@ hardening {
     // every interesting Base58 boundary lives in small inputs; beyond this the O(n^2)
     // codec only burns executions per second
     maxLen = 256
+  }
+  fuzz.register("borsh") {
+    targetClass = "software.sava.core.borsh.BorshFuzz"
+    // shallow structure: a u32 length prefix then elements; every boundary lives in small
+    // inputs, and valid prefixes are reachable from scratch so no seed corpus is needed
+    maxLen = 1024
   }
   fuzz.register("token2022") {
     targetClass = "software.sava.core.token.Token2022Fuzz"

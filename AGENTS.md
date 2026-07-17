@@ -193,13 +193,15 @@ Enum mirrors in this package: `RewardType` and the confirmation status strings m
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
 | `accounts/PublicKey.java` | PDA derivation (`MAX_SEED_LENGTH=32`, `MAX_SEEDS=16`, `"ProgramDerivedAddress"` marker, off-curve check) | `solana-sdk:pubkey/` |
 | `crypto/ed25519/Ed25519Util.java` | ed25519 decompression verdict backing the PDA off-curve check, plus public-key derivation for `Signer` | TweetNaCl/curve25519-dalek `decompress` semantics per `solana-sdk:pubkey/` `is_on_curve` — see Ed25519 hardening below |
-| `borsh/Borsh.java`, `borsh/RustEnum.java` | borsh spec: u32-prefixed strings/vecs, 1-byte Option tags, enum discriminants | `borsh` crate spec as used by agave/SPL |
+| `borsh/Borsh.java`, `borsh/RustEnum.java` | borsh spec: u32-prefixed strings/vecs, 1-byte Option tags, enum discriminants — see Borsh hardening below | `borsh` crate spec as used by agave/SPL |
 | `programs/Discriminator.java` | 8-byte Anchor sighash, 4-byte native enum tags | Anchor framework convention (not agave) |
 
 Existing sava-core tests: `tx/TransactionSerializationTests.java`,
 `accounts/lookup/AddressLookupTableTests.java`, `accounts/PublicKeyTest.java`,
 `crypto/ed25519/Ed25519UtilTests.java`, `token/TokenStateRoundTripTests.java`,
-`borsh/BorshTests.java`, `encoding/CompactU16EncodingTest.java`, `encoding/Base58Tests.java`,
+`borsh/BorshTests.java` (matrix families), `borsh/BorshCoreTests.java`,
+`borsh/BorshPrimitiveVectorTests.java`, `borsh/BorshReferenceVectorTests.java`,
+`borsh/RustEnumTests.java`, `encoding/CompactU16EncodingTest.java`, `encoding/Base58Tests.java`,
 `encoding/ByteUtilTests.java`, `encoding/JexTests.java`, plus the token extension tests above.
 
 ## Transaction hardening (sava-core `tx/`)
@@ -275,6 +277,40 @@ Verification tasks:
   re-serializing must consume exactly `l()` bytes and re-parse equal. Seeds in
   `src/test/resources/fuzz/token2022` are the PYUSD mint and confidential token account
   from `ParseExtensionsTests`; `maxLen = 2048`.
+
+## Borsh hardening (sava-core `borsh/`)
+
+`Borsh` and `RustEnum` deserialize untrusted account data in consumer projects' generated
+clients (a 2026-07-16 deprecation of the surface was reversed the next day — it is
+maintained). Same malformed-input contract as the other parsing surfaces: **garbage in →
+`RuntimeException` out**. Hardening (2026-07-17) fixed two defect classes, pinned by
+regressions:
+
+- every `read*Vector`/`readMultiDimension*` read its u32 length prefix as a signed int
+  and sized an allocation from it — a corrupt prefix forced up to multi-GB allocations
+  (`OutOfMemoryError` is not a `RuntimeException`). All 36 vector readers now validate
+  the length against the bytes actually present via the shared `readVectorLength`
+  (elements need at least their fixed width; strings and Borsh-typed elements at least
+  their minimum); negative lengths keep throwing `NegativeArraySizeException`.
+- `RustEnum.EnumInt128.l()` returned 129 and `EnumInt256.l()` 257 — bits, not bytes —
+  disagreeing with the 17/33 their `write` consumes, so any container sized by `l()`
+  disagreed with its own serialization. Fixed; `RustEnumTests` asserts `l() == write()`
+  for every variant shape.
+
+Verification tasks:
+
+- `./gradlew :sava-core:pitestBorsh` — PIT over `Borsh`, `RustEnum`, and their nested
+  interfaces (globbed as `Borsh$*`/`RustEnum$*` to keep test classes out). Baseline
+  2026-07-17: 1070 mutations, **100% killed, 0 without coverage** — hold this bar;
+  `BorshTests` covers the matrix families, `BorshCoreTests` the string/byte primitives,
+  `BorshPrimitiveVectorTests`/`BorshReferenceVectorTests` the 1-D families, checked
+  writers, Optionals, and length bounds, `RustEnumTests` every enum variant. Writers are
+  exercised at non-zero offsets into dirty buffers — offset-arithmetic and
+  dropped-write mutants are invisible at offset 0 into zeroed arrays.
+- `./gradlew :sava-core:fuzzBorsh -PmaxFuzzTime=<seconds>` — Jazzer over `BorshFuzz`:
+  every read family over every input; a successful read must re-serialize into exactly
+  the promised `len*` bytes and re-read equal. No seed corpus: the format is shallow
+  (u32 length prefix + elements), so valid prefixes are reachable from scratch.
 
 ## Encoding hardening (sava-core `encoding/`)
 
