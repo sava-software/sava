@@ -176,8 +176,9 @@ Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
   that matter here: a trailing decoy field of the same JSON type with a different value
   kills always-match dispatch mutants; a leading unknown field kills stop-iteration
   mutants; zero-value probes pin the `< 0` absent-sentinels; `assertSame` pins sentinel
-  identity. The 15 remaining are classified equivalent (int-clamp boundaries, unsigned
-  reinterpret at zero, logging/capacity). Fixed 2026-07-17 after the first baseline:
+  identity. The 8 baseline keys are all triaged equivalent (int-clamp boundaries,
+  unsigned reinterpret at zero, logging/capacity — reasons in
+  `sava-rpc/config/pitest/README.md`). Fixed 2026-07-17 after the first baseline:
   `TxStatus.parse`'s nil-status dedup compared `whatIsNext()` against Java null instead of
   `ValueType.NULL` and so never fired, and `TxSimulation.unitsConsumed` read an unguarded
   `readInt` where `fee` skips non-numbers. Known parser quirks, pinned not changed:
@@ -274,11 +275,14 @@ guarantees a *typed* rejection — see the `CompactU16Encoding.decode` leniency 
 - `./gradlew :sava-core:pitestTx` — PIT over the full `tx` and `accounts/lookup`
   packages (widened 2026-07-18 from the skeleton/lookup allowlist; the lookup tables
   were folded in 2026-07-16 — versioned skeleton parsing consumes tables, and they
-  parse the same untrusted account data). The ratchet baseline in
-  `sava-core/config/pitest/tx-accepted.csv` carries the debt the widening exposed
-  (mostly the builder classes) plus the long-standing skeleton survivors — offset
-  arithmetic a length assertion cannot distinguish. New unkilled mutants fail the
-  build via `pitestTxVerify`; triage per `config/pitest/README.md`.
+  parse the same untrusted account data). The builder/helper debt the widening
+  exposed was killed the same day (182 → 40 baseline keys) by
+  `AccountIndexLookupTableTests`, `TransactionByteHelpersTests`,
+  `TransactionFactoryTests`, and `TransactionRecordPlumbingTests`; the baseline in
+  `sava-core/config/pitest/tx-accepted.csv` now carries 27 triaged equivalents
+  (reasons in `config/pitest/README.md`) plus the 13 long-standing skeleton
+  survivors — offset arithmetic a length assertion cannot distinguish. New unkilled
+  mutants fail the build via `pitestTxVerify`; triage per `config/pitest/README.md`.
 - `./gradlew :sava-core:fuzzTxSkeleton -PmaxFuzzTime=<seconds>` — Jazzer over
   `TransactionSkeletonFuzz`: tolerates any `RuntimeException` from deserialization and the
   parsers, so what it hunts is what the contract forbids — hangs, memory exhaustion, and
@@ -328,7 +332,8 @@ Verification tasks:
 - `./gradlew :sava-core:pitestToken2022` — PIT over `software.sava.core.accounts.token.*`
   against the `software.sava.core.token.*` tests. Baseline 2026-07-16: 688 mutations, 97%
   detected, 0 without coverage; the 21 survivors are classified equivalent (mostly
-  `31 * h + x` hashCode operator swaps only exact-hash assertions could kill).
+  `31 * h + x` hashCode operator swaps only exact-hash assertions could kill; reasons
+  grouped in `sava-core/config/pitest/README.md`).
 - `./gradlew :sava-core:fuzzToken2022 -PmaxFuzzTime=<seconds>` — Jazzer over
   `Token2022Fuzz` (its class doc has the details): whenever a parse fully succeeds,
   re-serializing must consume exactly `l()` bytes and re-parse equal. Seeds in
@@ -398,9 +403,10 @@ provided by the shared `software.sava.build.feature.hardening` convention plugin
 - `./gradlew :sava-core:pitestEncoding` — PIT mutation testing of the four classes against
   their tests; report in `sava-core/build/reports/pitest/encoding`. Baseline (2026-07-16,
   Java 25 bytecode): 1064 mutations, 98% detected (a timed-out mutant — an induced
-  infinite loop — counts as detected), 0 without coverage; the 25 survivors were
-  individually verified equivalent. Any new survivor must be either killed with a test or
-  classified equivalent with a reason.
+  infinite loop — counts as detected), 0 without coverage; the survivors (20 baseline
+  keys as of 2026-07-18) are individually verified equivalent, reasons grouped in
+  `sava-core/config/pitest/README.md`. Any new survivor must be either killed with a
+  test or classified equivalent with a reason.
 - `./gradlew :sava-core:fuzzBase58 -PmaxFuzzTime=<seconds>` — Jazzer coverage-guided
   fuzzing of `Base58Fuzz`, a differential harness: every decode variant (String, char[],
   ASCII byte[], the decode-into forms against dirty buffers) and every encode variant
@@ -454,10 +460,11 @@ full input domain, including the torsion points and non-canonical encodings BC r
 judge.
 
 - `./gradlew :sava-core:pitestEd25519` — PIT over `Ed25519Util`, `Scalar25519`, `Codec`.
-  Baseline 2026-07-16: 940 mutations, 99% detected, 0 without coverage; the 11 survivors
-  are equivalent-in-context (defensive carry passes and dead stores no input reachable
-  through the public API can distinguish; two degrade a 256-bit equality to 128 bits,
-  unkillable without a crafted collision).
+  Baseline 2026-07-16: 940 mutations, 99% detected, 0 without coverage; the survivors
+  (12 baseline keys as of 2026-07-18) are equivalent-in-context — static-initializer
+  precompute construction, defensive carry passes, and verdict-invisible arithmetic no
+  input reachable through the public API can distinguish; reasons grouped in
+  `sava-core/config/pitest/README.md`.
 - No fuzz target: inputs are fixed 32-byte arrays, so the random differential coverage
   already does what a fuzzer would.
 
