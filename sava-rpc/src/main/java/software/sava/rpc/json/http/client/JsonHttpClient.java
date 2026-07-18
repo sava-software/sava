@@ -24,38 +24,24 @@ public abstract class JsonHttpClient {
   protected final HttpClient httpClient;
   protected final Duration requestTimeout;
   protected final UnaryOperator<HttpRequest.Builder> extendRequest;
-  @Deprecated(forRemoval = true)
-  protected final Predicate<HttpResponse<byte[]>> applyResponse;
   protected final BiPredicate<HttpResponse<?>, byte[]> testResponse;
 
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout,
                            final UnaryOperator<HttpRequest.Builder> extendRequest,
-                           @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
                            final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
     this.endpoint = endpoint;
     this.httpClient = httpClient;
     this.requestTimeout = requestTimeout;
     this.extendRequest = extendRequest == null ? UnaryOperator.identity() : extendRequest;
-    this.applyResponse = applyResponse;
     this.testResponse = testResponse;
   }
 
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout) {
-    this(endpoint, httpClient, requestTimeout, null, null, null);
-  }
-
-  @Deprecated(forRemoval = true)
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final Function<JsonIterator, R> parser) {
-    return new JsonBytesResponseController<>(parser);
-  }
-
-  @Deprecated(forRemoval = true)
-  protected static <R> Function<HttpResponse<byte[]>, R> applyResponse(final BiFunction<byte[], JsonIterator, R> parser) {
-    return new KeepJsonResponseController<>(parser);
+    this(endpoint, httpClient, requestTimeout, null, null);
   }
 
   protected static <R> Function<HttpResponse<?>, R> applyGenericResponse(final Function<JsonIterator, R> parser) {
@@ -150,12 +136,6 @@ public abstract class JsonHttpClient {
     return this.requestTimeout;
   }
 
-  @Deprecated(forRemoval = true)
-  protected <R> Function<HttpResponse<byte[]>, R> wrapParser(final Function<HttpResponse<byte[]>, R> parser) {
-    return applyResponse == null ? parser : response ->
-        applyResponse.test(response) ? parser.apply(response) : null;
-  }
-
   // GET methods
 
   protected final HttpRequest.Builder newRequest(final URI endpoint, final Duration requestTimeout) {
@@ -228,17 +208,7 @@ public abstract class JsonHttpClient {
 
   protected <R> Function<HttpResponse<?>, R> wrapResponseParser(final Function<HttpResponse<?>, R> parser) {
     if (testResponse == null) {
-      if (applyResponse == null) {
-        return parser;
-      } else {
-        return response -> {
-          final byte[] body = readBody(response);
-          final var disguisedResponse = new DisguisedHttpResponse(response, body);
-          return applyResponse.test(disguisedResponse)
-              ? parser.apply(new ReadHttpResponse<>(response, body))
-              : null;
-        };
-      }
+      return parser;
     } else {
       return response -> {
         final byte[] body = readBody(response);

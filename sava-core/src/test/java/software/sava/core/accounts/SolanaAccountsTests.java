@@ -24,7 +24,6 @@ final class SolanaAccountsTests {
     assertAddress("Ed25519SigVerify111111111111111111111111111", accounts.ed25519Program());
     assertAddress("KeccakSecp256k11111111111111111111111111111", accounts.secp256k1Program());
     assertAddress("Secp256r1SigVerify1111111111111111111111111", accounts.secp256r1Program());
-    assertAddress("ZkTokenProof1111111111111111111111111111111", accounts.zKTokenProofProgram());
     assertAddress("ZkE1Gama1Proof11111111111111111111111111111", accounts.zkElGamalProofProgram());
     assertAddress("So11111111111111111111111111111111111111112", accounts.wrappedSolTokenMint());
     assertAddress("ComputeBudget111111111111111111111111111111", accounts.computeBudgetProgram());
@@ -41,7 +40,6 @@ final class SolanaAccountsTests {
     assertAddress("Sysvar1111111111111111111111111111111111111", accounts.sysvarOwner());
     assertAddress("SysvarC1ock11111111111111111111111111111111", accounts.clockSysVar());
     assertAddress("SysvarEpochSchedu1e111111111111111111111111", accounts.epochScheduleSysVar());
-    assertAddress("SysvarFees111111111111111111111111111111111", accounts.feesSysVar());
     assertAddress("Sysvar1nstructions1111111111111111111111111", accounts.instructionsSysVar());
     assertAddress("SysvarRecentB1ockHashes11111111111111111111", accounts.recentBlockhashesSysVar());
     assertAddress("SysvarRent111111111111111111111111111111111", accounts.rentSysVar());

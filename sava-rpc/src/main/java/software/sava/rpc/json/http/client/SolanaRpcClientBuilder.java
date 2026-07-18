@@ -37,7 +37,6 @@ public final class SolanaRpcClientBuilder {
         httpClient,
         requestTimeout,
         extendRequest,
-        null,
         testResponse,
         defaultCommitment
     );

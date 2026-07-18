@@ -112,10 +112,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                       final HttpClient httpClient,
                       final Duration requestTimeout,
                       final UnaryOperator<HttpRequest.Builder> extendRequest,
-                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
                       final BiPredicate<HttpResponse<?>, byte[]> testResponse,
                       final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, testResponse, defaultCommitment);
+    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse, defaultCommitment);
     this.latestBlockhashResponseParser = wrapResponseParser(LATEST_BLOCK_HASH);
     this.sendTxResponseParser = wrapResponseParser(SEND_TX_RESPONSE_PARSER);
   }
@@ -297,43 +296,6 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     return sendPostRequest(BLOCK, format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b}]}""",
             id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards
-        )
-    );
-  }
-
-  @Deprecated(forRemoval = true)
-  @Override
-  public CompletableFuture<Block> getBlock(final long slot, final int maxSupportedTransactionVersion) {
-    return getBlock(this.defaultCommitment, slot, maxSupportedTransactionVersion);
-  }
-
-  @Deprecated(forRemoval = true)
-  @Override
-  public CompletableFuture<Block> getBlock(final long slot,
-                                           final BlockTxDetails blockTxDetails,
-                                           final int maxSupportedTransactionVersion) {
-    return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion);
-  }
-
-  @Deprecated(forRemoval = true)
-  @Override
-  public CompletableFuture<Block> getBlock(final long slot,
-                                           final BlockTxDetails blockTxDetails,
-                                           final int maxSupportedTransactionVersion,
-                                           final boolean rewards) {
-    return getBlock(this.defaultCommitment, slot, blockTxDetails, maxSupportedTransactionVersion, rewards);
-  }
-
-  @Deprecated(forRemoval = true)
-  @Override
-  public CompletableFuture<Block> getBlock(final Commitment commitment,
-                                           final long slot,
-                                           final BlockTxDetails blockTxDetails,
-                                           final int maxSupportedTransactionVersion,
-                                           final boolean rewards) {
-    return sendPostRequest(BLOCK, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","maxSupportedTransactionVersion":%d,"rewards":%b}]}""",
-            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, maxSupportedTransactionVersion, rewards
         )
     );
   }
@@ -1458,17 +1420,11 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     return getTransaction(defaultCommitment, txSignature);
   }
 
-  @Deprecated(forRemoval = true)
   @Override
-  public CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                              final int maxSupportedTransactionVersion,
-                                              final String txSignature) {
-    final var maxVersionParam = maxSupportedTransactionVersion < 0
-        ? ""
-        : String.format("\"maxSupportedTransactionVersion\":%d,", maxSupportedTransactionVersion);
+  public CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
     return sendPostRequest(TRANSACTION, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s",%s"encoding":"base64"}]}""",
-            id.incrementAndGet(), txSignature, commitment.getValue(), maxVersionParam
+                {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s","maxSupportedTransactionVersion":0,"encoding":"base64"}]}""",
+            id.incrementAndGet(), txSignature, commitment.getValue()
         )
     );
   }
@@ -1659,87 +1615,10 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     );
   }
 
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
-                                                             final PublicKey signer,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    return simulateTransaction(defaultCommitment, transaction, signer, accounts);
-  }
-
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                             final Transaction transaction,
-                                                             final PublicKey signer,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    final var base64TxData = transaction.base64EncodeToString();
-    return simulateTransaction(commitment, base64TxData, signer, accounts);
-  }
-
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
-                                                             final PublicKey signer,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    return simulateTransaction(defaultCommitment, base64EncodedTx, signer, accounts);
-  }
-
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                             final String base64EncodedTx,
-                                                             final PublicKey signer,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    return simulateTransaction(commitment, base64EncodedTx, List.of(signer), accounts);
-  }
-
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
-                                                             final SequencedCollection<PublicKey> signers,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    return simulateTransaction(defaultCommitment, transaction, signers, accounts);
-  }
-
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                             final Transaction transaction,
-                                                             final SequencedCollection<PublicKey> signers,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    final var base64TxData = transaction.base64EncodeToString();
-    return simulateTransaction(commitment, base64TxData, signers, accounts);
-  }
-
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
-                                                             final SequencedCollection<PublicKey> signers,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    return simulateTransaction(defaultCommitment, base64EncodedTx, signers, accounts);
-  }
-
   private static String joinSimulationAccounts(final SequencedCollection<PublicKey> accounts) {
     return accounts.stream()
         .map(PublicKey::toBase58)
         .collect(Collectors.joining("\",\"", ",\"accounts\":{\"addresses\":[\"", "\"],\"encoding\":\"base64\"}"));
-  }
-
-  @Override
-  public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                             final String base64EncodedTx,
-                                                             final SequencedCollection<PublicKey> signers,
-                                                             final SequencedCollection<PublicKey> accounts) {
-    final SequencedCollection<PublicKey> returnAccounts;
-    if (accounts.isEmpty()) {
-      if (signers.isEmpty()) {
-        return simulateTransaction(commitment, base64EncodedTx, true);
-      } else {
-        returnAccounts = signers;
-      }
-    } else {
-      returnAccounts = accounts;
-    }
-    final var joinedAccounts = joinSimulationAccounts(returnAccounts);
-    return sendPostRequest(applyGenericResponseValue((ji, context) -> TxSimulation.parse(returnAccounts, ji, context)), format("""
-                {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"commitment":"%s"%s}]}""",
-            id.incrementAndGet(), base64EncodedTx, commitment.getValue(), joinedAccounts
-        )
-    );
   }
 
   @Override

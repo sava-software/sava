@@ -25,10 +25,9 @@ public abstract class BaseSolanaJsonRpcClient extends JsonRpcHttpClient {
                                     final HttpClient httpClient,
                                     final Duration requestTimeout,
                                     final UnaryOperator<HttpRequest.Builder> extendRequest,
-                                    final Predicate<HttpResponse<byte[]>> applyResponse,
                                     final BiPredicate<HttpResponse<?>, byte[]> testResponse,
                                     final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, testResponse);
+    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse);
     this.defaultCommitment = defaultCommitment;
   }
 

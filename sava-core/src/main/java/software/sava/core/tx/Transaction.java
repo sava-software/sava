@@ -9,7 +9,6 @@ import software.sava.core.encoding.Base58;
 import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.*;
-import java.util.function.BiFunction;
 
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
@@ -21,40 +20,11 @@ public interface Transaction {
   /// @deprecated no longer valid for all transaction versions once v1 transactions are activated.
   @Deprecated
   int MAX_SERIALIZED_LENGTH = 1232;
-  /// @deprecated - redundant value, check against the serialized bytes.
-  @Deprecated(forRemoval = true)
-  int MAX_BASE_64_ENCODED_LENGTH = 1683;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
-
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = TransactionRecord.MERGE_ACCOUNT_META;
-
-  // fee payer, sign, write, read
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  Comparator<AccountMeta> LEGACY_META_COMPARATOR = TransactionRecord.LEGACY_META_COMPARATOR;
-
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  Comparator<AccountMeta> VO_META_COMPARATOR = TransactionRecord.VO_META_COMPARATOR;
-
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  int MSG_HEADER_LENGTH = TransactionRecord.MSG_HEADER_LENGTH;
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  int VERSIONED_MSG_HEADER_LENGTH = TransactionRecord.VERSIONED_MSG_HEADER_LENGTH;
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  byte VERSIONED_BIT_MASK = TransactionRecord.VERSIONED_BIT_MASK;
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  int BASE_LOOKUP_TABLE_LEN = TransactionRecord.BASE_LOOKUP_TABLE_LEN;
 
   static String getBase58Id(final byte[] signedTransaction) {
     if (signedTransaction[0] == 0) {
@@ -70,12 +40,6 @@ public interface Transaction {
     } else {
       return Arrays.copyOfRange(signedTransaction, 1, 1 + Transaction.SIGNATURE_LENGTH);
     }
-  }
-
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    return TransactionRecord.sortLegacyAccounts(mergedAccounts);
   }
 
   static Transaction createTx(final PublicKey feePayer, final List<Instruction> instructions) {
@@ -241,12 +205,6 @@ public interface Transaction {
         accountsOffset,
         recentBlockHashIndex
     );
-  }
-
-  /// @deprecated internal serialization
-  @Deprecated(forRemoval = true)
-  static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    return TransactionRecord.sortV0Accounts(mergedAccounts);
   }
 
   static Transaction createTx(final List<Instruction> instructions,

@@ -302,17 +302,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder reConnectDelay(final long reConnectDelay);
 
-    @Deprecated(forRemoval = true)
-    default Builder reConnect(final long reConnect) {
-      return reConnectDelay(reConnect);
-    }
-
     Builder pingDelay(final long pingDelay);
-
-    @Deprecated(forRemoval = true)
-    default Builder writeOrPingDelay(final long writeOrPingDelay) {
-      return pingDelay(writeOrPingDelay);
-    }
 
     Builder subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay);
 
@@ -324,9 +314,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     WebSocket.Builder webSocketBuilder();
 
-    long reConnect();
+    long reConnectDelay();
 
-    long writeOrPingDelay();
+    long pingDelay();
 
     long subscriptionAndPingCheckDelay();
 

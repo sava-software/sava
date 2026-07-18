@@ -14,8 +14,6 @@ import software.sava.rpc.json.http.response.*;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
@@ -24,8 +22,6 @@ import java.util.Map;
 import java.util.SequencedCollection;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
-import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
 
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.DEFAULT_REQUEST_TIMEOUT;
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.PROGRAM_ACCOUNTS_TIMEOUT;
@@ -46,40 +42,18 @@ public interface SolanaRpcClient {
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final Duration requestTimeout,
-                                      final UnaryOperator<HttpRequest.Builder> extendRequest,
-                                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse,
                                       final Commitment defaultCommitment) {
-    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, extendRequest, applyResponse, null, defaultCommitment);
-  }
-
-  static SolanaRpcClient createClient(final URI endpoint,
-                                      final HttpClient httpClient,
-                                      final UnaryOperator<HttpRequest.Builder> extendRequest,
-                                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse) {
-    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, extendRequest, applyResponse, CONFIRMED);
-  }
-
-  static SolanaRpcClient createClient(final URI endpoint,
-                                      final HttpClient httpClient,
-                                      @Deprecated final Predicate<HttpResponse<byte[]>> applyResponse) {
-    return createClient(endpoint, httpClient, null, applyResponse);
-  }
-
-  static SolanaRpcClient createClient(final URI endpoint,
-                                      final HttpClient httpClient,
-                                      final Duration requestTimeout,
-                                      final Commitment defaultCommitment) {
-    return createClient(endpoint, httpClient, requestTimeout, null, null, defaultCommitment);
+    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, null, null, defaultCommitment);
   }
 
   static SolanaRpcClient createClient(final URI endpoint,
                                       final HttpClient httpClient,
                                       final Commitment defaultCommitment) {
-    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, null, defaultCommitment);
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, defaultCommitment);
   }
 
   static SolanaRpcClient createClient(final URI endpoint, final HttpClient httpClient) {
-    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, null, null, CONFIRMED);
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, CONFIRMED);
   }
 
   URI endpoint();
@@ -200,63 +174,6 @@ public interface SolanaRpcClient {
   CompletableFuture<Block> getBlock(final Commitment commitment,
                                     final long slot,
                                     final BlockTxDetails blockTxDetails,
-                                    final boolean rewards);
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getBlock(long)] instead.
-  @Deprecated(forRemoval = true)
-  CompletableFuture<Block> getBlock(final long slot, final int maxSupportedTransactionVersion);
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getBlock(Commitment, long)] instead.
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Block> getBlock(final Commitment commitment,
-                                            final long slot,
-                                            final int maxSupportedTransactionVersion) {
-    return getBlock(commitment, slot, BlockTxDetails.none, maxSupportedTransactionVersion);
-  }
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getBlock(long, boolean)] instead.
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Block> getBlock(final long slot,
-                                            final int maxSupportedTransactionVersion,
-                                            final boolean rewards) {
-    return getBlock(slot, BlockTxDetails.none, maxSupportedTransactionVersion, rewards);
-  }
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getBlock(long, BlockTxDetails)] instead.
-  @Deprecated(forRemoval = true)
-  CompletableFuture<Block> getBlock(final long slot,
-                                    final BlockTxDetails blockTxDetails,
-                                    final int maxSupportedTransactionVersion);
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getBlock(Commitment, long, BlockTxDetails)] instead.
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Block> getBlock(final Commitment commitment,
-                                            final long slot,
-                                            final BlockTxDetails blockTxDetails,
-                                            final int maxSupportedTransactionVersion) {
-    return getBlock(commitment, slot, blockTxDetails, maxSupportedTransactionVersion, true);
-  }
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getBlock(long, BlockTxDetails, boolean)] instead.
-  @Deprecated(forRemoval = true)
-  CompletableFuture<Block> getBlock(final long slot,
-                                    final BlockTxDetails blockTxDetails,
-                                    final int maxSupportedTransactionVersion,
-                                    final boolean rewards);
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getBlock(Commitment, long, BlockTxDetails, boolean)] instead.
-  @Deprecated(forRemoval = true)
-  CompletableFuture<Block> getBlock(final Commitment commitment,
-                                    final long slot,
-                                    final BlockTxDetails blockTxDetails,
-                                    final int maxSupportedTransactionVersion,
                                     final boolean rewards);
 
   CompletableFuture<BlockHeight> getBlockHeight();
@@ -868,23 +785,7 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Tx> getTransaction(final String txSignature);
 
-  default CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
-    return getTransaction(commitment, 0, txSignature);
-  }
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getTransaction(String)] instead.
-  @Deprecated(forRemoval = true)
-  default CompletableFuture<Tx> getTransaction(final int maxSupportedTransactionVersion, final String txSignature) {
-    return getTransaction(defaultCommitment(), maxSupportedTransactionVersion, txSignature);
-  }
-
-  /// @deprecated `maxSupportedTransactionVersion` will be managed internally, matching the
-  /// transaction versions this library is able to parse. Use [#getTransaction(Commitment, String)] instead.
-  @Deprecated(forRemoval = true)
-  CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                       final int maxSupportedTransactionVersion,
-                                       final String txSignature);
+  CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature);
 
   CompletableFuture<Long> getTransactionCount();
 
@@ -995,17 +896,6 @@ public interface SolanaRpcClient {
         : sendTransaction(preflightCommitment, base64SignedTx, maxRetries);
   }
 
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
-                                                      final PublicKey signer,
-                                                      final SequencedCollection<PublicKey> accounts);
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                      final Transaction transaction,
-                                                      final PublicKey signer,
-                                                      final SequencedCollection<PublicKey> accounts);
-
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
@@ -1016,39 +906,6 @@ public interface SolanaRpcClient {
                                                       final boolean replaceRecentBlockhash);
 
   CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx);
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
-                                                      final PublicKey signer,
-                                                      final SequencedCollection<PublicKey> accounts);
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                      final String base64EncodedTx,
-                                                      final PublicKey signer,
-                                                      final SequencedCollection<PublicKey> accounts);
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
-                                                      final SequencedCollection<PublicKey> signers,
-                                                      final SequencedCollection<PublicKey> accounts);
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                      final Transaction transaction,
-                                                      final SequencedCollection<PublicKey> signers,
-                                                      final SequencedCollection<PublicKey> accounts);
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
-                                                      final SequencedCollection<PublicKey> signers,
-                                                      final SequencedCollection<PublicKey> accounts);
-
-  @Deprecated(forRemoval = true)
-  CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
-                                                      final String base64EncodedTx,
-                                                      final SequencedCollection<PublicKey> signers,
-                                                      final SequencedCollection<PublicKey> accounts);
 
   CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
                                                       final boolean replaceRecentBlockhash);

@@ -294,7 +294,7 @@ final class InstructionBuildingTests {
     final var invoked = AccountMeta.createInvoked(key(5));
     final var readOnly = createRead(key(6));
 
-    for (final var comparator : List.of(Transaction.LEGACY_META_COMPARATOR, Transaction.VO_META_COMPARATOR)) {
+    for (final var comparator : List.of(TransactionRecord.LEGACY_META_COMPARATOR, TransactionRecord.VO_META_COMPARATOR)) {
       // the fee payer outranks everything, from either side
       assertTrue(comparator.compare(feePayer, writableSigner) < 0);
       assertTrue(comparator.compare(writableSigner, feePayer) > 0);
@@ -310,13 +310,13 @@ final class InstructionBuildingTests {
     }
 
     // the legacy comparator ignores invoked: two read-only non-signers tie
-    assertEquals(0, Transaction.LEGACY_META_COMPARATOR.compare(invoked, readOnly));
-    assertEquals(0, Transaction.LEGACY_META_COMPARATOR.compare(readOnly, invoked));
+    assertEquals(0, TransactionRecord.LEGACY_META_COMPARATOR.compare(invoked, readOnly));
+    assertEquals(0, TransactionRecord.LEGACY_META_COMPARATOR.compare(readOnly, invoked));
 
     // the v0 comparator breaks that tie, invoked first
-    assertTrue(Transaction.VO_META_COMPARATOR.compare(invoked, readOnly) < 0);
-    assertTrue(Transaction.VO_META_COMPARATOR.compare(readOnly, invoked) > 0);
-    assertEquals(0, Transaction.VO_META_COMPARATOR.compare(invoked, AccountMeta.createInvoked(key(7))));
+    assertTrue(TransactionRecord.VO_META_COMPARATOR.compare(invoked, readOnly) < 0);
+    assertTrue(TransactionRecord.VO_META_COMPARATOR.compare(readOnly, invoked) > 0);
+    assertEquals(0, TransactionRecord.VO_META_COMPARATOR.compare(invoked, AccountMeta.createInvoked(key(7))));
   }
 
   @Test

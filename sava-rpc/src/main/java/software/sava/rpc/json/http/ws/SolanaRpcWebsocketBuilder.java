@@ -52,12 +52,12 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   }
 
   @Override
-  public long reConnect() {
+  public long reConnectDelay() {
     return reConnectDelay;
   }
 
   @Override
-  public long writeOrPingDelay() {
+  public long pingDelay() {
     return pingDelay;
   }
 

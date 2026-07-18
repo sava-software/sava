@@ -18,7 +18,6 @@ public final class SolanaAccountsBuilder {
   private PublicKey ed25519Program = fromBase58Encoded("Ed25519SigVerify111111111111111111111111111");
   private PublicKey secp256k1Program = fromBase58Encoded("KeccakSecp256k11111111111111111111111111111");
   private PublicKey secp256r1Program = fromBase58Encoded("Secp256r1SigVerify1111111111111111111111111");
-  private PublicKey zKTokenProofProgram = fromBase58Encoded("ZkTokenProof1111111111111111111111111111111");
   private PublicKey zkElGamalProofProgram = fromBase58Encoded("ZkE1Gama1Proof11111111111111111111111111111");
   // Mint
   private PublicKey wrappedSolTokenMint = fromBase58Encoded("So11111111111111111111111111111111111111112");
@@ -37,7 +36,6 @@ public final class SolanaAccountsBuilder {
   private PublicKey sysvarOwner = fromBase58Encoded("Sysvar1111111111111111111111111111111111111");
   private PublicKey clockSysVar = fromBase58Encoded("SysvarC1ock11111111111111111111111111111111");
   private PublicKey epochScheduleSysVar = fromBase58Encoded("SysvarEpochSchedu1e111111111111111111111111");
-  private PublicKey feesSysVar = fromBase58Encoded("SysvarFees111111111111111111111111111111111");
   private PublicKey instructionsSysVar = fromBase58Encoded("Sysvar1nstructions1111111111111111111111111");
   private PublicKey recentBlockhashesSysVar = fromBase58Encoded("SysvarRecentB1ockHashes11111111111111111111");
   private PublicKey rentSysVar = fromBase58Encoded("SysvarRent111111111111111111111111111111111");
@@ -86,9 +84,6 @@ public final class SolanaAccountsBuilder {
         secp256r1Program,
         createInvoked(secp256r1Program),
         createRead(secp256r1Program),
-        zKTokenProofProgram,
-        createInvoked(zKTokenProofProgram),
-        createRead(zKTokenProofProgram),
         zkElGamalProofProgram,
         createInvoked(zkElGamalProofProgram),
         createRead(zkElGamalProofProgram),
@@ -132,8 +127,6 @@ public final class SolanaAccountsBuilder {
         createRead(clockSysVar),
         epochScheduleSysVar,
         createRead(epochScheduleSysVar),
-        feesSysVar,
-        createRead(feesSysVar),
         instructionsSysVar,
         createRead(instructionsSysVar),
         recentBlockhashesSysVar,
@@ -241,15 +234,6 @@ public final class SolanaAccountsBuilder {
 
   public SolanaAccountsBuilder secp256r1Program(final String secp256r1Program) {
     return secp256r1Program(fromBase58Encoded(secp256r1Program));
-  }
-
-  public SolanaAccountsBuilder zKTokenProofProgram(final PublicKey zKTokenProofProgram) {
-    this.zKTokenProofProgram = zKTokenProofProgram;
-    return this;
-  }
-
-  public SolanaAccountsBuilder zKTokenProofProgram(final String zKTokenProofProgram) {
-    return zKTokenProofProgram(fromBase58Encoded(zKTokenProofProgram));
   }
 
   public SolanaAccountsBuilder zkElGamalProofProgram(final PublicKey zkElGamalProofProgram) {
@@ -385,15 +369,6 @@ public final class SolanaAccountsBuilder {
 
   public SolanaAccountsBuilder epochScheduleSysVar(final String epochScheduleSysVar) {
     return epochScheduleSysVar(fromBase58Encoded(epochScheduleSysVar));
-  }
-
-  public SolanaAccountsBuilder feesSysVar(final PublicKey feesSysVar) {
-    this.feesSysVar = feesSysVar;
-    return this;
-  }
-
-  public SolanaAccountsBuilder feesSysVar(final String feesSysVar) {
-    return feesSysVar(fromBase58Encoded(feesSysVar));
   }
 
   public SolanaAccountsBuilder instructionsSysVar(final PublicKey instructionsSysVar) {
