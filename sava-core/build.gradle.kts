@@ -8,44 +8,43 @@ testModuleInfo {
 }
 
 hardening {
+  // suites target by package wildcard with exclusions, never allowlist, so a
+  // new class is mutated by default instead of silently skipped (policy:
+  // sava-build's HARDENING.md); packages without a suite are deliberate scope
+  // decisions, not omissions
   mutation.register("borsh") {
-    // nested-class globs keep the test classes out while covering Borsh.Enum and the
-    // RustEnum variant interfaces
-    targetClasses = listOf(
-      "software.sava.core.borsh.Borsh",
-      "software.sava.core.borsh.Borsh\$*",
-      "software.sava.core.borsh.RustEnum",
-      "software.sava.core.borsh.RustEnum\$*"
+    targetClasses = listOf("software.sava.core.borsh.*")
+    excludedClasses = listOf(
+      "software.sava.core.borsh.*Test*",
+      "software.sava.core.borsh.*Fuzz"
     )
     targetTests = "software.sava.core.borsh.*Test*"
   }
   mutation.register("ed25519") {
-    targetClasses = listOf(
-      "software.sava.core.crypto.ed25519.Ed25519Util",
-      "software.sava.core.crypto.ed25519.Scalar25519",
-      "software.sava.core.crypto.ed25519.Codec"
+    targetClasses = listOf("software.sava.core.crypto.ed25519.*")
+    excludedClasses = listOf(
+      "software.sava.core.crypto.ed25519.*Test*",
+      "software.sava.core.crypto.ed25519.*Fuzz"
     )
     targetTests = "software.sava.core.crypto.ed25519.*Test*"
   }
   mutation.register("encoding") {
-    targetClasses = listOf(
-      "software.sava.core.encoding.Base58",
-      "software.sava.core.encoding.ByteUtil",
-      "software.sava.core.encoding.CompactU16Encoding",
-      "software.sava.core.encoding.Jex"
+    targetClasses = listOf("software.sava.core.encoding.*")
+    excludedClasses = listOf(
+      "software.sava.core.encoding.*Test*",
+      "software.sava.core.encoding.*Fuzz"
     )
     targetTests = "software.sava.core.encoding.*Test*"
   }
   mutation.register("tx") {
     targetClasses = listOf(
-      "software.sava.core.tx.TransactionSkeleton",
-      "software.sava.core.tx.TransactionSkeletonRecord",
-      "software.sava.core.tx.TransactionRecord",
-      "software.sava.core.tx.InstructionRecord",
-      "software.sava.core.accounts.lookup.AddressLookupTable",
-      "software.sava.core.accounts.lookup.AddressLookupTableRoot",
-      "software.sava.core.accounts.lookup.AddressLookupTableOverlay",
-      "software.sava.core.accounts.lookup.AddressLookupTableWithReverseLookup"
+      "software.sava.core.tx.*",
+      "software.sava.core.accounts.lookup.*"
+    )
+    excludedClasses = listOf(
+      "software.sava.core.tx.*Test*",
+      "software.sava.core.tx.*Fuzz",
+      "software.sava.core.accounts.lookup.*Test*"
     )
     targetTests = "software.sava.core.tx.*Test*,software.sava.core.accounts.lookup.*Test*"
   }

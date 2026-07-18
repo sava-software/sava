@@ -15,6 +15,32 @@ own tests, PIT targets, and fuzz harnesses. When sava work surfaces a coverage g
 suspected bug in json-iterator, report it to the user; do not add tests, harness code, or
 fixes in that repo from a sava task.
 
+## Quality gate & mutation ratchet
+
+The process contract for main-source changes (full policy: sava-build's
+`HARDENING.md`):
+
+- **Run `./gradlew :sava-core:qualityGate` / `:sava-rpc:qualityGate` after changing
+  main sources in that module** — unit tests plus every PIT suite, each diffed
+  against its accepted baseline in `<module>/config/pitest/`. It is the definition
+  of "safe to commit".
+- While iterating, run only the suite that owns the code you touched: sava-core has
+  `pitestBorsh`, `pitestEd25519`, `pitestEncoding`, `pitestTx` (the `tx` and
+  `accounts/lookup` packages), and `pitestToken2022`; sava-rpc has
+  `pitestResponses`. Suites target by package wildcard — a new class in a covered
+  package is mutated by default.
+- A new unkilled mutant has exactly three legal outcomes: **kill it** with a test
+  (prefer asserting the property it breaks over restating the implementation),
+  **refactor** it out of existence, or **accept it** with a written reason in the
+  module's `config/pitest/README.md`. Never run `-PupdateMutationBaseline` just to
+  make the build pass.
+- **Randomized tests use fixed seeds** (`BorshTests`): the ratchet needs
+  deterministic kills; exploration belongs to the fuzz targets. Don't reintroduce
+  unseeded `new Random()`.
+- Fuzz findings become a committed seed input **and** a named regression test,
+  never just a fix (the existing convention — see the per-surface hardening
+  sections below).
+
 ## Reference repositories
 
 The canonical sources are these upstream repos. Clone them wherever you prefer (keep them
@@ -245,15 +271,14 @@ may throw `IllegalArgumentException`, `ArrayIndexOutOfBoundsException`, or
 `NegativeArraySizeException` on hostile bytes; callers must not assume otherwise. Nothing
 guarantees a *typed* rejection — see the `CompactU16Encoding.decode` leniency gap below.
 
-- `./gradlew :sava-core:pitestTx` — PIT over `TransactionSkeleton`,
-  `TransactionSkeletonRecord`, `TransactionRecord`, `InstructionRecord`, and the four
-  `accounts/lookup/AddressLookupTable*` classes (folded in 2026-07-16 — versioned skeleton
-  parsing consumes tables, and they parse the same untrusted account data). Baseline
-  2026-07-16: 634 mutations, 94% detected, **1** without coverage —
-  `TransactionRecord.setBlockHash`'s non-`TransactionRecord` branch, unreachable without a
-  foreign `Transaction` implementation. The lookup-table classes stand at zero unkilled;
-  the 38 survivors in the tx classes are mostly offset arithmetic that a length assertion
-  cannot distinguish; treat any *new* no-coverage entry as a gap to close.
+- `./gradlew :sava-core:pitestTx` — PIT over the full `tx` and `accounts/lookup`
+  packages (widened 2026-07-18 from the skeleton/lookup allowlist; the lookup tables
+  were folded in 2026-07-16 — versioned skeleton parsing consumes tables, and they
+  parse the same untrusted account data). The ratchet baseline in
+  `sava-core/config/pitest/tx-accepted.csv` carries the debt the widening exposed
+  (mostly the builder classes) plus the long-standing skeleton survivors — offset
+  arithmetic a length assertion cannot distinguish. New unkilled mutants fail the
+  build via `pitestTxVerify`; triage per `config/pitest/README.md`.
 - `./gradlew :sava-core:fuzzTxSkeleton -PmaxFuzzTime=<seconds>` — Jazzer over
   `TransactionSkeletonFuzz`: tolerates any `RuntimeException` from deserialization and the
   parsers, so what it hunts is what the contract forbids — hangs, memory exhaustion, and

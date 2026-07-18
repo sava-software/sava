@@ -86,7 +86,7 @@ final class BorshTests {
                              final byte[] vectorArray,
                              final Function<byte[], T> factory,
                              final Serializer<T> serializer) {
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0001L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = (T[][]) Array.newInstance(clas, vectorSize, elementsPerArray);
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < vectorSize; ++i) {
       final var expectedArray = expectedMatrix[i];
@@ -173,7 +173,7 @@ final class BorshTests {
     final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
     ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
 
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0002L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = new float[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
       final var expectedArray = expectedMatrix[i];
@@ -235,7 +235,7 @@ final class BorshTests {
     final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
     ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
 
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0003L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = new double[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
       final var expectedArray = expectedMatrix[i];
@@ -297,7 +297,7 @@ final class BorshTests {
     final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
     ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
 
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0004L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = new byte[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
       final var expectedArray = expectedMatrix[i];
@@ -359,7 +359,7 @@ final class BorshTests {
     final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
     ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
 
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0005L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = new byte[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
       final var expectedArray = expectedMatrix[i];
@@ -421,7 +421,7 @@ final class BorshTests {
     final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
     ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
 
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0006L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = new short[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
       final var expectedArray = expectedMatrix[i];
@@ -483,7 +483,7 @@ final class BorshTests {
     final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
     ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
 
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0007L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = new int[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
       final var expectedArray = expectedMatrix[i];
@@ -545,7 +545,7 @@ final class BorshTests {
     final byte[] vectorArray = new byte[Integer.BYTES + arrayByteLength];
     ByteUtil.putInt32LE(vectorArray, 0, VECTOR_SIZE);
 
-    final var random = new Random();
+    final var random = new Random(0x5EEDB0008L); // fixed: the mutation baseline needs deterministic kills
     final var expectedMatrix = new long[VECTOR_SIZE][ELEMENTS_PER_ARRAY];
     for (int i = 0, from = Integer.BYTES, to = from + dataTypeByteLength; i < VECTOR_SIZE; ++i) {
       final var expectedArray = expectedMatrix[i];
