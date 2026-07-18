@@ -5,7 +5,6 @@ import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -13,13 +12,7 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 public record AccountLamports(Context context, PublicKey addressKey, long lamports) {
 
   public static List<AccountLamports> parseAccounts(final JsonIterator ji, final Context context) {
-    final var accounts = new ArrayList<AccountLamports>();
-    while (ji.readArray()) {
-      final var parser = new Parser(context);
-      ji.testObject(parser);
-      accounts.add(parser.create());
-    }
-    return accounts;
+    return ji.readList(j -> j.parseObject(new Parser(context), Parser::create));
   }
 
   private static final class Parser extends RootBuilder implements FieldBufferPredicate {

@@ -5,11 +5,7 @@ import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.util.DecimalIntegerAmount;
 import software.sava.core.util.LamportDecimal;
 import software.sava.rpc.json.PublicKeyEncoding;
-import systems.comodal.jsoniter.ContextFieldBufferPredicate;
-import systems.comodal.jsoniter.FieldIndexPredicate;
-import systems.comodal.jsoniter.FieldMatcher;
-import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
+import systems.comodal.jsoniter.*;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -27,7 +23,7 @@ public record AccountInfo<T>(PublicKey pubKey,
                              int space,
                              T data) implements DecimalIntegerAmount {
 
-  public static BiFunction<PublicKey, byte[], byte[]> BYTES_IDENTITY = (k, data) -> data;
+  public static BiFunction<PublicKey, byte[], byte[]> BYTES_IDENTITY = (_, data) -> data;
 
   public static void cacheTables(final Collection<AccountInfo<AddressLookupTable>> tableAccounts,
                                  final Map<PublicKey, AddressLookupTable> cache) {
@@ -172,13 +168,7 @@ public record AccountInfo<T>(PublicKey pubKey,
         case 2 -> lamports = ji.readLong();
         case 3 -> owner = PublicKeyEncoding.parseBase58Encoded(ji);
         case 4 -> rentEpoch = ji.readBigInteger();
-        case 5 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            space = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
+        case 5 -> space = ji.readIntOr(space);
         default -> ji.skip();
       }
       return true;

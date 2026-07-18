@@ -3,7 +3,6 @@ package software.sava.rpc.json.http.response;
 import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,38 +67,14 @@ public record Block(long blockHeight,
     @Override
     public boolean test(final int fieldIndex, final JsonIterator ji) {
       switch (fieldIndex) {
-        case 0 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            blockHeight = ji.readLong();
-          } else {
-            ji.skip();
-          }
-        }
-        case 1 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            blockTime = ji.readLong();
-          } else {
-            ji.skip();
-          }
-        }
-        case 2 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            numRewardPartitions = ji.readLong();
-          } else {
-            ji.skip();
-          }
-        }
+        case 0 -> blockHeight = ji.readLongOr(blockHeight);
+        case 1 -> blockTime = ji.readLongOr(blockTime);
+        case 2 -> numRewardPartitions = ji.readLongOr(numRewardPartitions);
         case 3 -> blockHash = ji.readString();
         case 4 -> previousBlockHash = ji.readString();
         case 5 -> parentSlot = ji.readLong();
         case 6 -> rewards = TxReward.parseRewards(ji);
-        case 7 -> {
-          final var signatures = new ArrayList<String>(2_048);
-          while (ji.readArray()) {
-            signatures.add(ji.readString());
-          }
-          this.signatures = signatures;
-        }
+        case 7 -> signatures = ji.readList(JsonIterator::readString);
         case 8 -> {
           final var transactions = new ArrayList<BlockTx>(2_048);
           while (ji.readArray()) {

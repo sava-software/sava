@@ -5,6 +5,16 @@ The canonical definitions live in the Agave validator codebase and its interface
 This document maps each sava surface to its canonical source so sync-and-test tasks can go
 straight to the right files on both sides.
 
+## Repo scope
+
+Work in this repo is scoped to the three sava modules: **sava-core, sava-rpc, sava-vanity**.
+`settings.gradle.kts` may composite the JSON parser source via
+`includeBuild("../json-iterator")` during local development, which makes its sources and
+gradle tasks reachable from here — but json-iterator is a separate project that owns its
+own tests, PIT targets, and fuzz harnesses. When sava work surfaces a coverage gap or a
+suspected bug in json-iterator, report it to the user; do not add tests, harness code, or
+fixes in that repo from a sava task.
+
 ## Reference repositories
 
 The canonical sources are these upstream repos. Clone them wherever you prefer (keep them
@@ -129,8 +139,12 @@ Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
   agave responses (getBlock, getProgramAccounts, getVoteAccounts, …). These detect response
   shape drift; refresh them from a live node when agave changes a shape.
 - `./gradlew :sava-rpc:pitestResponses` — PIT over the response package (sava-rpc has its
-  own `hardening {}` block). Baseline 2026-07-17: 903 mutations, **98% detected, 1 without
-  coverage**, driven from 72%/143 by `response/ParseResponseFieldTests` — synthetic
+  own `hardening {}` block). Baseline 2026-07-18: 524 mutations (down from 903 after the
+  deprecated-accessor removals), **98% detected, 1 without coverage**;
+  `response/ParseCustomErrorCodeTests` pins the `RpcCustomError` long-code range guards
+  with codes that alias real codes under `(int)` truncation (`code ± (1L << 32)`, both
+  overloads, both sides). Originally driven from 72%/143 by
+  `response/ParseResponseFieldTests` — synthetic
   whitebox JSON per record asserting every field (the tests live inside the target
   package, kept out of the mutation set via the suite's `excludedClasses`). Techniques
   that matter here: a trailing decoy field of the same JSON type with a different value

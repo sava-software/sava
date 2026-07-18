@@ -5,9 +5,7 @@ import software.sava.rpc.json.PublicKeyEncoding;
 import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -28,11 +26,7 @@ public record ClusterNode(String gossip,
                           int shredVersion) {
 
   public static List<ClusterNode> parse(final JsonIterator ji) {
-    final var nodes = new ArrayList<ClusterNode>();
-    while (ji.readArray()) {
-      nodes.add(ji.parseObject(Parser.FIELDS, new Parser()));
-    }
-    return nodes;
+    return ji.readList(j -> j.parseObject(Parser.FIELDS, new Parser()));
   }
 
   private static final class Parser implements FieldIndexPredicate, Supplier<ClusterNode> {
@@ -95,20 +89,8 @@ public record ClusterNode(String gossip,
         case 10 -> tvu = ji.readString();
         case 11 -> version = ji.readString();
         case 12 -> clientId = ji.readString();
-        case 13 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            featureSet = ji.readLong();
-          } else {
-            ji.skip();
-          }
-        }
-        case 14 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            shredVersion = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
+        case 13 -> featureSet = ji.readLongOr(featureSet);
+        case 14 -> shredVersion = ji.readIntOr(shredVersion);
         default -> ji.skip();
       }
       return true;

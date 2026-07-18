@@ -6,7 +6,6 @@ import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.util.List;
 import java.util.OptionalInt;
@@ -128,13 +127,7 @@ public record TxSimulation(Context context,
     public boolean test(final int fieldIndex, final JsonIterator ji) {
       switch (fieldIndex) {
         case 0 -> error = TransactionError.parseError(ji);
-        case 1 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            fee = ji.readLong();
-          } else {
-            ji.skip();
-          }
-        }
+        case 1 -> fee = ji.readLongOr(fee);
         case 2 -> loadedAccountsDataSize = ji.readInt();
         case 3 -> {
           if (accountPubKeys == null || accountPubKeys.isEmpty()) {
@@ -148,13 +141,7 @@ public record TxSimulation(Context context,
         case 6 -> this.postBalances = parseLamportBalances(ji);
         case 7 -> this.preTokenBalances = TokenBalance.parseBalances(ji);
         case 8 -> this.postTokenBalances = TokenBalance.parseBalances(ji);
-        case 9 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            unitsConsumed = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
+        case 9 -> unitsConsumed = ji.readIntOr(unitsConsumed);
         case 10 -> ji.testObject(this, RETURN_DATA_PARSER);
         case 11 -> innerInstructions = InnerInstructions.parseInstructions(ji);
         case 12 -> replacementBlockHash = ReplacementBlockHash.parse(ji);

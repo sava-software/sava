@@ -3,7 +3,6 @@ package software.sava.rpc.json.http.response;
 import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,13 +61,7 @@ public record TxInstruction(int programIdIndex,
           accountIndices = indices.stream().mapToInt(Integer::intValue).toArray();
         }
         case 2 -> b58Data = ji.readString();
-        case 3 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            stackHeight = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
+        case 3 -> stackHeight = ji.readIntOr(stackHeight);
         default -> ji.skip();
       }
       return true;

@@ -52,16 +52,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   private static final Function<HttpResponse<?>, NodeHealth> NODE_HEALTH = new JsonRestRpcResponseParser<>(NodeHealth::parse);
   private static final Function<HttpResponse<?>, InflationGovernor> INFLATION_GOVERNOR = applyGenericResponseResult(InflationGovernor::parse);
   private static final Function<HttpResponse<?>, InflationRate> INFLATION_RATE = applyGenericResponseResult(InflationRate::parse);
-  private static final Function<JsonIterator, long[]> PARSE_LONG_ARRAY = ji -> {
-    if (ji.whatIsNext() == ValueType.NULL) {
-      return new long[0];
-    }
-    final var longs = new ArrayList<Long>();
-    while (ji.readArray()) {
-      longs.add(ji.readLong());
-    }
-    return longs.stream().mapToLong(Long::longValue).toArray();
-  };
+  private static final Function<JsonIterator, long[]> PARSE_LONG_ARRAY = JsonIterator::readLongArray;
 
   static final Function<JsonIterator, Map<PublicKey, long[]>> KEY_LONG_ARRAY_MAP_PARSER = ji -> {
     if (ji.whatIsNext() == ValueType.NULL) {

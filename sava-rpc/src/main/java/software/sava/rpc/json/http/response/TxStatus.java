@@ -87,13 +87,7 @@ public record TxStatus(Context context,
     public boolean test(final int fieldIndex, final JsonIterator ji) {
       switch (fieldIndex) {
         case 0 -> this.slot = ji.readLong();
-        case 1 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            this.confirmations = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
+        case 1 -> this.confirmations = ji.readIntOr(this.confirmations);
         case 2 -> this.error = TransactionError.parseError(ji);
         case 3 -> this.confirmationStatus = ji.applyChars(Commitment.PARSER);
         default -> ji.skip();

@@ -4,9 +4,7 @@ import software.sava.rpc.json.http.request.Commitment;
 import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -23,11 +21,7 @@ public record TxSig(long slot,
                     TransactionError transactionError) {
 
   public static List<TxSig> parseSignatures(final JsonIterator ji) {
-    final var signatures = new ArrayList<TxSig>(2_048);
-    while (ji.readArray()) {
-      signatures.add(ji.parseObject(Parser.FIELDS, new Parser()));
-    }
-    return signatures;
+    return ji.readList(j -> j.parseObject(Parser.FIELDS, new Parser()));
   }
 
   private static final class Parser implements FieldIndexPredicate, Supplier<TxSig> {
@@ -70,20 +64,8 @@ public record TxSig(long slot,
     public boolean test(final int fieldIndex, final JsonIterator ji) {
       switch (fieldIndex) {
         case 0 -> this.slot = ji.readLong();
-        case 1 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            this.transactionIndex = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
-        case 2 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            this.blockTime = ji.readLong();
-          } else {
-            ji.skip();
-          }
-        }
+        case 1 -> this.transactionIndex = ji.readIntOr(this.transactionIndex);
+        case 2 -> this.blockTime = ji.readLongOr(this.blockTime);
         case 3 -> this.confirmationStatus = ji.applyChars(Commitment.PARSER);
         case 4 -> this.memo = ji.readString();
         case 5 -> this.signature = ji.readString();

@@ -3,7 +3,6 @@ package software.sava.rpc.json.http.response;
 import systems.comodal.jsoniter.ContextFieldBufferPredicate;
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
@@ -17,11 +16,7 @@ public record NodeHealth(int code, String message, int numSlotsBehind) {
 
   private static final ContextFieldBufferPredicate<Parser> DATA_PARSER = (parser, buf, offset, len, ji) -> {
     if (fieldEquals("numSlotsBehind", buf, offset, len)) {
-      if (ji.whatIsNext() == ValueType.NUMBER) {
-        parser.numSlotsBehind = ji.readInt();
-      } else {
-        ji.skip();
-      }
+      parser.numSlotsBehind = ji.readIntOr(parser.numSlotsBehind);
     } else {
       ji.skip();
     }

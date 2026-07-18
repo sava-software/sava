@@ -69,15 +69,9 @@ public record Tx(long slot,
     public boolean test(final int fieldIndex, final JsonIterator ji) {
       switch (fieldIndex) {
         case 0 -> this.slot = ji.readLong();
-        case 1 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            this.blockTime = ji.readLong();
-          } else {
-            ji.skip();
-          }
-        }
+        case 1 -> this.blockTime = ji.readLongOr(this.blockTime);
         case 2 -> {
-          if (!ji.readNull()) {
+          if (ji.notNull()) {
             this.meta = TxMeta.parse(ji);
           }
         }
@@ -90,20 +84,8 @@ public record Tx(long slot,
             ji.skip();
           }
         }
-        case 4 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            this.version = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
-        case 5 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            this.transactionIndex = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
+        case 4 -> this.version = ji.readIntOr(this.version);
+        case 5 -> this.transactionIndex = ji.readIntOr(this.transactionIndex);
         default -> ji.skip();
       }
       return true;

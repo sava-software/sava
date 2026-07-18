@@ -29,7 +29,7 @@ public record BlockTx(TxMeta meta, byte[] data) {
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("meta", buf, offset, len)) {
-        if (!ji.readNull()) {
+        if (ji.notNull()) {
           this.meta = TxMeta.parse(ji);
         }
       } else if (fieldEquals("transaction", buf, offset, len)) {

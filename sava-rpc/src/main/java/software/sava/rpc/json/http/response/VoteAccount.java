@@ -6,7 +6,6 @@ import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.function.Supplier;
@@ -27,11 +26,7 @@ public record VoteAccount(PublicKey voteKey,
                           long rootSlot) {
 
   static List<VoteAccount> parse(final JsonIterator ji) {
-    final var voteAccounts = new ArrayList<VoteAccount>();
-    while (ji.readArray()) {
-      voteAccounts.add(ji.parseObject(Parser.FIELDS, new Parser()));
-    }
-    return voteAccounts;
+    return ji.readList(j -> j.parseObject(Parser.FIELDS, new Parser()));
   }
 
 

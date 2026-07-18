@@ -6,7 +6,6 @@ import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.FieldIndexPredicate;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -69,13 +68,7 @@ public record TxReward(PublicKey publicKey,
     @Override
     public boolean test(final int fieldIndex, final JsonIterator ji) {
       switch (fieldIndex) {
-        case 0 -> {
-          if (ji.whatIsNext() == ValueType.NUMBER) {
-            commission = ji.readInt();
-          } else {
-            ji.skip();
-          }
-        }
+        case 0 -> commission = ji.readIntOr(commission);
         case 1 -> pubKey = PublicKeyEncoding.parseBase58Encoded(ji);
         case 2 -> rewardType = ji.applyChars(REWARD_TYPE_PARSER);
         case 3 -> lamports = ji.readLong();
