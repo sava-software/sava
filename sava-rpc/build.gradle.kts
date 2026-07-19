@@ -19,6 +19,12 @@ hardening {
   }
 }
 
+configurations.all {
+  resolutionStrategy {
+    force("software.sava:json-iterator:25.3.0")
+  }
+}
+
 dependencies {
   project(":sava-core")
 }
