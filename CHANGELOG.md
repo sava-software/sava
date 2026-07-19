@@ -1,5 +1,21 @@
 # Changelog
 
+## [25.8.0](https://github.com/sava-software/sava/compare/25.7.0...25.8.0) (2026-07-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** Projects must comply with mutation testing enforcement to ensure quality gate passes. Update workflows accordingly.
+
+### Features
+
+* **core:** add mutation testing baselines and policies ([471c770](https://github.com/sava-software/sava/commit/471c770abe87107471c576faf24e075c60dd4083))
+
+
+### Miscellaneous Chores
+
+* release 25.8.0 ([5cfea95](https://github.com/sava-software/sava/commit/5cfea954ba6a8953e0b8d3bf24f202af2fe0007a))
+
 ## [25.7.0](https://github.com/sava-software/sava/compare/25.6.1...25.7.0) (2026-07-17)
 
 
