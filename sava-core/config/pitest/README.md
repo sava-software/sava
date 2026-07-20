@@ -84,6 +84,46 @@ last `i += pendingBurn.length` before the return is a dead store — nothing
 reads `i` afterwards. Kept for symmetry with the preceding field reads;
 refactoring it away would remove the mutant.
 
+## Triaged equivalent mutants — meta suite
+
+Seeded 2026-07-20 with the suite, 18 entries across three families. No
+`NO_COVERAGE`.
+
+**Identity short circuit in equals** (7 keys, `RemoveConditionalMutator_EQUAL_IF`
+on the `this == o ||` prefix of every `equals`): removing the reference check
+falls through to the class-and-key comparison, which returns the same answer
+for every input. It is a fast path, not a branch.
+
+**Redundant or equal-returning branches in merge** (6 keys,
+`RemoveConditionalMutator_EQUAL_ELSE`), two sub-cases:
+- `AccountMetaWrite.merge` line 18 and `AccountMetaReadOnlySigner.merge`
+  line 18: the `accountMeta.feePayer()` guard is subsumed by the `signer()`
+  branch below it, because a fee payer is also a signer *and* writable, so the
+  ternary there returns the same argument the guard would have.
+- the `accountMeta.write()` ternaries (`AccountMetaWrite` 26/29,
+  `AccountMetaReadOnlySigner` 22, `AccountMetaInvoked` 19): forcing the else
+  builds a fresh `AccountMetaSignerWriter`/`AccountMetaInvokedAndWrite` with
+  the same key instead of returning the argument. Equal by `equals`, just not
+  the same instance. Killable only by asserting identity, which the API does
+  not promise.
+
+**hashCode arithmetic** (5 keys, `MathMutator` on the `31 * result + 1` mixing):
+the surviving mutations still produce hashes that are distinct across the
+privilege types, which is the only property that matters and the one
+`hashCodeDistinguishesPrivileges` asserts. Killing them would mean pinning
+exact hash values and freezing an implementation detail.
+
+Note `AccountMetaFeePayer` and `AccountMetaSignerWriter` hash identically —
+the scheme folds in `(signer, write, invoked)` and a fee payer shares that
+triple. Legal, since `equals` separates them by class and unequal objects may
+collide. Asserted in `hashCodeDistinguishesPrivileges` so it stays deliberate.
+
+Six further `merge` cells lose a privilege where `invoked` meets `signer`
+(there is no type for an invoked signer). Those are unreachable — a program
+account cannot sign — and are pinned in
+`AccountMetaTests.mergeLosesPrivilegesOnlyWhereInvokedMeetsSigner` rather than
+here, because they are a behaviour gap rather than an unkillable mutant.
+
 ## crypto suite — no accepted mutants
 
 `crypto-accepted.csv` is empty and the suite runs at 100% (12 mutants). Keep it

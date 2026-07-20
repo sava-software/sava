@@ -2,6 +2,34 @@ plugins {
   id("software.sava.build.feature.hardening")
 }
 
+// AGENTS.md names the mutation suites so an agent knows which one owns the code it
+// touched. That list is derivable from the registrations below, so it drifts silently
+// whenever a suite is added — it already did. Fail the build instead of relying on a
+// prose reminder.
+val docsInSync = tasks.register("docsInSync") {
+  group = "verification"
+  description = "Fails when a registered mutation suite is not named in AGENTS.md."
+  val agentsDoc = rootProject.layout.projectDirectory.file("AGENTS.md").asFile
+  // resolved at configuration time so the task stays configuration-cache friendly
+  val suiteTasks = hardening.mutation.names.map { "pitest" + it.replaceFirstChar(Char::uppercase) }
+  val projectPath = project.path
+  inputs.file(agentsDoc)
+  inputs.property("suites", suiteTasks)
+  doLast {
+    val doc = agentsDoc.readText()
+    val missing = suiteTasks.filterNot(doc::contains)
+    if (missing.isNotEmpty()) {
+      throw GradleException(
+        "AGENTS.md does not mention ${missing.size} mutation suite(s) registered by $projectPath:\n" +
+            missing.joinToString("\n") { "  $it" } +
+            "\nAdd them to the 'Quality gate & mutation ratchet' section, with the package each covers."
+      )
+    }
+  }
+}
+
+tasks.named("qualityGate") { dependsOn(docsInSync) }
+
 testModuleInfo {
   requires("org.junit.jupiter.api")
   runtimeOnly("org.junit.jupiter.engine")
@@ -57,6 +85,13 @@ hardening {
       "software.sava.core.accounts.token.*Fuzz"
     )
     targetTests = "software.sava.core.accounts.token.*Test*"
+  }
+  mutation.register("meta") {
+    // the account privilege lattice: merge() decides the transaction header and,
+    // via invoked(), whether an account may be moved into a lookup table
+    targetClasses = listOf("software.sava.core.accounts.meta.*")
+    excludedClasses = listOf("software.sava.core.accounts.meta.*Test*")
+    targetTests = "software.sava.core.accounts.meta.*Test*"
   }
   mutation.register("crypto") {
     // hashing primitives: sha256Twice and h160 have no caller in this repo, so

@@ -20,6 +20,7 @@
 !/sava-*/
 !/settings.gradle.kts
 !AGENTS.md
+!AGAVE_SYNC.md
 
 # Re-apply ignores within included directories.
 .gradle

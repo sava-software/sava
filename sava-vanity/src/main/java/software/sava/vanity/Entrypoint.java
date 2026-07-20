@@ -15,17 +15,17 @@ import java.util.concurrent.TimeUnit;
 
 public final class Entrypoint {
 
-  private static int intProp(final String moduleName, final String property, final int def) {
+  static int intProp(final String moduleName, final String property, final int def) {
     final var val = System.getProperty(moduleName + '.' + property);
     return val == null || val.isBlank() ? def : Integer.parseInt(val);
   }
 
-  private static boolean boolProp(final String moduleName, final String property, final boolean def) {
+  static boolean boolProp(final String moduleName, final String property, final boolean def) {
     final var val = System.getProperty(moduleName + '.' + property);
     return val == null || val.isBlank() ? def : Boolean.parseBoolean(val);
   }
 
-  private static Duration durationProp(final String moduleName, final String property, final Duration def) {
+  static Duration durationProp(final String moduleName, final String property, final Duration def) {
     final var val = System.getProperty(moduleName + '.' + property);
     return val == null || val.isBlank()
         ? def
@@ -51,7 +51,7 @@ public final class Entrypoint {
     }
   }
 
-  private static Path readKeyPath(final String moduleName, final Subsequence beginsWith, final Subsequence endsWith) {
+  static Path readKeyPath(final String moduleName, final Subsequence beginsWith, final Subsequence endsWith) {
     final var outDir = System.getProperty(moduleName + ".outDir");
     if (outDir == null || outDir.isBlank()) {
       throw new IllegalStateException(
@@ -263,12 +263,12 @@ public final class Entrypoint {
     }
   }
 
-  private static String maybePlural(final long val, final String context) {
+  static String maybePlural(final long val, final String context) {
     final var prefix = Long.toUnsignedString(val) + ' ' + context;
     return val == 1 ? prefix : prefix + 's';
   }
 
-  private static String formatDuration(final Duration duration) {
+  static String formatDuration(final Duration duration) {
     return duration.truncatedTo(ChronoUnit.SECONDS).toString().substring(2);
   }
 }

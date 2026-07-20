@@ -18,6 +18,13 @@ final class AccountMetaWrite extends AccountMetaReadOnly {
     if (accountMeta.feePayer()) {
       return accountMeta;
     }
+    // an account that is written by one instruction and invoked as the program of
+    // another arrives here, because InstructionRecord merges an instruction's
+    // accounts before its program id. Dropping invoked would let the program be
+    // moved into an address lookup table, which the runtime rejects.
+    if (accountMeta.invoked()) {
+      return accountMeta.write() ? accountMeta : new AccountMetaInvokedAndWrite(publicKey);
+    }
     if (accountMeta.signer()) {
       return accountMeta.write() ? accountMeta : new AccountMetaSignerWriter(publicKey);
     } else {
