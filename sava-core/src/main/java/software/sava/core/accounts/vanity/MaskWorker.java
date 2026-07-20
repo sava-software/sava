@@ -26,8 +26,9 @@ final class MaskWorker extends BaseMaskWorker {
              final AtomicInteger found,
              final AtomicLong searched,
              final Queue<Result> results,
-             final int checkFound) {
-    super(keyPath, password, secureRandom, privateKeyEncoding, keyFileFormat, keyDerivation, sigVerify, beginsWith, find, found, searched, results, checkFound);
+             final int checkFound,
+             final long maxSearches) {
+    super(keyPath, password, secureRandom, privateKeyEncoding, keyFileFormat, keyDerivation, sigVerify, beginsWith, find, found, searched, results, checkFound, maxSearches);
     this.endsWith = endsWith;
   }
 
@@ -39,8 +40,10 @@ final class MaskWorker extends BaseMaskWorker {
       final int shortStart = shortEncoded.length - endLength;
       long fastEncodeOffsets;
       long start = System.currentTimeMillis();
+      long attempts = 0;
       for (int i = 0, keyStart, shortKeyStart; ; ) {
         generateKeyPair();
+        ++attempts;
 
         fastEncodeOffsets = Base58.beginMutableEncode(mutablePublicKey, endLength, shortEncoded);
         shortKeyStart = (int) fastEncodeOffsets;
@@ -70,9 +73,12 @@ final class MaskWorker extends BaseMaskWorker {
           if (foundLimitOrInterrupted()) {
             return;
           } else {
-            searched.getAndAccumulate(i, SUM);
             i = 0;
           }
+        }
+        if (searchExhausted(attempts)) {
+          searched.getAndAccumulate(i, SUM);
+          return;
         }
       }
     } finally {

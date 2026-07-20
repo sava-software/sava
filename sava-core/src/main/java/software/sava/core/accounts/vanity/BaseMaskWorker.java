@@ -40,6 +40,7 @@ abstract class BaseMaskWorker implements AddressWorker {
   protected final AtomicLong searched;
   private final Queue<Result> results;
   protected final int checkFound;
+  private final long maxSearches;
   private final MessageDigest digest = Hash.sha512Digest();
   private final byte[] privateKey;
   private final byte[] publicKey;
@@ -59,7 +60,8 @@ abstract class BaseMaskWorker implements AddressWorker {
                            final AtomicInteger found,
                            final AtomicLong searched,
                            final Queue<Result> results,
-                           final int checkFound) {
+                           final int checkFound,
+                           final long maxSearches) {
     this.keyPath = keyPath;
     this.password = password;
     this.secureRandom = secureRandom;
@@ -73,6 +75,7 @@ abstract class BaseMaskWorker implements AddressWorker {
     this.searched = searched;
     this.results = results;
     this.checkFound = checkFound;
+    this.maxSearches = maxSearches;
     this.privateKey = new byte[32];
     this.publicKey = new byte[32];
     this.encoded = new char[64];
@@ -254,5 +257,17 @@ abstract class BaseMaskWorker implements AddressWorker {
 
   protected final boolean foundHitLimitOrInterrupted() {
     return this.found.get() >= find || Thread.currentThread().isInterrupted();
+  }
+
+  /// Bounds an otherwise unbounded search. A worker asked for a subsequence that
+  /// its encoder can never produce would spin forever, so callers that cannot
+  /// afford that — tests, and any caller wanting a deadline — cap the number of
+  /// key pairs generated. [Long#MAX_VALUE] is the unbounded default.
+  ///
+  /// @param attempts key pairs this worker has generated so far.
+  /// @return true once the cap is reached, at which point the worker stops
+  /// without having found anything.
+  protected final boolean searchExhausted(final long attempts) {
+    return attempts >= maxSearches;
   }
 }

@@ -77,7 +77,7 @@ record SubsequenceRecord(String subsequence,
                                       final boolean _1337Numbers,
                                       final boolean _1337Letters) {
     final char[][] findChars = new char[find.length()][];
-    final char[] storage = new char[3];
+    final char[] storage = new char[Subsequence.MAX_OPTIONS];
     for (int i = 0; i < findChars.length; ++i) {
       findChars[i] = getCharOptions(storage, find.charAt(i), caseSensitive, _1337Numbers, _1337Letters);
     }
@@ -139,6 +139,26 @@ record SubsequenceRecord(String subsequence,
       }
     }
     return Arrays.copyOfRange(storage, 0, i);
+  }
+
+  /// One row per alternative, `_` padding positions with fewer alternatives than
+  /// the widest. See [Subsequence#charOptionsTable()].
+  static String formatCharOptions(final char[][] charOptions) {
+    final var table = new StringBuilder();
+    for (int level = 0; level < Subsequence.MAX_OPTIONS; ++level) {
+      if (level > 0) {
+        table.append('\n');
+      }
+      table.append("  ");
+      for (int column = 0; column < charOptions.length; ++column) {
+        if (column > 0) {
+          table.append(' ');
+        }
+        final char[] options = charOptions[column];
+        table.append(options.length > level ? options[level] : '_');
+      }
+    }
+    return table.toString();
   }
 
   @Override

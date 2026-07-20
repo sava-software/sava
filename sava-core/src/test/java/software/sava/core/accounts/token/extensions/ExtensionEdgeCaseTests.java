@@ -1,4 +1,4 @@
-package software.sava.core.token.extensions;
+package software.sava.core.accounts.token.extensions;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
@@ -7,7 +7,6 @@ import software.sava.core.accounts.token.Mint;
 import software.sava.core.accounts.token.Token2022;
 import software.sava.core.accounts.token.Token2022Account;
 import software.sava.core.accounts.token.TokenAccount;
-import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.zk.ElGamal;
 

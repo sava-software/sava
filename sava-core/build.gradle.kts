@@ -50,7 +50,40 @@ hardening {
   }
   mutation.register("token2022") {
     targetClasses = listOf("software.sava.core.accounts.token.*")
-    targetTests = "software.sava.core.token.*Test*"
+    // the tests share the package with what they mutate, so they need excluding
+    // by name the way every other suite does
+    excludedClasses = listOf(
+      "software.sava.core.accounts.token.*Test*",
+      "software.sava.core.accounts.token.*Fuzz"
+    )
+    targetTests = "software.sava.core.accounts.token.*Test*"
+  }
+  mutation.register("vanity") {
+    // DELIBERATE DEVIATION from the package-wildcard rule: this suite allowlists
+    // the Subsequence pair instead of taking software.sava.core.accounts.vanity.*.
+    // The workers search in an unbounded loop, so every mutant that breaks the
+    // match predicate runs to the PIT timeout instead of failing fast. PIT scores
+    // TIMED_OUT as killed so the ratchet stays correct, but a whole-package suite
+    // would cost a timeout window per such mutant. The mask logic — where a wrong
+    // answer is silent rather than a hang — is here; the workers stay covered by
+    // MaskWorkerTests without being mutated.
+    targetClasses = listOf("software.sava.core.accounts.vanity.Subsequence*")
+    // SubsequenceTests itself matches that prefix
+    excludedClasses = listOf("software.sava.core.accounts.vanity.*Test*")
+    targetTests = "software.sava.core.accounts.vanity.SubsequenceTests"
+  }
+  mutation.register("decimal") {
+    // lamport and token amount conversion: a shift in the wrong direction or by
+    // the wrong exponent is off by a factor of a billion and still looks like a
+    // plausible balance
+    targetClasses = listOf("software.sava.core.util.*")
+    excludedClasses = listOf("software.sava.core.util.*Test*")
+    targetTests = "software.sava.core.util.*Test*"
+    // deliberately plain STRONGER: EXPERIMENTAL_BIG_DECIMAL only rewrites the
+    // (BigDecimal)BigDecimal arithmetic methods — add/subtract/multiply/divide/
+    // remainder/min/max/abs/negate/plus — and never the (int)BigDecimal shifts
+    // this package is built on, so enabling it here generates nothing. The
+    // shift direction is pinned by tests instead.
   }
   fuzz.register("base58") {
     targetClass = "software.sava.core.encoding.Base58Fuzz"
@@ -65,7 +98,7 @@ hardening {
     maxLen = 1024
   }
   fuzz.register("token2022") {
-    targetClass = "software.sava.core.token.Token2022Fuzz"
+    targetClass = "software.sava.core.accounts.token.Token2022Fuzz"
     // real mints with metadata run a few hundred bytes; every TLV boundary case lives in
     // small inputs
     maxLen = 2048

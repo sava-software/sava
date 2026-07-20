@@ -1,11 +1,10 @@
-package software.sava.core.token.extensions;
+package software.sava.core.accounts.token.extensions;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.AccountState;
 import software.sava.core.accounts.token.Token2022;
 import software.sava.core.accounts.token.Token2022Account;
-import software.sava.core.accounts.token.extensions.*;
 
 import java.time.Duration;
 import java.util.Base64;

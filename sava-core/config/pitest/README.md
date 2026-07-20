@@ -84,6 +84,57 @@ last `i += pendingBurn.length` before the return is a dead store — nothing
 reads `i` afterwards. Kept for symmetry with the preceding field reads;
 refactoring it away would remove the mutant.
 
+## vanity suite — no accepted mutants
+
+`vanity-accepted.csv` is empty and the suite runs at 100%. Keep it that way:
+any new survivor here is a real gap, not debt.
+
+It was briefly seeded 2026-07-20 with 9 entries, all from the "Character
+options:" table that `Subsequence.create` printed to `System.out` while
+building the mask set — `VoidMethodCallMutator` on the print calls plus the
+`level < 3` loop driving them. Nothing asserts stdout, so nothing could kill
+them. Rather than accept that, the block moved out of the library the same
+day: [Subsequence#charOptionsTable()] now returns the table as a string and
+`software.sava.vanity.Entrypoint` prints it, which is where user-facing
+reporting belongs. A pure function is assertable, and all nine mutants died.
+
+The general lesson for this repo: a cluster of unkillable mutants around
+output or logging usually means the side effect is in the wrong layer, not
+that the mutants are equivalent.
+
+Note this suite deviates from the package-wildcard targeting rule and
+allowlists `Subsequence*`. The reason is in `sava-core/build.gradle.kts`: the
+mask workers search in an unbounded loop, so mutants that break the match
+predicate run to the PIT timeout rather than failing fast. They stay covered
+by `MaskWorkerTests` without being mutated.
+
+## Triaged equivalent mutants — decimal suite
+
+Seeded 2026-07-20 with the suite. All 4 entries are the same equivalence,
+one instance per class.
+
+**Unsigned widening fast path** (`DecimalInteger.toDecimal` line 28,
+`DecimalIntegerAmount.amount` line 10): both read
+`val < 0 ? new BigDecimal(Long.toUnsignedString(val)) : BigDecimal.valueOf(val)`
+(and the `BigInteger` equivalent). The else branch is only an allocation
+shortcut — for every non-negative long the two branches build an identical
+value (same unscaled magnitude, scale 0), verified exhaustively over the
+boundaries and 2M random non-negative longs. So `<` → `<=`
+(`ConditionalsBoundaryMutator`, differs only at 0, where both give 0) and
+force-true (`RemoveConditionalMutator_ORDER_IF`, always takes the string
+path) are unkillable by construction. The force-false direction
+(`ORDER_ELSE`) is *not* equivalent — it sign-extends instead of widening —
+and is killed by `longOverloadTreatsNegativeAsUnsigned` and
+`amountWidensNegativeLongsAsUnsigned`.
+
+Note this suite runs plain `STRONGER`. `EXPERIMENTAL_BIG_DECIMAL` /
+`EXPERIMENTAL_BIG_INTEGER` (fixed for java 25 in pitest 1.25.8) were tried
+and generate zero mutants here: they only rewrite the
+`(BigDecimal)BigDecimal` arithmetic methods — add, subtract, multiply,
+divide, remainder, min, max, abs, negate, plus — and this package's only
+arithmetic is `movePointLeft`/`movePointRight`, which take an `int`. No
+package in the repo currently has a call site those mutators can reach.
+
 ## Triaged equivalent mutants — tx suite
 
 The tx baseline was seeded 2026-07-18 with 182 keys of untriaged debt from

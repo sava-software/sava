@@ -37,12 +37,17 @@ public final class Entrypoint {
     if (prefix == null || prefix.isBlank()) {
       return null;
     } else {
-      return Subsequence.create(
+      final var subsequence = Subsequence.create(
           prefix,
           boolProp(moduleName, ps + "CaseSensitive", false),
           boolProp(moduleName, ps + "1337Numbers", true),
           boolProp(moduleName, ps + "1337Letters", true)
       );
+      if (subsequence != null) {
+        System.out.println("Character options for " + property + ':');
+        System.out.println(subsequence.charOptionsTable());
+      }
+      return subsequence;
     }
   }
 

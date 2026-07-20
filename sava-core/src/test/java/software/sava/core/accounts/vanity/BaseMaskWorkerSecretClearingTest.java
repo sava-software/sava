@@ -30,7 +30,7 @@ final class BaseMaskWorkerSecretClearingTest {
     final var worker = new BeginsWithMaskWorker(
         null,
         null,
-        new SecureRandom(),
+        new FixedSeedSecureRandom(FixedSeedSecureRandom.SEEDS[0]),
         null,
         null,
         null,
@@ -40,7 +40,8 @@ final class BaseMaskWorkerSecretClearingTest {
         found,
         searched,
         results,
-        1
+        1,
+        Long.MAX_VALUE
     );
 
     worker.run();

@@ -1,10 +1,7 @@
-package software.sava.core.token;
+package software.sava.core.accounts.token;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.accounts.token.AccountState;
-import software.sava.core.accounts.token.Mint;
-import software.sava.core.accounts.token.TokenAccount;
 
 import java.util.Arrays;
 

@@ -23,16 +23,19 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
                        final AtomicInteger found,
                        final AtomicLong searched,
                        final Queue<Result> results,
-                       final int checkFound) {
-    super(keyPath, password, secureRandom, privateKeyEncoding, keyFileFormat, keyDerivation, sigVerify, beginsWith, find, found, searched, results, checkFound);
+                       final int checkFound,
+                       final long maxSearches) {
+    super(keyPath, password, secureRandom, privateKeyEncoding, keyFileFormat, keyDerivation, sigVerify, beginsWith, find, found, searched, results, checkFound, maxSearches);
   }
 
   @Override
   public void run() {
     try {
       long start = System.currentTimeMillis();
+      long attempts = 0;
       for (int i = 0, keyStart; ; ) {
         generateKeyPair();
+        ++attempts;
 
         keyStart = Base58.mutableEncode(mutablePublicKey, encoded);
         if (queueResult(start, keyStart)) {
@@ -47,9 +50,12 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
           if (foundLimitOrInterrupted()) {
             return;
           } else {
-            searched.getAndAccumulate(i, SUM);
             i = 0;
           }
+        }
+        if (searchExhausted(attempts)) {
+          searched.getAndAccumulate(i, SUM);
+          return;
         }
       }
     } finally {

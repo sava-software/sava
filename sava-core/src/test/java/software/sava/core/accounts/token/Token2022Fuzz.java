@@ -1,8 +1,6 @@
-package software.sava.core.token;
+package software.sava.core.accounts.token;
 
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.accounts.token.Token2022;
-import software.sava.core.accounts.token.Token2022Account;
 import software.sava.core.accounts.token.extensions.TokenExtension;
 
 import java.util.Set;
