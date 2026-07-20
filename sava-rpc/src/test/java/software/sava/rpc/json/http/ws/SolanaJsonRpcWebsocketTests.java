@@ -8,12 +8,9 @@ import software.sava.rpc.json.http.response.*;
 
 import java.math.BigInteger;
 import java.net.URI;
-import java.net.http.WebSocket;
-import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
@@ -41,60 +38,6 @@ final class SolanaJsonRpcWebsocketTests {
         },
         null, null, null
     );
-  }
-
-  private static final class RecordingWebSocket implements WebSocket {
-
-    private final List<String> sentText = new ArrayList<>();
-
-    @Override
-    public CompletableFuture<WebSocket> sendText(final CharSequence data, final boolean last) {
-      sentText.add(data.toString());
-      return CompletableFuture.completedFuture(this);
-    }
-
-    @Override
-    public CompletableFuture<WebSocket> sendBinary(final ByteBuffer data, final boolean last) {
-      return CompletableFuture.completedFuture(this);
-    }
-
-    @Override
-    public CompletableFuture<WebSocket> sendPing(final ByteBuffer message) {
-      return CompletableFuture.completedFuture(this);
-    }
-
-    @Override
-    public CompletableFuture<WebSocket> sendPong(final ByteBuffer message) {
-      return CompletableFuture.completedFuture(this);
-    }
-
-    @Override
-    public CompletableFuture<WebSocket> sendClose(final int statusCode, final String reason) {
-      return CompletableFuture.completedFuture(this);
-    }
-
-    @Override
-    public void request(final long n) {
-    }
-
-    @Override
-    public String getSubprotocol() {
-      return "";
-    }
-
-    @Override
-    public boolean isOutputClosed() {
-      return false;
-    }
-
-    @Override
-    public boolean isInputClosed() {
-      return false;
-    }
-
-    @Override
-    public void abort() {
-    }
   }
 
   private static void feed(final SolanaJsonRpcWebsocket ws, final RecordingWebSocket socket, final String json) {

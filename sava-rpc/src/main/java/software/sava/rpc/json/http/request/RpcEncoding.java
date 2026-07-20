@@ -3,6 +3,14 @@ package software.sava.rpc.json.http.request;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonIterator;
 
+/// Wire encodings for account and transaction data.
+///
+/// `jsonParsed` is deliberately absent and should not be added. sava's purpose is
+/// to parse account and transaction data client side — asking the node to do it
+/// gives up the typed layouts this library exists to provide, costs more bytes on
+/// the wire, and only covers the programs the node happens to know. Generated
+/// serialization helpers for specific programs live in the sibling `idl-clients`
+/// project.
 public enum RpcEncoding {
 
   @Deprecated(forRemoval = true)

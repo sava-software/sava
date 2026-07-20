@@ -96,6 +96,8 @@ public interface ProgramAccountsRequest<T> {
       return this;
     }
 
+    /// @param dataSliceOffset byte offset into the account data to start at.
+    /// @param dataSliceLength bytes to return, 0 for the whole account.
     public Builder dataSliceLength(final int dataSliceOffset, final int dataSliceLength) {
       this.dataSliceOffset = dataSliceOffset;
       this.dataSliceLength = dataSliceLength;

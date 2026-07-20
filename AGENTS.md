@@ -13,6 +13,13 @@ own tests, PIT targets, and fuzz harnesses. When sava work surfaces a coverage g
 suspected bug in json-iterator, report it to the user; do not add tests, harness code, or
 fixes in that repo from a sava task.
 
+sava parses account and transaction data **client side**. Do not reach for the RPC
+`jsonParsed` encoding to avoid writing a parser — it gives up the typed layouts this
+library exists to provide, and only covers programs the node happens to know.
+`RpcEncoding` has no `jsonParsed` constant on purpose. Generated serialization helpers
+for specific programs live in the sibling `idl-clients` project; check there before
+adding program-specific parsing here.
+
 ## Quality gate & mutation ratchet
 
 The process contract for main-source changes (full policy: sava-build's

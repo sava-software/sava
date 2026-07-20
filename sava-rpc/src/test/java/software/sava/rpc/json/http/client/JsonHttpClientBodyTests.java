@@ -2,22 +2,9 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 
-import javax.net.ssl.SSLSession;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpHeaders;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.zip.GZIPOutputStream;
 
@@ -28,48 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 /// buggy provider". These drive [JsonHttpClient#readBody] directly with hostile
 /// and malformed responses rather than through a live server.
 final class JsonHttpClientBodyTests {
-
-  private record StubResponse<T>(T body, HttpHeaders headers) implements HttpResponse<T> {
-
-    /// `headerPairs` are flat name/value pairs.
-    static <T> StubResponse<T> of(final T body, final String... headerPairs) {
-      final var map = new java.util.LinkedHashMap<String, List<String>>();
-      for (int i = 0; i < headerPairs.length; i += 2) {
-        map.computeIfAbsent(headerPairs[i], _ -> new java.util.ArrayList<>()).add(headerPairs[i + 1]);
-      }
-      return new StubResponse<>(body, HttpHeaders.of(map, (_, _) -> true));
-    }
-
-    @Override
-    public int statusCode() {
-      return 200;
-    }
-
-    @Override
-    public HttpRequest request() {
-      return null;
-    }
-
-    @Override
-    public Optional<HttpResponse<T>> previousResponse() {
-      return Optional.empty();
-    }
-
-    @Override
-    public Optional<SSLSession> sslSession() {
-      return Optional.empty();
-    }
-
-    @Override
-    public URI uri() {
-      return URI.create("https://rpc.example.invalid");
-    }
-
-    @Override
-    public HttpClient.Version version() {
-      return HttpClient.Version.HTTP_2;
-    }
-  }
 
   private static byte[] ascii(final String s) {
     return s.getBytes(StandardCharsets.US_ASCII);
@@ -88,13 +33,13 @@ final class JsonHttpClientBodyTests {
   @Test
   void plainByteArrayBodyIsPassedThroughUntouched() {
     final byte[] body = ascii("{\"jsonrpc\":\"2.0\"}");
-    final byte[] read = JsonHttpClient.readBody(StubResponse.of(body));
+    final byte[] read = JsonHttpClient.readBody(StubHttpResponse.of(body));
     assertSame(body, read, "an unencoded body should not be copied");
   }
 
   @Test
   void nullBodyReadsAsNull() {
-    assertNull(JsonHttpClient.readBody(StubResponse.of(null)));
+    assertNull(JsonHttpClient.readBody(StubHttpResponse.of(null)));
   }
 
   @Test
@@ -102,13 +47,13 @@ final class JsonHttpClientBodyTests {
     final byte[] empty = new byte[0];
     // an empty body with a gzip header is not a valid gzip stream; the length
     // check has to come first or this would throw
-    assertSame(empty, JsonHttpClient.readBody(StubResponse.of(empty, "Content-Encoding", "gzip")));
+    assertSame(empty, JsonHttpClient.readBody(StubHttpResponse.of(empty, "Content-Encoding", "gzip")));
   }
 
   @Test
   void gzippedByteArrayBodyIsInflated() {
     final byte[] raw = ascii("{\"result\":[1,2,3]}");
-    final var response = StubResponse.of(gzip(raw), "Content-Encoding", "gzip");
+    final var response = StubHttpResponse.of(gzip(raw), "Content-Encoding", "gzip");
     assertArrayEquals(raw, JsonHttpClient.readBody(response));
   }
 
@@ -119,8 +64,9 @@ final class JsonHttpClientBodyTests {
     final byte[] raw = ascii("{\"ok\":true}");
     for (final String name : new String[]{"Content-Encoding", "content-encoding", "CONTENT-ENCODING"}) {
       for (final String value : new String[]{"gzip", "GZIP", "GzIp"}) {
-        assertArrayEquals(raw, JsonHttpClient.readBody(StubResponse.of(gzip(raw), name, value)),
-            name + ": " + value);
+        assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(gzip(raw), name, value)),
+            name + ": " + value
+        );
       }
     }
   }
@@ -130,14 +76,15 @@ final class JsonHttpClientBodyTests {
   void gzipIsFoundAmongMultipleEncodingHeaders() {
     final byte[] raw = ascii("{\"ok\":true}");
     assertArrayEquals(raw, JsonHttpClient.readBody(
-        StubResponse.of(gzip(raw), "Content-Encoding", "identity", "Content-Encoding", "gzip")));
+        StubHttpResponse.of(gzip(raw), "Content-Encoding", "identity", "Content-Encoding", "gzip"))
+    );
   }
 
   @Test
   void nonGzipEncodingsLeaveTheBodyAlone() {
     final byte[] body = ascii("{\"ok\":true}");
     for (final String encoding : new String[]{"identity", "deflate", "br", "compress", ""}) {
-      assertSame(body, JsonHttpClient.readBody(StubResponse.of(body, "Content-Encoding", encoding)), encoding);
+      assertSame(body, JsonHttpClient.readBody(StubHttpResponse.of(body, "Content-Encoding", encoding)), encoding);
     }
   }
 
@@ -145,7 +92,7 @@ final class JsonHttpClientBodyTests {
   void inputStreamBodyIsReadFully() {
     final byte[] raw = ascii("{\"result\":\"streamed\"}");
     final InputStream stream = new ByteArrayInputStream(raw);
-    assertArrayEquals(raw, JsonHttpClient.readBody(StubResponse.of(stream)));
+    assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(stream)));
   }
 
   @Test
@@ -153,12 +100,13 @@ final class JsonHttpClientBodyTests {
     final byte[] raw = ascii("{\"result\":\"streamed and squeezed\"}");
     final InputStream stream = new ByteArrayInputStream(gzip(raw));
     assertArrayEquals(raw, JsonHttpClient.readBody(
-        StubResponse.of(stream, "Content-Encoding", "gzip")));
+        StubHttpResponse.of(stream, "Content-Encoding", "gzip"))
+    );
   }
 
   @Test
   void nullInputStreamReadsAsNull() {
-    assertNull(JsonHttpClient.readBody(StubResponse.of((InputStream) null)));
+    assertNull(JsonHttpClient.readBody(StubHttpResponse.of((InputStream) null)));
   }
 
   /// The Solana RPC server does not send Content-Length, so the gzip path falls
@@ -170,7 +118,8 @@ final class JsonHttpClientBodyTests {
     new Random(42).nextBytes(raw);
     final InputStream stream = new ByteArrayInputStream(gzip(raw));
     assertArrayEquals(raw, JsonHttpClient.readBody(
-        StubResponse.of(stream, "Content-Encoding", "gzip")));
+        StubHttpResponse.of(stream, "Content-Encoding", "gzip"))
+    );
   }
 
   @Test
@@ -178,14 +127,16 @@ final class JsonHttpClientBodyTests {
     final byte[] raw = ascii("{\"result\":\"a body much longer than the declared length\"}");
     final var gzipped = gzip(raw);
     // deliberately wrong, but small and positive: correctness must not depend on it
-    assertArrayEquals(raw, JsonHttpClient.readBody(StubResponse.of(
-        new ByteArrayInputStream(gzipped), "Content-Encoding", "gzip", "Content-Length", "1")));
+    assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(
+        new ByteArrayInputStream(gzipped), "Content-Encoding", "gzip", "Content-Length", "1"))
+    );
   }
 
   @Test
   void unsupportedBodyTypeIsRejected() {
     final var ex = assertThrows(IllegalArgumentException.class,
-        () -> JsonHttpClient.readBody(StubResponse.of("a String body")));
+        () -> JsonHttpClient.readBody(StubHttpResponse.of("a String body"))
+    );
     assertTrue(ex.getMessage().contains("Unsupported response body type"), ex.getMessage());
     assertTrue(ex.getMessage().contains("String"), ex.getMessage());
   }
@@ -194,7 +145,7 @@ final class JsonHttpClientBodyTests {
   void readHttpResponseReturnsItsAlreadyReadBody() {
     final byte[] alreadyRead = ascii("{\"cached\":true}");
     // the wrapped response carries a different body, which must be ignored
-    final var wrapped = new ReadHttpResponse<>(StubResponse.of(ascii("ignored")), alreadyRead);
+    final var wrapped = new ReadHttpResponse<>(StubHttpResponse.of(ascii("ignored")), alreadyRead);
     assertSame(alreadyRead, JsonHttpClient.readBody(wrapped));
   }
 
@@ -203,7 +154,8 @@ final class JsonHttpClientBodyTests {
   @Test
   void gzipHeaderOnAPlainBodyFails() {
     final var ex = assertThrows(UncheckedIOException.class, () -> JsonHttpClient.readBody(
-        StubResponse.of(ascii("{\"not\":\"compressed\"}"), "Content-Encoding", "gzip")));
+        StubHttpResponse.of(ascii("{\"not\":\"compressed\"}"), "Content-Encoding", "gzip"))
+    );
     assertInstanceOf(java.util.zip.ZipException.class, ex.getCause());
   }
 
@@ -212,9 +164,11 @@ final class JsonHttpClientBodyTests {
     final byte[] full = gzip(ascii("{\"result\":\"a body that gets cut off part way through\"}"));
     final byte[] truncated = Arrays.copyOf(full, full.length / 2);
     assertThrows(UncheckedIOException.class, () -> JsonHttpClient.readBody(
-        StubResponse.of(truncated, "Content-Encoding", "gzip")));
+        StubHttpResponse.of(truncated, "Content-Encoding", "gzip"))
+    );
     assertThrows(UncheckedIOException.class, () -> JsonHttpClient.readBody(
-        StubResponse.of(new ByteArrayInputStream(truncated), "Content-Encoding", "gzip")));
+        StubHttpResponse.of(new ByteArrayInputStream(truncated), "Content-Encoding", "gzip"))
+    );
   }
 
   @Test
@@ -222,7 +176,8 @@ final class JsonHttpClientBodyTests {
     final byte[] garbage = new byte[512];
     new Random(7).nextBytes(garbage);
     assertThrows(UncheckedIOException.class, () -> JsonHttpClient.readBody(
-        StubResponse.of(garbage, "Content-Encoding", "gzip")));
+        StubHttpResponse.of(garbage, "Content-Encoding", "gzip"))
+    );
   }
 
   /// Content-Length is server controlled, unrelated to the bytes actually sent,
@@ -251,10 +206,12 @@ final class JsonHttpClientBodyTests {
         "",                     // empty
     };
     for (final String contentLength : hostile) {
-      assertArrayEquals(raw, JsonHttpClient.readBody(StubResponse.of(
+      assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(
               new ByteArrayInputStream(gzip(raw)),
-              "Content-Encoding", "gzip", "Content-Length", contentLength)),
-          "Content-Length: " + contentLength);
+              "Content-Encoding", "gzip", "Content-Length", contentLength
+          )),
+          "Content-Length: " + contentLength
+      );
     }
   }
 
@@ -266,9 +223,11 @@ final class JsonHttpClientBodyTests {
     new Random(11).nextBytes(raw);
     final var gzipped = gzip(raw);
     // honest length, well past MAX_GZIP_BUFFER
-    assertArrayEquals(raw, JsonHttpClient.readBody(StubResponse.of(
-        new ByteArrayInputStream(gzipped),
-        "Content-Encoding", "gzip", "Content-Length", Integer.toString(gzipped.length))));
+    assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(
+            new ByteArrayInputStream(gzipped),
+            "Content-Encoding", "gzip", "Content-Length", Integer.toString(gzipped.length)
+        ))
+    );
   }
 
   /// The equivalent byte[] path sizes from the array itself, so the same hostile
@@ -276,7 +235,8 @@ final class JsonHttpClientBodyTests {
   @Test
   void hostileContentLengthIsHarmlessOnTheByteArrayPath() {
     final byte[] raw = ascii("{\"ok\":true}");
-    assertArrayEquals(raw, JsonHttpClient.readBody(StubResponse.of(
-        gzip(raw), "Content-Encoding", "gzip", "Content-Length", "2147483648")));
+    assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(
+        gzip(raw), "Content-Encoding", "gzip", "Content-Length", "2147483648"))
+    );
   }
 }
