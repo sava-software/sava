@@ -2,14 +2,20 @@ package software.sava.rpc.json.http.client;
 
 import systems.comodal.jsoniter.JsonIterator;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.*;
+import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.zip.GZIPInputStream;
 
 import static java.lang.System.Logger.Level.DEBUG;
@@ -19,6 +25,30 @@ import static java.net.http.HttpResponse.BodyHandlers.ofInputStream;
 public abstract class JsonHttpClient {
 
   private static final System.Logger logger = System.getLogger(JsonHttpClient.class.getName());
+
+  /// Read buffer for the gzip path. Only a chunk size — inflating is done by
+  /// `readAllBytes`, which grows on its own — but [GZIPInputStream] allocates
+  /// this buffer eagerly, and the size comes from a Content-Length the server
+  /// controls. Left unclamped a provider sizes a client-side allocation at will:
+  /// `Content-Length: 200000000` against a 31 byte body allocates 200MB.
+  ///
+  /// The bound stays deliberately tight because a bigger read buffer buys
+  /// nothing: `readAllBytes` owns the growth, so this is only the inflate chunk
+  /// size and it does not scale with the response. Swept against a real 5.7MB
+  /// mainnet `getBlock` response, from both an in-memory and a chunked
+  /// network-like source:
+  ///
+  ///   512B    9.6-10.3 ms   11.39 MB allocated
+  ///   4KiB    8.6- 8.7 ms   11.39 MB
+  ///   64KiB   8.5- 8.9 ms   11.45 MB
+  ///   1MiB    8.7- 8.8 ms   12.44 MB
+  ///
+  /// Flat from 4KiB up, and above 64KiB allocation climbs because the buffer
+  /// itself is allocated per request. The only real effect is a floor — 512
+  /// bytes costs 12-20% — so [#MIN_GZIP_BUFFER] is a floor worth keeping and
+  /// raising either bound has no measured upside.
+  private static final int MIN_GZIP_BUFFER = 4_096;
+  private static final int MAX_GZIP_BUFFER = 1 << 20;
 
   protected final URI endpoint;
   protected final HttpClient httpClient;
@@ -73,10 +103,8 @@ public abstract class JsonHttpClient {
       return body;
     }
     if (JsonHttpClient.isGzipEncoded(response)) {
-      try (final var gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(body), body.length);
-           final var byteArrayOutputStream = new ByteArrayOutputStream(body.length << 2)) {
-        gzipInputStream.transferTo(byteArrayOutputStream);
-        return byteArrayOutputStream.toByteArray();
+      try (final var gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(body), body.length)) {
+        return gzipInputStream.readAllBytes();
       } catch (final IOException e) {
         throw new UncheckedIOException(e);
       }
@@ -85,19 +113,47 @@ public abstract class JsonHttpClient {
     }
   }
 
+  /// Clamps the declared Content-Length into a sane buffer size. Nothing about
+  /// this header is trustworthy: it is server controlled, unrelated to the bytes
+  /// actually sent, and need not even be a number. A value past int range used to
+  /// narrow to a negative or zero buffer and escape as an IllegalArgumentException
+  /// rather than the UncheckedIOException the rest of this path throws; a large
+  /// in-range value used to allocate exactly that many bytes up front.
+  ///
+  /// Against the Solana RPC servers the header is simply never here: they
+  /// compress on the fly, so the compressed length is not known when the headers
+  /// are written and they omit it (HTTP/2) or fall back to chunked (HTTP/1.1).
+  /// Verified with curl — an uncompressed `getSlot` returns `content-length: 44`
+  /// on both HTTP versions, and the same request with `Accept-Encoding: gzip`
+  /// returns none. Content-Length and gzip are mutually exclusive by
+  /// construction for any server streaming its compression, so there is nothing
+  /// to raise upstream; this call just falls through to [#MIN_GZIP_BUFFER].
+  ///
+  /// It is still read because a buffering proxy or CDN compresses fully before
+  /// responding and can legally send both — which is exactly the untrusted,
+  /// non-Solana-origin value the clamp exists to bound.
+  ///
+  /// @return a size between [#MIN_GZIP_BUFFER] and [#MAX_GZIP_BUFFER], falling
+  /// back to the minimum when the header is absent or unparseable.
+  private static int gzipBufferSize(final HttpResponse<?> response) {
+    final long contentLength;
+    try {
+      contentLength = response.headers().firstValueAsLong("Content-Length").orElse(MIN_GZIP_BUFFER);
+    } catch (final NumberFormatException e) {
+      logger.log(System.Logger.Level.DEBUG, "Ignoring unparseable Content-Length from {0}", response.uri());
+      return MIN_GZIP_BUFFER;
+    }
+    return Math.clamp(contentLength, MIN_GZIP_BUFFER, MAX_GZIP_BUFFER);
+  }
+
   private static byte[] readInputStream(final HttpResponse<?> response, final InputStream inputStream) {
     if (inputStream == null) {
       return null;
     }
     try {
       if (JsonHttpClient.isGzipEncoded(response)) {
-        final int bufferSize = (int) response.headers()
-            .firstValueAsLong("Content-Length")
-            .orElse(4_096); // TODO: raise issue that the Solana RPC server does not provide this response header.
-        try (final var gzipInputStream = new GZIPInputStream(inputStream, bufferSize);
-             final var byteArrayOutputStream = new ByteArrayOutputStream(bufferSize << 2)) {
-          gzipInputStream.transferTo(byteArrayOutputStream);
-          return byteArrayOutputStream.toByteArray();
+        try (final var gzipInputStream = new GZIPInputStream(inputStream, JsonHttpClient.gzipBufferSize(response))) {
+          return gzipInputStream.readAllBytes();
         }
       } else {
         return inputStream.readAllBytes();

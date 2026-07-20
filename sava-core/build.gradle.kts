@@ -58,6 +58,17 @@ hardening {
     )
     targetTests = "software.sava.core.accounts.token.*Test*"
   }
+  mutation.register("crypto") {
+    // hashing primitives: sha256Twice and h160 have no caller in this repo, so
+    // tests are the only thing that would notice them breaking
+    targetClasses = listOf("software.sava.core.crypto.*")
+    excludedClasses = listOf(
+      // the ed25519 subpackage has its own suite; the wildcard above spans dots
+      "software.sava.core.crypto.ed25519.*",
+      "software.sava.core.crypto.*Test*"
+    )
+    targetTests = "software.sava.core.crypto.HashTests,software.sava.core.crypto.HmacTests"
+  }
   mutation.register("vanity") {
     // DELIBERATE DEVIATION from the package-wildcard rule: this suite allowlists
     // the Subsequence pair instead of taking software.sava.core.accounts.vanity.*.

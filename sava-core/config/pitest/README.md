@@ -84,6 +84,24 @@ last `i += pendingBurn.length` before the return is a dead store — nothing
 reads `i` afterwards. Kept for symmetry with the preceding field reads;
 refactoring it away would remove the mutant.
 
+## crypto suite — no accepted mutants
+
+`crypto-accepted.csv` is empty and the suite runs at 100% (12 mutants). Keep it
+that way.
+
+`Hash.sha256Twice` and `Hash.h160` have no caller anywhere in the repo. They
+were kept rather than deprecated — unlike `Hmac.hmacSHA512`, which was
+deprecated because it was wrong — since they are correct, tiny, and removing
+`h160` would not shed the BouncyCastle dependency (ed25519, `Signer`,
+`PublicKey` and Argon2id all need it). Being uncalled is exactly why they are
+pinned to published vectors *and* differentially checked against a naive
+two-instance implementation: `sha256Twice` reuses one `MessageDigest` across
+both rounds and depends on `digest()` resetting it, so comparing against the
+same technique twice would prove nothing.
+
+The `ed25519` subpackage is excluded here — it has its own suite, and the
+`crypto.*` wildcard spans dots.
+
 ## vanity suite — no accepted mutants
 
 `vanity-accepted.csv` is empty and the suite runs at 100%. Keep it that way:
