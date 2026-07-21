@@ -1,5 +1,18 @@
 # Changelog
 
+## [25.8.1](https://github.com/sava-software/sava/compare/25.8.0...25.8.1) (2026-07-21)
+
+
+### Features
+
+* **core:** Improve conversion of u64 that exceed the max value of i64. ([8fb4c56](https://github.com/sava-software/sava/commit/8fb4c56b867d9aea198c6bbbee70e10f6146b46a))
+
+
+### Bug Fixes
+
+* **core:** Merging invoked accounts into write only accounts. ([0844b5d](https://github.com/sava-software/sava/commit/0844b5d4b8a1c6f1976b5ac75f889d66d8333a86))
+* **rpc:** Protect against malicious Content-Length header leading to OOM ([2a89159](https://github.com/sava-software/sava/commit/2a89159ee04f7abff55f9e987331a9aac4f6da12))
+
 ## [25.8.0](https://github.com/sava-software/sava/compare/25.7.0...25.8.0) (2026-07-19)
 
 
