@@ -1,33 +1,7 @@
 plugins {
   id("software.sava.build.feature.hardening")
+  id("sava.docs-in-sync")
 }
-
-// See the equivalent block in sava-core: AGENTS.md's suite list is derivable from these
-// registrations, so the build checks it rather than trusting a prose reminder.
-val docsInSync = tasks.register("docsInSync") {
-  group = "verification"
-  description = "Fails when a registered mutation suite is not named in AGENTS.md."
-  val agentsDoc = rootProject.layout.projectDirectory.file("AGENTS.md").asFile
-  val suiteTasks = hardening.mutation.names.map { "pitest" + it.replaceFirstChar(Char::uppercase) }
-  val projectPath = project.path
-  inputs.file(agentsDoc)
-  inputs.property("suites", suiteTasks)
-  doLast {
-    val doc = agentsDoc.readText()
-    val missing = suiteTasks.filterNot(doc::contains)
-    if (missing.isNotEmpty()) {
-      throw GradleException(
-        "AGENTS.md does not mention ${missing.size} mutation suite(s) registered by $projectPath:\n" +
-            missing.joinToString("\n") { "  $it" } +
-            "\nAdd them to the 'Quality gate & mutation ratchet' section, with the package each covers."
-      )
-    }
-  }
-}
-
-// In check as well as qualityGate — CI runs only check; see sava-core.
-tasks.named("check") { dependsOn(docsInSync) }
-tasks.named("qualityGate") { dependsOn(docsInSync) }
 
 testModuleInfo {
   requires("jdk.httpserver")
@@ -44,19 +18,31 @@ hardening {
     // wildcard picks up the drift check and the stub helpers unless they are named
     excludedClasses = listOf(
       "software.sava.rpc.json.http.client.*Test*",
-      "software.sava.rpc.json.http.client.*Check",
+      "software.sava.rpc.json.http.client.*Check*",
       "software.sava.rpc.json.http.client.Stub*",
       // a git-ignored local scratch driver; not part of the build contract
-      "software.sava.rpc.json.http.client.Integ"
+      "software.sava.rpc.json.http.client.Integ*"
     )
     targetTests = "software.sava.rpc.json.http.client.*Test*"
+  }
+  mutation.register("ws") {
+    // subscription bookkeeping, reconnect throttling, and ping pacing; time-dependent
+    // paths run against the NanoClock seam so tests advance time instead of waiting
+    targetClasses = listOf("software.sava.rpc.json.http.ws.*")
+    excludedClasses = listOf(
+      // TestClock matches *Test*; the no-network fakes are named for their role
+      "software.sava.rpc.json.http.ws.*Test*",
+      "software.sava.rpc.json.http.ws.Recording*"
+    )
+    targetTests = "software.sava.rpc.json.http.ws.*Test*"
   }
   mutation.register("responses") {
     // the hand-rolled json_iterator field predicates parse whatever an RPC node returns;
     // a compromised or buggy provider is the threat model
     targetClasses = listOf("software.sava.rpc.json.http.response.*")
-    // the whitebox parser tests live inside the targeted package
-    excludedClasses = listOf("software.sava.rpc.json.http.response.*Tests")
+    // the whitebox parser tests live inside the targeted package; trailing wildcard
+    // so a helper nested in a test class stays excluded too
+    excludedClasses = listOf("software.sava.rpc.json.http.response.*Tests*")
     targetTests = "software.sava.rpc.json.http.client.*Test*,software.sava.rpc.json.http.response.*Test*"
   }
 }
@@ -65,8 +51,4 @@ configurations.all {
   resolutionStrategy {
     force("software.sava:json-iterator:25.3.0")
   }
-}
-
-dependencies {
-  project(":sava-core")
 }

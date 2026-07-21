@@ -36,6 +36,8 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
+<!-- hardening-template sha256:96ddf18dcc3a -->
+
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
 - **Scale verification to the change.** Iterate with the module's `test` task;
@@ -52,8 +54,8 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   `-PnoMutationHistory` so release numbers are re-earned from scratch.
 - Suites: sava-core has `pitestBorsh`, `pitestEd25519`, `pitestEncoding`, `pitestTx`
   (`tx` + `accounts/lookup`), `pitestToken2022`, `pitestMeta`, `pitestDecimal`
-  (`core/util`), `pitestCrypto` and `pitestVanity`; sava-rpc has `pitestResponses`
-  and `pitestClient`. Per-suite scope decisions and exceptions are in
+  (`core/util`), `pitestCrypto` and `pitestVanity`; sava-rpc has `pitestResponses`,
+  `pitestClient` and `pitestWs`. Per-suite scope decisions and exceptions are in
   `HARDENING_NOTES.md`.
 - Every `pitest<Suite>` run prints its own summary — `killed/total (%)` plus the
   survived/uncovered split — and warns if the suite is mutating its own test
@@ -104,7 +106,14 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   in every candidate suite here (trial table in `HARDENING_NOTES.md`) — left
   off; re-trial if Big arithmetic is introduced.
 - Fuzz findings become a committed seed input **and** a named regression test, never
-  just a fix.
+  just a fix — and every committed corpus is replayed by a unit test inside `check`
+  (`Token2022CorpusReplayTests`, `TransactionSkeletonCorpusReplayTests`), so a new
+  seed replays automatically and the corpus cannot rot between fuzz runs.
+- **When one thing has two representations, fuzz the differential.** An
+  encode/decode round trip, an eager view beside a lazy overlay: assert the two
+  *agree* rather than that neither crashes — crash-only fuzzing cannot see a wrong
+  answer. The existing harnesses all carry such invariants; keep new ones to that
+  bar.
 
 ## Verifying your own work
 
@@ -130,8 +139,17 @@ The failure modes here are ones that look like success:
 
 The mutation suite list above is checked by the build: `:sava-core:docsInSync` and
 `:sava-rpc:docsInSync` fail when a registered suite is not named here, and both are
-wired into `check` (so CI enforces them) as well as `qualityGate`. Prefer that
-pattern over prose reminders for anything else derivable from the build.
+wired into `check` (so CI enforces them) as well as `qualityGate`. The task is
+defined once by the `sava.docs-in-sync` convention plugin in `gradle/plugins`
+(repo-local plugins, included from `settings.gradle.kts`). Prefer that pattern
+over prose reminders for anything else derivable from the build.
+
+The quality-gate block itself is checked the same way from the other direction:
+the hardening plugin's `agentsTemplateInSync` task (also in `check`) fails when
+sava-build's agent-instructions template changes until the block here is re-diffed
+against it and the `hardening-template` marker above is updated to the digest the
+failure prints. Sync or **act on** each changed bullet before updating the marker
+— a new template requirement may mean new code, not just new prose.
 
 Machine-specific context (local clone paths, environment notes) belongs in
 `AGENTS.local.md`, which is git-ignored. Keep this file portable.

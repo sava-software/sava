@@ -18,7 +18,3 @@ jlinkApplication {
   compress = "zip-6"
   vm = "server"
 }
-
-dependencies {
-  project(":sava-core")
-}

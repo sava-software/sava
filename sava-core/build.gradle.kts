@@ -1,39 +1,7 @@
 plugins {
   id("software.sava.build.feature.hardening")
+  id("sava.docs-in-sync")
 }
-
-// AGENTS.md names the mutation suites so an agent knows which one owns the code it
-// touched. That list is derivable from the registrations below, so it drifts silently
-// whenever a suite is added — it already did. Fail the build instead of relying on a
-// prose reminder.
-val docsInSync = tasks.register("docsInSync") {
-  group = "verification"
-  description = "Fails when a registered mutation suite is not named in AGENTS.md."
-  val agentsDoc = rootProject.layout.projectDirectory.file("AGENTS.md").asFile
-  // resolved at configuration time so the task stays configuration-cache friendly
-  val suiteTasks = hardening.mutation.names.map { "pitest" + it.replaceFirstChar(Char::uppercase) }
-  val projectPath = project.path
-  inputs.file(agentsDoc)
-  inputs.property("suites", suiteTasks)
-  doLast {
-    val doc = agentsDoc.readText()
-    val missing = suiteTasks.filterNot(doc::contains)
-    if (missing.isNotEmpty()) {
-      throw GradleException(
-        "AGENTS.md does not mention ${missing.size} mutation suite(s) registered by $projectPath:\n" +
-            missing.joinToString("\n") { "  $it" } +
-            "\nAdd them to the 'Quality gate & mutation ratchet' section, with the package each covers."
-      )
-    }
-  }
-}
-
-// Wired into check, not just qualityGate: CI deliberately runs only check (the
-// serialized PIT suites are the cost being avoided, and this task reads two
-// files), so without this the doc drift it exists to catch would go unenforced
-// between releases.
-tasks.named("check") { dependsOn(docsInSync) }
-tasks.named("qualityGate") { dependsOn(docsInSync) }
 
 testModuleInfo {
   requires("org.junit.jupiter.api")

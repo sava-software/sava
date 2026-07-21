@@ -24,6 +24,9 @@ pluginManagement {
   if (settingsDir.resolve("../sava-build").isDirectory) {
     includeBuild("../sava-build")
   }
+  // Repo-local convention plugins (e.g. 'sava.docs-in-sync') — conventions that
+  // belong to this repo rather than sava-build.
+  includeBuild("gradle/plugins")
 }
 
 plugins {

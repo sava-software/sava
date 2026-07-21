@@ -60,6 +60,28 @@ nothing.
 DEBUG log call and a header append that the request builder overwrites anyway.
 Neither is observable.
 
+## Untriaged debt — ws suite
+
+Seeded 2026-07-21 when the `ws` suite was added over
+`software.sava.rpc.json.http.ws.*`, alongside the `NanoClock` seam that made
+its time-dependent paths (reconnect throttle, ping pacing) deterministically
+testable at all. 247 entries — 134 SURVIVED and 128 NO_COVERAGE at seeding,
+from a population of 526 (50% detected). **This is triage debt made explicit,
+not acceptance**: the population has not been worked, and every entry is a
+candidate for outcome 1 (kill) or 2 (refactor) before any is recorded here as
+equivalent. The bulk sits in `SolanaJsonRpcWebsocket`'s subscribe/unsubscribe
+bookkeeping and notification dispatch, which the existing listener-path tests
+drive only partially.
+
+One row is flip insurance, observed 2026-07-21 during seeding:
+`SolanaJsonRpcWebsocket,run,177,RemoveConditionalMutator_EQUAL_IF` flipped
+detected↔SURVIVED between two otherwise identical runs. Line 177 is the
+`webSocket != null` guard inside the background subscription thread's loop,
+so its coverage is attributed by a thread racing the test scheduler — the
+known background-thread variant of the wandering-count causes. It stays in
+the baseline as an observed flip; re-measure if the loop gains a
+deterministic driver.
+
 ## Triaged equivalent mutants (accepted with reasons)
 
 Triaged 2026-07-18 — all 8 `responses` baseline entries are accepted

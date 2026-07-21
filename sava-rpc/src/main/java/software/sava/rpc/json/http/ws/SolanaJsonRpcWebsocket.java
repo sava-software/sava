@@ -39,6 +39,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final SolanaAccounts solanaAccounts;
   private final Commitment defaultCommitment;
   private final Timings timings;
+  private final NanoClock clock;
   private final WebSocket.Builder webSocketBuilder;
   private final ExecutorService executorService;
   private final Consumer<SolanaRpcWebsocket> onOpen;
@@ -73,6 +74,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final Commitment defaultCommitment,
                          final WebSocket.Builder webSocketBuilder,
                          final Timings timings,
+                         final NanoClock clock,
                          final Consumer<SolanaRpcWebsocket> onOpen,
                          final OnClose onClose,
                          final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
@@ -82,6 +84,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.solanaAccounts = solanaAccounts;
     this.defaultCommitment = defaultCommitment;
     this.timings = timings;
+    this.clock = clock;
     this.webSocketBuilder = webSocketBuilder;
     this.onOpen = onOpen;
     this.onClose = onClose;
@@ -138,13 +141,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public CompletableFuture<?> connect() {
     if (!closed()) {
       this.webSocket = null;
-      final long now = System.currentTimeMillis();
+      final long now = clock.currentTimeMillis();
       final long millisSinceLastWrite = now - this.lastWrite.get();
       if (millisSinceLastWrite < timings.reConnectDelay()) {
         final long delay = this.timings.reConnectDelay() - millisSinceLastWrite;
         final var delayedExecutor = CompletableFuture.delayedExecutor(delay, MILLISECONDS);
         return CompletableFuture.supplyAsync(() -> {
-              this.lastWrite.set(System.currentTimeMillis());
+              this.lastWrite.set(clock.currentTimeMillis());
               return this.webSocketBuilder.buildAsync(this.endpoint, this).join();
             }, delayedExecutor
         );
@@ -694,7 +697,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     try {
       final var msg = this.pendingUnSubscriptions.remove(subId);
       sendText(webSocket, msg == null ? createUnSubMsg(unSubscribeMethod, subId) : msg);
-      this.lastWrite.set(System.currentTimeMillis());
+      this.lastWrite.set(clock.currentTimeMillis());
     } finally {
       lock.unlock();
     }
@@ -931,7 +934,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   private void handlePendingSubscriptions(final WebSocket webSocket) {
-    final long now = System.currentTimeMillis();
+    final long now = clock.currentTimeMillis();
     // Mark lastWrite to try to prevent a concurrent ping.
     final long previousSend = this.lastWrite.getAndSet(now);
     if (this.pendingSubscriptions.isEmpty()) {
@@ -957,7 +960,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   private void sendPing(final WebSocket webSocket) {
-    final long now = System.currentTimeMillis();
+    final long now = clock.currentTimeMillis();
     final long millisSinceLastWrite = now - this.lastWrite.get();
     if (millisSinceLastWrite > this.timings.pingDelay()) {
       final long previousWrite = this.lastWrite.getAndSet(now);

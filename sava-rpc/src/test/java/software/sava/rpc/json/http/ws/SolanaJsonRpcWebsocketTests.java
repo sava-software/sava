@@ -32,6 +32,7 @@ final class SolanaJsonRpcWebsocketTests {
         Commitment.CONFIRMED,
         null,
         TIMINGS,
+        new TestClock(),
         _ -> {
         },
         (_, _, _) -> {

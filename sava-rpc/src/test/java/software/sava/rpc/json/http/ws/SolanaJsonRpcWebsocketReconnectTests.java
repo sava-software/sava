@@ -7,6 +7,7 @@ import software.sava.rpc.json.http.request.Commitment;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -40,10 +41,17 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
   private static SolanaJsonRpcWebsocket websocket(final Timings timings) {
-    return websocket(timings, null, null);
+    return websocket(timings, new TestClock(), null, null);
   }
 
   private static SolanaJsonRpcWebsocket websocket(final Timings timings,
+                                                  final Consumer<SolanaRpcWebsocket> onOpen,
+                                                  final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
+    return websocket(timings, new TestClock(), onOpen, onError);
+  }
+
+  private static SolanaJsonRpcWebsocket websocket(final Timings timings,
+                                                  final NanoClock clock,
                                                   final Consumer<SolanaRpcWebsocket> onOpen,
                                                   final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
     return new SolanaJsonRpcWebsocket(
@@ -52,6 +60,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
         Commitment.CONFIRMED,
         null,
         timings,
+        clock,
         onOpen,
         (_, _, _) -> {
         },
@@ -91,6 +100,59 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       final var second = new RecordingWebSocket();
       ws.onOpen(second);
       assertNotSent(second, "slotSubscribe");
+    }
+  }
+
+  /// The other side of the throttle: once the reconnect window has elapsed, an
+  /// unconfirmed subscription is re-sent on the next check. An incoming ping drives
+  /// that check synchronously; the clock steps over the window instead of waiting.
+  @Test
+  void unconfirmedSubscriptionIsResentOnceTheReconnectDelayElapses() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, clock, null, null)) {
+      assertTrue(ws.slotSubscribe(_ -> {
+      }));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertSent(socket, "slotSubscribe", "");
+      final int sentOnOpen = socket.sentText.size();
+
+      // still inside the window: the check must skip it
+      ws.onPing(socket, ByteBuffer.allocate(0));
+      assertEquals(sentOnOpen, socket.sentText.size(), "resend inside the window: " + socket.sentText);
+
+      clock.advanceMillis(TIMINGS.reConnectDelay() + 1);
+      ws.onPing(socket, ByteBuffer.allocate(0));
+      assertEquals(sentOnOpen + 1, socket.sentText.size(),
+          "the unconfirmed subscription should be re-sent after the window: " + socket.sentText);
+      assertSent(socket, "slotSubscribe", "");
+    }
+  }
+
+  /// Ping pacing: a quiet connection is pinged only once `pingDelay` has elapsed
+  /// since the last write, and a sent ping counts as that write — a second check
+  /// inside the window must not ping again. `lastWrite` starts at 0, so against
+  /// epoch-scale clock readings the very first quiet check always pings; pinned
+  /// here as existing behaviour, not endorsed.
+  @Test
+  void quietConnectionIsPingedOnlyAfterPingDelay() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, clock, null, null)) {
+      // no subscriptions: every check is a pure ping decision
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertEquals(1, socket.pings, "nothing has ever been written, so the first check pings");
+
+      ws.onPing(socket, ByteBuffer.allocate(0));
+      assertEquals(1, socket.pings, "the ping itself is a write; no re-ping inside the window");
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      ws.onPing(socket, ByteBuffer.allocate(0));
+      assertEquals(2, socket.pings, "a quiet connection should be pinged after pingDelay");
+
+      ws.onPing(socket, ByteBuffer.allocate(0));
+      assertEquals(2, socket.pings, "and the window restarts from the new ping");
     }
   }
 

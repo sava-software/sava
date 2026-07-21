@@ -54,6 +54,7 @@ mutators can reach, so do not re-enable them on a hunch.
 | --- | --- | --- |
 | `pitestResponses` | `json.http.response.*` | Debt free — keep it that way. |
 | `pitestClient` | `json.http.client.*` | Carries real coverage debt; see below. |
+| `pitestWs` | `json.http.ws.*` | Seeded 2026-07-21 with untriaged debt; see below. |
 
 ### `pitestClient` — the debt is deliberate and documented
 
@@ -67,9 +68,29 @@ Clearing those needs new harness scaffolding — a local server exercising the G
 and no-wrap routes — not another `registerRequest` line. Reasons are grouped by
 family in `sava-rpc/config/pitest/README.md`.
 
-Exclusions must name `*Check` and `Stub*` as well as `*Test*`: test sources share
-this package and shared fakes are named for their role. The verify task warns if
-this regresses.
+Exclusions must name `*Check*` and `Stub*` as well as `*Test*`: test sources share
+this package and shared fakes are named for their role. Trailing wildcards
+throughout, per HARDENING.md — `*Check` would stop matching the moment a drift
+check grows a nested helper. The verify task warns if this regresses.
+
+### `pitestWs` — seeded with untriaged debt, and one background-thread flip
+
+Registered 2026-07-21 together with the `NanoClock` seam
+(`SolanaRpcWebsocket.Builder#clock`, mirroring ravina's
+`software.sava.services.core.NanoClock`): `SolanaJsonRpcWebsocket`'s reconnect
+throttle and ping pacing previously read `System.currentTimeMillis()` directly,
+so the package could not meet the determinism requirement and was left without
+a suite. The clock lives in the `ws` package deliberately, so this suite
+mutates it; `NanoClockTests` (ported from ravina) covers it, and the reconnect
+tests step a `TestClock` over the throttle and ping windows instead of waiting.
+
+Seeded at 50% detected (247 baseline entries) — untriaged debt, worked from
+here; the breakdown is in `config/pitest/README.md`. The websocket starts a
+background subscription thread in its constructor, and coverage of that
+thread's loop races the test scheduler: `run:177` was observed to flip
+detected↔SURVIVED between identical runs and stays in the baseline as flip
+insurance. Fakes are named `Recording*` and excluded alongside `*Test*`
+(which also matches `TestClock`).
 
 ## sava-vanity
 
@@ -173,3 +194,16 @@ sickness) are recorded in sava-build's HARDENING.md under "Transient
 infrastructure failures". The verify task's missing-report error now says the
 run may have just failed (it previously said "run pitestEncoding first",
 burying the real error above it).
+
+## Fuzz corpus replay (resolved 2026-07-21)
+
+The shared doc expects committed seed corpora to be replayed inside `check`.
+sava-core's `fuzz/token2022` (2 seeds) and `fuzz/txSkeleton` (4 seeds) were
+read only by their fuzz harnesses, so they could rot between fuzz runs.
+Closed with a replay test per corpus (`Token2022CorpusReplayTests`,
+`TransactionSkeletonCorpusReplayTests`), following json-iterator's
+`TestFuzzCorpusReplay`: list the resource directory, fail on an empty corpus,
+feed every seed through `fuzzerTestOneInput`. Each lives in its harness's
+package, so the `*Test*` wildcards feed it to the matching PIT suite and the
+corpus doubles as a mutant oracle. New seeds — including minimized fuzz
+findings — replay automatically.

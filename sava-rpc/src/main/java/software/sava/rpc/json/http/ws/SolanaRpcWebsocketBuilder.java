@@ -13,6 +13,7 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
 
   private URI wsUri;
   private WebSocket.Builder webSocketBuilder;
+  private NanoClock clock = NanoClock.SYSTEM;
   private long reConnectDelay = 3_000;
   private long pingDelay = 15_000;
   private long subscriptionAndPingCheckDelay = 2_000;
@@ -33,6 +34,7 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
         wsUri, solanaAccounts, commitment,
         webSocketBuilder.connectTimeout(Duration.ofMillis(reConnectDelay)),
         new Timings(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay),
+        clock == null ? NanoClock.SYSTEM : clock,
         onOpen,
         onClose,
         onError,
@@ -86,6 +88,17 @@ public final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Build
   public SolanaRpcWebsocket.Builder webSocketBuilder(final WebSocket.Builder webSocketBuilder) {
     this.webSocketBuilder = webSocketBuilder;
     return this;
+  }
+
+  @Override
+  public SolanaRpcWebsocket.Builder clock(final NanoClock clock) {
+    this.clock = clock;
+    return this;
+  }
+
+  @Override
+  public NanoClock clock() {
+    return clock;
   }
 
   @Override
