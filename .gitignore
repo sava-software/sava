@@ -21,6 +21,8 @@
 !/settings.gradle.kts
 !AGENTS.md
 !AGAVE_SYNC.md
+!CONVENTIONS.md
+!HARDENING_NOTES.md
 
 # Re-apply ignores within included directories.
 .gradle

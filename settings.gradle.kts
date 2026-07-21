@@ -21,9 +21,9 @@ pluginManagement {
   }
   // Resolve sava-build from GitHub Packages. Uncomment only while depending on an
   // unpublished sava-build change, then publish, bump the versions below, re-comment.
-//  if (settingsDir.resolve("../sava-build").isDirectory) {
-//    includeBuild("../sava-build")
-//  }
+  if (settingsDir.resolve("../sava-build").isDirectory) {
+    includeBuild("../sava-build")
+  }
 }
 
 plugins {

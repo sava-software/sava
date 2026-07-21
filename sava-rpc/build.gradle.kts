@@ -34,6 +34,21 @@ testModuleInfo {
 }
 
 hardening {
+  mutation.register("client") {
+    // body decoding, the JSON-RPC envelope gate, and request construction — all of
+    // it reading or answering an untrusted node
+    targetClasses = listOf("software.sava.rpc.json.http.client.*")
+    // test sources share this package, and not all of them are named *Test* — the
+    // wildcard picks up the drift check and the stub helpers unless they are named
+    excludedClasses = listOf(
+      "software.sava.rpc.json.http.client.*Test*",
+      "software.sava.rpc.json.http.client.*Check",
+      "software.sava.rpc.json.http.client.Stub*",
+      // a git-ignored local scratch driver; not part of the build contract
+      "software.sava.rpc.json.http.client.Integ"
+    )
+    targetTests = "software.sava.rpc.json.http.client.*Test*"
+  }
   mutation.register("responses") {
     // the hand-rolled json_iterator field predicates parse whatever an RPC node returns;
     // a compromised or buggy provider is the threat model

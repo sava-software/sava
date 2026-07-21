@@ -295,12 +295,20 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Long> getMinimumBalanceForRentExemption(final long accountLength);
 
-  /// In the case an account does not exist, the matching entry at the expected index is skipped
-  /// instead of placing a null entry into the List.
+  /// Accounts which do not exist are **omitted** from the returned List rather than
+  /// occupying their slot, so the result is shorter than `keys` and every entry after
+  /// a missing account shifts down by one. Zipping the result back against `keys` by
+  /// index therefore attributes data to the wrong account, silently.
   ///
-  /// This behavior does not match the response of the Solana RPC API one to one.
+  /// This does not match the Solana RPC response one to one — the node returns a null
+  /// in place of each missing account.
   ///
-  /// It is recommended to use [SolanaRpcClient#getAccounts] instead.
+  /// Prefer [#getAccounts(SequencedCollection, BiFunction)], which keeps the null and
+  /// stays aligned with `keys`. Every `getMultipleAccounts` overload behaves this way,
+  /// not just this one; both families send an identical `getMultipleAccounts` request
+  /// and differ only in how the response is parsed.
+  ///
+  /// @return the accounts which exist, in key order, with absent accounts omitted.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
@@ -308,6 +316,9 @@ public interface SolanaRpcClient {
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Absent accounts are omitted rather than nulled — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)]. Prefer
+  /// [#getAccounts(SequencedCollection)] to stay aligned with `keys`.
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(keys, BYTES_IDENTITY);
   }
@@ -377,6 +388,15 @@ public interface SolanaRpcClient {
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Fetches several accounts in one `getMultipleAccounts` request, keeping the result
+  /// positionally aligned with `keys`: an account which does not exist is a null entry
+  /// at its own index, matching the Solana RPC response one to one.
+  ///
+  /// This is the difference from [#getMultipleAccounts(SequencedCollection, BiFunction)],
+  /// which sends the identical request but drops absent accounts from the List. Use
+  /// this family whenever the results are correlated back to the keys by index.
+  ///
+  /// @return one entry per key, in key order, null where the account does not exist.
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
@@ -501,6 +521,12 @@ public interface SolanaRpcClient {
                                                                  final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
+  /// @param minContextSlot **0 means unset**, not "slot 0" — the field is omitted
+  ///                       from the request entirely, so the node applies no
+  ///                       minimum. Slots are u64, so a negative value is read as
+  ///                       the unsigned slot (`-1` is 18446744073709551615). Use
+  ///                       the [BigInteger] overloads to pass an explicit 0 or a
+  ///                       slot above [Long#MAX_VALUE].
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
@@ -834,10 +860,22 @@ public interface SolanaRpcClient {
                                             final SequencedCollection<Signer> signers,
                                             final byte[] recentBlockHash);
 
+  /// Submits with preflight checks, asking the node to retry once.
+  ///
+  /// `maxRetries` is how many times the RPC node re-sends the transaction to the
+  /// leader on the caller's behalf. `0` means send once and stop — it is not
+  /// "unset". Every overload in this client sends the field, so the node's own
+  /// behaviour when it is absent (retry until the transaction is finalized or the
+  /// blockhash expires) is not reachable here; pass an explicit `maxRetries` to
+  /// choose something other than the defaults.
+  ///
+  /// The two families default it differently on purpose — see
+  /// [#sendTransactionSkipPreflight(String)].
   default CompletableFuture<String> sendTransaction(final String base64SignedTx) {
     return sendTransaction(base64SignedTx, 1);
   }
 
+  /// @param maxRetries node-side re-sends to the leader; `0` sends once and stops.
   CompletableFuture<String> sendTransaction(final String base64SignedTx, final int maxRetries);
 
   default CompletableFuture<String> sendTransaction(final Commitment preflightCommitment, final String base64SignedTx) {
@@ -848,6 +886,17 @@ public interface SolanaRpcClient {
                                             final String base64SignedTx,
                                             final int maxRetries);
 
+  /// Submits without preflight checks, asking the node **not** to retry.
+  ///
+  /// The `maxRetries` default of `0` is deliberate and differs from the
+  /// preflighting family's `1`: skipping preflight is what a caller does when it
+  /// is driving its own submission loop — re-signing or re-broadcasting until the
+  /// signature confirms — and node-side retries would duplicate that work against
+  /// the same blockhash. Callers who are not rebroadcasting themselves should pass
+  /// an explicit `maxRetries`.
+  ///
+  /// Preflight commitment defaults to [Commitment#PROCESSED] here, since there is
+  /// no simulation to run at a stronger commitment.
   default CompletableFuture<String> sendTransactionSkipPreflight(final String base64SignedTx) {
     return sendTransactionSkipPreflight(PROCESSED, base64SignedTx, 0);
   }
@@ -865,11 +914,24 @@ public interface SolanaRpcClient {
                                                          final String base64SignedTx,
                                                          final int maxRetries);
 
+  /// Selects between the two families by flag.
+  ///
+  /// **`skipPreFlight` changes more than preflight.** It routes to
+  /// [#sendTransactionSkipPreflight(String)] or [#sendTransaction(String)], and
+  /// those differ in their `maxRetries` default as well — `true` sends with `0`
+  /// node-side retries, `false` with `1`. The flag also selects the preflight
+  /// commitment ([Commitment#PROCESSED] when skipping, the client default
+  /// otherwise). Use the three argument overload to fix `maxRetries` across both
+  /// branches.
   default CompletableFuture<String> sendTransaction(final String base64SignedTx, final boolean skipPreFlight) {
     return skipPreFlight
         ? sendTransactionSkipPreflight(base64SignedTx)
         : sendTransaction(base64SignedTx);
   }
+
+  /// Selects between the two families by flag, with `maxRetries` pinned, so unlike
+  /// [#sendTransaction(String, boolean)] the flag only affects preflight and the
+  /// preflight commitment.
 
   default CompletableFuture<String> sendTransaction(final String base64SignedTx,
                                                     final boolean skipPreFlight,
@@ -879,6 +941,8 @@ public interface SolanaRpcClient {
         : sendTransaction(base64SignedTx, maxRetries);
   }
 
+  /// As [#sendTransaction(String, boolean)], the flag also picks the `maxRetries`
+  /// default — `0` when skipping preflight, `1` otherwise.
   default CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
                                                     final String base64SignedTx,
                                                     final boolean skipPreFlight) {
