@@ -60,27 +60,69 @@ nothing.
 DEBUG log call and a header append that the request builder overwrites anyway.
 Neither is observable.
 
-## Untriaged debt — ws suite
+## Triaged mutants — ws suite
 
-Seeded 2026-07-21 when the `ws` suite was added over
-`software.sava.rpc.json.http.ws.*`, alongside the `NanoClock` seam that made
-its time-dependent paths (reconnect throttle, ping pacing) deterministically
-testable at all. 247 entries — 134 SURVIVED and 128 NO_COVERAGE at seeding,
-from a population of 526 (50% detected). **This is triage debt made explicit,
-not acceptance**: the population has not been worked, and every entry is a
-candidate for outcome 1 (kill) or 2 (refactor) before any is recorded here as
-equivalent. The bulk sits in `SolanaJsonRpcWebsocket`'s subscribe/unsubscribe
-bookkeeping and notification dispatch, which the existing listener-path tests
-drive only partially.
+Seeded 2026-07-21 at 50% detected (247 entries) when the suite was added over
+`software.sava.rpc.json.http.ws.*` alongside the `NanoClock` seam, then worked
+the same day to 69% (153 entries: ~127 SURVIVED, 26 NO_COVERAGE, plus flip
+insurance) by driving the unsubscribe flows per channel, the connect/onClose
+lifecycle, the sendText/sendPing failure callbacks, the interface-default
+subscribe overloads, and the dispatch edge branches (unknown methods,
+unsubscribed slot/root notifications, array-less fragmented buffers). The
+check-loop executor is injectable (package-private on
+`SolanaRpcWebsocketBuilder`; null creates the classic dedicated thread), so
+the constructor-driven tests run with a `RecordingExecutor` and no background
+thread exists to race clock-stepped assertions — which is what made the
+resend-cycle ping assertion and the `handlePendingSubscriptions` counter kill
+possible.
 
-One row is flip insurance, observed 2026-07-21 during seeding:
-`SolanaJsonRpcWebsocket,run,177,RemoveConditionalMutator_EQUAL_IF` flipped
-detected↔SURVIVED between two otherwise identical runs. Line 177 is the
-`webSocket != null` guard inside the background subscription thread's loop,
-so its coverage is attributed by a thread racing the test scheduler — the
-known background-thread variant of the wandering-count causes. It stays in
-the baseline as an observed flip; re-measure if the loop gains a
-deterministic driver.
+**Accepted with reasons** (triaged, closed):
+
+- **`connect` timing mutants** (`connect` boundary/order/`MathMutator`,
+  `lambda$connect$0` `lastWrite` write): the deferred branch runs on
+  `CompletableFuture.delayedExecutor`, for which there is no seam — the
+  mutants are distinguishable only by wall-clock timing of the connection
+  attempt or by racing the executor thread. The named escape hatch is a
+  schedulable-executor seam on `connect()`; the immediate branch's `lastWrite`
+  write *is* pinned (`connectBuildsImmediatelyWhenIdle`).
+- **Error-callback `EQUAL_ELSE` forks** (`lambda$sendText$0:681`,
+  `lambda$sendPing$0:971`): forcing the handler branch with a null handler
+  NPEs inside `whenComplete`, which the CompletionStage swallows —
+  unobservable. The handler-present side of each fork is pinned by the
+  failure-injection tests.
+- **Logging only**: `VoidMethodCallMutator` on the log calls in the
+  null-handler error paths, `onClose`, `onPong`, and the reason-blank message
+  choice in `onClose:1011` (both branches close).
+- **Defensive scans unreachable through the public API**
+  (`removeDanglingSub` match path, `queueUnsubscribe:332`,
+  `unsubscribe:639–641`): the match requires a subscription present in
+  `subscriptionsBySubId` but absent from its channel map, which no public
+  call sequence constructs — the map-first branch always wins. Every miss
+  dimension (key, channel, commitment, notification method) is pinned by
+  tests; only the impossible match is accepted.
+- **Check-loop rows covered only by racing threads** (`run:187` EQUAL_IF,
+  `run:188`/`run:191` VoidMethodCall — flip insurance, each observed flipping
+  between detected and SURVIVED across identical runs): the builder-path
+  tests create websockets with real internal executors, so the loop interior
+  is executed by threads racing the test scheduler; the deterministic inline
+  run tests cover only the interrupt- and closed-exit paths. The loop's
+  `TIMED_OUT` rows come from the same place.
+- **close() executor-ownership branch** (`close` EQUAL_ELSE on
+  `internalExecutor`, `shutdown()`/`signal()` VoidMethodCall): the injected
+  side — never shut down what the caller owns — is pinned by
+  `executorServiceDefaultsNullAndAnInjectedOneIsNotShutDownByClose`; the
+  internal executor's `shutdown()` and the wake-up `signal()` have no
+  observable effect from outside (the signal only shortens how long the loop
+  waits before noticing `closed()`).
+
+**Remaining untriaged debt** (~115 rows): concentrated in `onWholeMessage` /
+`onText` parse-branch survivors, `close`'s field-clearing breadth,
+`handlePendingSubscriptions`' CAS choreography, and `queueSubscription`'s
+signal/lock mutants (check-loop timing only). The 26 NO_COVERAGE rows are
+mostly the same defensive-scan interiors and DEBUG-level log suppliers
+(`lambda$onPing$0`/`lambda$onPong$0` run only with DEBUG enabled), plus
+`Builder.clock`'s throwing default, reachable only by a Builder
+implementation that does not override it.
 
 ## Triaged equivalent mutants (accepted with reasons)
 

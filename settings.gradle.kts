@@ -30,8 +30,8 @@ pluginManagement {
 }
 
 plugins {
-  id("software.sava.build") version "21.5.7"
-  id("software.sava.build.feature.jdk-provisioning") version "21.5.7"
+  id("software.sava.build") version "21.5.8"
+  id("software.sava.build.feature.jdk-provisioning") version "21.5.8"
 }
 
 javaModules {

@@ -46,9 +46,3 @@ hardening {
     targetTests = "software.sava.rpc.json.http.client.*Test*,software.sava.rpc.json.http.response.*Test*"
   }
 }
-
-configurations.all {
-  resolutionStrategy {
-    force("software.sava:json-iterator:25.3.0")
-  }
-}

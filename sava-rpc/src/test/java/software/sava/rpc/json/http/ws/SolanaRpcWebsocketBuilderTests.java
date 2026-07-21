@@ -123,4 +123,116 @@ final class SolanaRpcWebsocketBuilderTests {
     final var builder = builder().uri(URI.create("wss://example.invalid"));
     assertThrows(NullPointerException.class, builder::create);
   }
+
+  @Test
+  void uriStringOverloadParses() {
+    final var builder = builder().uri("wss://example.invalid");
+    assertEquals(URI.create("wss://example.invalid"), builder.wsUri());
+  }
+
+  @Test
+  void uriNetworkOverloadUsesTheNetworkEndpoint() {
+    final var builder = builder().uri(SolanaNetwork.DEV_NET);
+    assertEquals(SolanaNetwork.DEV_NET.getWebSocketEndpoint(), builder.wsUri());
+  }
+
+  @Test
+  void clockDefaultsToSystemAndRoundTrips() {
+    final var builder = builder();
+    assertSame(NanoClock.SYSTEM, builder.clock());
+    final var clock = new TestClock();
+    assertSame(clock, builder.clock(clock).clock());
+  }
+
+  /// Null (the default) means an internally created executor that close() shuts
+  /// down; an injected one runs the check loop but stays the caller's to manage.
+  /// The setter is package-private on the impl — not public API — so the test
+  /// casts the builder.
+  @Test
+  void executorServiceDefaultsNullAndAnInjectedOneIsNotShutDownByClose() {
+    final var builder = (SolanaRpcWebsocketBuilder) builder();
+    assertNull(builder.executorService());
+
+    final var executor = new RecordingExecutor();
+    assertSame(executor, builder.executorService(executor).executorService());
+
+    final var websocket = builder
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(new RecordingWebSocketBuilder(new AtomicReference<>()))
+        .clock(new TestClock())
+        .create();
+    assertEquals(1, executor.tasks.size(), "create() submits the check loop to the injected executor");
+
+    websocket.close();
+    assertFalse(executor.shutdown, "close() must not shut down an executor it does not own");
+  }
+
+  /// connect() with no prior write attempts immediately; the builder's clock and
+  /// websocket builder are what it runs against.
+  @Test
+  void connectBuildsImmediatelyWhenIdle() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    final var endpoint = URI.create("wss://example.invalid");
+    try (final var websocket = (SolanaJsonRpcWebsocket) builder()
+        .uri(endpoint)
+        .webSocketBuilder(webSocketBuilder)
+        .clock(new TestClock())
+        .create()) {
+      final var future = websocket.connect();
+      assertNotNull(future);
+      assertSame(socket, future.toCompletableFuture().join());
+      assertEquals(endpoint, webSocketBuilder.builtUri.get());
+
+      // the attempt marked lastWrite, so the next check is inside the ping window
+      websocket.onPing(socket, java.nio.ByteBuffer.wrap(new byte[0]));
+      assertEquals(0, socket.pings, "connect() must count as the last write");
+    }
+  }
+
+  /// A write inside the reconnect window defers the attempt; the returned future
+  /// completes only after the delay, which this test never waits out.
+  @Test
+  void connectIsDeferredInsideTheReconnectWindow() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    try (final var websocket = (SolanaJsonRpcWebsocket) builder()
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(webSocketBuilder)
+        .clock(new TestClock())
+        .reConnectDelay(60_000L)
+        .create()) {
+      assertTrue(websocket.rootSubscribe(_ -> {
+      }));
+      websocket.onOpen(socket);
+      assertEquals(1, socket.sentText.size(), "the write that arms the reconnect window");
+
+      final var future = websocket.connect();
+      assertNotNull(future);
+      assertFalse(future.toCompletableFuture().isDone(), "the attempt is deferred by the reconnect window");
+    }
+  }
+
+  /// The deferred branch does eventually build. The 25ms delay is the one real
+  /// wait in this suite — connect()'s deferral runs on a delayed executor there
+  /// is no seam for.
+  @Test
+  void connectRunsOnceTheReconnectDelayElapses() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    try (final var websocket = (SolanaJsonRpcWebsocket) builder()
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(webSocketBuilder)
+        .clock(new TestClock())
+        .reConnectDelay(25L)
+        .create()) {
+      assertTrue(websocket.rootSubscribe(_ -> {
+      }));
+      websocket.onOpen(socket);
+
+      final var future = websocket.connect();
+      assertNotNull(future);
+      assertSame(socket, future.toCompletableFuture().join());
+    }
+  }
 }

@@ -33,6 +33,7 @@ final class SolanaJsonRpcWebsocketTests {
         null,
         TIMINGS,
         new TestClock(),
+        new RecordingExecutor(),
         _ -> {
         },
         (_, _, _) -> {
@@ -378,6 +379,74 @@ final class SolanaJsonRpcWebsocketTests {
           {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid subscription id."},"id":6}"""
       );
       assertEquals(1, exceptions.size());
+    }
+  }
+
+  /// Slot and root notifications with no local subscriber are unsubscribed at the
+  /// server rather than silently dropped forever.
+  @Test
+  void slotAndRootNotificationsWithoutASubscriberAreUnsubscribed() {
+    try (final var ws = createWebsocket()) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":75,"root":44,"slot":76},"subscription":7}}"""
+      );
+      assertEquals("""
+          {"jsonrpc":"2.0","id":2,"method":"slotUnsubscribe","params":[7]}""", socket.sentText.getLast());
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"rootNotification","params":{"result":42,"subscription":8}}"""
+      );
+      assertEquals("""
+          {"jsonrpc":"2.0","id":3,"method":"rootUnsubscribe","params":[8]}""", socket.sentText.getLast());
+    }
+  }
+
+  /// A notification method nobody subscribed to generically is ignored without a
+  /// frame or an exception.
+  @Test
+  void unknownNotificationMethodsAreIgnored() {
+    try (final var ws = createWebsocket()) {
+      final var exceptions = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(exceptions::add);
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"mysteryNotification","params":{"result":1,"subscription":9}}"""
+      );
+      assertTrue(socket.sentText.isEmpty(), socket.sentText.toString());
+      assertTrue(exceptions.isEmpty());
+    }
+  }
+
+  /// Fragments arriving in array-less CharBuffers exercise the buffer-copy side
+  /// of every onText branch the array-backed fragmented test does not.
+  @Test
+  void fragmentedNotificationWithoutABackingArray() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""
+      );
+
+      final var notification = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["dGVzdA==","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}},"subscription":23784}}""";
+      final int half = notification.length() / 2;
+      // CharBuffer.wrap(String) has no backing array on either fragment
+      ws.onText(socket, CharBuffer.wrap(notification.substring(0, half)), false);
+      assertTrue(received.isEmpty());
+      ws.onText(socket, CharBuffer.wrap(notification.substring(half)), true);
+
+      assertEquals(1, received.size());
+      assertEquals(33594L, received.getFirst().lamports());
     }
   }
 

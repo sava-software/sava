@@ -8,7 +8,8 @@ import java.util.concurrent.CompletableFuture;
 
 /// Captures what the client writes, so the listener path can be driven with no
 /// network. `outputClosed` is settable because `close()` only sends a close frame
-/// when the output is still open.
+/// when the output is still open. `failText` / `failPing` make the returned
+/// futures fail, driving the error-callback paths; the attempt is still recorded.
 final class RecordingWebSocket implements WebSocket {
 
   final List<String> sentText = new ArrayList<>();
@@ -16,11 +17,15 @@ final class RecordingWebSocket implements WebSocket {
   int pings;
   boolean aborted;
   boolean outputClosed;
+  Throwable failText;
+  Throwable failPing;
 
   @Override
   public CompletableFuture<WebSocket> sendText(final CharSequence data, final boolean last) {
     sentText.add(data.toString());
-    return CompletableFuture.completedFuture(this);
+    return failText == null
+        ? CompletableFuture.completedFuture(this)
+        : CompletableFuture.failedFuture(failText);
   }
 
   @Override
@@ -31,7 +36,9 @@ final class RecordingWebSocket implements WebSocket {
   @Override
   public CompletableFuture<WebSocket> sendPing(final ByteBuffer message) {
     ++pings;
-    return CompletableFuture.completedFuture(this);
+    return failPing == null
+        ? CompletableFuture.completedFuture(this)
+        : CompletableFuture.failedFuture(failPing);
   }
 
   @Override

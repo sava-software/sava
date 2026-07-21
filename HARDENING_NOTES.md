@@ -54,7 +54,7 @@ mutators can reach, so do not re-enable them on a hunch.
 | --- | --- | --- |
 | `pitestResponses` | `json.http.response.*` | Debt free — keep it that way. |
 | `pitestClient` | `json.http.client.*` | Carries real coverage debt; see below. |
-| `pitestWs` | `json.http.ws.*` | Seeded 2026-07-21 with untriaged debt; see below. |
+| `pitestWs` | `json.http.ws.*` | Seeded at 50%, worked to 69% same day; see below. |
 
 ### `pitestClient` — the debt is deliberate and documented
 
@@ -73,7 +73,7 @@ this package and shared fakes are named for their role. Trailing wildcards
 throughout, per HARDENING.md — `*Check` would stop matching the moment a drift
 check grows a nested helper. The verify task warns if this regresses.
 
-### `pitestWs` — seeded with untriaged debt, and one background-thread flip
+### `pitestWs` — the clock seam, and the background-thread ceiling
 
 Registered 2026-07-21 together with the `NanoClock` seam
 (`SolanaRpcWebsocket.Builder#clock`, mirroring ravina's
@@ -84,13 +84,23 @@ a suite. The clock lives in the `ws` package deliberately, so this suite
 mutates it; `NanoClockTests` (ported from ravina) covers it, and the reconnect
 tests step a `TestClock` over the throttle and ping windows instead of waiting.
 
-Seeded at 50% detected (247 baseline entries) — untriaged debt, worked from
-here; the breakdown is in `config/pitest/README.md`. The websocket starts a
-background subscription thread in its constructor, and coverage of that
-thread's loop races the test scheduler: `run:177` was observed to flip
-detected↔SURVIVED between identical runs and stays in the baseline as flip
-insurance. Fakes are named `Recording*` and excluded alongside `*Test*`
-(which also matches `TestClock`).
+Seeded at 50% detected (247 entries), worked the same day to 69% (153 entries)
+— per-family acceptances and the remaining debt are in
+`config/pitest/README.md`. The check-loop executor is injectable
+(package-private setter on `SolanaRpcWebsocketBuilder`, reached by casting the
+builder — deliberately not public API; null creates the classic dedicated
+single-thread executor, tracked with `internalExecutor` so `close()` shuts
+down only what it owns and merely signals an injected executor's loop to
+return its thread). Landing the seam also fixed two real defects in the loop:
+it busy-spun — lock, throttled no-op, unlock — for the whole window between a
+subscription's send and its confirmation, and it never exited after `close()`,
+stranding the non-daemon thread. Constructor-driven tests inject a
+`RecordingExecutor` (captures the loop task, never runs it), so no background
+thread races clock-stepped assertions; builder-path tests still run real
+internal executors, which is where the loop's remaining flip-insurance rows
+come from. `connect()`'s delayed-executor branch remains the one seamless
+acceptance family. Fakes are named `Recording*` and excluded alongside
+`*Test*` (which also matches `TestClock`).
 
 ## sava-vanity
 

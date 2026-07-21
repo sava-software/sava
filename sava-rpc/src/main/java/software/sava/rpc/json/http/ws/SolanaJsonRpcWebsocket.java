@@ -63,6 +63,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final ReentrantLock lock;
   private final Condition newSubscription;
   private final AtomicLong lastWrite;
+  private final boolean internalExecutor;
   private volatile WebSocket webSocket;
 
   private char[] buffer;
@@ -75,6 +76,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final WebSocket.Builder webSocketBuilder,
                          final Timings timings,
                          final NanoClock clock,
+                         final ExecutorService executorService,
                          final Consumer<SolanaRpcWebsocket> onOpen,
                          final OnClose onClose,
                          final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
@@ -108,7 +110,16 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.ji = JsonIterator.parse(new byte[0]);
     this.lock = new ReentrantLock();
     this.newSubscription = lock.newCondition();
-    this.executorService = Executors.newFixedThreadPool(1);
+    // null: same dedicated executor as always, owned by this websocket and shut
+    // down by close(); injected: the caller's to shut down, and close() only asks
+    // the check loop to return its thread.
+    if (executorService == null) {
+      this.executorService = Executors.newFixedThreadPool(1);
+      this.internalExecutor = true;
+    } else {
+      this.executorService = executorService;
+      this.internalExecutor = false;
+    }
     this.executorService.execute(this);
   }
 
@@ -164,15 +175,14 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public void run() {
     try {
       final long sleepNanos = MILLISECONDS.toNanos(timings.subscriptionAndPingCheckDelay());
-      for (; ; ) {
+      while (!closed()) {
         lock.lock();
         try {
-          for (long remaining = sleepNanos; this.pendingSubscriptions.isEmpty(); ) {
-            remaining = newSubscription.awaitNanos(remaining);
-            if (remaining <= 0) {
-              break;
-            }
-          }
+          // Wake on a new subscription, on close(), or every check delay. The wait
+          // is deliberately unconditional: waiting only while no subscription was
+          // pending spun this loop hot — lock, throttled no-op, unlock — for the
+          // whole window between a subscription's send and its confirmation.
+          newSubscription.awaitNanos(sleepNanos);
           final var webSocket = this.webSocket;
           if (webSocket != null) {
             handlePendingSubscriptions(webSocket);
@@ -1046,7 +1056,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       this.webSocket = null;
     }
 
-    this.executorService.shutdown();
+    if (this.internalExecutor) {
+      this.executorService.shutdown();
+    }
+    // wake the check loop so it observes closed() and returns its thread — an
+    // injected executor is never shut down here, so this is all it gets
+    lock.lock();
+    try {
+      newSubscription.signal();
+    } finally {
+      lock.unlock();
+    }
     this.pendingSubscriptions.clear();
     this.pendingUnSubscriptions.clear();
     this.subscriptionsBySubId.clear();

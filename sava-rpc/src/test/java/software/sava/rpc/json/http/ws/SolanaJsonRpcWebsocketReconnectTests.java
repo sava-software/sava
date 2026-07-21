@@ -61,6 +61,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
         null,
         timings,
         clock,
+        new RecordingExecutor(),
         onOpen,
         (_, _, _) -> {
         },
@@ -127,6 +128,9 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       assertEquals(sentOnOpen + 1, socket.sentText.size(),
           "the unconfirmed subscription should be re-sent after the window: " + socket.sentText);
       assertSent(socket, "slotSubscribe", "");
+      // Deterministic now that the check loop runs on a RecordingExecutor and no
+      // background thread exists: the re-send counts as the cycle's write.
+      assertEquals(0, socket.pings, "a cycle that re-sent a subscription must not also ping");
     }
   }
 
