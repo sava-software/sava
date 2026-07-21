@@ -25,6 +25,8 @@ val docsInSync = tasks.register("docsInSync") {
   }
 }
 
+// In check as well as qualityGate — CI runs only check; see sava-core.
+tasks.named("check") { dependsOn(docsInSync) }
 tasks.named("qualityGate") { dependsOn(docsInSync) }
 
 testModuleInfo {

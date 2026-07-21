@@ -38,11 +38,18 @@ When you find one:
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
-- **Run `./gradlew :sava-core:qualityGate` / `:sava-rpc:qualityGate` after changing
-  main sources in that module** — unit tests plus every PIT suite, each diffed
-  against its accepted baseline in `<module>/config/pitest/`. It is the definition
-  of "safe to commit". While iterating, run only the suite that owns the code you
-  touched.
+- **Scale verification to the change.** Iterate with the module's `test` task;
+  before handing off, run only the `pitest<Suite>`(s) whose mutated code the
+  change can reach — including a dependent module's suite when it calls the
+  changed API, and the owning suite for test-only edits, since a weakened
+  test is exactly what the ratchet catches.
+- **The full `qualityGate` is the pre-release check, owned by the local
+  release checklist.** CI deliberately runs only `check` (serialized PIT is
+  too slow for hosted runners) — run the gate locally before deciding to
+  release and don't wire it into CI to "fix" that. Once an
+  `arcmutate-licence.txt` sits at the repo root, suite runs reuse prior
+  results (`[history]` in the summary marks reuse) and the gate takes
+  `-PnoMutationHistory` so release numbers are re-earned from scratch.
 - Suites: sava-core has `pitestBorsh`, `pitestEd25519`, `pitestEncoding`, `pitestTx`
   (`tx` + `accounts/lookup`), `pitestToken2022`, `pitestMeta`, `pitestDecimal`
   (`core/util`), `pitestCrypto` and `pitestVanity`; sava-rpc has `pitestResponses`
@@ -54,21 +61,23 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - **`SURVIVED` and `NO_COVERAGE` are different problems.** The first is a judgement
   call about equivalence; the second is an untested line and is mechanical work.
   Never accept a `NO_COVERAGE` mutant as "equivalent" — you have not observed it.
+  A `SURVIVED` mutant no deterministic harness can reach is accepted as
+  **unreachable in-harness**, naming what would reach it — worked example in the
+  client triage of `sava-rpc/config/pitest/README.md`.
 - **A suite's percentage is not a target.** An accepted mutant with a written
-  reason is finished work, not a gap. `decimal` sits at 81% because four of its
-  22 mutants are documented equivalents — that is an accurate number, and driving
-  it to 100% was tried on 2026-07-20 and reverted. Before trying to raise a
-  figure, check whether what remains is uncovered code or already-closed triage.
-- **Allocation and timing harnesses are a last resort.** They re-run once per
-  mutant, need a `volatile` sink so escape analysis cannot delete what they
-  measure, and flap when the margin is thin. Reserve them for properties that are
-  a stated design goal — see the decimal notes in
-  `sava-core/config/pitest/README.md` for a worked example of when not to.
+  reason is finished work, not a gap — `decimal`'s 81% is four documented
+  equivalents, an accurate number whose "fix" was tried and reverted (casebook:
+  the allocation harness that flapped). Check whether what remains is uncovered
+  code or already-closed triage before trying to raise a figure.
+- **Allocation and timing harnesses are a last resort**, reserved for properties
+  that are a stated design goal — same casebook entry; the local decision is in
+  the decimal notes of `sava-core/config/pitest/README.md`.
 - A new unkilled mutant has exactly three legal outcomes: **kill it** with a test
   (prefer asserting the property it breaks over restating the implementation),
   **refactor** it out of existence, or **accept it** with a written reason in the
   module's `config/pitest/README.md`. Never run `-PupdateMutationBaseline` just to
-  make the build pass.
+  make the build pass. Sweepable equivalence claims are verified empirically with
+  the range recorded, not argued in prose.
 - Widening or adding a suite is expected to go red first. Register it, then work the
   population down and triage what is left — do not narrow the target or drop the
   registration to keep the build green.
@@ -79,6 +88,21 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - **Randomized tests use fixed seeds**; never sleep in a test. The ratchet needs
   deterministic kills and PIT re-runs the suite per mutant. Exploration belongs to
   the fuzz targets.
+- **Do not rely on PIT's timeout to detect a mutant.** `TIMED_OUT` counts as
+  detected and is load-dependent — the same mutant can flip to `SURVIVED` when
+  its suite runs alone. Verify a changed baseline in both modes; union in only
+  rows observed to flip, never every timed-out row.
+- **A wandering unkilled count is a defect to chase, not re-ratchet past** — a
+  lucky run bakes in a row later runs fail on. Causes and the convergence
+  method: `HARDENING.md`. The abstract-base annotation cause is ruled out here
+  (JUnit 6.1.2 verification in `HARDENING_NOTES.md`); coverage attributed to
+  field initializers still applies — exercise factories inside a `@Test`. The
+  2026-07-21 convergence record in `HARDENING_NOTES.md` is the stability
+  baseline.
+- **Kill rates are bounded by the mutator set.** Big-value arithmetic is method
+  calls, invisible to `STRONGER`. `EXPERIMENTAL_BIG_INTEGER` fired zero times
+  in every candidate suite here (trial table in `HARDENING_NOTES.md`) — left
+  off; re-trial if Big arithmetic is introduced.
 - Fuzz findings become a committed seed input **and** a named regression test, never
   just a fix.
 
@@ -97,13 +121,17 @@ The failure modes here are ones that look like success:
 - When a test you believe in will not go green, **suspect the code before you soften
   the assertion**. Every defect found in this repo's hardening passes surfaced that
   way, not from a mutant kill.
+- **No failure is "unexplained" until the daemon log says so.** `~/.gradle/daemon/
+  <version>/daemon-<pid>.out.log` keeps a failed build's full output even when the
+  shell discarded it. One-shot `MINION_DIED` / worker-`EOFException` failures are
+  transient — re-run; both diagnoses are in the shared casebook.
 
 ## Keeping this file honest
 
 The mutation suite list above is checked by the build: `:sava-core:docsInSync` and
 `:sava-rpc:docsInSync` fail when a registered suite is not named here, and both are
-wired into `qualityGate`. Prefer that pattern over prose reminders for anything else
-derivable from the build.
+wired into `check` (so CI enforces them) as well as `qualityGate`. Prefer that
+pattern over prose reminders for anything else derivable from the build.
 
 Machine-specific context (local clone paths, environment notes) belongs in
 `AGENTS.local.md`, which is git-ignored. Keep this file portable.
@@ -119,6 +147,7 @@ Machine-specific context (local clone paths, environment notes) belongs in
   canonical sources, Alpenglow, known gaps, last-verified sync points, and the sync
   task checklist.
 - **sava-build's `HARDENING.md`** — the full mutation-testing and fuzzing policy this
-  contract summarises.
+  contract summarises; its `HARDENING_CASEBOOK.md` holds the observed incidents
+  behind each rule — read an entry before arguing with its rule.
 - **`<module>/config/pitest/README.md`** — the accepted-mutant baselines and the
   written reason for every one of them.

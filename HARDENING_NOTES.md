@@ -84,3 +84,92 @@ The per-surface notes — what each package's fuzz corpus covers, which invarian
 are asserted where, and the reasoning behind long-standing accepted mutants —
 live in the hardening sections of `AGAVE_SYNC.md`, alongside the canonical
 sources they mirror.
+
+## Mutator-set trials
+
+`STRONGER` is the default everywhere. Per HARDENING.md ("the mutator set bounds
+what the ratchet can see"), `EXPERIMENTAL_BIG_INTEGER` was trialed on
+2026-07-21 against every suite whose mutated code mentions
+`BigInteger`/`BigDecimal`:
+
+| Suite | Generated without | With | Fires |
+|---|---|---|---|
+| core `borsh` | 1070 | 1070 | 0 |
+| core `encoding` | 1072 | 1072 | 0 |
+| core `decimal` | 22 | 22 | 0 |
+| core `token2022` | 688 | 688 | 0 |
+| rpc `client` | 498 | 498 | 0 |
+| rpc `responses` | 524 | 524 | 0 |
+
+Zero fires: this code constructs, parses, and compares Big values but performs
+no `add`/`multiply`-family arithmetic on them in mutated classes (the grep hits
+are `List.add` and friends). Enabling a mutator that cannot fire is baseline
+churn for nothing, so it stays off. **Re-trial if Big arithmetic is introduced**
+— fixed-point/fee math of the kind that made it fire 114 times in idl-clients'
+`orca` suite.
+
+## Environment verifications
+
+- **JUnit 6.1.2: `@Execution` and `@TestInstance` are both `@Inherited`** —
+  verified in the resolved jar's bytecode, 2026-07-21. `RpcRequestTests`'
+  base-level annotations therefore reach its nine concrete subclasses, and
+  parallel execution is not enabled in any module, so the abstract-base
+  wandering-count cause in the shared casebook does not apply to this repo.
+  Re-verify on a JUnit major bump before restructuring any tests over it.
+
+## Arcmutate incremental analysis — wired, awaiting licence
+
+Support landed in the sava-build plugin 2026-07-21 (licence requested from
+arcmutate the same day — free for open-source projects). Activation is
+dropping the `arcmutate-licence.txt` at the repo root: history files appear at
+`<module>/.pitest-history/<suite>.hist` (git-ignored, survive `clean`), each
+assisted summary carries a `[history]` marker, and the pre-release gate runs
+with `-PnoMutationHistory`. Wiring was verified end-to-end with a dummy
+licence file: config cache invalidates on the file appearing,
+`com.arcmutate:base:1.7.1` resolves, PIT runs with `+arcmutate_history`, and
+arcmutate's signature check rejects the dummy — so the only untested step is
+a valid certificate. A DIY changed-classes-only mode was considered and
+declined: subsumed by history, and the savings did not survive arithmetic
+(the coverage phase and JVM floor dominate every suite under ~30s).
+
+## Convergence check — 2026-07-21 (pre-release)
+
+Ran HARDENING.md's convergence method across all 11 suites: two solo passes
+with report directories deleted between (so Gradle could not serve a stale
+report), then both modules' `qualityGate`, diffed per-mutant on
+`(class, method, line, mutator)` with duplicate keys compared as counted sets.
+
+**6,129 mutants × 2 comparisons: zero flips crossing the
+`SURVIVED`/`NO_COVERAGE` boundary**, and the accepted-row sweep found all 179
+baseline rows matching a real unkilled mutant in every run — no stale
+acceptances widening the gate. Two flips within detected statuses, neither
+able to move the ratchet:
+
+- `ed25519` `Ed25519Util.M:563` (duplicate-keyed `MathMutator` pair): one of
+  the two reported `RUN_ERROR` instead of `KILLED` under full-gate load.
+- `vanity` `SubsequenceRecord.formatCharOptions:148`: `TIMED_OUT` ↔ `KILLED`
+  between solo runs — ordinary timing jitter on a detected mutant.
+
+Two transient failures were later root-caused from the Gradle daemon logs
+(`~/.gradle/daemon/<version>/daemon-<pid>.out.log` keeps full build output
+even when the invoking shell discarded it — check there before calling any
+failure unexplained):
+
+- The first solo `pitestEncoding` invocation of the day exited 1 with no
+  report: PIT's coverage minion started, waited 10s on its socket for the
+  controller's handshake, hit `SocketTimeoutException`, and died
+  (`MINION_DIED`). Known intermittent PIT failure mode, upstream, no exposed
+  knob for the handshake timeout (`--timeoutConst` is per-mutant, unrelated).
+  Remedy: re-run the suite. Every subsequent run (solo ×2, full gate) was
+  identical, so it cannot poison a result — only fail a build.
+- A `:sava-core:test` run (2026-07-20) failed with `java.io.EOFException`:
+  the forked test-worker JVM died abruptly — no `hs_err` dump, no crash
+  report, so external kill or hard abort, cause unrecoverable. One-shot.
+
+Neither is a sava defect. Both signatures, the daemon-log recovery recipe, and
+the decision *not* to auto-retry `MINION_DIED` in the plugin (declined
+2026-07-21 — at ~1 per 100 suite runs a retry mostly masks environment
+sickness) are recorded in sava-build's HARDENING.md under "Transient
+infrastructure failures". The verify task's missing-report error now says the
+run may have just failed (it previously said "run pitestEncoding first",
+burying the real error above it).

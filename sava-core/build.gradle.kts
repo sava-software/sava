@@ -28,6 +28,11 @@ val docsInSync = tasks.register("docsInSync") {
   }
 }
 
+// Wired into check, not just qualityGate: CI deliberately runs only check (the
+// serialized PIT suites are the cost being avoided, and this task reads two
+// files), so without this the doc drift it exists to catch would go unenforced
+// between releases.
+tasks.named("check") { dependsOn(docsInSync) }
 tasks.named("qualityGate") { dependsOn(docsInSync) }
 
 testModuleInfo {
@@ -44,7 +49,7 @@ hardening {
     targetClasses = listOf("software.sava.core.borsh.*")
     excludedClasses = listOf(
       "software.sava.core.borsh.*Test*",
-      "software.sava.core.borsh.*Fuzz"
+      "software.sava.core.borsh.*Fuzz*"
     )
     targetTests = "software.sava.core.borsh.*Test*"
   }
@@ -52,7 +57,7 @@ hardening {
     targetClasses = listOf("software.sava.core.crypto.ed25519.*")
     excludedClasses = listOf(
       "software.sava.core.crypto.ed25519.*Test*",
-      "software.sava.core.crypto.ed25519.*Fuzz"
+      "software.sava.core.crypto.ed25519.*Fuzz*"
     )
     targetTests = "software.sava.core.crypto.ed25519.*Test*"
   }
@@ -60,7 +65,7 @@ hardening {
     targetClasses = listOf("software.sava.core.encoding.*")
     excludedClasses = listOf(
       "software.sava.core.encoding.*Test*",
-      "software.sava.core.encoding.*Fuzz"
+      "software.sava.core.encoding.*Fuzz*"
     )
     targetTests = "software.sava.core.encoding.*Test*"
   }
@@ -71,7 +76,7 @@ hardening {
     )
     excludedClasses = listOf(
       "software.sava.core.tx.*Test*",
-      "software.sava.core.tx.*Fuzz",
+      "software.sava.core.tx.*Fuzz*",
       "software.sava.core.accounts.lookup.*Test*"
     )
     targetTests = "software.sava.core.tx.*Test*,software.sava.core.accounts.lookup.*Test*"
@@ -82,7 +87,7 @@ hardening {
     // by name the way every other suite does
     excludedClasses = listOf(
       "software.sava.core.accounts.token.*Test*",
-      "software.sava.core.accounts.token.*Fuzz"
+      "software.sava.core.accounts.token.*Fuzz*"
     )
     targetTests = "software.sava.core.accounts.token.*Test*"
   }

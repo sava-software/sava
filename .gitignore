@@ -51,3 +51,6 @@ ignore
 keys
 Integ.*
 integ.*
+
+# arcmutate incremental-analysis state — machine local, survives clean
+.pitest-history/

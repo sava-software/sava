@@ -34,12 +34,20 @@ entries are `Transaction`-plus-accounts overloads in the same position.
 
 **Fast-path and defensive conditionals** (SURVIVED): `joinKeys` and
 `ProgramAccountsRequestRecord.toJson` null/empty guards, `readBytes` and
-`readInputStream` early returns, `wrapResponseParser`'s null check, and the
-`checkResponse` status-range boundaries. These are guards whose two branches
-converge on the same observable result for every input a test can construct —
-the empty-collection and null cases are covered, and the mutants that survive
-flip a check whose other side produces an identical request or an identical
-parse.
+`readInputStream` early returns, and `wrapResponseParser`'s null check. These
+are guards whose two branches converge on the same observable result for every
+input a test can construct — the empty-collection and null cases are covered,
+and the mutants that survive flip a check whose other side produces an
+identical request or an identical parse.
+
+**`checkResponse` status-range boundaries** (SURVIVED): **unreachable
+in-harness**, not equivalent — this is the worked example in HARDENING.md's
+acceptance-categories note. A real 199 *would* distinguish the `< 200` mutant,
+but the JDK client treats 1xx as interim responses and never surfaces one as a
+final status; a mock server replying 199 kills the connection before the guard
+runs. Reaching it needs a raw-socket stub speaking HTTP/1.1 by hand — that
+named escape hatch is what a later reader re-checks before assuming the
+acceptance still holds.
 
 **Pass-through accessors on `ReadHttpResponse`** (`request`,
 `previousResponse`, `sslSession`): the record delegates to the wrapped response,
@@ -71,9 +79,12 @@ include real coverage debt, so the module-wide claim no longer holds. The
   `ParseCustomErrorCodeTests`.
 - `Lamports.amount`, boundary/forced-true on `lamports < 0`: both branches
   build the same `BigInteger` for every long, so the signed branch is
-  allocation routing only — `valueOf` is cheaper than widening the bits. See
-  the decimal suite notes in sava-core for why the allocation-bound technique
-  that would kill these was tried and reverted.
+  allocation routing only — `valueOf` is cheaper than widening the bits. The
+  agreement is not just prose: sava-core's
+  `ByteUtilTests.toUnsignedBigIntegerAgreesWithValueOfWhereCallersBranch`
+  sweeps `valueOf` vs the widening over 10k seeded non-negative values plus
+  boundaries on every build. See the decimal suite notes in sava-core for why
+  the allocation-bound technique that would kill these was tried and reverted.
 - `JsonUtil.parseEncodedData`, forced-true on `ji.readArray()` plus the
   `NO_COVERAGE` null-return below it: both sit on the single-element-array
   branch, which always throws (the known parser quirk recorded in
