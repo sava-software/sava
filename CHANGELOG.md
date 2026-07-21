@@ -1,5 +1,13 @@
 # Changelog
 
+## [25.8.2](https://github.com/sava-software/sava/compare/25.8.1...25.8.2) (2026-07-21)
+
+
+### Bug Fixes
+
+* Fix pinging immediately after connection upgrade. ([07e3592](https://github.com/sava-software/sava/commit/07e3592706a78c2b29514a3006341a98f4032624))
+* **ws:** Fix pinning the CPU when waiting for intial subscription responses. ([ef7c9f4](https://github.com/sava-software/sava/commit/ef7c9f4a0952f5e532be563bf2b5f9c9f4f8474a))
+
 ## [25.8.1](https://github.com/sava-software/sava/compare/25.8.0...25.8.1) (2026-07-21)
 
 
