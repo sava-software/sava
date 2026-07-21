@@ -235,4 +235,130 @@ final class ByteUtilTests {
 
     assertArrayEquals(bytes, ByteUtil.reverse(ByteUtil.reverse(bytes)));
   }
+
+  /// The u64 widening used wherever a wire `long` is really unsigned. Pinned
+  /// against the decimal round trip it replaced, which is the obvious-but-slow
+  /// way to say the same thing.
+  @Test
+  void toUnsignedBigIntegerMatchesTheDecimalRoundTrip() {
+    final long[] edges = {
+        0L, 1L, -1L, -2L, 255L, 256L, -256L,
+        0xFFL, 0xFF00L, 0xFF000000L, 0xFF00000000L, 0xFF00000000000000L,
+        0x0102030405060708L, 0x8000000000000000L, 0x7FFFFFFFFFFFFFFFL,
+        (long) Integer.MAX_VALUE, (long) Integer.MAX_VALUE + 1, 0xFFFFFFFFL,
+        Long.MIN_VALUE, Long.MIN_VALUE + 1, Long.MAX_VALUE, Long.MAX_VALUE - 1
+    };
+    for (final long val : edges) {
+      assertEquals(new BigInteger(Long.toUnsignedString(val)), ByteUtil.toUnsignedBigInteger(val),
+          "widening " + val);
+    }
+
+    final var random = new java.util.Random(20260720L);
+    for (int i = 0; i < 20_000; ++i) {
+      final long val = random.nextLong();
+      assertEquals(new BigInteger(Long.toUnsignedString(val)), ByteUtil.toUnsignedBigInteger(val),
+          "widening " + val);
+    }
+  }
+
+  /// One bit at a time across all 64 positions. The random sweep above only
+  /// catches a wrong shift distance or a transposed byte with high probability;
+  /// this catches it outright, and says which position is wrong.
+  @Test
+  void toUnsignedBigIntegerPlacesEveryBitAtItsOwnPosition() {
+    for (int i = 0; i < Long.SIZE; ++i) {
+      assertEquals(BigInteger.ONE.shiftLeft(i), ByteUtil.toUnsignedBigInteger(1L << i),
+          "bit " + i);
+    }
+    // Every bit below i set: catches a shift that is right for isolated bits but
+    // drops or duplicates a byte when neighbours are populated.
+    for (int i = 1; i <= Long.SIZE; ++i) {
+      final long val = i == Long.SIZE ? -1L : (1L << i) - 1;
+      assertEquals(BigInteger.ONE.shiftLeft(i).subtract(BigInteger.ONE),
+          ByteUtil.toUnsignedBigInteger(val), "low " + i + " bits");
+    }
+  }
+
+  /// The property every call site leans on. `DecimalInteger`, `DecimalIntegerAmount`
+  /// and `Lamports` all branch `val < 0 ? toUnsignedBigInteger(val) : valueOf(val)`,
+  /// treating the two as interchangeable where they overlap — the branch is an
+  /// allocation choice, not a change of meaning. If they ever diverged, those
+  /// callers would return different values either side of zero for no stated reason.
+  @Test
+  void toUnsignedBigIntegerAgreesWithValueOfWhereCallersBranch() {
+    for (final long val : new long[]{0L, 1L, 2L, 255L, 256L, 0xFFFFFFFFL, Long.MAX_VALUE}) {
+      assertEquals(BigInteger.valueOf(val), ByteUtil.toUnsignedBigInteger(val), "non-negative " + val);
+    }
+    final var random = new java.util.Random(31L);
+    for (int i = 0; i < 10_000; ++i) {
+      final long val = random.nextLong() >>> 1; // non-negative half of the range
+      assertEquals(BigInteger.valueOf(val), ByteUtil.toUnsignedBigInteger(val), "non-negative " + val);
+    }
+    // And the negative half is where they must differ, by exactly 2^64.
+    assertEquals(BigInteger.valueOf(-1L).add(BigInteger.TWO.pow(64)),
+        ByteUtil.toUnsignedBigInteger(-1L));
+  }
+
+  /// Widening must not lose or invent bits: truncating the result back to a
+  /// `long` has to reproduce the input exactly, and the value has to land inside
+  /// the u64 range for every input.
+  @Test
+  void toUnsignedBigIntegerPreservesAllSixtyFourBits() {
+    final var twoPow64 = BigInteger.TWO.pow(64);
+    final var random = new java.util.Random(64L);
+    for (int i = 0; i < 20_000; ++i) {
+      final long val = i == 0 ? Long.MIN_VALUE : i == 1 ? -1L : random.nextLong();
+      final var widened = ByteUtil.toUnsignedBigInteger(val);
+      assertEquals(val, widened.longValue(), "bits lost widening " + val);
+      assertTrue(widened.signum() >= 0 && widened.compareTo(twoPow64) < 0, "out of u64 range: " + val);
+      assertTrue(widened.bitLength() <= Long.SIZE, "too wide: " + val);
+    }
+  }
+
+  /// Widening has to induce the same order as `Long.compareUnsigned` — that is
+  /// what makes the result usable for comparing wire amounts. The top half of the
+  /// signed range must sort above the bottom half, not below it.
+  @Test
+  void toUnsignedBigIntegerOrdersLikeCompareUnsigned() {
+    assertTrue(ByteUtil.toUnsignedBigInteger(Long.MIN_VALUE)
+        .compareTo(ByteUtil.toUnsignedBigInteger(Long.MAX_VALUE)) > 0);
+
+    final var random = new java.util.Random(128L);
+    for (int i = 0; i < 10_000; ++i) {
+      final long a = random.nextLong();
+      final long b = random.nextLong();
+      assertEquals(Integer.signum(Long.compareUnsigned(a, b)),
+          ByteUtil.toUnsignedBigInteger(a).compareTo(ByteUtil.toUnsignedBigInteger(b)),
+          a + " vs " + b);
+    }
+  }
+
+  /// Cross-check against this class's own little-endian writer, which reaches the
+  /// same 64 bits through a `VarHandle` rather than through the shift arithmetic
+  /// under test — an oracle that shares no code with the implementation.
+  @Test
+  void toUnsignedBigIntegerAgreesWithTheVarHandleWriter() {
+    final byte[] le = new byte[Long.BYTES];
+    final var random = new java.util.Random(256L);
+    for (int i = 0; i < 5_000; ++i) {
+      final long val = i == 0 ? Long.MIN_VALUE : i == 1 ? -1L : random.nextLong();
+      ByteUtil.putInt64LE(le, 0, val);
+      assertEquals(new BigInteger(1, ByteUtil.reverse(le)), ByteUtil.toUnsignedBigInteger(val),
+          "widening " + val);
+    }
+  }
+
+  /// The whole point: the top half of the range widens to a large positive value
+  /// rather than staying negative.
+  @Test
+  void toUnsignedBigIntegerNeverReturnsANegative() {
+    assertEquals(new BigInteger("18446744073709551615"), ByteUtil.toUnsignedBigInteger(-1L));
+    assertEquals(new BigInteger("9223372036854775808"), ByteUtil.toUnsignedBigInteger(Long.MIN_VALUE));
+
+    final var random = new java.util.Random(7L);
+    for (int i = 0; i < 5_000; ++i) {
+      assertTrue(ByteUtil.toUnsignedBigInteger(random.nextLong()).signum() >= 0);
+    }
+    assertEquals(0, ByteUtil.toUnsignedBigInteger(0L).signum());
+  }
 }

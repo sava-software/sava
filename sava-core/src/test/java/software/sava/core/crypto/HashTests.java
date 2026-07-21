@@ -144,4 +144,47 @@ final class HashTests {
     assertEquals(64, Hash.sha512Digest().digest(new byte[0]).length);
     assertEquals(32, Hash.sha256Digest().digest(new byte[0]).length);
   }
+
+  /// SHA-512 is not decoration here: [software.sava.core.crypto.ed25519.Ed25519Util]
+  /// derives public keys through this digest, and `BaseMaskWorker` generates vanity
+  /// keys with it. A wrong SHA-512 produces addresses nobody holds the key to, so it
+  /// gets known-answer vectors rather than a length check.
+  ///
+  /// FIPS 180-4 one-block, empty, and the 448-bit multi-block case.
+  @Test
+  void sha512MatchesTheFipsVectors() {
+    assertArrayEquals(
+        Jex.decode("ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
+            + "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"),
+        Hash.sha512Digest().digest(ascii("abc")));
+
+    assertArrayEquals(
+        Jex.decode("cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce"
+            + "47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"),
+        Hash.sha512Digest().digest(new byte[0]));
+
+    assertArrayEquals(
+        Jex.decode("204a8fc6dda82f0a0ced7beb8e08a41657c16ef468b228a8279be331a703c335"
+            + "96fd15c13b1b07f9aa1d3bea57789ca031ad85c7a71dd70354ec631238ca3445"),
+        Hash.sha512Digest().digest(ascii("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")));
+  }
+
+  /// The digests are requested from a specific [java.security.Provider] instance
+  /// rather than by name, so a provider installed ahead of SUN cannot supply the
+  /// implementation. That is a deliberate choice and worth asserting.
+  @Test
+  void digestsComeFromThePinnedSunProvider() {
+    assertSame(SunCrypto.SUN_SECURITY_PROVIDER, Hash.sha256Digest().getProvider());
+    assertSame(SunCrypto.SUN_SECURITY_PROVIDER, Hash.sha512Digest().getProvider());
+    assertEquals("SHA-256", Hash.sha256Digest().getAlgorithm());
+    assertEquals("SHA-512", Hash.sha512Digest().getAlgorithm());
+  }
+
+  /// Digest length is part of the contract for callers sizing buffers.
+  @Test
+  void digestLengthsAreFixed() {
+    assertEquals(32, Hash.sha256Digest().getDigestLength());
+    assertEquals(64, Hash.sha512Digest().getDigestLength());
+    assertEquals(32, Hash.sha256(new byte[0]).length);
+  }
 }

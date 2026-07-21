@@ -70,9 +70,10 @@ include real coverage debt, so the module-wide claim no longer holds. The
   truncation, `code ± (1L << 32)` — are pinned by
   `ParseCustomErrorCodeTests`.
 - `Lamports.amount`, boundary/forced-true on `lamports < 0`: both branches
-  build the same `BigInteger` for every long — non-negative values render
-  identically through `Long.toUnsignedString` (at zero it is `"0"`), so the
-  signed branch is allocation routing only.
+  build the same `BigInteger` for every long, so the signed branch is
+  allocation routing only — `valueOf` is cheaper than widening the bits. See
+  the decimal suite notes in sava-core for why the allocation-bound technique
+  that would kill these was tried and reverted.
 - `JsonUtil.parseEncodedData`, forced-true on `ji.readArray()` plus the
   `NO_COVERAGE` null-return below it: both sit on the single-element-array
   branch, which always throws (the known parser quirk recorded in

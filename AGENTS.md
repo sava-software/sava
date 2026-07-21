@@ -54,6 +54,16 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - **`SURVIVED` and `NO_COVERAGE` are different problems.** The first is a judgement
   call about equivalence; the second is an untested line and is mechanical work.
   Never accept a `NO_COVERAGE` mutant as "equivalent" — you have not observed it.
+- **A suite's percentage is not a target.** An accepted mutant with a written
+  reason is finished work, not a gap. `decimal` sits at 81% because four of its
+  22 mutants are documented equivalents — that is an accurate number, and driving
+  it to 100% was tried on 2026-07-20 and reverted. Before trying to raise a
+  figure, check whether what remains is uncovered code or already-closed triage.
+- **Allocation and timing harnesses are a last resort.** They re-run once per
+  mutant, need a `volatile` sink so escape analysis cannot delete what they
+  measure, and flap when the margin is thin. Reserve them for properties that are
+  a stated design goal — see the decimal notes in
+  `sava-core/config/pitest/README.md` for a worked example of when not to.
 - A new unkilled mutant has exactly three legal outcomes: **kill it** with a test
   (prefer asserting the property it breaks over restating the implementation),
   **refactor** it out of existence, or **accept it** with a written reason in the

@@ -168,30 +168,39 @@ by `MaskWorkerTests` without being mutated.
 
 ## Triaged equivalent mutants — decimal suite
 
-Seeded 2026-07-20 with the suite. All 4 entries are the same equivalence,
-one instance per class.
+4 entries, all the same equivalence: the unsigned-widening guard
+`val < 0 ? ByteUtil.toUnsignedBigInteger(val) : BigDecimal.valueOf(val)` in
+`DecimalInteger.toDecimal`, and its `BigInteger` twin in
+`DecimalIntegerAmount.amount`.
 
-**Unsigned widening fast path** (`DecimalInteger.toDecimal` line 28,
-`DecimalIntegerAmount.amount` line 10): both read
-`val < 0 ? new BigDecimal(Long.toUnsignedString(val)) : BigDecimal.valueOf(val)`
-(and the `BigInteger` equivalent). The else branch is only an allocation
-shortcut — for every non-negative long the two branches build an identical
-value (same unscaled magnitude, scale 0), verified exhaustively over the
-boundaries and 2M random non-negative longs. So `<` → `<=`
-(`ConditionalsBoundaryMutator`, differs only at 0, where both give 0) and
-force-true (`RemoveConditionalMutator_ORDER_IF`, always takes the string
-path) are unkillable by construction. The force-false direction
-(`ORDER_ELSE`) is *not* equivalent — it sign-extends instead of widening —
-and is killed by `longOverloadTreatsNegativeAsUnsigned` and
+**Allocation routing only.** Both branches build an identical value for every
+non-negative long — verified exhaustively over the boundaries and 2M random
+values — so `<` → `<=` (which differs only at zero, where both give zero) and
+forced-true (which always widens) cannot be told apart by any assertion on the
+result. The guard exists because `valueOf` is cheaper, not because the branches
+disagree. The forced-*false* direction is not equivalent — it sign-extends
+instead of widening — and is killed by
+`DecimalIntegerTests.longOverloadTreatsNegativeAsUnsigned` and
 `amountWidensNegativeLongsAsUnsigned`.
 
-Note this suite runs plain `STRONGER`. `EXPERIMENTAL_BIG_DECIMAL` /
-`EXPERIMENTAL_BIG_INTEGER` (fixed for java 25 in pitest 1.25.8) were tried
-and generate zero mutants here: they only rewrite the
-`(BigDecimal)BigDecimal` arithmetic methods — add, subtract, multiply,
-divide, remainder, min, max, abs, negate, plus — and this package's only
-arithmetic is `movePointLeft`/`movePointRight`, which take an `int`. No
-package in the repo currently has a call site those mutators can reach.
+These were briefly killed on 2026-07-20 with `ThreadMXBean` allocation bounds,
+which is the technique HARDENING.md suggests for exactly this shape. It was
+reverted, and the reasons are worth recording before anyone tries again:
+
+- **The measurement is fragile.** A result that is immediately discarded can be
+  scalar-replaced by escape analysis, erasing the allocation being measured — and
+  only on runs that reach the right JIT tier. The first version passed alone and
+  failed intermittently under the ratchet. A `volatile` sink fixes it, but the
+  fragility is inherent.
+- **The margins are thin.** Bounds have to be set per method from measurements;
+  `toDecimal` has a ~40 byte floor that `amount` does not, and on a large value
+  the gap between the fast path and the mutant is 64 bytes against 88.
+- **PIT re-runs covering tests once per mutant.** A warmup-plus-rounds harness of
+  ~150k iterations per assertion took this suite from ~10s to ~38s, for four
+  mutants that are correctly described here in prose.
+
+A documented equivalent mutant is a closed gap. Chasing the last four to make a
+percentage read 100 cost more than it returned.
 
 ## Triaged equivalent mutants — tx suite
 

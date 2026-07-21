@@ -1,5 +1,6 @@
 package software.sava.rpc.json.http.response;
 
+import software.sava.core.encoding.ByteUtil;
 import software.sava.core.util.DecimalIntegerAmount;
 import software.sava.core.util.LamportDecimal;
 import systems.comodal.jsoniter.JsonIterator;
@@ -20,7 +21,7 @@ public record Lamports(Context context, long lamports) implements DecimalInteger
 
   @Override
   public BigInteger amount() {
-    return lamports < 0 ? new BigInteger(Long.toUnsignedString(lamports)) : BigInteger.valueOf(lamports);
+    return lamports < 0 ? ByteUtil.toUnsignedBigInteger(lamports) : BigInteger.valueOf(lamports);
   }
 
   @Override

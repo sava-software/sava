@@ -6,8 +6,7 @@ import software.sava.core.encoding.Jex;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 
 /// Known-answer vectors from RFC 4231, section 4. The vectors are what pins the
 /// key and data arguments to their roles: cases 2 and 3 use a key and a message
@@ -72,5 +71,39 @@ final class HmacTests {
     final var key = ascii("Jefe");
     final var data = ascii("what do ya want for nothing?");
     assertFalse(Arrays.equals(Hmac.hmacSHA512(key, data), Hmac.hmacSHA512(data, key)));
+  }
+
+  /// The no-argument factory is public API and the escape hatch the deprecated
+  /// two-argument method points callers at, so it has to hand back a usable,
+  /// independent [javax.crypto.Mac] from the pinned provider.
+  @Test
+  void factoryReturnsAnIndependentMacFromThePinnedProvider() throws Exception {
+    final var mac = Hmac.hmacSHA512();
+    assertEquals("HmacSHA512", mac.getAlgorithm());
+    assertSame(SunCrypto.SUN_JCE_PROVIDER, mac.getProvider());
+    assertEquals(64, mac.getMacLength());
+
+    assertNotSame(Hmac.hmacSHA512(), Hmac.hmacSHA512(), "each call needs its own Mac");
+
+    // driving it by hand must reproduce the convenience method
+    mac.init(new javax.crypto.spec.SecretKeySpec(ascii("Jefe"), "HmacSHA512"));
+    assertArrayEquals(
+        Hmac.hmacSHA512(ascii("Jefe"), ascii("what do ya want for nothing?")),
+        mac.doFinal(ascii("what do ya want for nothing?")));
+  }
+
+  /// A fresh Mac carries no state from a previous one — the reason the factory
+  /// hands out a new instance rather than sharing one.
+  @Test
+  void separateMacsDoNotShareState() throws Exception {
+    final var poisoned = Hmac.hmacSHA512();
+    poisoned.init(new javax.crypto.spec.SecretKeySpec(ascii("Jefe"), "HmacSHA512"));
+    poisoned.update(ascii("partial input"));
+
+    final var clean = Hmac.hmacSHA512();
+    clean.init(new javax.crypto.spec.SecretKeySpec(ascii("Jefe"), "HmacSHA512"));
+    assertArrayEquals(
+        Hmac.hmacSHA512(ascii("Jefe"), ascii("what do ya want for nothing?")),
+        clean.doFinal(ascii("what do ya want for nothing?")));
   }
 }

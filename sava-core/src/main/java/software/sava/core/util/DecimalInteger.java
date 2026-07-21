@@ -1,5 +1,7 @@
 package software.sava.core.util;
 
+import software.sava.core.encoding.ByteUtil;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
@@ -25,7 +27,7 @@ public interface DecimalInteger {
 
   static BigDecimal toDecimal(final long val, final int decimals) {
     return toDecimal(
-        val < 0 ? new BigDecimal(Long.toUnsignedString(val)) : BigDecimal.valueOf(val),
+        val < 0 ? new BigDecimal(ByteUtil.toUnsignedBigInteger(val)) : BigDecimal.valueOf(val),
         decimals);
   }
 

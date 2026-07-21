@@ -102,7 +102,10 @@ hardening {
       "software.sava.core.crypto.ed25519.*",
       "software.sava.core.crypto.*Test*"
     )
-    targetTests = "software.sava.core.crypto.HashTests,software.sava.core.crypto.HmacTests"
+    // a wildcard rather than a list, so a new test in this package feeds the suite
+    // instead of leaving its mutants looking uncovered; the ed25519 tests it also
+    // matches are cheap and their own suite still owns that subpackage
+    targetTests = "software.sava.core.crypto.*Tests"
   }
   mutation.register("vanity") {
     // DELIBERATE DEVIATION from the package-wildcard rule: this suite allowlists
