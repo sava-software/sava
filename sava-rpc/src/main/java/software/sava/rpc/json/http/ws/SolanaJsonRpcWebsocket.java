@@ -64,6 +64,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Condition newSubscription;
   private final AtomicLong lastWrite;
   private final boolean internalExecutor;
+  private final ScheduledExecutorService scheduler;
   private volatile WebSocket webSocket;
 
   private char[] buffer;
@@ -77,6 +78,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final Timings timings,
                          final NanoClock clock,
                          final ExecutorService executorService,
+                         final ScheduledExecutorService scheduler,
                          final Consumer<SolanaRpcWebsocket> onOpen,
                          final OnClose onClose,
                          final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
@@ -110,6 +112,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.ji = JsonIterator.parse(new byte[0]);
     this.lock = new ReentrantLock();
     this.newSubscription = lock.newCondition();
+    // null: deferred connects use CompletableFuture.delayedExecutor — the shared
+    // JDK delayer, no thread of ours. The check-loop executor below cannot host
+    // them: its single thread is occupied by the loop for the websocket's
+    // lifetime. Injected, deferred connects are scheduled on it instead; the
+    // caller owns its lifecycle.
+    this.scheduler = scheduler;
     // null: same dedicated executor as always, owned by this websocket and shut
     // down by close(); injected: the caller's to shut down, and close() only asks
     // the check loop to return its thread.
@@ -156,12 +164,31 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       final long millisSinceLastWrite = now - this.lastWrite.get();
       if (millisSinceLastWrite < timings.reConnectDelay()) {
         final long delay = this.timings.reConnectDelay() - millisSinceLastWrite;
-        final var delayedExecutor = CompletableFuture.delayedExecutor(delay, MILLISECONDS);
-        return CompletableFuture.supplyAsync(() -> {
+        if (scheduler == null) {
+          final var delayedExecutor = CompletableFuture.delayedExecutor(delay, MILLISECONDS);
+          return CompletableFuture.supplyAsync(() -> {
+                this.lastWrite.set(clock.currentTimeMillis());
+                return this.webSocketBuilder.buildAsync(this.endpoint, this).join();
+              }, delayedExecutor
+          );
+        } else {
+          final var connected = new CompletableFuture<WebSocket>();
+          this.scheduler.schedule(() -> {
+            try {
               this.lastWrite.set(clock.currentTimeMillis());
-              return this.webSocketBuilder.buildAsync(this.endpoint, this).join();
-            }, delayedExecutor
-        );
+              this.webSocketBuilder.buildAsync(this.endpoint, this).whenComplete((webSocket, ex) -> {
+                if (ex == null) {
+                  connected.complete(webSocket);
+                } else {
+                  connected.completeExceptionally(ex);
+                }
+              });
+            } catch (final RuntimeException ex) {
+              connected.completeExceptionally(ex);
+            }
+          }, delay, MILLISECONDS);
+          return connected;
+        }
       } else {
         this.lastWrite.set(now);
         return this.webSocketBuilder.buildAsync(this.endpoint, this);

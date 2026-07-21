@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -16,6 +17,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   private WebSocket.Builder webSocketBuilder;
   private NanoClock clock = NanoClock.SYSTEM;
   private ExecutorService executorService;
+  private ScheduledExecutorService scheduler;
   private long reConnectDelay = 3_000;
   private long pingDelay = 15_000;
   private long subscriptionAndPingCheckDelay = 2_000;
@@ -38,6 +40,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
         new Timings(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay),
         clock == null ? NanoClock.SYSTEM : clock,
         executorService,
+        scheduler,
         onOpen,
         onClose,
         onError,
@@ -118,6 +121,20 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
 
   ExecutorService executorService() {
     return executorService;
+  }
+
+  /// Deliberately not on the public [SolanaRpcWebsocket.Builder] interface, like
+  /// [#executorService(ExecutorService)]. Null (the default) defers reconnects on
+  /// `CompletableFuture.delayedExecutor` — the shared JDK delayer, no extra
+  /// thread; injected, deferred connects are scheduled on it and its lifecycle is
+  /// the caller's. Tests reach it by casting the builder.
+  SolanaRpcWebsocketBuilder scheduler(final ScheduledExecutorService scheduler) {
+    this.scheduler = scheduler;
+    return this;
+  }
+
+  ScheduledExecutorService scheduler() {
+    return scheduler;
   }
 
   @Override

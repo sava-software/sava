@@ -62,6 +62,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
         timings,
         clock,
         new RecordingExecutor(),
+        null,
         onOpen,
         (_, _, _) -> {
         },
@@ -252,9 +253,12 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   }
 
   /// close() drops every subscription, so a later connection has nothing to resend.
+  /// The clock steps past the resend throttle first — inside the window nothing
+  /// would be re-sent even from an uncleared map.
   @Test
   void closeClearsSubscriptionsSoNothingIsResent() {
-    final var ws = websocket(TIMINGS);
+    final var clock = new TestClock();
+    final var ws = websocket(TIMINGS, clock, null, null);
     ws.accountSubscribe(ACCOUNT_A, _ -> {
     });
     ws.slotSubscribe(_ -> {
@@ -267,6 +271,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
     assertTrue(ws.closed());
     assertFalse(socket.closeReasons.isEmpty(), "a close frame should be sent");
 
+    clock.advanceMillis(TIMINGS.reConnectDelay() + 1);
     final var afterClose = new RecordingWebSocket();
     ws.onOpen(afterClose);
     assertNotSent(afterClose, "accountSubscribe");

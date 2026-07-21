@@ -34,6 +34,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         clock,
         new RecordingExecutor(),
         null,
+        null,
         onClose,
         (_, _) -> {
         },
@@ -65,11 +66,14 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   }
 
   /// close() forgets every channel: nothing survives to be re-sent on a
-  /// subsequent connection. The account/slot channels are pinned in the
-  /// reconnect tests; this covers the rest.
+  /// subsequent connection. The clock steps past the resend throttle before the
+  /// reopen — inside the window, re-queued subscriptions would be skipped anyway
+  /// and an uncleared map would go unnoticed. The account/slot channels are
+  /// pinned in the reconnect tests; this covers the rest.
   @Test
   void closeClearsEveryChannel() {
-    final var ws = websocket(new TestClock(), (_, _, _) -> {
+    final var clock = new TestClock();
+    final var ws = websocket(clock, (_, _, _) -> {
     }, null, null);
     final var key = software.sava.core.accounts.PublicKey
         .fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
@@ -91,9 +95,63 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
 
     ws.close();
 
+    clock.advanceMillis(TIMINGS.reConnectDelay() + 1);
     final var afterClose = new RecordingWebSocket();
     ws.onOpen(afterClose);
     assertTrue(afterClose.sentText.isEmpty(), "close() should forget every subscription: " + afterClose.sentText);
+  }
+
+  /// close() also drops in-flight state that no reopen would surface: a pending
+  /// unconfirmed subscription must not be re-sent, and a queued un-subscription
+  /// must not be flushed, by a later write cycle on the dead listener.
+  @Test
+  void closeDropsPendingAndQueuedWrites() {
+    final var clock = new TestClock();
+    final var ws = websocket(clock, (_, _, _) -> {
+    }, null, null);
+    final var key = software.sava.core.accounts.PublicKey
+        .fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+    // a confirmed subscription with its un-subscription queued...
+    assertTrue(ws.logsSubscribe(key, _ -> {
+    }));
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+    ws.onText(socket, java.nio.CharBuffer.wrap("""
+        {"jsonrpc":"2.0","result":555,"id":2}"""), true);
+    assertTrue(ws.logsUnsubscribe(key));
+    // ...and a pending unconfirmed one
+    assertTrue(ws.rootSubscribe(_ -> {
+    }));
+    final int sent = socket.sentText.size();
+
+    ws.close();
+
+    clock.advanceMillis(TIMINGS.reConnectDelay() + 1);
+    ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+    assertEquals(sent, socket.sentText.size(),
+        "nothing pending or queued should survive close(): " + socket.sentText.subList(sent, socket.sentText.size()));
+  }
+
+  /// After close() a notification quoting a previously confirmed subscription id
+  /// must not reach the consumer — the id mapping does not outlive the client.
+  @Test
+  void closeForgetsActiveSubscriptionIds() {
+    final var ws = websocket(new TestClock(), (_, _, _) -> {
+    }, null, null);
+    final var key = software.sava.core.accounts.PublicKey
+        .fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+    final var received = new ArrayList<Object>();
+    assertTrue(ws.accountSubscribe(key, received::add));
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+    ws.onText(socket, java.nio.CharBuffer.wrap("""
+        {"jsonrpc":"2.0","result":999,"id":2}"""), true);
+
+    ws.close();
+
+    ws.onText(socket, java.nio.CharBuffer.wrap("""
+        {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":1},"value":{"data":["","base64"],"executable":false,"lamports":1,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":0}},"subscription":999}}"""), true);
+    assertTrue(received.isEmpty(), "a subscription id must not dispatch after close()");
   }
 
   @Test
@@ -205,7 +263,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     final var executor = new RecordingExecutor();
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
-        TIMINGS, new TestClock(), executor,
+        TIMINGS, new TestClock(), executor, null,
         null, (_, _, _) -> {
         }, (_, _) -> {
         }, null, null
@@ -226,7 +284,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     final var executor = new RecordingExecutor();
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
-        TIMINGS, new TestClock(), executor,
+        TIMINGS, new TestClock(), executor, null,
         null, (_, _, _) -> {
         }, (_, _) -> {
         }, null, null

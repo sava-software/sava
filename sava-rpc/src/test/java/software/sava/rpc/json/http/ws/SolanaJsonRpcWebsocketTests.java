@@ -10,6 +10,7 @@ import java.math.BigInteger;
 import java.net.URI;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -34,6 +35,7 @@ final class SolanaJsonRpcWebsocketTests {
         TIMINGS,
         new TestClock(),
         new RecordingExecutor(),
+        null,
         _ -> {
         },
         (_, _, _) -> {
@@ -379,6 +381,122 @@ final class SolanaJsonRpcWebsocketTests {
           {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid subscription id."},"id":6}"""
       );
       assertEquals(1, exceptions.size());
+    }
+  }
+
+  /// Params field order is the node's choice: `subscription` may precede `result`.
+  /// The dispatch paths carry mark/reset fallbacks for exactly that, and an
+  /// exception subscriber pins that no parse goes through the catch-all instead.
+  @Test
+  void notificationParamsFieldOrderDoesNotMatter() {
+    try (final var ws = createWebsocket()) {
+      final var exceptions = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(exceptions::add);
+
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var accounts = new ArrayList<AccountInfo<byte[]>>();
+      final var txResults = new ArrayList<TxResult>();
+      final var votes = new ArrayList<Long>();
+      assertTrue(ws.accountSubscribe(key, accounts::add));
+      assertTrue(ws.signatureSubscribe("sigF", txResults::add));
+      assertTrue(ws.subscribe("voteSubscribe", "voteUnsubscribe", "voteNotification",
+          "vote", "", ji -> ji.skipUntil("slots").openArray().readLong(), null, votes::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":11,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":12,"id":3}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":13,"id":4}""");
+
+      // subscription before result, on every fallback-carrying path
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"subscription":11,"result":{"context":{"slot":1},"value":{"data":["dGVzdA==","base64"],"executable":false,"lamports":7,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}}}}""");
+      assertEquals(1, accounts.size());
+      assertEquals(7L, accounts.getFirst().lamports());
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"signatureNotification","params":{"subscription":12,"result":{"context":{"slot":2},"value":{"err":null}}}}""");
+      assertEquals(1, txResults.size());
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"voteNotification","params":{"subscription":13,"result":{"hash":"8Rshv2oMkPu5E4opXTRyuyBeZBqQ4S477VG26wUTFxUM","slots":[77],"timestamp":null}}}""");
+      assertEquals(List.of(77L), votes);
+
+      assertTrue(exceptions.isEmpty(), "no reordered notification may fall into the exception path: " + exceptions);
+    }
+  }
+
+  /// Array-backed fragments with non-zero position and arrayOffset drive the
+  /// `buf.position() + buf.arrayOffset()` arithmetic that whole-array wraps
+  /// (position 0, arrayOffset 0) leave invisible.
+  @Test
+  void fragmentedNotificationThroughOffsetBuffers() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}""");
+
+      final var notification = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["dGVzdA==","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}},"subscription":23784}}""";
+      final int half = notification.length() / 2;
+
+      // fragment 1: non-zero position inside a larger backing array
+      final char[] backing = new char[7 + half];
+      Arrays.fill(backing, 0, 7, 'x');
+      notification.getChars(0, half, backing, 7);
+      ws.onText(socket, CharBuffer.wrap(backing, 7, half), false);
+      assertTrue(received.isEmpty());
+
+      // fragment 2: non-zero arrayOffset via slice()
+      final char[] backing2 = new char[11 + (notification.length() - half)];
+      Arrays.fill(backing2, 0, 11, 'y');
+      notification.getChars(half, notification.length(), backing2, 11);
+      final var sliced = CharBuffer.wrap(backing2, 11, notification.length() - half).slice();
+      assertTrue(sliced.hasArray());
+      ws.onText(socket, sliced, true);
+
+      assertEquals(1, received.size());
+      assertEquals(33594L, received.getFirst().lamports());
+      assertArrayEquals("test".getBytes(US_ASCII), received.getFirst().data());
+    }
+  }
+
+  /// A fragmented message larger than the 4096-char buffer forces ensureCapacity
+  /// down both growth branches: doubling, and jumping straight to a minCapacity
+  /// beyond the doubled size.
+  @Test
+  void oversizedFragmentedNotificationGrowsTheBuffer() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}""");
+
+      // 12k base64 chars decode to 9k bytes; the first oversized fragment jumps
+      // past the doubled capacity, the trailing one grows incrementally
+      final var data = "A".repeat(12_000);
+      final var notification = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":1},"value":{"data":["%s","base64"],"executable":false,"lamports":5,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":9000}},"subscription":23784}}"""
+          .formatted(data);
+      final int split = 9_000;
+      ws.onText(socket, CharBuffer.wrap(notification.substring(0, split).toCharArray()), false);
+      assertTrue(received.isEmpty());
+      ws.onText(socket, CharBuffer.wrap(notification.substring(split)), true);
+
+      assertEquals(1, received.size());
+      assertEquals(9_000, received.getFirst().data().length);
     }
   }
 

@@ -37,6 +37,7 @@ final class SubscribeOverloadTests {
         new TestClock(),
         new RecordingExecutor(),
         null,
+        null,
         (_, _, _) -> {
         },
         null, null, null

@@ -65,7 +65,7 @@ Neither is observable.
 
 Seeded 2026-07-21 at 50% detected (247 entries) when the suite was added over
 `software.sava.rpc.json.http.ws.*` alongside the `NanoClock` seam, then worked
-the same day to 69% (153 entries: ~127 SURVIVED, 26 NO_COVERAGE, plus flip
+the same day to 73% (138 entries: ~117 SURVIVED, 24 NO_COVERAGE, plus flip
 insurance) by driving the unsubscribe flows per channel, the connect/onClose
 lifecycle, the sendText/sendPing failure callbacks, the interface-default
 subscribe overloads, and the dispatch edge branches (unknown methods,
@@ -79,13 +79,15 @@ possible.
 
 **Accepted with reasons** (triaged, closed):
 
-- **`connect` timing mutants** (`connect` boundary/order/`MathMutator`,
-  `lambda$connect$0` `lastWrite` write): the deferred branch runs on
-  `CompletableFuture.delayedExecutor`, for which there is no seam — the
-  mutants are distinguishable only by wall-clock timing of the connection
-  attempt or by racing the executor thread. The named escape hatch is a
-  schedulable-executor seam on `connect()`; the immediate branch's `lastWrite`
-  write *is* pinned (`connectBuildsImmediatelyWhenIdle`).
+- **`connect` classic-path body** (one `VoidMethodCallMutator` row): the
+  scheduler seam (2026-07-21, package-private `scheduler(...)` on the
+  builder) closed the old timing family — the window boundary, the
+  remaining-delay arithmetic, and the deferred `lastWrite` write are all
+  killed against a `RecordingScheduler` with a stepped clock. What remains is
+  the body of the default `CompletableFuture.delayedExecutor` branch, taken
+  only when no scheduler is injected: identical logic to the seam path that
+  *is* pinned, distinguishable only by real waits. The 25ms
+  `connectRunsOnceTheReconnectDelayElapses` covers its execution.
 - **Error-callback `EQUAL_ELSE` forks** (`lambda$sendText$0:681`,
   `lambda$sendPing$0:971`): forcing the handler branch with a null handler
   NPEs inside `whenComplete`, which the CompletionStage swallows —
@@ -101,13 +103,29 @@ possible.
   call sequence constructs — the map-first branch always wins. Every miss
   dimension (key, channel, commitment, notification method) is pinned by
   tests; only the impossible match is accepted.
-- **Check-loop rows covered only by racing threads** (`run:187` EQUAL_IF,
-  `run:188`/`run:191` VoidMethodCall — flip insurance, each observed flipping
-  between detected and SURVIVED across identical runs): the builder-path
-  tests create websockets with real internal executors, so the loop interior
-  is executed by threads racing the test scheduler; the deterministic inline
-  run tests cover only the interrupt- and closed-exit paths. The loop's
-  `TIMED_OUT` rows come from the same place.
+- **Check-loop rows covered only by racing threads** (`run:205/214/215/218/224`
+  as of the scheduler-seam line shift, unioned in both SURVIVED and
+  NO_COVERAGE — flip insurance, each observed flipping across identical
+  runs): the builder-path tests create websockets
+  with real internal executors, so the loop interior is executed by threads
+  racing the test scheduler; the deterministic inline run tests cover only
+  the interrupt- and closed-exit paths. The loop's `TIMED_OUT` rows come from
+  the same place. NOTE `-PupdateMutationBaseline` rewrites this file from a
+  single run and silently drops these unions — re-append them after any
+  refresh.
+- **`queueSubscription` lock/signal choreography**: removing the
+  `newSubscription.signal()` (or its lock/unlock pair) only changes when the
+  background check loop wakes — every send is also driven synchronously by
+  the message cycle, so no deterministic test can see the difference. The
+  inner `putIfAbsent` duplicate branch is unreachable single-threaded: the
+  outer `containsKey`/`get` guard already filtered duplicates, and only a
+  concurrent subscribe between guard and put could reach it.
+- **`ensureCapacity` growth arithmetic** (`MathMutator` on
+  `(length << 1) + 2`): every variant still feeds `Math.max(newCapacity,
+  minCapacity)`, so the buffer ends at least `minCapacity` and parsing is
+  unaffected — allocation-size only. The growth path itself (doubling and
+  the straight-to-minCapacity jump) is exercised by
+  `oversizedFragmentedNotificationGrowsTheBuffer`.
 - **close() executor-ownership branch** (`close` EQUAL_ELSE on
   `internalExecutor`, `shutdown()`/`signal()` VoidMethodCall): the injected
   side — never shut down what the caller owns — is pinned by
@@ -116,13 +134,16 @@ possible.
   observable effect from outside (the signal only shortens how long the loop
   waits before noticing `closed()`).
 
-**Remaining untriaged debt** (~115 rows): concentrated in `onWholeMessage` /
-`onText` parse-branch survivors, `close`'s field-clearing breadth,
-`handlePendingSubscriptions`' CAS choreography, and `queueSubscription`'s
-signal/lock mutants (check-loop timing only). The 26 NO_COVERAGE rows are
-mostly the same defensive-scan interiors and DEBUG-level log suppliers
-(`lambda$onPing$0`/`lambda$onPong$0` run only with DEBUG enabled), plus
-`Builder.clock`'s throwing default, reachable only by a Builder
+**Remaining untriaged debt** (~70 rows at 73% detected): what is left of the
+`onWholeMessage`/`onText` parse-branch survivors after the reordered-params,
+offset-buffer, and buffer-growth passes (2026-07-21: those plus post-close
+dispatch tests killed `close()`'s ten field-clearing mutants — the reopen
+tests alone had let them survive because the resend throttle masks an
+uncleared map — and ~10 dispatch rows), plus
+`handlePendingSubscriptions`' CAS choreography and assorted singles. The 24
+NO_COVERAGE rows are mostly defensive-scan interiors and DEBUG-level log
+suppliers (`lambda$onPing$0`/`lambda$onPong$0` run only with DEBUG enabled),
+plus `Builder.clock`'s throwing default, reachable only by a Builder
 implementation that does not override it.
 
 ## Triaged equivalent mutants (accepted with reasons)

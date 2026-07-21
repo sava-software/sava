@@ -54,7 +54,7 @@ mutators can reach, so do not re-enable them on a hunch.
 | --- | --- | --- |
 | `pitestResponses` | `json.http.response.*` | Debt free — keep it that way. |
 | `pitestClient` | `json.http.client.*` | Carries real coverage debt; see below. |
-| `pitestWs` | `json.http.ws.*` | Seeded at 50%, worked to 69% same day; see below. |
+| `pitestWs` | `json.http.ws.*` | Seeded at 50%, worked to 73% same day; see below. |
 
 ### `pitestClient` — the debt is deliberate and documented
 
@@ -84,7 +84,7 @@ a suite. The clock lives in the `ws` package deliberately, so this suite
 mutates it; `NanoClockTests` (ported from ravina) covers it, and the reconnect
 tests step a `TestClock` over the throttle and ping windows instead of waiting.
 
-Seeded at 50% detected (247 entries), worked the same day to 69% (153 entries)
+Seeded at 50% detected (247 entries), worked the same day to 73% (138 entries)
 — per-family acceptances and the remaining debt are in
 `config/pitest/README.md`. The check-loop executor is injectable
 (package-private setter on `SolanaRpcWebsocketBuilder`, reached by casting the
@@ -98,9 +98,15 @@ stranding the non-daemon thread. Constructor-driven tests inject a
 `RecordingExecutor` (captures the loop task, never runs it), so no background
 thread races clock-stepped assertions; builder-path tests still run real
 internal executors, which is where the loop's remaining flip-insurance rows
-come from. `connect()`'s delayed-executor branch remains the one seamless
-acceptance family. Fakes are named `Recording*` and excluded alongside
-`*Test*` (which also matches `TestClock`).
+come from. `connect()`'s deferred branch has its own seam — a package-private
+`scheduler(ScheduledExecutorService)` on the builder, null defaulting to the
+classic `CompletableFuture.delayedExecutor` (the shared JDK delayer; the
+check-loop executor cannot host deferred connects because its single thread
+is occupied by the loop for the websocket's lifetime). With a
+`RecordingScheduler` the window boundary, remaining-delay arithmetic, and
+deferred `lastWrite` write are pinned deterministically, leaving one
+classic-path body row accepted. Fakes are named `Recording*` and excluded
+alongside `*Test*` (which also matches `TestClock`).
 
 ## sava-vanity
 

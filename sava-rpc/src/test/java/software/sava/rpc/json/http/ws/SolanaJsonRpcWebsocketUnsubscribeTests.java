@@ -39,6 +39,7 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
         clock,
         new RecordingExecutor(),
         null,
+        null,
         (_, _, _) -> {
         },
         null, null, null

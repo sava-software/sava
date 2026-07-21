@@ -156,6 +156,11 @@ final class SolanaRpcWebsocketBuilderTests {
     final var executor = new RecordingExecutor();
     assertSame(executor, builder.executorService(executor).executorService());
 
+    assertNull(builder.scheduler());
+    final var scheduler = new RecordingScheduler();
+    assertSame(scheduler, builder.scheduler(scheduler).scheduler());
+    builder.scheduler(null);
+
     final var websocket = builder
         .uri(URI.create("wss://example.invalid"))
         .webSocketBuilder(new RecordingWebSocketBuilder(new AtomicReference<>()))
@@ -187,6 +192,123 @@ final class SolanaRpcWebsocketBuilderTests {
       // the attempt marked lastWrite, so the next check is inside the ping window
       websocket.onPing(socket, java.nio.ByteBuffer.wrap(new byte[0]));
       assertEquals(0, socket.pings, "connect() must count as the last write");
+    }
+  }
+
+  /// With an injected scheduler, a deferred connect is a captured task with an
+  /// exact delay — no waiting, no races: the test steps the clock, runs the task,
+  /// and the future completes with the built socket.
+  @Test
+  void connectSchedulesOnTheInjectedSchedulerInsideTheWindow() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    final var clock = new TestClock();
+    final var scheduler = new RecordingScheduler();
+    final var endpoint = URI.create("wss://example.invalid");
+    try (final var websocket = (SolanaJsonRpcWebsocket) ((SolanaRpcWebsocketBuilder) builder())
+        .scheduler(scheduler)
+        .uri(endpoint)
+        .webSocketBuilder(webSocketBuilder)
+        .clock(clock)
+        .reConnectDelay(60_000L)
+        .create()) {
+      assertTrue(websocket.rootSubscribe(_ -> {
+      }));
+      websocket.onOpen(socket);
+
+      final var future = websocket.connect();
+      assertNotNull(future);
+      assertFalse(future.toCompletableFuture().isDone());
+      assertEquals(1, scheduler.deferred.size());
+      assertEquals(60_000L, scheduler.deferred.getFirst().delay(), "nothing has elapsed, so the full window defers");
+      assertNull(webSocketBuilder.builtUri.get(), "no build before the delay elapses");
+
+      clock.advanceMillis(60_000L);
+      scheduler.deferred.getFirst().task().run();
+      assertSame(socket, future.toCompletableFuture().join());
+      assertEquals(endpoint, webSocketBuilder.builtUri.get());
+
+      // the scheduled attempt marked lastWrite at its run time
+      websocket.onPing(socket, java.nio.ByteBuffer.wrap(new byte[0]));
+      assertEquals(0, socket.pings, "the deferred connect must count as the last write");
+    }
+  }
+
+  /// The scheduled delay is the unelapsed remainder of the window, not the whole
+  /// window.
+  @Test
+  void connectSchedulerDelayReflectsElapsedTime() {
+    final var socket = new RecordingWebSocket();
+    final var clock = new TestClock();
+    final var scheduler = new RecordingScheduler();
+    try (final var websocket = (SolanaJsonRpcWebsocket) ((SolanaRpcWebsocketBuilder) builder())
+        .scheduler(scheduler)
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(new RecordingWebSocketBuilder(new AtomicReference<>(), socket))
+        .clock(clock)
+        .reConnectDelay(60_000L)
+        .create()) {
+      assertTrue(websocket.rootSubscribe(_ -> {
+      }));
+      websocket.onOpen(socket);
+
+      clock.advanceMillis(13_000L);
+      assertNotNull(websocket.connect());
+      assertEquals(1, scheduler.deferred.size());
+      assertEquals(47_000L, scheduler.deferred.getFirst().delay());
+    }
+  }
+
+  /// At exactly the window edge the attempt is immediate: the build happens
+  /// synchronously and nothing is handed to the scheduler.
+  @Test
+  void connectAtTheWindowEdgeIsImmediate() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    final var clock = new TestClock();
+    final var scheduler = new RecordingScheduler();
+    try (final var websocket = (SolanaJsonRpcWebsocket) ((SolanaRpcWebsocketBuilder) builder())
+        .scheduler(scheduler)
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(webSocketBuilder)
+        .clock(clock)
+        .reConnectDelay(60_000L)
+        .create()) {
+      assertTrue(websocket.rootSubscribe(_ -> {
+      }));
+      websocket.onOpen(socket);
+
+      clock.advanceMillis(60_000L);
+      final var future = websocket.connect();
+      assertNotNull(future);
+      assertTrue(scheduler.deferred.isEmpty(), "the window has fully elapsed; nothing to defer");
+      assertNotNull(webSocketBuilder.builtUri.get(), "the build happens synchronously");
+      assertSame(socket, future.toCompletableFuture().join());
+    }
+  }
+
+  /// A failed build on the scheduled path surfaces through the returned future.
+  @Test
+  void connectFailureOnTheSchedulerPathSurfaces() {
+    final var clock = new TestClock();
+    final var scheduler = new RecordingScheduler();
+    // no connect result: buildAsync fails
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>());
+    try (final var websocket = (SolanaJsonRpcWebsocket) ((SolanaRpcWebsocketBuilder) builder())
+        .scheduler(scheduler)
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(webSocketBuilder)
+        .clock(clock)
+        .reConnectDelay(60_000L)
+        .create()) {
+      assertTrue(websocket.rootSubscribe(_ -> {
+      }));
+      websocket.onOpen(new RecordingWebSocket());
+
+      final var future = websocket.connect();
+      scheduler.deferred.getFirst().task().run();
+      assertTrue(future.toCompletableFuture().isCompletedExceptionally(),
+          "a failed build must fail the deferred future");
     }
   }
 
