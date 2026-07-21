@@ -236,6 +236,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
     this.pendingUnSubscriptions.clear();
     this.subscriptionsBySubId.clear();
+    // the connection upgrade that just completed is this connection's first
+    // write; without this, lastWrite's 0 origin made the first quiet check
+    // ping a brand-new connection immediately
+    this.lastWrite.set(clock.currentTimeMillis());
     lockAndHandlePendingSubscriptions(webSocket);
     webSocket.request(Long.MAX_VALUE);
     this.webSocket = webSocket;

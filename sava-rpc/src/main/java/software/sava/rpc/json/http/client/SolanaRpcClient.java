@@ -297,90 +297,136 @@ public interface SolanaRpcClient {
 
   /// Accounts which do not exist are **omitted** from the returned List rather than
   /// occupying their slot, so the result is shorter than `keys` and every entry after
-  /// a missing account shifts down by one. Zipping the result back against `keys` by
-  /// index therefore attributes data to the wrong account, silently.
+  /// a missing account shifts down by one. This does not match the Solana RPC
+  /// response one to one — the node returns a null in place of each missing account.
   ///
-  /// This does not match the Solana RPC response one to one — the node returns a null
-  /// in place of each missing account.
+  /// That contract is the right fit when absence does not matter: each returned
+  /// account carries its own [AccountInfo#pubKey()], so a caller dispatching on the
+  /// entries themselves — switching on owner, key, or contents — never sees a gap.
+  /// It is the wrong fit for indexed correlation: zipping the result back against
+  /// `keys` by index attributes data to the wrong account, silently. For that, use
+  /// [#getAccounts(SequencedCollection, BiFunction)], which keeps a null in each
+  /// absent account's slot and stays aligned with `keys`.
   ///
-  /// Prefer [#getAccounts(SequencedCollection, BiFunction)], which keeps the null and
-  /// stays aligned with `keys`. Every `getMultipleAccounts` overload behaves this way,
-  /// not just this one; both families send an identical `getMultipleAccounts` request
-  /// and differ only in how the response is parsed.
+  /// Every `getMultipleAccounts` overload behaves this way, not just this one; both
+  /// families send an identical `getMultipleAccounts` request and differ only in how
+  /// the response is parsed.
   ///
   /// @return the accounts which exist, in key order, with absent accounts omitted.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   /// Absent accounts are omitted rather than nulled — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)]. Prefer
-  /// [#getAccounts(SequencedCollection)] to stay aligned with `keys`.
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(SequencedCollection)] stays aligned with `keys`.
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(keys, BYTES_IDENTITY);
   }
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, SequencedCollection)] keeps the result aligned with `keys`.
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                            final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(commitment, keys, BYTES_IDENTITY);
   }
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(int, int, SequencedCollection)] keeps the result aligned with `keys`.
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(BigInteger, SequencedCollection)] keeps the result aligned with `keys`.
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(BigInteger, int, int, SequencedCollection)] keeps the result aligned with `keys`.
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, BigInteger, SequencedCollection)] keeps the result aligned with `keys`.
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, int, int, SequencedCollection)] keeps the result aligned with `keys`.
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, BigInteger, int, int, SequencedCollection)] keeps the result aligned with `keys`.
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(BigInteger, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(BigInteger, int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, BigInteger, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Absent accounts are omitted — see
+  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
+  /// [#getAccounts(Commitment, BigInteger, int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final int length,
@@ -400,72 +446,102 @@ public interface SolanaRpcClient {
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final SequencedCollection<PublicKey> keys) {
     return getAccounts(keys, BYTES_IDENTITY);
   }
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                                    final SequencedCollection<PublicKey> keys) {
     return getAccounts(commitment, keys, BYTES_IDENTITY);
   }
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
                                                            final SequencedCollection<PublicKey> keys);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
                                                            final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                            final BigInteger minContextSlot,
                                                            final SequencedCollection<PublicKey> keys);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                            final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                            final BigInteger minContextSlot,
                                                            final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final int length,
                                                           final int offset,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
                                                           final int length,
                                                           final int offset,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final int length,
                                                           final int offset,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final BigInteger minContextSlot,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Result aligned with `keys`, null where an account does not exist — see
+  /// [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final BigInteger minContextSlot,
                                                           final int length,

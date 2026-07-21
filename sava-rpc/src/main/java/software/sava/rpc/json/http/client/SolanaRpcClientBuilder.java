@@ -62,8 +62,14 @@ public final class SolanaRpcClientBuilder {
     return this;
   }
 
+  /// Composes with any previously set [#extendRequest(UnaryOperator)] rather
+  /// than replacing it — the chaining reads as if it composes, and until
+  /// 2026-07-21 it silently did not.
   public SolanaRpcClientBuilder compressResponses() {
-    return extendRequest(r -> r.header("Accept-Encoding", "gzip"));
+    final var extendRequest = this.extendRequest;
+    return extendRequest(extendRequest == null
+        ? r -> r.header("Accept-Encoding", "gzip")
+        : r -> extendRequest.apply(r).header("Accept-Encoding", "gzip"));
   }
 
   public SolanaRpcClientBuilder testResponse(final BiPredicate<HttpResponse<?>, byte[]> testResponse) {

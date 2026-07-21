@@ -260,11 +260,11 @@ shapes in `TransactionFactoryTests`.
 - `TransactionRecord.sign` 156: widening the signer scan by one slot probes
   an account that cannot equal a distinct signer key.
 - `AccountIndexLookupTableView.compareTo` 25: forcing the `instanceof` view
-  branch off routes through `toByteArray`, result-identical for views over
-  one shared table — the only supported shape. NOTE the view-vs-view branch
-  compares `this.lookupTable` against itself rather than
-  `view.lookupTable`, so cross-table views compare incorrectly; flagged
-  2026-07-18, behavior deliberately unpinned pending an owner decision.
+  branch off routes through `toByteArray`, result-identical for every pair of
+  views since the 2026-07-21 fix. (The view-vs-view branch used to compare
+  `this.lookupTable` against itself rather than `view.lookupTable` — flagged
+  2026-07-18, owner-approved and fixed 2026-07-21, cross-table ordering
+  pinned by `viewCompareToReadsTheOtherViewsBackingTable`.)
 
 ## Untriaged debt (tx suite)
 

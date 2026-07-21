@@ -16,7 +16,7 @@ wrong one silently misattributes data rather than failing.
 | API | A missing thing is… | Detect it with |
 | --- | --- | --- |
 | `getAccounts(...)` | a `null` entry holding its slot | `list.get(i) == null` |
-| `getMultipleAccounts(...)` | **omitted**, so later entries shift | you cannot — use `getAccounts` |
+| `getMultipleAccounts(...)` | **omitted**, so later entries shift | you cannot from the list shape — dispatch on each entry's `pubKey()`, or use `getAccounts` for indexed correlation |
 | `getAccountInfo(...)` | a non-null `AccountInfo` with empty fields | `owner() == null` |
 | `getSignatureStatuses(...)` | a sentinel `TxStatus` in the map | `status.nil()` |
 
@@ -48,8 +48,10 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it
   also changes the `maxRetries` default (0 when skipping, 1 otherwise) and the
   preflight commitment. Use the three-argument overload to pin retries.
-- `SolanaRpcClientBuilder.compressResponses()` **replaces** any previously set
-  `extendRequest` rather than composing with it.
+- `SolanaRpcClientBuilder.compressResponses()` composes with a previously set
+  `extendRequest` (it silently replaced it until 2026-07-21). `extendRequest`
+  itself is still a plain setter: calling it *after* `compressResponses()`
+  replaces everything, compression header included.
 - Both `simulateTransaction` families default `replaceRecentBlockhash` to
   `true`, so a simulation does not fail on an expired blockhash by default.
 

@@ -88,10 +88,12 @@ final class SolanaRpcClientBuilderTests {
     }
   }
 
-  /// compressResponses replaces any previously set extendRequest rather than
-  /// composing with it — pinned because the chaining reads as if it would compose.
+  /// compressResponses composes with a previously set extendRequest — it used to
+  /// silently replace it, which read as a bug because the chaining looks
+  /// compositional. A later extendRequest still replaces everything, including
+  /// the compression header: the setter is a setter.
   @Test
-  void compressResponsesReplacesAnEarlierExtendRequest() {
+  void compressResponsesComposesWithAnEarlierExtendRequest() {
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var client = (SolanaJsonRpcClient) SolanaRpcClient.build()
           .endpoint(ENDPOINT)
@@ -102,8 +104,27 @@ final class SolanaRpcClientBuilderTests {
 
       final var request = client.newRequest().uri(ENDPOINT).build();
       assertEquals("gzip", request.headers().firstValue("Accept-Encoding").orElse(null));
-      assertTrue(request.headers().firstValue("X-First").isEmpty(),
-          "compressResponses overwrites extendRequest: " + request.headers().map());
+      assertEquals("set", request.headers().firstValue("X-First").orElse(null),
+          "compressResponses must compose with the earlier extendRequest: " + request.headers().map());
+    }
+  }
+
+  /// The reverse order is a replacement, not a composition — extendRequest is a
+  /// plain setter, so it discards the compression header set before it.
+  @Test
+  void aLaterExtendRequestStillReplacesCompressResponses() {
+    try (final var httpClient = HttpClient.newHttpClient()) {
+      final var client = (SolanaJsonRpcClient) SolanaRpcClient.build()
+          .endpoint(ENDPOINT)
+          .httpClient(httpClient)
+          .compressResponses()
+          .extendRequest(request -> request.header("X-First", "set"))
+          .createClient();
+
+      final var request = client.newRequest().uri(ENDPOINT).build();
+      assertTrue(request.headers().firstValue("Accept-Encoding").isEmpty(),
+          "extendRequest is a setter and replaces: " + request.headers().map());
+      assertEquals("set", request.headers().firstValue("X-First").orElse(null));
     }
   }
 

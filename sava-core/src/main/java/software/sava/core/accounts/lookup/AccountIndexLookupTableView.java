@@ -23,7 +23,7 @@ public record AccountIndexLookupTableView(byte[] lookupTable,
   @Override
   public int compareTo(final PublicKey o) {
     if (o instanceof AccountIndexLookupTableView view) {
-      return Arrays.compare(lookupTable, offset, offset + PUBLIC_KEY_LENGTH, lookupTable, view.offset, view.offset + PUBLIC_KEY_LENGTH);
+      return Arrays.compare(lookupTable, offset, offset + PUBLIC_KEY_LENGTH, view.lookupTable, view.offset, view.offset + PUBLIC_KEY_LENGTH);
     } else {
       return Arrays.compare(lookupTable, offset, offset + PUBLIC_KEY_LENGTH, o.toByteArray(), 0, PUBLIC_KEY_LENGTH);
     }

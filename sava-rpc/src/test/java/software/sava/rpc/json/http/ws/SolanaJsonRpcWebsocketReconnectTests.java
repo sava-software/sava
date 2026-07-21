@@ -136,9 +136,9 @@ final class SolanaJsonRpcWebsocketReconnectTests {
 
   /// Ping pacing: a quiet connection is pinged only once `pingDelay` has elapsed
   /// since the last write, and a sent ping counts as that write — a second check
-  /// inside the window must not ping again. `lastWrite` starts at 0, so against
-  /// epoch-scale clock readings the very first quiet check always pings; pinned
-  /// here as existing behaviour, not endorsed.
+  /// inside the window must not ping again. The connection upgrade counts as the
+  /// first write, so a brand-new connection is not pinged immediately (it used
+  /// to be: `lastWrite`'s 0 origin read as infinitely stale).
   @Test
   void quietConnectionIsPingedOnlyAfterPingDelay() {
     final var clock = new TestClock();
@@ -146,17 +146,21 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       // no subscriptions: every check is a pure ping decision
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
-      assertEquals(1, socket.pings, "nothing has ever been written, so the first check pings");
+      assertEquals(0, socket.pings, "opening the connection is the first write; no immediate ping");
 
       ws.onPing(socket, ByteBuffer.allocate(0));
-      assertEquals(1, socket.pings, "the ping itself is a write; no re-ping inside the window");
+      assertEquals(0, socket.pings, "still inside the window");
 
       clock.advanceMillis(TIMINGS.pingDelay() + 1);
       ws.onPing(socket, ByteBuffer.allocate(0));
-      assertEquals(2, socket.pings, "a quiet connection should be pinged after pingDelay");
+      assertEquals(1, socket.pings, "a quiet connection should be pinged after pingDelay");
 
       ws.onPing(socket, ByteBuffer.allocate(0));
-      assertEquals(2, socket.pings, "and the window restarts from the new ping");
+      assertEquals(1, socket.pings, "the ping itself is a write; the window restarts from it");
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      ws.onPing(socket, ByteBuffer.allocate(0));
+      assertEquals(2, socket.pings, "pinging resumes once the window elapses again");
     }
   }
 

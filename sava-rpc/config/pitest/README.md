@@ -16,8 +16,9 @@ rows are the shifted old ones before refreshing.
 ## Triaged mutants — client suite
 
 Seeded 2026-07-20 when the `client` suite was added over
-`software.sava.rpc.json.http.client.*`. 56 entries: 27 SURVIVED and 29
-NO_COVERAGE, from a population of 498 (89% killed).
+`software.sava.rpc.json.http.client.*`. 56 entries: 27 SURVIVED and 30
+NO_COVERAGE (one shared baseline key), from a population of 501 (88%
+detected).
 
 Unlike the `responses` suite below, this one **does** carry debt. It was
 registered deliberately red and worked down from 54% over several passes; what

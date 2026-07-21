@@ -103,12 +103,14 @@ final class AccountIndexLookupTableTests {
   @Test
   void entryEqualsAndHashCodeCompareKeyBytesOnly() {
     final var entry = new AccountIndexLookupTableEntry(key(4), 1);
+    //noinspection EqualsWithItself
     assertEquals(entry, entry);
     // the index is not part of equality: any PublicKey with the same bytes matches
     assertEquals(entry, new AccountIndexLookupTableEntry(key(4), 2));
     assertEquals(entry, PublicKey.createPubKey(key(4)));
     assertNotEquals(entry, new AccountIndexLookupTableEntry(key(6), 1));
-    assertNotEquals(entry, (Object) "not a public key");
+    //noinspection MisorderedAssertEqualsArguments,AssertBetweenInconvertibleTypes
+    assertNotEquals(entry, "not a public key");
 
     assertEquals(entry.hashCode(), new AccountIndexLookupTableEntry(key(4), 2).hashCode());
     assertNotEquals(entry.hashCode(), new AccountIndexLookupTableEntry(key(6), 1).hashCode());
@@ -167,18 +169,41 @@ final class AccountIndexLookupTableTests {
     assertEquals(0, middle.compareTo(PublicKey.createPubKey(key(4))));
   }
 
+  /// Regression: the view-vs-view branch used to compare `this.lookupTable`
+  /// against itself at the argument's offset, so views over *different* backing
+  /// tables compared whatever this table held at that offset. Same slot layout,
+  /// different bytes: the comparison must read the argument's table.
+  @Test
+  void viewCompareToReadsTheOtherViewsBackingTable() {
+    final byte[] table = backingTable();
+    final byte[] otherTable = backingTable();
+    // same offset as view(table, 1) but different key bytes behind it
+    System.arraycopy(key(9), 0, otherTable, 5 + PUBLIC_KEY_LENGTH, PUBLIC_KEY_LENGTH);
+
+    final var middle = view(table, 1);          // key(4)
+    final var otherMiddle = view(otherTable, 1); // key(9)
+
+    assertTrue(middle.compareTo(otherMiddle) < 0, "key(4) must order below key(9) from the other table");
+    assertTrue(otherMiddle.compareTo(middle) > 0);
+    // identical bytes across distinct tables still compare equal
+    assertEquals(0, middle.compareTo(view(backingTable(), 1)));
+  }
+
   @Test
   void viewEqualsAndHashCodeCompareSlotBytesOnly() {
     final byte[] table = backingTable();
     final var view = view(table, 1);
 
+    //noinspection EqualsWithItself
     assertEquals(view, view);
     // the index is not part of equality: any PublicKey with the same bytes matches
     assertEquals(view, new AccountIndexLookupTableView(table, 5 + PUBLIC_KEY_LENGTH, 9));
     assertEquals(view, PublicKey.createPubKey(key(4)));
+    //noinspection AssertBetweenInconvertibleTypes
     assertEquals(view, new AccountIndexLookupTableEntry(key(4), 1));
     assertNotEquals(view, view(table, 0));
-    assertNotEquals(view, (Object) "not a public key");
+    //noinspection MisorderedAssertEqualsArguments,AssertBetweenInconvertibleTypes
+    assertNotEquals(view, "not a public key");
 
     assertEquals(view.hashCode(), PublicKey.createPubKey(key(4)).hashCode());
     assertNotEquals(view.hashCode(), view(table, 2).hashCode());

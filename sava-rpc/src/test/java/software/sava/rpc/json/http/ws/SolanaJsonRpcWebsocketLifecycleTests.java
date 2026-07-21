@@ -184,10 +184,14 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       socket.failPing = boom;
 
       ws.onOpen(socket);
-      assertEquals(1, socket.pings, "nothing has ever been written, so the first check pings");
+      assertEquals(0, socket.pings, "opening the connection counts as the first write");
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+      assertEquals(1, socket.pings);
       assertSame(boom, seen.get());
 
-      // without advancing the clock: the rollback re-arms the ping window
+      // without advancing the clock again: the rollback re-arms the ping window
       ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
       assertEquals(2, socket.pings, "a failed ping must not count as the last write");
     }
@@ -236,11 +240,14 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
 
   @Test
   void pingFailureWithoutAHandlerIsLoggedNotThrown() {
-    try (final var ws = websocket(new TestClock(), (_, _, _) -> {
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock, (_, _, _) -> {
     }, null, null)) {
       final var socket = new RecordingWebSocket();
       socket.failPing = new IllegalStateException("ping failed");
-      assertDoesNotThrow(() -> ws.onOpen(socket));
+      ws.onOpen(socket);
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.onPong(socket, ByteBuffer.wrap(new byte[0])));
       assertEquals(1, socket.pings);
     }
   }
