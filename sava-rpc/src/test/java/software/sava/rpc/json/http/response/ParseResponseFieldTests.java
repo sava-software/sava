@@ -670,6 +670,71 @@ final class ParseResponseFieldTests {
     assertEquals("AccountInUse", error.error().getClass().getSimpleName());
   }
 
+  /// A dropped skip on an unknown-field or unknown-payload branch leaves the iterator
+  /// mid-value — invisible when the skipped value is the last thing parsed, which is
+  /// where the trailing-decoy fixtures sit. These fixtures lead with the skipped value
+  /// and require a real field after it to still parse.
+  @Test
+  void skippedValuesLeaveTheIteratorAligned() {
+    final var slot = ProcessedSlot.parse(ji("""
+        {"future":[7,8],"slot":7,"parent":6,"root":5}"""));
+    assertEquals(7, slot.slot());
+    assertEquals(6, slot.parent());
+    assertEquals(5, slot.root());
+
+    final var logs = TxLogs.parse(ji("""
+        {"future":{"nested":[1]},"signature":"sig","err":null,"logs":["l"]}"""), CONTEXT);
+    assertEquals("sig", logs.signature());
+    assertEquals(List.of("l"), logs.logs());
+
+    // null and array results are skipped whole, then parsing continues after them
+    var it = ji("""
+        {"result":null,"after":1}""");
+    it.skipUntil("result");
+    assertNull(TxResult.parseResult(it, CONTEXT));
+    assertEquals(1, it.skipUntil("after").readInt());
+
+    it = ji("""
+        {"result":[1,2],"after":2}""");
+    it.skipUntil("result");
+    assertNull(TxResult.parseResult(it, CONTEXT));
+    assertEquals(2, it.skipUntil("after").readInt());
+
+    // an unknown custom-error code consumes its whole data payload
+    it = ji("""
+        {"data":{"detail":[1,2]},"after":3}""");
+    it.skipUntil("data");
+    assertSame(RpcCustomError.Unknown.INSTANCE, RpcCustomError.parseError(-32000, it));
+    assertEquals(3, it.skipUntil("after").readInt());
+
+    // non-string, non-object instruction errors are skipped and yield null
+    it = ji("""
+        {"err":42,"after":4}""");
+    it.skipUntil("err");
+    assertNull(IxError.parseError(it));
+    assertEquals(4, it.skipUntil("after").readInt());
+
+    // every encoded-data branch must consume the whole value: the [null] fast path,
+    // the [data, encoding] pair, and the unsupported-type fallback
+    it = ji("""
+        {"data":[null,13],"after":5}""");
+    it.skipUntil("data");
+    assertArrayEquals(new byte[0], JsonUtil.parseEncodedData(it));
+    assertEquals(5, it.skipUntil("after").readInt());
+
+    it = ji("""
+        {"data":["aGVsbG8=","base64"],"after":6}""");
+    it.skipUntil("data");
+    assertArrayEquals("hello".getBytes(), JsonUtil.parseEncodedData(it));
+    assertEquals(6, it.skipUntil("after").readInt());
+
+    it = ji("""
+        {"data":true,"after":7}""");
+    it.skipUntil("data");
+    assertArrayEquals(new byte[0], JsonUtil.parseEncodedData(it));
+    assertEquals(7, it.skipUntil("after").readInt());
+  }
+
   /// The trailing decoy fields in these fixtures carry values of the same JSON type as a
   /// real field with a different value: a parser mutated to treat every field name as a
   /// match lets the decoy overwrite the real value and fails the assertion.

@@ -52,6 +52,7 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,932,RemoveCondition
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,940,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,941,MathMutator,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,942,MathMutator,NO_COVERAGE
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,944,NakedReceiverMutator,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,944,VoidMethodCallMutator,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,946,VoidMethodCallMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,953,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
@@ -64,9 +65,9 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,830,RemoveC
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,831,RemoveConditionalMutator_EQUAL_ELSE,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,831,RemoveConditionalMutator_EQUAL_IF,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,832,VoidMethodCallMutator,NO_COVERAGE
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,875,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,875,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,886,RemoveConditionalMutator_EQUAL_IF,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,887,NakedReceiverMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,888,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,893,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,895,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
@@ -77,13 +78,14 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,546,Remov
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,546,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,547,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,555,BooleanTrueReturnValsMutator,SURVIVED
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,753,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,752,NakedReceiverMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,753,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,758,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,759,VoidMethodCallMutator,NO_COVERAGE
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,771,NakedReceiverMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,772,RemoveConditionalMutator_EQUAL_IF,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publishGeneric,790,NakedReceiverMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publishGeneric,791,RemoveConditionalMutator_EQUAL_IF,SURVIVED
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publishGeneric,801,VoidMethodCallMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueSubscription,299,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueSubscription,303,VoidMethodCallMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueSubscription,305,VoidMethodCallMutator,SURVIVED

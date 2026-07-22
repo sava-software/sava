@@ -224,6 +224,65 @@ final class SolanaJsonRpcWebsocketTests {
     }
   }
 
+  /// Notification field order is provider JSON, not a contract: when "subscription"
+  /// precedes "result", or "value" precedes "context", the forward scan comes up empty
+  /// and the parser must re-scan from its mark instead of dropping the notification.
+  @Test
+  void reorderedNotificationFields() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("GovaE4iu227srtG2s3tZzB4RmWBzw8sTwrCLZz7kN7rY");
+      final var received = new ArrayList<TxLogs>();
+      assertTrue(ws.logsSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":24040,"id":2}"""
+      );
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"logsNotification","params":{"subscription":24040,"result":{"value":{"signature":"sigR","err":null,"logs":["log line"]},"context":{"slot":5208470}}}}"""
+      );
+
+      assertEquals(1, received.size());
+      final var txLogs = received.getFirst();
+      assertEquals("sigR", txLogs.signature());
+      assertEquals(List.of("log line"), txLogs.logs());
+      assertEquals(5208470L, txLogs.context().slot());
+    }
+  }
+
+  /// A generic notification whose subscription id matches no generic subscription
+  /// derives the unsubscribe method from the notification method name; the outgoing
+  /// frame must carry the derived name, not the notification's.
+  @Test
+  void unknownGenericSubscriptionIdUnsubscribes() {
+    try (final var ws = createWebsocket()) {
+      final var received = new ArrayList<Long>();
+      assertTrue(ws.subscribe(
+          "voteSubscribe", "voteUnsubscribe", "voteNotification",
+          "vote", "",
+          ji -> ji.skipUntil("slots").openArray().readLong(),
+          null,
+          received::add
+      ));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":99,"id":2}"""
+      );
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"voteNotification","params":{"result":{"slots":[1,2]},"subscription":555}}"""
+      );
+      assertTrue(received.isEmpty());
+      assertEquals("""
+          {"jsonrpc":"2.0","id":3,"method":"voteUnsubscribe","params":[555]}""", socket.sentText.getLast()
+      );
+    }
+  }
+
   @Test
   void signatureSubscription() {
     try (final var ws = createWebsocket()) {

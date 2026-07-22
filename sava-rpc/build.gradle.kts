@@ -24,6 +24,9 @@ hardening {
       "software.sava.rpc.json.http.client.Integ*"
     )
     targetTests = "software.sava.rpc.json.http.client.*Test*"
+    // fluent receiver-returning calls (iterator chains, builder-style writes) are
+    // invisible to VoidMethodCall; fired in the 2026-07-22 trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("ws") {
     // subscription bookkeeping, reconnect throttling, and ping pacing; time-dependent
@@ -35,6 +38,8 @@ hardening {
       "software.sava.rpc.json.http.ws.Recording*"
     )
     targetTests = "software.sava.rpc.json.http.ws.*Test*"
+    // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("responses") {
     // the hand-rolled json_iterator field predicates parse whatever an RPC node returns;
@@ -44,5 +49,14 @@ hardening {
     // so a helper nested in a test class stays excluded too
     excludedClasses = listOf("software.sava.rpc.json.http.response.*Tests*")
     targetTests = "software.sava.rpc.json.http.client.*Test*,software.sava.rpc.json.http.response.*Test*"
+    // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
+}
+
+// Mutator-trial hook (shared HARDENING.md: "trial per suite, enable only what
+// fires"): -PtrialMutators=STRONGER,EXPERIMENTAL_X overrides every suite for a run.
+// Trial results are recorded in HARDENING_NOTES.md ("Mutator-set trials").
+providers.gradleProperty("trialMutators").orNull?.let { trial ->
+  hardening.mutation.configureEach { mutators = trial }
 }

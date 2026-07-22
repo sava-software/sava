@@ -36,7 +36,7 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
-<!-- hardening-template sha256:96ddf18dcc3a -->
+<!-- hardening-template sha256:a3a73f4b95f3 -->
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
@@ -104,7 +104,17 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - **Kill rates are bounded by the mutator set.** Big-value arithmetic is method
   calls, invisible to `STRONGER`. `EXPERIMENTAL_BIG_INTEGER` fired zero times
   in every candidate suite here (trial table in `HARDENING_NOTES.md`) — left
-  off; re-trial if Big arithmetic is introduced.
+  off; re-trial if Big arithmetic is introduced. Fluent calls returning their
+  receiver are expressions, invisible to `VoidMethodCallMutator`;
+  `EXPERIMENTAL_NAKED_RECEIVER` fired in seven suites here and is enabled on
+  exactly those (same trial table). Trial new mutators per suite with
+  `-PtrialMutators=`; enable only what fires and record the numbers.
+- **PIT minions run on the class path** while this repo's `test` tasks run on
+  the module path, so `module-info` services would diverge between the two.
+  Ruled out here 2026-07-22 — no sava module declares or consumes services
+  (`HARDENING_NOTES.md`); a first real service needs the dual
+  `module-info` + `META-INF/services` declaration, and a harness whose result
+  depends on which task ran it is never committed.
 - Fuzz findings become a committed seed input **and** a named regression test, never
   just a fix — and every committed corpus is replayed by a unit test inside `check`
   (`Token2022CorpusReplayTests`, `TransactionSkeletonCorpusReplayTests`), so a new

@@ -1,4 +1,5 @@
 software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,28,RemoveConditionalMutator_EQUAL_IF,SURVIVED
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,37,NakedReceiverMutator,SURVIVED
 software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,40,NullReturnValsMutator,NO_COVERAGE
 software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,45,VoidMethodCallMutator,SURVIVED
 software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,57,MathMutator,SURVIVED

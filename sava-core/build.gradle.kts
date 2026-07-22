@@ -48,6 +48,9 @@ hardening {
       "software.sava.core.accounts.lookup.*Test*"
     )
     targetTests = "software.sava.core.tx.*Test*,software.sava.core.accounts.lookup.*Test*"
+    // fluent receiver-returning calls (String formatting, iterator chains) are
+    // invisible to VoidMethodCall; fired in the 2026-07-22 trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("token2022") {
     targetClasses = listOf("software.sava.core.accounts.token.*")
@@ -65,6 +68,8 @@ hardening {
     targetClasses = listOf("software.sava.core.accounts.meta.*")
     excludedClasses = listOf("software.sava.core.accounts.meta.*Test*")
     targetTests = "software.sava.core.accounts.meta.*Test*"
+    // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("crypto") {
     // hashing primitives: sha256Twice and h160 have no caller in this repo, so
@@ -93,6 +98,8 @@ hardening {
     // SubsequenceTests itself matches that prefix
     excludedClasses = listOf("software.sava.core.accounts.vanity.*Test*")
     targetTests = "software.sava.core.accounts.vanity.SubsequenceTests"
+    // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("decimal") {
     // lamport and token amount conversion: a shift in the wrong direction or by
@@ -101,7 +108,9 @@ hardening {
     targetClasses = listOf("software.sava.core.util.*")
     excludedClasses = listOf("software.sava.core.util.*Test*")
     targetTests = "software.sava.core.util.*Test*"
-    // deliberately plain STRONGER: EXPERIMENTAL_BIG_DECIMAL only rewrites the
+    // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
+    // deliberately plain STRONGER otherwise: EXPERIMENTAL_BIG_DECIMAL only rewrites the
     // (BigDecimal)BigDecimal arithmetic methods — add/subtract/multiply/divide/
     // remainder/min/max/abs/negate/plus — and never the (int)BigDecimal shifts
     // this package is built on, so enabling it here generates nothing. The
@@ -137,4 +146,11 @@ hardening {
     // agreement can't be reached from scratch by a mutator
     seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/txSkeleton")
   }
+}
+
+// Mutator-trial hook (shared HARDENING.md: "trial per suite, enable only what
+// fires"): -PtrialMutators=STRONGER,EXPERIMENTAL_X overrides every suite for a run.
+// Trial results are recorded in HARDENING_NOTES.md ("Mutator-set trials").
+providers.gradleProperty("trialMutators").orNull?.let { trial ->
+  hardening.mutation.configureEach { mutators = trial }
 }

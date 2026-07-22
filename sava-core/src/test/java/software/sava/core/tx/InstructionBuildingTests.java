@@ -257,6 +257,11 @@ final class InstructionBuildingTests {
     // the data must be the slice, base64 encoded — not the backing array
     assertTrue(rendered.contains(Base64.getEncoder().encodeToString(new byte[]{1, 2, 3, 4})), rendered);
 
+    // the accounts block is shifted four spaces under the "accounts" key and the
+    // indent's trailing newline is stripped, so the comma stays on the closing line
+    assertTrue(rendered.contains("\"accounts\":     [{"), rendered);
+    assertTrue(rendered.contains("}],\n"), rendered);
+
     // empty accounts and empty data render without blowing up
     final var bare = Instruction.createInstruction(PROGRAM, List.of(), new byte[0]);
     final var bareRendered = bare.toString();

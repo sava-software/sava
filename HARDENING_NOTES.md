@@ -145,8 +145,53 @@ churn for nothing, so it stays off. **Re-trial if Big arithmetic is introduced**
 — fixed-point/fee math of the kind that made it fire 114 times in idl-clients'
 `orca` suite.
 
+`EXPERIMENTAL_NAKED_RECEIVER` was trialed 2026-07-22 against every suite, per
+the shared HARDENING.md's fluent-API blind spot (a call returning its receiver
+type is an expression, invisible to `VoidMethodCallMutator` — casebook: the
+EXPERIMENTAL_NAKED_RECEIVER trials). Trials run with the build-file hook:
+`-PtrialMutators=STRONGER,EXPERIMENTAL_X` overrides every suite for a run.
+
+| Suite | Without | With | Fires |
+|---|---|---|---|
+| core `borsh` | 1070 | 1070 | 0 |
+| core `ed25519` | 946 | 946 | 0 |
+| core `encoding` | 1072 | 1072 | 0 |
+| core `token2022` | 688 | 688 | 0 |
+| core `crypto` | 12 | 12 | 0 |
+| core `decimal` | 22 | 25 | 3 |
+| core `meta` | 212 | 213 | 1 |
+| core `tx` | 972 | 978 | 6 |
+| core `vanity` | 113 | 117 | 4 |
+| rpc `client` | 501 | 601 | 100 |
+| rpc `responses` | 524 | 607 | 83 |
+| rpc `ws` | 541 | 592 | 51 |
+
+Enabled on the seven firing suites (`mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"`
+at each registration); the zero-fire suites stay plain `STRONGER` — their mutated
+code returns primitives, arrays, and records, not fluent receivers. 219 of the
+248 fires died against existing tests on the first run; new tests killed 14
+more, and 15 were accepted with reasons (9 in `client`'s documented
+never-entered transport family, 1 `responses` position-equivalent, 5 `ws`
+fallback-funnel redundancies — each in its module's `config/pitest/README.md`).
+The kills closed three real gaps, all same-day: response parsers' unknown-field
+`ji.skip()` branches were only ever exercised with nothing after the skipped
+value (`skippedValuesLeaveTheIteratorAligned` now trails every skip with a
+field that must still parse), websocket notification parsing was never fed
+reordered-field messages (`reorderedNotificationFields`,
+`unknownGenericSubscriptionIdUnsubscribes` — which also killed three
+previously accepted rows), and `InstructionRecord.toString`'s
+`indent(4).stripTrailing()` formatting was covered but unasserted.
+
 ## Environment verifications
 
+- **No services anywhere, so PIT's class-path world cannot diverge (2026-07-22):**
+  this repo's `test` tasks run on the module path (gradlex whitebox test suites)
+  while PIT minions run on the class path — the shared casebook's `ServiceLoader`
+  trap ("PIT's world is the class path") — but no sava `module-info` carries a
+  `provides`/`uses` clause, no source set ships a `META-INF/services` entry, and
+  nothing calls `ServiceLoader`. Re-verify when introducing a service; a real one
+  then needs the dual declaration (`module-info` **and** `META-INF/services`) per
+  the shared HARDENING.md.
 - **JUnit 6.1.2: `@Execution` and `@TestInstance` are both `@Inherited`** —
   verified in the resolved jar's bytecode, 2026-07-21. `RpcRequestTests`'
   base-level annotations therefore reach its nine concrete subclasses, and

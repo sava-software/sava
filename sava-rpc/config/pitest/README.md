@@ -24,14 +24,17 @@ Unlike the `responses` suite below, this one **does** carry debt. It was
 registered deliberately red and worked down from 54% over several passes; what
 remains is recorded here rather than hidden by narrowing the suite.
 
-**Transport paths not driven by the harness** (29 NO_COVERAGE — the bulk):
+**Transport paths not driven by the harness** (38 NO_COVERAGE — the bulk):
 `sendPostRequestNoWrap`, `sendGetRequestNoWrap`, `sendGetRequest` and the
 `applyResponse` tail of `BaseJsonResponseController`. `RpcRequestTests` drives
 requests through `sendPostRequest`, so the unwrapped and GET variants are never
 entered. Killing these needs new harness scaffolding — a local server exercising
 the GET and no-wrap routes — rather than another `registerRequest` line. The
 remaining `simulateTransaction` / `simulateTransactionWithInnerInstructions`
-entries are `Transaction`-plus-accounts overloads in the same position.
+entries are `Transaction`-plus-accounts overloads in the same position. The
+2026-07-22 `NakedReceiverMutator` rows (`JsonHttpClient` request-builder chains,
+`JsonRpcBytesValueParseController.parseResponse`) sit on the same never-entered
+lines and join the family unchanged.
 
 **Fast-path and defensive conditionals** (SURVIVED): `joinKeys` and
 `ProgramAccountsRequestRecord.toJson` null/empty guards, `readBytes` and
@@ -113,6 +116,20 @@ possible.
   the same place. NOTE `-PupdateMutationBaseline` rewrites this file from a
   single run and silently drops these unions — re-append them after any
   refresh.
+- **Notification fast-forwards rescued by the reset-fallback funnel**
+  (`NakedReceiverMutator` on `publish:752/771`'s `skipRestOfObject()`,
+  `publishGeneric:790`'s `skip()`, `onWholeMessage:887`'s
+  `skipRestOfObject()`, 2026-07-22): each drops the scan-ahead before
+  `skipUntil("subscription")`. `skipUntil` stays inside the current object
+  and returns null at its `}`, so without the fast-forward it exhausts the
+  result object, misses, and the `reset(paramsMark)` fallback re-scans from
+  the params mark and finds the id anyway — the funnel produces the identical
+  dispatch. The funnel itself is pinned: `reorderedNotificationFields` drives
+  the fallback directly (subscription-before-result, value-before-context)
+  and killed the fallback-line mutants, and
+  `unknownGenericSubscriptionIdUnsubscribes` pins the miss branch. Only the
+  redundant fast-forwards are accepted. The `onText:944` NakedReceiver row
+  joins the existing uncovered `onText` buffered-path family below.
 - **`queueSubscription` lock/signal choreography**: removing the
   `newSubscription.signal()` (or its lock/unlock pair) only changes when the
   background check loop wakes — every send is also driven synchronously by
@@ -134,7 +151,8 @@ possible.
   observable effect from outside (the signal only shortens how long the loop
   waits before noticing `closed()`).
 
-**Remaining untriaged debt** (~70 rows at 73% detected): what is left of the
+**Remaining untriaged debt** (~70 rows; 76% detected as of the 2026-07-22
+NakedReceiver pass): what is left of the
 `onWholeMessage`/`onText` parse-branch survivors after the reordered-params,
 offset-buffer, and buffer-growth passes (2026-07-21: those plus post-close
 dispatch tests killed `close()`'s ten field-clearing mutants — the reopen
@@ -177,6 +195,15 @@ include real coverage debt, so the module-wide claim no longer holds. The
   `AGENTS.md` — real providers send `[data, encoding]` pairs). Both routes
   reject, and the branch's return value is never observable. Killing these
   means changing the quirk, which is deliberately unchanged.
+- `JsonUtil.parseEncodedData:37`, `NakedReceiverMutator` on
+  `ji.reset(mark2).skipRestOfArray()` (2026-07-22): dropping the `reset`
+  makes `skipRestOfArray` re-skip the elements between the cursor (after the
+  decoded data element) and `mark2` instead of starting there — either way
+  the iterator stops after the array's `]`, so the terminal position is
+  identical. The line is covered: `skippedValuesLeaveTheIteratorAligned`
+  parses a field *after* the array and killed the sibling
+  `skipRestOfArray`-drop on the same line; only the reset-drop is
+  position-equivalent.
 - `JsonUtil.parseEncodedData`, removed `System.Logger::log` call on the
   unsupported-encoding fallback: logging only.
 - `JsonUtil.toJsonIntArray`, capacity math `(data.length << 2) + 2`:
