@@ -232,6 +232,48 @@ able to move the ratchet:
 - `vanity` `SubsequenceRecord.formatCharOptions:148`: `TIMED_OUT` ↔ `KILLED`
   between solo runs — ordinary timing jitter on a detected mutant.
 
+## Mode comparison — 2026-07-22 (scripted)
+
+The hand-run procedure above is now sava-build's
+`pitestModeSnapshot -PpitestMode=<label>` / `pitestModeCompare` pair; first
+scripted runs, per module (quiet all-suites pass stashed as `solo`, then
+`qualityGate` stashed as `gate`):
+
+- **sava-core** (9 suites): zero boundary flips, zero dead baseline rows, one
+  benign flip — `formatCharOptions:148` `KILLED` ↔ `TIMED_OUT` again, the
+  same known flapper, classified as unable to move the ratchet.
+- **sava-rpc** (3 suites): zero boundary flips; one benign flip —
+  `client` `BaseJsonRpcResponseParser.checkResponse:31` `EQUAL_IF` read
+  `RUN_ERROR` solo / `KILLED` gate (first `RUN_ERROR` seen in a *quiet* run;
+  one-off until it repeats on the same mutant). The dead-row sweep named
+  exactly the six ws flip-insurance halves (`run:205/214/215/218/224`) —
+  every key read identically in both modes, so the quiet halves matched
+  nothing. Evidence recorded in the ws README; the unions stay until
+  repeated re-measures stay quiet (casebook: flip insurance that outlived
+  its cause).
+
+## ws check-loop flip family — resolved by removing the cause (2026-07-22)
+
+Rather than wait out the re-measure criterion, the cause was removed the same
+day: the `run` loop's body is now the package-private `checkCycle(long
+awaitNanos)` seam (`awaitNanos <= 0` never parks), and three deterministic
+lifecycle tests drive the interior inline — retry-window resend, socketless
+no-op, and the unhandled-exception funnel, whose ERROR record is asserted
+through System.Logger's JUL backend (`testModuleInfo` gained
+`requires("java.logging")`; `RecordingWebSocket` gained a synchronous
+`throwText`). The refactor shifted every ws line below `run()`: the churn
+classifier read it as `123 shifted, 0 newly covered, 1 unexplained` — the one
+unexplained being the `unlock()` removal, which moved methods (`run` →
+`checkCycle`) and was accepted with a reason (cross-thread-only observable;
+a timing harness one call does not earn). Baseline went 140 → 130: all
+eleven `run`-family rows out (six insurance halves, five live halves — four
+now killed, one relocated and accepted). Post-refactor
+`pitestModeCompare` (solo vs `qualityGate`): **zero flips of any kind, zero
+dead rows** across all three suites, and ws's permanent 6-stale warning is
+gone. The `run` while-condition forced-always-true mutant remains `TIMED_OUT`
+(detected, stable in both modes) — nontermination is inherently PIT-timeout
+territory.
+
 Two transient failures were later root-caused from the Gradle daemon logs
 (`~/.gradle/daemon/<version>/daemon-<pid>.out.log` keeps full build output
 even when the invoking shell discarded it — check there before calling any
@@ -256,15 +298,20 @@ infrastructure failures". The verify task's missing-report error now says the
 run may have just failed (it previously said "run pitestEncoding first",
 burying the real error above it).
 
-## Fuzz corpus replay (resolved 2026-07-21)
+## Fuzz corpus replay (resolved 2026-07-21; generated 2026-07-22)
 
 The shared doc expects committed seed corpora to be replayed inside `check`.
 sava-core's `fuzz/token2022` (2 seeds) and `fuzz/txSkeleton` (4 seeds) were
 read only by their fuzz harnesses, so they could rot between fuzz runs.
-Closed with a replay test per corpus (`Token2022CorpusReplayTests`,
-`TransactionSkeletonCorpusReplayTests`), following json-iterator's
-`TestFuzzCorpusReplay`: list the resource directory, fail on an empty corpus,
-feed every seed through `fuzzerTestOneInput`. Each lives in its harness's
-package, so the `*Test*` wildcards feed it to the matching PIT suite and the
-corpus doubles as a mutant oracle. New seeds — including minimized fuzz
-findings — replay automatically.
+First closed with a hand-written replay test per corpus, following
+json-iterator's `TestFuzzCorpusReplay`; those were deleted 2026-07-22 in
+favour of the plugin's `generateFuzzReplayTests`, which now generates an
+equivalent-or-stricter test per `seedCorpus` target (classpath-resource
+resolution, regular files only, fails — not skips — on a missing or empty
+corpus). The generated test lands in the harness's package, so the `*Test*`
+wildcards feed it to the matching PIT suite and the corpus doubles as a
+mutant oracle — verified 2026-07-22: `pitestToken2022` and `pitestTx` green
+against unchanged baselines after the deletion. Seed provenance moved to
+`sava-core/src/test/resources/fuzz/README.md`, next to (never inside) the
+corpus directories. New seeds — including minimized fuzz findings — replay
+automatically.

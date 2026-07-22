@@ -203,20 +203,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     try {
       final long sleepNanos = MILLISECONDS.toNanos(timings.subscriptionAndPingCheckDelay());
       while (!closed()) {
-        lock.lock();
-        try {
-          // Wake on a new subscription, on close(), or every check delay. The wait
-          // is deliberately unconditional: waiting only while no subscription was
-          // pending spun this loop hot — lock, throttled no-op, unlock — for the
-          // whole window between a subscription's send and its confirmation.
-          newSubscription.awaitNanos(sleepNanos);
-          final var webSocket = this.webSocket;
-          if (webSocket != null) {
-            handlePendingSubscriptions(webSocket);
-          }
-        } finally {
-          lock.unlock();
-        }
+        checkCycle(sleepNanos);
       }
     } catch (final InterruptedException e) {
       // exit
@@ -224,6 +211,28 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       log.log(ERROR, "Unhandled Solana Websocket exception.", ex);
     } finally {
       close();
+    }
+  }
+
+  /// One wait-and-check cycle of the loop above, package-private so same-package
+  /// tests can drive the loop interior deterministically — an `awaitNanos <= 0`
+  /// never parks. Extracted because the interior was otherwise reachable only by
+  /// threads racing the test scheduler (see the ws triage README's check-loop
+  /// entry for the flip-insurance history this replaced).
+  void checkCycle(final long awaitNanos) throws InterruptedException {
+    lock.lock();
+    try {
+      // Wake on a new subscription, on close(), or every check delay. The wait
+      // is deliberately unconditional: waiting only while no subscription was
+      // pending spun this loop hot — lock, throttled no-op, unlock — for the
+      // whole window between a subscription's send and its confirmation.
+      newSubscription.awaitNanos(awaitNanos);
+      final var webSocket = this.webSocket;
+      if (webSocket != null) {
+        handlePendingSubscriptions(webSocket);
+      }
+    } finally {
+      lock.unlock();
     }
   }
 

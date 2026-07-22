@@ -296,6 +296,113 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     assertTrue(ws.closed());
   }
 
+  /// The loop interior, driven deterministically through the checkCycle seam: an
+  /// unconfirmed subscription re-sends only once its retry window passes. This
+  /// interior was previously reachable only by threads racing the test scheduler
+  /// (the run-loop flip-insurance family in the ws triage README).
+  @Test
+  void checkCycleResendsAnUnconfirmedSubscription() throws InterruptedException {
+    final var clock = new TestClock();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
+        TIMINGS, clock, new RecordingExecutor(), null,
+        null, (_, _, _) -> {
+        }, (_, _) -> {
+        }, null, null
+    );
+    assertTrue(ws.rootSubscribe(_ -> {
+    }));
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+    assertEquals(1, socket.sentText.size(), "opening flushes the pending subscription once");
+
+    ws.checkCycle(0L);
+    assertEquals(1, socket.sentText.size(), "inside the retry window the cycle must not re-send");
+
+    clock.advanceMillis(TIMINGS.reConnectDelay() + 1);
+    ws.checkCycle(0L);
+    assertEquals(2, socket.sentText.size(), "an unconfirmed subscription re-sends after the retry window");
+    assertTrue(socket.sentText.get(1).contains("rootSubscribe"), socket.sentText.toString());
+    ws.close();
+  }
+
+  /// Before any connection there is nothing to write to: a cycle with no websocket
+  /// is a no-op that must not dereference the absent socket, and it leaves the
+  /// subscription pending for the eventual onOpen flush.
+  @Test
+  void checkCycleWithoutASocketLeavesTheSubscriptionPending() throws InterruptedException {
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
+        TIMINGS, new TestClock(), new RecordingExecutor(), null,
+        null, (_, _, _) -> {
+        }, (_, _) -> {
+        }, null, null
+    );
+    assertTrue(ws.rootSubscribe(_ -> {
+    }));
+    ws.checkCycle(0L); // an NPE here means the absent socket was dereferenced
+
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+    assertEquals(1, socket.sentText.size(), "the subscription must still be pending after a socketless cycle");
+    ws.close();
+  }
+
+  /// A RuntimeException escaping the loop body is the loop's failure funnel: it
+  /// must close the websocket AND say so. The ERROR record is asserted through
+  /// System.Logger's JUL backend, so a silent funnel cannot pass — failures are
+  /// never silent.
+  @Test
+  void checkLoopClosesAndLogsAnUnhandledException() {
+    final var executor = new RecordingExecutor();
+    final var clock = new TestClock();
+    final var timings = new Timings(60_000, 60_000, 0); // zero check delay: the await never parks
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
+        timings, clock, executor, null,
+        null, (_, _, _) -> {
+        }, (_, _) -> {
+        }, null, null
+    );
+    assertTrue(ws.rootSubscribe(_ -> {
+    }));
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+    clock.advanceMillis(timings.reConnectDelay() + 1);
+    socket.throwText = new IllegalStateException("send blew up");
+
+    final var records = new ArrayList<java.util.logging.LogRecord>();
+    final var handler = new java.util.logging.Handler() {
+      @Override
+      public void publish(final java.util.logging.LogRecord record) {
+        records.add(record);
+      }
+
+      @Override
+      public void flush() {
+      }
+
+      @Override
+      public void close() {
+      }
+    };
+    final var julLogger = java.util.logging.Logger.getLogger(SolanaJsonRpcWebsocket.class.getName());
+    final boolean parentHandlers = julLogger.getUseParentHandlers();
+    julLogger.setUseParentHandlers(false);
+    julLogger.addHandler(handler);
+    try {
+      executor.tasks.getFirst().run();
+    } finally {
+      julLogger.removeHandler(handler);
+      julLogger.setUseParentHandlers(parentHandlers);
+    }
+
+    assertEquals(2, socket.sentText.size(), "the throwing re-send attempt is still recorded");
+    assertTrue(ws.closed(), "an unhandled loop exception closes the websocket");
+    assertTrue(records.stream().anyMatch(record -> record.getThrown() == socket.throwText),
+        "the failure funnel must log the exception, not swallow it");
+  }
+
   @Test
   void pingFailureWithoutAHandlerIsLoggedNotThrown() {
     final var clock = new TestClock();

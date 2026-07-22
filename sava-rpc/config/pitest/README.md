@@ -106,16 +106,29 @@ possible.
   call sequence constructs — the map-first branch always wins. Every miss
   dimension (key, channel, commitment, notification method) is pinned by
   tests; only the impossible match is accepted.
-- **Check-loop rows covered only by racing threads** (`run:205/214/215/218/224`
-  as of the scheduler-seam line shift, unioned in both SURVIVED and
-  NO_COVERAGE — flip insurance, each observed flipping across identical
-  runs): the builder-path tests create websockets
-  with real internal executors, so the loop interior is executed by threads
-  racing the test scheduler; the deterministic inline run tests cover only
-  the interrupt- and closed-exit paths. The loop's `TIMED_OUT` rows come from
-  the same place. NOTE `-PupdateMutationBaseline` rewrites this file from a
-  single run and silently drops these unions — re-append them after any
-  refresh.
+- **Check-loop interior — RESOLVED 2026-07-22, flip insurance deleted for
+  cause.** The `run` loop's interior was reachable only by threads racing the
+  test scheduler, and its keys (`run:205/214/215/218/224`) were unioned in
+  both SURVIVED and NO_COVERAGE as flip insurance. The loop body is now the
+  package-private `checkCycle(long awaitNanos)` seam (`awaitNanos <= 0` never
+  parks), driven deterministically by the lifecycle tests: the retry-window
+  resend, the socketless no-op, and the unhandled-exception funnel (closed
+  *and* logged — asserted through the JUL backend, so the funnel cannot go
+  silent). All eleven family rows left the baseline in the refresh; the one
+  remaining loop-family key is below.
+- **`checkCycle` `unlock()` removal** (`checkCycle:235`, VoidMethodCall):
+  `unlock()` sits in a `finally`; its removal is observable only by a second
+  thread blocking on the lock, i.e. a timing harness — a last resort this
+  single call does not earn. The loop's lock/await lines are otherwise
+  deterministically covered by the checkCycle tests. Accepted as unreachable
+  in-harness; a deterministic kill would need an injectable lock or a
+  package-private hold-count probe.
+- **`run` while-condition forced always-true** (`RemoveConditionalMutator`
+  `EQUAL_IF`): a loop that never exits is caught by PIT's timeout —
+  `TIMED_OUT`, detected, not baselined — and with the interior now covered
+  deterministically that detection is stable across modes (verified by
+  `pitestModeCompare` below). Not an acceptance; recorded so the next reader
+  does not hunt for a missing baseline row.
 - **Notification fast-forwards rescued by the reset-fallback funnel**
   (`NakedReceiverMutator` on `publish:752/771`'s `skipRestOfObject()`,
   `publishGeneric:790`'s `skip()`, `onWholeMessage:887`'s
