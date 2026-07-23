@@ -28,6 +28,20 @@ final class SolanaRpcClientBuilderTests {
     }
   }
 
+  /// Every other test here hands the builder an `HttpClient` so it can assert the
+  /// instance came through, which leaves the *omitted* case — the one that decides
+  /// what an unconfigured client talks over — driven by no test at all. Construction
+  /// wiring is only observable to the test that constructs, so the fallback needs its
+  /// own build: without it, dropping `HttpClient.newHttpClient()` and passing the null
+  /// field straight through is indistinguishable to the suite.
+  @Test
+  void anOmittedHttpClientDefaultsToANewOne() {
+    final var client = SolanaRpcClient.build().endpoint(ENDPOINT).createClient();
+    try (final var httpClient = client.httpClient()) {
+      assertNotNull(httpClient, "an unconfigured builder must supply its own HttpClient");
+    }
+  }
+
   @Test
   void configuredValuesReachTheClient() {
     try (final var httpClient = HttpClient.newHttpClient()) {

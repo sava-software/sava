@@ -36,7 +36,7 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
-<!-- hardening-template sha256:e6d8a19c3b67 -->
+<!-- hardening-template sha256:2c504992c917 -->
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
@@ -66,7 +66,7 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - **Iterate with `-PmutateOnly=<class-glob[,glob]>`** while killing a cluster:
   it narrows the mutated classes (the tests still run in full, so coverage is
   unchanged) and turns a suite-length loop into seconds. The report it writes is
-  stamped `.scoped` and the ratchet, both refresh flags and the mode snapshots
+  stamped `.scoped` and the ratchet, all three refresh flags and the mode snapshots
   refuse it, so re-run the suite unscoped before refreshing anything.
 - **`SURVIVED` and `NO_COVERAGE` are different problems.** The first is a judgement
   call about equivalence; the second is an untested line and is mechanical work.
@@ -95,6 +95,15 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   mixed in — a newly covered row, an unexplained one, changed counts — still fails
   and is triage first, refresh after. `-PnoDriftTolerance` restores the strict
   diff for a certifying run, alongside `-PnoMutationHistory`.
+- **After a pass that killed baseline rows, shrink with `-PpruneMutationBaseline`,
+  not `-PupdateMutationBaseline`.** Prune drops rows matching nothing this run and
+  writes nothing new, so no coin-flip from a single run can be baked in; it keeps
+  rows whose coordinate `TIMED_OUT` or is still unkilled at another status, and
+  names both. The verify's stale-entry hint still says "refresh with
+  `-PupdateMutationBaseline`" — prefer prune when the only news is *fewer*
+  survivors. The three flags are mutually exclusive and the build refuses a
+  combination. Never hand-roll a pruning script: matching rows without the status
+  field deletes the wrong one (casebook: the status-blind prune).
 - **Identical baseline rows are sibling mutants, not duplicates.** One compound
   condition emits several mutants at the same `class,method,line,mutator`
   coordinate — one per operand or branch direction — and the comparison is a
@@ -128,6 +137,16 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   field initializers still applies — exercise factories inside a `@Test`. The
   2026-07-21 convergence record in `HARDENING_NOTES.md` is the stability
   baseline.
+- **Build the subject under test inside the test body, not in a field.**
+  `RpcRequestTests` is `PER_CLASS` and builds its `SolanaRpcClient` in the
+  constructor, so that construction's coverage attaches to whichever test runs
+  first and wiring mutants can never pair with the test that drives what they
+  wire. `SolanaRpcClientBuilderTests` is the counterweight — it builds a client
+  per `@Test` — and a `SURVIVED` builder or constructor mutant is this pattern
+  until proven otherwise: a missing *omitted-value* build, not an equivalence.
+  That is how `SolanaRpcClientBuilder.createClient`'s `httpClient` fallback was
+  killed on 2026-07-23 (every test had passed an explicit client, so the default
+  branch was never observed).
 - **Kill rates are bounded by the mutator set.** Big-value arithmetic is method
   calls, invisible to `STRONGER`. `EXPERIMENTAL_BIG_INTEGER` fired zero times
   in every candidate suite here (trial table in `HARDENING_NOTES.md`) — left
@@ -145,7 +164,11 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - Fuzz findings become a committed seed input **and** a named regression test, never
   just a fix — and every committed corpus is replayed by a unit test inside `check`
   (`Token2022CorpusReplayTests`, `TransactionSkeletonCorpusReplayTests`), so a new
-  seed replays automatically and the corpus cannot rot between fuzz runs.
+  seed replays automatically and the corpus cannot rot between fuzz runs. Dedupe
+  with `fuzz<Target>Minimize` rather than by hand; both corpora here were verified
+  already-minimal on 2026-07-23 (a 0-removed no-op), and every seed is named for
+  its provenance, so a future run that proposes *removing* one is deleting a
+  documented regression input — read the diff before keeping it.
 - **When one thing has two representations, fuzz the differential.** An
   encode/decode round trip, an eager view beside a lazy overlay: assert the two
   *agree* rather than that neither crashes — crash-only fuzzing cannot see a wrong

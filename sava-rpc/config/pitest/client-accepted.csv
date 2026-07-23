@@ -61,4 +61,3 @@ software.sava.rpc.json.http.client.SolanaJsonRpcClient,simulateTransactionWithIn
 software.sava.rpc.json.http.client.SolanaJsonRpcClient,simulateTransactionWithInnerInstructions,1660,NullReturnValsMutator,NO_COVERAGE
 software.sava.rpc.json.http.client.SolanaRpcClient,sendTransaction,1025,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.client.SolanaRpcClient,sendTransaction,1034,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
-software.sava.rpc.json.http.client.SolanaRpcClientBuilder,createClient,31,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED

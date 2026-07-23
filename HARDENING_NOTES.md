@@ -59,7 +59,7 @@ mutators can reach, so do not re-enable them on a hunch.
 ### `pitestClient` — the debt is deliberate and documented
 
 Registered over the whole package and worked from 54% to 89% rather than being
-narrowed to fit. What remains is 27 survivors (triaged for equivalence) and 29
+narrowed to fit. What remains is 24 survivors (triaged for equivalence) and 39
 `NO_COVERAGE` — almost all the `sendPostRequestNoWrap` / `sendGetRequestNoWrap` /
 `sendGetRequest` transport paths, which `RpcRequestTests` never enters because it
 routes everything through `sendPostRequest`.
@@ -72,6 +72,22 @@ Exclusions must name `*Check*` and `Stub*` as well as `*Test*`: test sources sha
 this package and shared fakes are named for their role. Trailing wildcards
 throughout, per HARDENING.md — `*Check` would stop matching the moment a drift
 check grows a nested helper. The verify task warns if this regresses.
+
+**The builder's omitted-value branch — killed 2026-07-23.** The template's new
+"build the subject inside the test body" rule sent a re-read through the one
+`SolanaRpcClientBuilder` row in the baseline
+(`createClient,31,RemoveConditionalMutator_EQUAL_ELSE`), which had been carried
+with no written reason in the README. It was not equivalent and not the
+field-initializer trap either: `SolanaRpcClientBuilderTests` already builds a
+client per `@Test`, but *every one of them* passed an explicit `httpClient(...)`
+so it could assert the instance came through, leaving the `this.httpClient ==
+null` fallback — what an unconfigured client actually talks over — driven by no
+test. `anOmittedHttpClientDefaultsToANewOne` builds without one and asserts the
+client supplied its own; the class went to 29/29. The generalisation worth
+keeping: a builder test that always configures a value cannot see the default it
+replaces, so each defaulted field needs one build that omits it. `pitestClient`
+is now 538/601 with a 63-row baseline (was 64), pruned via
+`-PpruneMutationBaseline`.
 
 ### `pitestWs` — the clock seam, and the background-thread ceiling
 
