@@ -1,5 +1,6 @@
 software.sava.core.encoding.Base58,beginMutableEncode,377,ConditionalsBoundaryMutator,SURVIVED
 software.sava.core.encoding.Base58,beginMutableEncode,377,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
+software.sava.core.encoding.Base58,beginMutableEncode,377,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
 software.sava.core.encoding.Base58,continueMutableEncode,356,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.core.encoding.Base58,continueMutableEncode,356,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
 software.sava.core.encoding.Base58,decode,196,MathMutator,SURVIVED
@@ -11,10 +12,14 @@ software.sava.core.encoding.Base58,decode,294,MathMutator,SURVIVED
 software.sava.core.encoding.Base58,encode,70,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.core.encoding.Base58,encode,70,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
 software.sava.core.encoding.Base58,limbsLength,94,MathMutator,SURVIVED
+software.sava.core.encoding.Base58,limbsLength,94,MathMutator,SURVIVED
 software.sava.core.encoding.Base58,mutableEncode,326,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.core.encoding.Base58,mutableEncode,326,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
 software.sava.core.encoding.Base58,toLimbs,116,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
+software.sava.core.encoding.Base58,toLimbs,116,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
 software.sava.core.encoding.Base58,toLimbs,129,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
+software.sava.core.encoding.Base58,toLimbs,129,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
+software.sava.core.encoding.Base58,toLimbs,142,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
 software.sava.core.encoding.Base58,toLimbs,142,RemoveConditionalMutator_ORDER_ELSE,SURVIVED
 software.sava.core.encoding.Jex,decodePrimIterChecked,905,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.core.encoding.Jex,decodePrimIterChecked,938,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED

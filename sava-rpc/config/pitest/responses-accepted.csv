@@ -3,7 +3,10 @@ software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,37,NakedReceiverM
 software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,40,NullReturnValsMutator,NO_COVERAGE
 software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,45,VoidMethodCallMutator,SURVIVED
 software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,57,MathMutator,SURVIVED
+software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,57,MathMutator,SURVIVED
 software.sava.rpc.json.http.response.Lamports,amount,24,ConditionalsBoundaryMutator,SURVIVED
 software.sava.rpc.json.http.response.Lamports,amount,24,RemoveConditionalMutator_ORDER_IF,SURVIVED
 software.sava.rpc.json.http.response.RpcCustomError,parseError,58,ConditionalsBoundaryMutator,SURVIVED
+software.sava.rpc.json.http.response.RpcCustomError,parseError,58,ConditionalsBoundaryMutator,SURVIVED
+software.sava.rpc.json.http.response.RpcCustomError,parseError,66,ConditionalsBoundaryMutator,SURVIVED
 software.sava.rpc.json.http.response.RpcCustomError,parseError,66,ConditionalsBoundaryMutator,SURVIVED

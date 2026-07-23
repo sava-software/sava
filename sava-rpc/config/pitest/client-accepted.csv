@@ -2,7 +2,6 @@ software.sava.rpc.json.http.client.BaseJsonResponseController,applyResponse,42,V
 software.sava.rpc.json.http.client.BaseJsonResponseController,applyResponse,43,RemoveConditionalMutator_EQUAL_ELSE,NO_COVERAGE
 software.sava.rpc.json.http.client.BaseJsonResponseController,applyResponse,43,RemoveConditionalMutator_EQUAL_IF,NO_COVERAGE
 software.sava.rpc.json.http.client.BaseJsonResponseController,checkResponse,23,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
-software.sava.rpc.json.http.client.BaseJsonRpcResponseParser,checkResponse,32,ConditionalsBoundaryMutator,SURVIVED
 software.sava.rpc.json.http.client.BaseJsonRpcResponseParser,checkResponse,32,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.client.BaseJsonRpcResponseParser,checkResponse,32,RemoveConditionalMutator_ORDER_IF,SURVIVED
 software.sava.rpc.json.http.client.BaseJsonRpcResponseParser,parseRpcException,22,VoidMethodCallMutator,NO_COVERAGE

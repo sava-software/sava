@@ -10,7 +10,9 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,927,Conditi
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,927,MathMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,927,RemoveConditionalMutator_ORDER_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,928,MathMutator,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,928,MathMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1001,IncrementsMutator,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1004,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1004,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1004,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1006,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
@@ -24,6 +26,8 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$onPing$0,1046,Empty
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$onPong$0,1054,EmptyObjectReturnValsMutator,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$queueUnsubscribe$0,384,EmptyObjectReturnValsMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$queueUnsubscribe$0,384,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$queueUnsubscribe$0,384,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$queueUnsubscribe$0,384,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$queueUnsubscribe$0,384,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$sendPing$0,1021,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$sendPing$0,1022,VoidMethodCallMutator,SURVIVED
@@ -37,6 +41,8 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,logsSubscribe,433,RemoveCo
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,logsSubscribe,433,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,logsSubscribe,437,BooleanTrueReturnValsMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onClose,1061,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onClose,1061,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onClose,1061,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onClose,1061,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onClose,1062,VoidMethodCallMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onClose,1066,VoidMethodCallMutator,SURVIVED
@@ -76,6 +82,7 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,916,VoidMet
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,919,VoidMethodCallMutator,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,921,VoidMethodCallMutator,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,555,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,555,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,555,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,556,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,programSubscribe,564,BooleanTrueReturnValsMutator,SURVIVED
@@ -98,6 +105,8 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueSubscription,343,Bool
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueUnsubscribe,378,BooleanFalseReturnValsMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueUnsubscribe,382,BooleanFalseReturnValsMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,removeDanglingSub,361,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,removeDanglingSub,363,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,removeDanglingSub,363,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,removeDanglingSub,363,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,removeDanglingSub,364,VoidMethodCallMutator,NO_COVERAGE
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,removeDanglingSub,365,VoidMethodCallMutator,NO_COVERAGE

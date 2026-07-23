@@ -10,8 +10,19 @@ lives in sava-build's `HARDENING.md`.
 Never refresh with `-PupdateMutationBaseline` just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence
 reason below. Line numbers are part of the baseline key, so edits to a
-mutated file shift entries — confirm the verify task's paired stale/"new"
-rows are the shifted old ones before refreshing.
+mutated file shift entries — but *pure* drift (every new row a same-status
+shift, populations unchanged) now passes with a notice, so a refresh for
+churn alone can wait; anything mixed in still fails and is triage first.
+
+**Identical rows are sibling mutants — never dedupe this file.** One compound
+condition emits a mutant per operand or branch direction at the same
+`class,method,line,mutator` key (and one `MathMutator` key can cover two
+different operations on a line, e.g. a shift and an add), so a coordinate
+legitimately repeats. The comparison is a multiset: the copies were collapsed
+until 2026-07-23, which let a killed sibling regress unnoticed behind its
+accepted twin. The migration that materialized them added five copies here
+(`ed25519` `car25519`, `encoding` `Base58` ×4) — all inside the families
+below, plus one `limbsLength` copy that had been reading `TIMED_OUT`.
 
 ## Triaged equivalent mutants (accepted with reasons)
 

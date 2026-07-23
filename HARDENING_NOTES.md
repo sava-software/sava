@@ -199,6 +199,98 @@ previously accepted rows), and `InstructionRecord.toString`'s
   wandering-count cause in the shared casebook does not apply to this repo.
   Re-verify on a JUnit major bump before restructuring any tests over it.
 
+## Multiset baseline migration — 2026-07-23
+
+The plugin's ratchet compared baseline rows as a *set* until 2026-07-23; it now
+compares multisets, because one compound condition emits a mutant per operand or
+branch direction at the same `class,method,line,mutator` key (and a single
+`MathMutator` key can cover two different operations on one line). A collapsed
+row meant a killed sibling could regress to `SURVIVED` and be absorbed by its
+already-accepted twin — a hole in the ratchet, not an ergonomic nit.
+
+Migrating all twelve suites materialized **18 previously absorbed copies**, and
+nothing else: every one sat at a coordinate already in the baseline, no suite
+gained a new coordinate.
+
+| Suite | Copies | Where |
+| --- | --- | --- |
+| `ed25519` | 1 | `car25519:367` — the two `long -` → `+` bias terms |
+| `encoding` | 4 (+1) | `Base58` `toLimbs:116/129/142`, `beginMutableEncode:377`; the extra is a `limbsLength:94` copy that had been reading `TIMED_OUT` |
+| `client` | 1 | `checkResponse:32` — **killable, not equivalent** (below) |
+| `ws` | 9 | `removeDanglingSub:363` (×2), `lambda$queueUnsubscribe$0:384`, `onClose:1061`, `programSubscribe:555`, `handlePendingSubscriptions:1004`, `ensureCapacity:928` |
+| `responses` | 3 | `toJsonIntArray:57`, `RpcCustomError.parseError:58/66` |
+
+Seventeen were the opposite operand of an already-triaged condition and joined
+their existing family notes. The eighteenth was not: `client`
+`BaseJsonRpcResponseParser.checkResponse:32`'s second
+`RemoveConditionalMutator_ORDER_IF` is the `>= 300` operand, and the harness had
+no case where an HTTP failure status carries a well-formed `result` envelope.
+`resultEnvelopeUnderANonSuccessStatusIsRejected` pins that contract (the status
+vetoes the body) and killed both it and the `ConditionalsBoundaryMutator` row on
+the same line — the 300 case separates `>= 300` from `> 300`. So the migration
+converted one silent acceptance into a test and shrank the `client` baseline by
+a row. Details in `sava-rpc/config/pitest/README.md`.
+
+`ws` was refreshed with `-PunionMutationBaseline`, not
+`-PupdateMutationBaseline`: its accepted `checkCycle:235` `unlock()` row read
+`TIMED_OUT` in the migration run (removing an `unlock()` in a `finally` wedges a
+later test rather than failing it), and a plain refresh would have dropped
+flip insurance on the strength of a load-dependent detection.
+
+## Timeout budgets — sized to the tests, 2026-07-23
+
+PIT's default per-test allowance is `recorded time × 1.25 + 4000ms`, paid on
+every hanging-mutant detection. Ranked by duration, no test in any sava suite
+comes close to justifying that constant:
+
+| Suite | Tests | Sum | Slowest |
+| --- | --- | --- | --- |
+| `client` / `responses` | 310 / 347 | ~1.0s | 0.246s (`clampingDoesNotTruncateLargeBodies`) |
+| `ws` | 111 | 0.16s | 0.055s (`systemSleepBlocksForAtLeastTheRequestedDuration`) |
+| `encoding` | 43 | 0.48s | 0.202s (`testReferenceCrossValidation`) |
+| `ed25519` / `crypto` | 12 / 31 | ~0.5s | 0.212s (`isNotOnCurveMatchesReferenceForRandomEncodings`) |
+| `borsh`, `tx`, `token2022`, `meta`, `decimal`, `vanity` | 20–83 each | ≤0.07s | ≤0.009s |
+
+Both modules therefore run `timeoutFactor = 2.0; timeoutConst = 1500` via
+`mutation.configureEach`. The factor went **up** while the constant went down on
+purpose: load inflates a test in proportion to its own runtime, so proportional
+headroom is the safe kind, and even the slowest suite keeps ~8× its quiet
+runtime.
+
+Measured, all twelve suites re-run against the migrated baselines: **every
+status identical** to the default-timeout run, and the whole set finished in
+3m06 against 8m47 (both `--continue`, both modules in parallel, so treat the
+totals as indicative). The clean single-suite A/B is `encoding`, run alone
+back-to-back with the report deleted between: **27s → 17s (-37%)**, same
+1048/1072, same 24 survived, same 2 timed out. `client` (41s → 33s) and `ws`
+(57s → 45s) came in at the ~20% the shared casebook predicts. `SURVIVED -> TIMED_OUT` drift in the verify output (the plugin stashes
+each run's statuses under `<module>/.pitest-history/<suite>.statuses` and names
+each newcomer's origin) is the signal that the constant went too low; raise it
+back before suspecting the code. One standing exception: `encoding`
+`Base58.limbsLength:94`, where the mutant inflates the allocation estimate and
+so flips between `SURVIVED` and `TIMED_OUT` on its own — both copies sit in the
+baseline, so the ratchet holds either way and the warning naming that row is
+expected rather than a signal to retune. `ws` is the suite to watch — its `checkCycle`
+`unlock()` mutant and the `run` while-condition are detected *by* timing out.
+
+## Plugin knobs and generated scaffolding — what this repo uses
+
+- **`recompileExcludes = listOf("Integ.java")`** (sava-rpc): `Integ.java` is a
+  git-ignored scratch driver in `src/main/java`, so without the exclusion the
+  PIT/Jazzer recompiles compile a different source set here than in CI. The
+  suite's `excludedClasses` already kept it out of the mutant population; this
+  keeps it off the tool class path too.
+- **`-PmutateOnly=<class-glob>`** is the iteration loop for killing a cluster
+  (tests still run in full; the report is stamped `.scoped` and cannot touch a
+  baseline). `pitest<Suite>Debt` ranks the remaining debt by class.
+- **`generateTestSupport` stays off.** The generated `ConcurrencyHarness` /
+  `Ports` / `LoopbackHttpServer` / `JulRecorder` set has no consumer here: no
+  sava test starts a thread — the ws determinism story is seams
+  (`RecordingExecutor`, `RecordingScheduler`, `TestClock`), not concurrency
+  harnesses — and the client tests drive `StubHttpResponse` rather than a
+  socket. Enable it if a suite ever needs a real server or a parked-thread
+  assertion; do not turn it on speculatively.
+
 ## Arcmutate incremental analysis — wired, awaiting licence
 
 Support landed in the sava-build plugin 2026-07-21 (licence requested from

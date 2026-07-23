@@ -10,8 +10,22 @@ lives in sava-build's `HARDENING.md`.
 Never refresh with `-PupdateMutationBaseline` just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence
 reason below. Line numbers are part of the baseline key, so edits to a
-mutated file shift entries — confirm the verify task's paired stale/"new"
-rows are the shifted old ones before refreshing.
+mutated file shift entries — but *pure* drift (every new row a same-status
+shift, populations unchanged) now passes with a notice, so a refresh for
+churn alone can wait; anything mixed in still fails and is triage first.
+
+**Identical rows are sibling mutants — never dedupe these files.** One
+compound condition emits a mutant per operand or branch direction at the same
+`class,method,line,mutator` key (and one `MathMutator` key can cover two
+different operations on a line — `ensureCapacity:928` is a shift *and* an
+add), so a coordinate legitimately repeats. The comparison is a multiset: the
+copies were collapsed until 2026-07-23, which let a killed sibling regress
+unnoticed behind its accepted twin. Migrating these baselines materialized 13
+copies — 9 in `ws`, 3 in `responses`, all inside the families below, and one
+in `client` that turned out to be **killable**, not equivalent (see the
+`checkResponse` entry). When one sibling survives and another is killed, the
+verify names the killing test: the survivor is that test's opposite branch,
+and it is triaged as its own mutant rather than assumed covered.
 
 ## Triaged mutants — client suite
 
@@ -52,6 +66,18 @@ final status; a mock server replying 199 kills the connection before the guard
 runs. Reaching it needs a raw-socket stub speaking HTTP/1.1 by hand — that
 named escape hatch is what a later reader re-checks before assuming the
 acceptance still holds.
+
+The acceptance is now scoped to the `< 200` side only. The multiset migration
+(2026-07-23) materialized a second `RemoveConditionalMutator_ORDER_IF` copy at
+`checkResponse:32` that the old set-based baseline had absorbed: the `>= 300`
+operand, which is distinguishable by a case the harness simply never had — an
+HTTP failure status carrying a well-formed `result` envelope, where the real
+code lets the status veto the body. `resultEnvelopeUnderANonSuccessStatusIsRejected`
+(300/400/500/503 with `{"result":"ok"}`) pins that contract and killed the
+sibling *and* the `ConditionalsBoundaryMutator` row at the same line — the 300
+case distinguishes `>= 300` from `> 300`. Worked exactly as the casebook's
+sibling entry predicts: the survivor at an accepted coordinate was the opposite
+operand, and it was not equivalent, only untested.
 
 **Pass-through accessors on `ReadHttpResponse`** (`request`,
 `previousResponse`, `sslSession`): the record delegates to the wrapped response,

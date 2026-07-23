@@ -13,6 +13,12 @@ testModuleInfo {
 }
 
 hardening {
+  // Integ.java is a git-ignored local scratch driver in src/main/java: present on a
+  // dev machine, absent in CI, so the PIT/Jazzer recompiles would compile a different
+  // source set in each place. The suite's excludedClasses already keep it out of the
+  // mutant population; this keeps it out of the tool class path too.
+  recompileExcludes = listOf("Integ.java")
+
   mutation.register("client") {
     // body decoding, the JSON-RPC envelope gate, and request construction — all of
     // it reading or answering an untrusted node
@@ -54,6 +60,18 @@ hardening {
     targetTests = "software.sava.rpc.json.http.client.*Test*,software.sava.rpc.json.http.response.*Test*"
     // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
     mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
+  }
+
+  // PIT's default per-test allowance is `recorded time x 1.25 + 4000ms`, and every
+  // hanging-mutant detection pays that flat fee. This module's whole test set runs in
+  // ~1.2s, slowest test 0.25s (ranking in HARDENING_NOTES.md), so the constant is cut
+  // and the proportional headroom raised instead — load inflates a test in proportion
+  // to its own runtime. The ws suite is the one to watch: its check-loop and unlock
+  // mutants are detected *by* timing out, so SURVIVED -> TIMED_OUT drift in the verify
+  // output is the signal that the constant went too low.
+  mutation.configureEach {
+    timeoutFactor = 2.0
+    timeoutConst = 1500L
   }
 }
 

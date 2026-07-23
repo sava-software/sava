@@ -36,7 +36,7 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
-<!-- hardening-template sha256:a3a73f4b95f3 -->
+<!-- hardening-template sha256:e6d8a19c3b67 -->
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
@@ -59,7 +59,15 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   `HARDENING_NOTES.md`.
 - Every `pitest<Suite>` run prints its own summary — `killed/total (%)` plus the
   survived/uncovered split — and warns if the suite is mutating its own test
-  sources. Read that line before planning a pass.
+  sources. Read that line before planning a pass. `pitest<Suite>Debt` prints the
+  same debt grouped by class, largest first, with the delta against the baseline
+  (falling back to the baseline when no full report is present) — use it to pick
+  the next cluster instead of re-ranking the CSV by hand.
+- **Iterate with `-PmutateOnly=<class-glob[,glob]>`** while killing a cluster:
+  it narrows the mutated classes (the tests still run in full, so coverage is
+  unchanged) and turns a suite-length loop into seconds. The report it writes is
+  stamped `.scoped` and the ratchet, both refresh flags and the mode snapshots
+  refuse it, so re-run the suite unscoped before refreshing anything.
 - **`SURVIVED` and `NO_COVERAGE` are different problems.** The first is a judgement
   call about equivalence; the second is an untested line and is mechanical work.
   Never accept a `NO_COVERAGE` mutant as "equivalent" — you have not observed it.
@@ -80,6 +88,20 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   module's `config/pitest/README.md`. Never run `-PupdateMutationBaseline` just to
   make the build pass. Sweepable equivalence claims are verified empirically with
   the range recorded, not argued in prose.
+- **Pure line drift passes on its own.** Editing above a mutated method moves its
+  rows; when every new baseline entry is a same-status shift of a stale one *and*
+  the per-`(class, method, mutator, status)` population is unchanged, the verify
+  passes with a notice and the refresh can wait for a convenient moment. Anything
+  mixed in — a newly covered row, an unexplained one, changed counts — still fails
+  and is triage first, refresh after. `-PnoDriftTolerance` restores the strict
+  diff for a certifying run, alongside `-PnoMutationHistory`.
+- **Identical baseline rows are sibling mutants, not duplicates.** One compound
+  condition emits several mutants at the same `class,method,line,mutator`
+  coordinate — one per operand or branch direction — and the comparison is a
+  multiset, so never hand-dedupe a baseline CSV: a collapsed row lets a killed
+  sibling regress to `SURVIVED` invisibly. When one sibling survives, the verify
+  prints the killed sibling's test; the survivor is that test's opposite branch
+  direction and is triaged as its own mutant.
 - Widening or adding a suite is expected to go red first. Register it, then work the
   population down and triage what is left — do not narrow the target or drop the
   registration to keep the build green.
@@ -93,7 +115,12 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - **Do not rely on PIT's timeout to detect a mutant.** `TIMED_OUT` counts as
   detected and is load-dependent — the same mutant can flip to `SURVIVED` when
   its suite runs alone. Verify a changed baseline in both modes; union in only
-  rows observed to flip, never every timed-out row.
+  rows observed to flip, never every timed-out row. The verify stashes each run's
+  `TIMED_OUT`/`SURVIVED` coordinates (`.pitest-history/<suite>.statuses`, machine
+  local) and names each newcomer's origin on the next run: `KILLED -> TIMED_OUT`
+  is the benign flavour and gets a count, `SURVIVED -> TIMED_OUT` gets a warning —
+  a mutant nobody killed now reading as detected purely through load. Never let a
+  refresh drop those rows from the baseline.
 - **A wandering unkilled count is a defect to chase, not re-ratchet past** — a
   lucky run bakes in a row later runs fail on. Causes and the convergence
   method: `HARDENING.md`. The abstract-base annotation cause is ruled out here

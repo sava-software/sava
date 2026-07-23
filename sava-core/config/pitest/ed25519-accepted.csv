@@ -1,6 +1,7 @@
 software.sava.core.crypto.ed25519.Ed25519Util$PointAccum,create,57,NullReturnValsMutator,SURVIVED
 software.sava.core.crypto.ed25519.Ed25519Util$PointExtended,create,68,NullReturnValsMutator,SURVIVED
 software.sava.core.crypto.ed25519.Ed25519Util,car25519,367,MathMutator,SURVIVED
+software.sava.core.crypto.ed25519.Ed25519Util,car25519,367,MathMutator,SURVIVED
 software.sava.core.crypto.ed25519.Ed25519Util,pack25519,382,VoidMethodCallMutator,SURVIVED
 software.sava.core.crypto.ed25519.Ed25519Util,pack25519,383,VoidMethodCallMutator,SURVIVED
 software.sava.core.crypto.ed25519.Ed25519Util,pack25519,384,VoidMethodCallMutator,SURVIVED

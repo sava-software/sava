@@ -128,6 +128,21 @@ final class JsonRpcResponseParserTests {
     }
   }
 
+  /// The mirror of [#errorEnvelopeUnderANonSuccessStatusStillParses]: a `result`
+  /// envelope does **not** win over a failing status. A proxy answering 5xx with a
+  /// cached or synthesized success body is not a node answering, so the status
+  /// vetoes the body and the call fails as a transport error rather than handing
+  /// the parser a result nobody vouched for.
+  @Test
+  void resultEnvelopeUnderANonSuccessStatusIsRejected() {
+    for (final int status : new int[]{300, 400, 500, 503}) {
+      final var ex = assertThrows(UncheckedIOException.class,
+          () -> parseResult(status, "{\"result\":\"ok\",\"id\":1}"), "status " + status);
+      assertInstanceOf(UnknownServiceException.class, ex.getCause(), "status " + status);
+      assertTrue(ex.getMessage().contains("httpCode:" + status), ex.getMessage());
+    }
+  }
+
   /// A 2xx body that is a bare `result: null` still counts as a result — the node
   /// answered, the value is simply absent (getAccountInfo for a missing account).
   @Test

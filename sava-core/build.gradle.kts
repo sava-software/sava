@@ -116,6 +116,17 @@ hardening {
     // this package is built on, so enabling it here generates nothing. The
     // shift direction is pinned by tests instead.
   }
+  // PIT's default per-test allowance is `recorded time x 1.25 + 4000ms`, and every
+  // hanging-mutant detection pays that flat fee. No test in this module's suites runs
+  // longer than ~0.2s (the ranking is in HARDENING_NOTES.md), so the constant is cut
+  // and the proportional headroom raised instead — load inflates a test in proportion
+  // to its own runtime. Watch for SURVIVED -> TIMED_OUT drift in the verify output if
+  // this is ever retuned; that is the signal the constant went too low.
+  mutation.configureEach {
+    timeoutFactor = 2.0
+    timeoutConst = 1500L
+  }
+
   fuzz.register("base58") {
     targetClass = "software.sava.core.encoding.Base58Fuzz"
     // every interesting Base58 boundary lives in small inputs; beyond this the O(n^2)
