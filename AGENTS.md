@@ -36,7 +36,7 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
-<!-- hardening-template sha256:cdac2e3852a9 -->
+<!-- hardening-template sha256:7f9eb869ee7e -->
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
@@ -90,7 +90,10 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   label with a short family label (`# race-guard family`, `# capacity-hint`) whose
   full argument lives in the README — the baseline then says which rows are argued
   and which are still debt, and each verify and `Debt` run prints the per-label
-  count. Never run `-PupdateMutationBaseline` just to make the build pass. Sweepable
+  count. The label is a pointer, and the verify checks it resolves: it warns when a
+  label has no `# <label>` mention in the module's `config/pitest/README.md`, so a
+  typo'd label surfaces instead of silently opening its own bucket (`# untriaged`
+  is exempt). Never run `-PupdateMutationBaseline` just to make the build pass. Sweepable
   equivalence claims are verified empirically with the range recorded, not argued in
   prose.
 - **Pure line drift passes on its own.** Editing above a mutated method moves its
@@ -114,8 +117,23 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   coordinate — one per operand or branch direction — and the comparison is a
   multiset, so never hand-dedupe a baseline CSV: a collapsed row lets a killed
   sibling regress to `SURVIVED` invisibly. When one sibling survives, the verify
-  prints the killed sibling's test; the survivor is that test's opposite branch
-  direction and is triaged as its own mutant.
+  prints the killed sibling's test (in the ratchet failure, a scoped run and
+  `-PlistUnkilled` alike); the survivor is that test's opposite branch direction
+  and is triaged as its own mutant.
+- **Stubs and fixtures return distinguishable, non-default values.** A stub
+  method returning null, `0`, `""`, `true`, an empty `Optional` or an empty
+  collection makes the matching return-value mutant equivalent by accident of the
+  fixture — the test-clock non-zero-origin rule generalized to every stubbed
+  return. `StubHttpResponse` was exactly this shape: its null `request()` and
+  empty `sslSession()`/`previousResponse()` blinded three `ReadHttpResponse`
+  delegation mutants that a real request and a real session turned into ordinary
+  kills (casebook: the stub that returned the mutant's value).
+- **Copy-on-write clusters split by direction.** Where one branch returns a
+  defensive copy and the other returns the collection as-is, assert immutability
+  of the returned collection (`assertThrows(UnsupportedOperationException, …)`) at
+  every size: the mutable-escape direction is a kill, not an acceptance, and only
+  the content-equal siblings are family-accepted equivalents. A family acceptance
+  is per-direction, never per-pattern.
 - Widening or adding a suite is expected to go red first. Register it, then work the
   population down and triage what is left — do not narrow the target or drop the
   registration to keep the build green.

@@ -80,11 +80,18 @@ sibling entry predicts: the survivor at an accepted coordinate was the opposite
 operand, and it was not equivalent, only untested.
 
 **Pass-through accessors on `ReadHttpResponse`** (`request`,
-`previousResponse`, `sslSession`): the record delegates to the wrapped response,
-and the tests assert delegation against a stub whose own values are null or
-empty — so returning null/empty directly is indistinguishable. Killing them
-needs a stub with a non-empty `SSLSession` and a real `HttpRequest`, which buys
-nothing.
+`previousResponse`, `sslSession`) — **withdrawn 2026-07-24, they were never
+equivalent.** The acceptance read "the tests assert delegation against a stub
+whose own values are null or empty, so returning null/empty directly is
+indistinguishable; a real `HttpRequest` and a non-empty `SSLSession` buy
+nothing" — but the indistinguishability was the *fixture's*, not the code's: a
+stub returning the mutator's own replacement value withdraws that mutant before
+the tests are consulted. `StubHttpResponse` now answers with a real
+`HttpRequest`, a 302 predecessor and the never-connected `SSLSession` from
+`SSLContext.getDefault().createSSLEngine()`, and
+`readHttpResponseDelegatesEverythingButTheBody` asserts delegation by identity;
+all three rows are ordinary kills and left the baseline. Read every remaining
+"the stub returns null anyway" acceptance the same way.
 
 **`gzipBufferSize` / `newPostRequest` `VoidMethodCallMutator`**: removing the
 DEBUG log call and a header append that the request builder overwrites anyway.
@@ -142,7 +149,8 @@ possible.
   *and* logged — asserted through the JUL backend, so the funnel cannot go
   silent). All eleven family rows left the baseline in the refresh; the one
   remaining loop-family key is below.
-- **`checkCycle` `unlock()` removal** (`checkCycle:235`, VoidMethodCall):
+- **`checkCycle` `unlock()` removal** — baseline label `# unlock in finally`
+  (`checkCycle:235`, VoidMethodCall):
   `unlock()` sits in a `finally`; its removal is observable only by a second
   thread blocking on the lock, i.e. a timing harness — a last resort this
   single call does not earn. The loop's lock/await lines are otherwise

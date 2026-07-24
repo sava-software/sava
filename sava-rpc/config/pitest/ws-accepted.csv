@@ -1,6 +1,6 @@
 software.sava.rpc.json.http.ws.RootSubscription,hashCode,114,PrimitiveReturnsMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,accountSubscribe,406,BooleanTrueReturnValsMutator,SURVIVED
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,checkCycle,235,VoidMethodCallMutator,SURVIVED # unlock in finally; cross-thread-only observable
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,checkCycle,235,VoidMethodCallMutator,SURVIVED # unlock in finally
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,1099,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,1100,VoidMethodCallMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,1106,VoidMethodCallMutator,SURVIVED

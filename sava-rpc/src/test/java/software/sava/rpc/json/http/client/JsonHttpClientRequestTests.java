@@ -225,9 +225,12 @@ final class JsonHttpClientRequestTests {
     assertEquals("v", response.headers().firstValue("X-H").orElse(null));
     assertEquals(wrapped.uri(), response.uri());
     assertEquals(wrapped.version(), response.version());
-    assertEquals(wrapped.request(), response.request());
-    assertEquals(wrapped.previousResponse(), response.previousResponse());
-    assertEquals(wrapped.sslSession(), response.sslSession());
+    // by identity, and against a stub whose values are non-default: asserting
+    // equality against a null request or an empty Optional would pass just as well
+    // for a mutant that returns null / Optional.empty() from the delegation itself
+    assertSame(wrapped.request(), response.request());
+    assertSame(wrapped.previousResponse().orElseThrow(), response.previousResponse().orElseThrow());
+    assertSame(wrapped.sslSession().orElseThrow(), response.sslSession().orElseThrow());
     // body() is the wrapped body; readBody() is the decoded one
     assertSame(wrapped.body(), response.body());
     assertSame(alreadyRead, response.readBody());

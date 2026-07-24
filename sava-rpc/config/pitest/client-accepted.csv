@@ -48,9 +48,6 @@ software.sava.rpc.json.http.client.JsonRpcValueResponseParser$Parser,parse,46,Re
 software.sava.rpc.json.http.client.JsonRpcValueResponseParser$Parser,test,53,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.client.ProgramAccountsRequestRecord,toJson,29,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.client.ProgramAccountsRequestRecord,toJson,30,MathMutator,SURVIVED
-software.sava.rpc.json.http.client.ReadHttpResponse,previousResponse,25,EmptyObjectReturnValsMutator,SURVIVED
-software.sava.rpc.json.http.client.ReadHttpResponse,request,20,NullReturnValsMutator,SURVIVED
-software.sava.rpc.json.http.client.ReadHttpResponse,sslSession,40,EmptyObjectReturnValsMutator,SURVIVED
 software.sava.rpc.json.http.client.SolanaJsonRpcClient,getAppliedAccounts,824,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.client.SolanaJsonRpcClient,getProgramAccounts,1047,NullReturnValsMutator,NO_COVERAGE
 software.sava.rpc.json.http.client.SolanaJsonRpcClient,lambda$static$0,58,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
