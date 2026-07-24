@@ -54,3 +54,6 @@ integ.*
 
 # arcmutate incremental-analysis state — machine local, survives clean
 .pitest-history/
+
+# atomic baseline-write temp; a kill in the write window can leave one behind
+*.csv.tmp

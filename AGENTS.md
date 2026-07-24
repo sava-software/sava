@@ -36,7 +36,7 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
-<!-- hardening-template sha256:2c504992c917 -->
+<!-- hardening-template sha256:cdac2e3852a9 -->
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
@@ -85,9 +85,14 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - A new unkilled mutant has exactly three legal outcomes: **kill it** with a test
   (prefer asserting the property it breaks over restating the implementation),
   **refactor** it out of existence, or **accept it** with a written reason in the
-  module's `config/pitest/README.md`. Never run `-PupdateMutationBaseline` just to
-  make the build pass. Sweepable equivalence claims are verified empirically with
-  the range recorded, not argued in prose.
+  module's `config/pitest/README.md` **and a short family label on the row itself**.
+  A refresh seeds every genuinely new row `# untriaged`, so triage is replacing that
+  label with a short family label (`# race-guard family`, `# capacity-hint`) whose
+  full argument lives in the README — the baseline then says which rows are argued
+  and which are still debt, and each verify and `Debt` run prints the per-label
+  count. Never run `-PupdateMutationBaseline` just to make the build pass. Sweepable
+  equivalence claims are verified empirically with the range recorded, not argued in
+  prose.
 - **Pure line drift passes on its own.** Editing above a mutated method moves its
   rows; when every new baseline entry is a same-status shift of a stale one *and*
   the per-`(class, method, mutator, status)` population is unchanged, the verify
