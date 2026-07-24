@@ -240,7 +240,7 @@ final class ExtensionEdgeCaseTests {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
+  @SuppressWarnings({"deprecation", "removal"}) // exercises the deprecated extensions() map, whose drop-unknowns behavior has no successor
   void extensionsMapDropsUnknownExtensions() {
     final var pausableConfig = new PausableConfig(key(1), true);
     final var unknown = new UnknownTokenExtension(999, bytes(2, 3));
@@ -255,7 +255,8 @@ final class ExtensionEdgeCaseTests {
 
   @Test
   void uninitializedExtension() {
-    assertEquals(ExtensionType.Uninitialized, Uninitialized.INSTANCE.extensionType());
+    // Uninitialized is padding: on-chain extension type value 0 with a zero-length payload
+    assertEquals(0, Uninitialized.INSTANCE.ordinal());
     assertEquals(0, Uninitialized.INSTANCE.l());
   }
 
@@ -302,6 +303,7 @@ final class ExtensionEdgeCaseTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // the boundary IS ExtensionType.values().length, the count parseExtensions keys on; migrates when the enum is removed
   void ordinalsExactlyAtTheEnumBoundary() {
     // values().length is the first ordinal released after the last sync
     final byte[] mintData = new byte[Mint.BYTES + 83 + 1];
