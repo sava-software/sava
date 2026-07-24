@@ -14,6 +14,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class ParseExtensionsTests {
 
+  // extensions are keyed by their sealed type now that the ExtensionType map is deprecated
+  private static <T extends TokenExtension> T assertExtension(final Set<TokenExtension> extensions, final Class<T> type) {
+    for (final var extension : extensions) {
+      if (type.isInstance(extension)) {
+        return type.cast(extension);
+      }
+    }
+    return fail("missing extension " + type.getSimpleName());
+  }
+
   @Test
   void unsignedTypeAndLength() {
     // type and length are u16 on-chain; read as signed i16 a length of 0xFFFC walked the
@@ -83,13 +93,12 @@ final class ParseExtensionsTests {
     assertEquals(0, tokenAccount.closeAuthorityOption());
     assertNull(tokenAccount.closeAuthority());
 
-    final var extensions = account.extensions();
+    final var extensions = account.tokenExtensions();
     assertEquals(2, extensions.size());
 
-    final var immutableOwner = assertInstanceOf(ImmutableOwner.class, extensions.get(ExtensionType.ImmutableOwner));
-    assertNotNull(immutableOwner);
+    assertExtension(extensions, ImmutableOwner.class);
 
-    final var confidentialTransferAccount = assertInstanceOf(ConfidentialTransferAccount.class, extensions.get(ExtensionType.ConfidentialTransferAccount));
+    final var confidentialTransferAccount = assertExtension(extensions, ConfidentialTransferAccount.class);
     assertTrue(confidentialTransferAccount.approved());
     assertEquals(PublicKey.fromBase58Encoded("3TpHnXSnhyqK9re84Nvxg4iYsqqWpiZYdDSK3LvajNMS"), confidentialTransferAccount.elgamalPubkey());
 
@@ -133,16 +142,16 @@ final class ParseExtensionsTests {
         data
     );
 
-    final var extensions = token2022.extensions();
+    final var extensions = token2022.tokenExtensions();
     assertEquals(8, extensions.size());
 
-    final var mintCloseAuthority = assertInstanceOf(MintCloseAuthority.class, extensions.get(ExtensionType.MintCloseAuthority));
+    final var mintCloseAuthority = assertExtension(extensions, MintCloseAuthority.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", mintCloseAuthority.closeAuthority().toBase58());
 
-    final var permanentDelegate = assertInstanceOf(PermanentDelegate.class, extensions.get(ExtensionType.PermanentDelegate));
+    final var permanentDelegate = assertExtension(extensions, PermanentDelegate.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", permanentDelegate.delegate().toBase58());
 
-    final var transferFeeConfig = assertInstanceOf(TransferFeeConfig.class, extensions.get(ExtensionType.TransferFeeConfig));
+    final var transferFeeConfig = assertExtension(extensions, TransferFeeConfig.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", transferFeeConfig.transferFeeConfigAuthority().toBase58());
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", transferFeeConfig.withdrawWithheldAuthority().toBase58());
     assertEquals(0, transferFeeConfig.withheldAmount());
@@ -157,12 +166,12 @@ final class ParseExtensionsTests {
     assertEquals(0, olderTransferFee.maximumFee());
     assertEquals(0, olderTransferFee.transferFeeBasisPoints());
 
-    final var confidentialTransferMint = assertInstanceOf(ConfidentialTransferMint.class, extensions.get(ExtensionType.ConfidentialTransferMint));
+    final var confidentialTransferMint = assertExtension(extensions, ConfidentialTransferMint.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", confidentialTransferMint.authority().toBase58());
     assertFalse(confidentialTransferMint.autoApproveNewAccounts());
     assertEquals(PublicKey.NONE, confidentialTransferMint.auditorElGamalKey());
 
-    final var confidentialTransferFeeConfig = assertInstanceOf(ConfidentialTransferFeeConfig.class, extensions.get(ExtensionType.ConfidentialTransferFeeConfig));
+    final var confidentialTransferFeeConfig = assertExtension(extensions, ConfidentialTransferFeeConfig.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", confidentialTransferFeeConfig.authority().toBase58());
     assertEquals("HDfmQztzBN2Cc3rkDZuL88SfWw5sSajVMyiz5QaQHFc=", confidentialTransferFeeConfig.withdrawWithheldAuthorityElgamalPubkey().toBase64());
     assertTrue(confidentialTransferFeeConfig.harvestToMintEnabled());
@@ -171,14 +180,14 @@ final class ParseExtensionsTests {
         Base64.getEncoder().encodeToString(confidentialTransferFeeConfig.withheldAmount())
     );
 
-    final var transferHook = assertInstanceOf(TransferHook.class, extensions.get(ExtensionType.TransferHook));
+    final var transferHook = assertExtension(extensions, TransferHook.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", transferHook.authority().toBase58());
 
-    final var metadataPointer = assertInstanceOf(MetadataPointer.class, extensions.get(ExtensionType.MetadataPointer));
+    final var metadataPointer = assertExtension(extensions, MetadataPointer.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", metadataPointer.authority().toBase58());
     assertEquals("2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", metadataPointer.metadataAddress().toBase58());
 
-    final var tokenMetadata = assertInstanceOf(TokenMetadata.class, extensions.get(ExtensionType.TokenMetadata));
+    final var tokenMetadata = assertExtension(extensions, TokenMetadata.class);
     assertEquals("2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk", tokenMetadata.updateAuthority().toBase58());
     assertEquals("2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", tokenMetadata.mint().toBase58());
     assertEquals("PayPal USD", tokenMetadata.name());
