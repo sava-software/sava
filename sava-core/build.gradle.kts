@@ -132,12 +132,20 @@ hardening {
     // every interesting Base58 boundary lives in small inputs; beyond this the O(n^2)
     // codec only burns executions per second
     maxLen = 256
+    // NOT a bootstrap corpus — base58 is ASCII text, so a mutator reaches valid inputs
+    // from scratch in seconds and these seeds buy no coverage the fuzzer cannot find.
+    // They are the regression half: a committed corpus is where a future finding lands
+    // (AGENTS.md: a finding is closed by a seed *and* a named test), and it is replayed
+    // by 'check' in milliseconds rather than only when someone runs a campaign
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/base58")
   }
   fuzz.register("borsh") {
     targetClass = "software.sava.core.borsh.BorshFuzz"
     // shallow structure: a u32 length prefix then elements; every boundary lives in small
-    // inputs, and valid prefixes are reachable from scratch so no seed corpus is needed
+    // inputs, and valid prefixes are reachable from scratch — so, as with base58, the
+    // corpus below is for regression replay inside 'check', not for bootstrapping
     maxLen = 1024
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/borsh")
   }
   fuzz.register("token2022") {
     targetClass = "software.sava.core.accounts.token.Token2022Fuzz"

@@ -423,3 +423,42 @@ against unchanged baselines after the deletion. Seed provenance moved to
 `sava-core/src/test/resources/fuzz/README.md`, next to (never inside) the
 corpus directories. New seeds — including minimized fuzz findings — replay
 automatically.
+
+### `base58` and `borsh` gain regression corpora, 2026-07-25
+
+sava-build `575d292` made `generateFuzzReplayTests` name every target that
+declares no `seedCorpus`; here that was `base58` and `borsh`, both skipped
+deliberately because their formats — ASCII text, and a `u32` length prefix —
+are reachable from scratch, so seeds buy no coverage.
+
+That reasoning was right and is beside the point. It answers the **bootstrap**
+question (does a mutator need help finding valid inputs?) when the rule these
+targets were failing is the **regression** one: a fuzz finding is closed by a
+committed seed *plus* a named test, and a target with no corpus has nowhere to
+put the seed. Committing crash reproducers and replaying them in ordinary CI is
+the settled practice elsewhere — OSS-Fuzz/ClusterFuzz regression testing, Go's
+`testdata/fuzz` — and it is independent of whether the format needs
+bootstrapping. So both targets now carry a corpus (6 and 7 seeds), and the
+build-file comments say which job each corpus does, because the old comments
+would otherwise read as an argument against seeds that are there for a
+different reason.
+
+Measured, not assumed:
+
+- **No mutation gain.** `pitestEncoding` 1048/1072 with 24 survived and 2 timed
+  out — identical to the pre-corpus numbers; `pitestBorsh` stayed 1070/1070 with
+  its baseline still empty. The `encoding` survivors are the documented
+  allocation-sizing and chunking equivalents, which no input can kill, so this
+  was the expected result rather than a disappointment. The one baseline row
+  reported stale is the standing `limbsLength:94` `SURVIVED`/`TIMED_OUT`
+  flipper — **not** pruned, per the rule above.
+- **Every seed earns its place.** `fuzzBase58Minimize` 6 → 6 and
+  `fuzzBorshMinimize` 7 → 7, both 0-removed, each seed contributing distinct
+  coverage features. The two `Minimize` tasks also now run at all, which they
+  could not before.
+- The replay is cheap and real: `BorshFuzzSeedReplayTest` is the
+  largest-coverage test in its suite at 320 blocks.
+
+The value delivered is a home for future findings and deterministic
+`check`-time execution of both harnesses — not a tighter ratchet. Do not expect
+seeds to move these two baselines.

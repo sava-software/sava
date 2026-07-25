@@ -185,13 +185,19 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   `module-info` + `META-INF/services` declaration, and a harness whose result
   depends on which task ran it is never committed.
 - Fuzz findings become a committed seed input **and** a named regression test, never
-  just a fix — and every committed corpus is replayed by a unit test inside `check`
-  (`Token2022CorpusReplayTests`, `TransactionSkeletonCorpusReplayTests`), so a new
-  seed replays automatically and the corpus cannot rot between fuzz runs. Dedupe
-  with `fuzz<Target>Minimize` rather than by hand; both corpora here were verified
-  already-minimal on 2026-07-23 (a 0-removed no-op), and every seed is named for
-  its provenance, so a future run that proposes *removing* one is deleting a
-  documented regression input — read the diff before keeping it.
+  just a fix — and every committed corpus is replayed inside `check` by a generated
+  `<Harness>SeedReplayTest` (`Base58Fuzz`, `BorshFuzz`, `Token2022Fuzz`,
+  `TransactionSkeletonFuzz`), so a new seed replays automatically and the corpus
+  cannot rot between fuzz runs. **Every fuzz target carries a corpus**, including the
+  two whose formats a mutator reaches from scratch: `base58` and `borsh` are
+  regression corpora, not bootstrap ones (the distinction, and what each seed pins,
+  is in `src/test/resources/fuzz/README.md`) — a target with nowhere to put a finding
+  cannot satisfy the seed-plus-test rule above. Dedupe with `fuzz<Target>Minimize`
+  rather than by hand; all four corpora were verified already-minimal (token2022 and
+  txSkeleton on 2026-07-23, base58 and borsh on 2026-07-25, each a 0-removed no-op),
+  and every seed is named for its provenance, so a future run that proposes
+  *removing* one is deleting a documented regression input — read the diff before
+  keeping it.
 - **When one thing has two representations, fuzz the differential.** An
   encode/decode round trip, an eager view beside a lazy overlay: assert the two
   *agree* rather than that neither crashes — crash-only fuzzing cannot see a wrong
