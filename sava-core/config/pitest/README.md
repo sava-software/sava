@@ -290,3 +290,54 @@ Packages without a suite are deliberate scope decisions (see
 
 Shrinking the baseline is always an improvement; growing it requires a
 reason here.
+
+## Timed-out mutants (audited set)
+
+`TIMED_OUT` is detected — these mutants never enter a baseline — but the
+watchdog observed slowness, not wrongness: for exactly these mutants the
+ratchet cannot see a weakened covering assertion, because a timeout keeps
+"detecting" no matter what the test asserts. Per HARDENING.md, the summary's
+`N timed out (load-dependent)` is therefore an audited set, not a count: every
+member is listed here with the structural cause that makes it spin, and a
+mutant timing out that is *not* on this list is something a reviewer stops on.
+Membership is machine-checked: `<suite>-timeouts.csv` holds the line-less
+`class,method,mutator` keys, and the verify warns on any timeout outside them.
+Per-run counts sit at or below the set size — a dead mutant's covering test
+racing the watchdog can land either detected flavour.
+
+As of 2026-07-26 — 8 members across four suites:
+
+**ed25519** (4, all `Ed25519Util`; read `TIMED_OUT` identically solo and under
+gate load in the 2026-07-22 mode comparison)
+- `pack25519:385` (`RemoveConditionalMutator_ORDER_IF` on the `j < 2`
+  reduction-pass loop): the canonical-reduction pass loses its only exit and
+  repeats forever.
+- `pow2523:420` (`ORDER_IF` on `a >= 0`): the 2^252−3 exponentiation ladder
+  loses its countdown exit.
+- `scalarMultBase:938` (`IncrementsMutator`, `var6 -= 4` → `+= 4`): the
+  window cursor walks up instead of down and never crosses the `var6 < 0`
+  exit.
+- `scalarMultBase:939` (`ORDER_ELSE` on `var6 < 0`): the ladder loop's only
+  `return` is forced unreachable.
+
+**encoding** (2)
+- `Jex.isValid:571` (`IncrementsMutator`, second `index++` → `index--`): the
+  do-while cursor oscillates over the same valid digit pair and never reaches
+  `len`.
+- `Base58.limbsLength:94` (`MathMutator`): inflates the limb-count allocation
+  estimate, so the run crawls under allocation/GC instead of failing — the
+  known `SURVIVED`↔`TIMED_OUT` flapper; both baseline copies are flip
+  insurance (see `HARDENING_NOTES.md`, timeout budgets).
+
+**tx** (1)
+- `AddressLookupTableOverlay.lambda$keysToString$1:128`
+  (`PrimitiveReturnsMutator` on the `IntStream.iterate` step
+  `i -> i + PUBLIC_KEY_LENGTH` → `0`): the offset cursor collapses to 0,
+  stays below `to` forever, and the join accumulates keys until the watchdog.
+
+**vanity** (1)
+- `SubsequenceRecord.formatCharOptions:148` (`ORDER_IF` on
+  `level < Subsequence.MAX_OPTIONS`): the row loop loses its exit and appends
+  rows until the watchdog — the growing `StringBuilder` races it, so this
+  member flips `KILLED`↔`TIMED_OUT` between runs (the known flapper in the
+  `HARDENING_NOTES.md` mode comparisons).

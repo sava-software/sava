@@ -1,0 +1,4 @@
+# Audited timed-out mutants (class,method,mutator — line-less; the verify warns on
+# timeouts missing from this set). Structural causes: README.md "Timed-out mutants
+# (audited set)".
+software.sava.core.accounts.vanity.SubsequenceRecord,formatCharOptions,RemoveConditionalMutator_ORDER_IF

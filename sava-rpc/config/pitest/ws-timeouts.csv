@@ -1,0 +1,10 @@
+# Audited timed-out mutants (class,method,mutator — line-less; the verify warns on
+# timeouts missing from this set). Structural causes: README.md "Timed-out mutants
+# (audited set)".
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,run,RemoveConditionalMutator_EQUAL_IF
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,checkCycle,VoidMethodCallMutator
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,run,VoidMethodCallMutator
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,VoidMethodCallMutator
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$connect$2,RemoveConditionalMutator_EQUAL_ELSE
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$connect$1,NakedReceiverMutator
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,closed,RemoveConditionalMutator_ORDER_ELSE

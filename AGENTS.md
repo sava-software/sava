@@ -14,6 +14,22 @@ suspected bug in json-iterator, report it to the user; do not add tests, harness
 fixes in that repo from a sava task. The same applies to `../sava-build`, which owns the
 convention plugins and `HARDENING.md`.
 
+To build against an unpublished sava-build change, publish sava-build to its local test
+repo and point this build at it — the property belongs in `~/.gradle/gradle.properties`
+or on the CLI, never in `settings.gradle.kts`:
+
+```sh
+(cd ../sava-build; ./gradlew publishSavaBuildTestPublicationToSavaTestRepoRepository)
+./gradlew check -PsavaBuildLocalRepo=../sava-build/build/sava-test-repo
+```
+
+While set, every `software.sava.build*` plugin id resolves to the `0.0.0-test` module
+from that repo and the pinned versions are ignored (a warning is logged, with the age of
+the last publish). **The publish is not automatic** — re-run it after every sava-build
+edit, or the build silently keeps the previously published jar. When done, drop the
+property and bump the pinned versions in `settings.gradle.kts` to the released
+sava-build.
+
 sava parses account and transaction data **client side**. Do not reach for the RPC
 `jsonParsed` encoding to avoid writing a parser — it gives up the typed layouts this
 library exists to provide, and only covers programs the node happens to know.

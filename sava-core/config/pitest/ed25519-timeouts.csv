@@ -1,0 +1,7 @@
+# Audited timed-out mutants (class,method,mutator — line-less; the verify warns on
+# timeouts missing from this set). Structural causes: README.md "Timed-out mutants
+# (audited set)".
+software.sava.core.crypto.ed25519.Ed25519Util,pack25519,RemoveConditionalMutator_ORDER_IF
+software.sava.core.crypto.ed25519.Ed25519Util,pow2523,RemoveConditionalMutator_ORDER_IF
+software.sava.core.crypto.ed25519.Ed25519Util,scalarMultBase,IncrementsMutator
+software.sava.core.crypto.ed25519.Ed25519Util,scalarMultBase,RemoveConditionalMutator_ORDER_ELSE

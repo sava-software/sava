@@ -258,3 +258,48 @@ include real coverage debt, so the module-wide claim no longer holds. The
 
 Shrinking the baseline is always an improvement; growing it requires a
 reason here.
+
+## Timed-out mutants (audited set)
+
+`TIMED_OUT` is detected — never baselined — but the watchdog observed
+slowness, not wrongness: for these mutants the ratchet cannot see a weakened
+covering assertion, so per HARDENING.md the summary's `N timed out
+(load-dependent)` is an audited set, not a count. Membership is
+machine-checked: `ws-timeouts.csv` holds the line-less `class,method,mutator`
+keys and the verify warns on any timeout outside them. A member can also read
+`KILLED` or (for the baselined flip below) `SURVIVED` on a given run.
+
+As of 2026-07-26 — 7 members, all ws, all `SolanaJsonRpcWebsocket`. The first
+two are the long-documented pair; the rest surfaced across the 2026-07-26
+five-suite parallel run and two solo confirmation runs (racers — on other
+runs they read `KILLED`, the covering test winning the race). They are one
+family: make `closed()` lie and the check loop never exits, or strand the
+connect future and the joining test parks. Expect membership to accrete a
+run at a time — each run samples a few racers — and admit a newcomer only
+with its structural cause written here:
+
+- `run` while-condition forced always-true (`RemoveConditionalMutator`
+  `EQUAL_IF`): the loop that never exits, caught by PIT's timeout — the
+  stable detection documented in the ws triage section above.
+- `checkCycle:235` `unlock()` removal (`VoidMethodCall`): baselined
+  `SURVIVED # unlock in finally`; under load a later test blocks on the
+  leaked lock and the reading flips to `TIMED_OUT` (the 2026-07-23 migration
+  run) — audited so that flavour does not read as a newcomer.
+- `run:206` `checkCycle(sleepNanos)` removal (`VoidMethodCall`): the loop
+  body goes empty, leaving a busy spin on `!closed()` that never parks —
+  detection races the covering test's eventual close.
+- `close:1089` `msgId.set(Long.MIN_VALUE)` removal (`VoidMethodCall`):
+  `closed()` reads `msgId < 0`, so the closed marker never sets and the
+  check loop's exit never turns true — the same never-exits family as the
+  `run` while-condition.
+- `lambda$connect$2:180` `ex == null` forced-else (`RemoveConditionalMutator`
+  `EQUAL_ELSE`): the connect future can only complete exceptionally, so a
+  test joining `connected` parks until its own timeout, which under load
+  loses to PIT's watchdog.
+- `lambda$connect$1:179` dropped `.whenComplete(...)` (`NakedReceiver`,
+  keeping the bare `buildAsync` future): the callback that completes
+  `connected` never attaches — the same park-on-connect wedge as
+  `lambda$connect$2:180`; surfaced in the 2026-07-26 solo confirmation run.
+- `closed:156` `msgId.get() < 0` forced-false (`RemoveConditionalMutator`
+  `ORDER_ELSE`): `closed()` can never report true, so the check loop's exit
+  vanishes — the accessor-side twin of the `close:1089` marker removal.
