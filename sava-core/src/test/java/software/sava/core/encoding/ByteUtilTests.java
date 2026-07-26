@@ -1,16 +1,24 @@
 package software.sava.core.encoding;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ByteUtilTests {
 
   private static final BigInteger TWO_POW_128 = BigInteger.TWO.pow(128);
+  private static final BigInteger TWO_POW_192 = BigInteger.TWO.pow(192);
   private static final BigInteger TWO_POW_256 = BigInteger.TWO.pow(256);
+
+  /// The widths the arbitrary-width methods are exercised at: the named ones,
+  /// the `u192` they were opened up for, and odd sizes either side of a Java
+  /// primitive so nothing can depend on the field being a whole number of words.
+  private static final int[] WIDTHS = {1, 2, 3, 5, 8, 9, 16, 24, 32, 33};
 
   /// Signed round trip at every offset, plus the unsigned view of the same
   /// bytes, plus containment: bytes outside the field must never be written.
@@ -122,6 +130,223 @@ final class ByteUtilTests {
     final var uMax = TWO_POW_256.subtract(BigInteger.ONE);
     ByteUtil.putInt256LE(write, 0, uMax);
     assertEquals(uMax, ByteUtil.getUInt256LE(write, 0));
+  }
+
+  /// Signed and unsigned round trips at every offset for an arbitrary width, the
+  /// generalisation of [#testInt128] and [#testInt256] to the widths this class
+  /// does not name — a `u192` pod decimal being the one that asked for them.
+  private static void testWidth(final BigInteger expected, final int byteSize) {
+    final byte[] write = new byte[byteSize * 2];
+    final var modulus = BigInteger.TWO.pow(byteSize * Byte.SIZE);
+    for (int i = 0; i <= byteSize; ++i) {
+      Arrays.fill(write, (byte) 0x5A);
+      assertEquals(byteSize, ByteUtil.putIntLE(write, i, expected, byteSize));
+      assertEquals(expected, ByteUtil.getIntLE(write, i, byteSize), "signed width " + byteSize);
+      assertEquals(expected.mod(modulus), ByteUtil.getUIntLE(write, i, byteSize), "unsigned width " + byteSize);
+      assertContained(write, i, byteSize);
+    }
+  }
+
+  @Test
+  void testArbitraryWidthIntegers() {
+    for (final int byteSize : WIDTHS) {
+      final int bits = byteSize * Byte.SIZE;
+      testWidth(BigInteger.ZERO, byteSize);
+      testWidth(BigInteger.ONE, byteSize);
+      testWidth(BigInteger.ONE.negate(), byteSize);
+      testWidth(BigInteger.TWO.pow(bits - 1).subtract(BigInteger.ONE), byteSize);
+      testWidth(BigInteger.TWO.pow(bits - 1).negate(), byteSize);
+    }
+  }
+
+  /// The whole reason the unsigned reader is a separate method: a field whose top
+  /// bit is set is a large positive number, and reading it through the signed one
+  /// returns a value short by exactly the modulus.
+  @Test
+  void testArbitraryWidthUnsignedExtremes() {
+    for (final int byteSize : WIDTHS) {
+      final var modulus = BigInteger.TWO.pow(byteSize * Byte.SIZE);
+      final var uMax = modulus.subtract(BigInteger.ONE);
+      final var topBit = BigInteger.TWO.pow(byteSize * Byte.SIZE - 1);
+      final byte[] write = new byte[byteSize * 2];
+      for (int i = 0; i <= byteSize; ++i) {
+        Arrays.fill(write, (byte) 0x5A);
+        assertEquals(byteSize, ByteUtil.putUIntLE(write, i, uMax, byteSize));
+        assertEquals(uMax, ByteUtil.getUIntLE(write, i, byteSize));
+        assertEquals(BigInteger.ONE.negate(), ByteUtil.getIntLE(write, i, byteSize));
+        assertContained(write, i, byteSize);
+
+        assertEquals(byteSize, ByteUtil.putUIntLE(write, i, topBit, byteSize));
+        assertEquals(topBit, ByteUtil.getUIntLE(write, i, byteSize));
+        assertEquals(topBit.subtract(modulus), ByteUtil.getIntLE(write, i, byteSize));
+        assertContained(write, i, byteSize);
+      }
+      assertThrows(IllegalArgumentException.class,
+          () -> ByteUtil.putIntLE(new byte[byteSize], 0, modulus, byteSize));
+    }
+  }
+
+  /// The arbitrary-width reads against an oracle that shares no code with them:
+  /// each byte weighted by its own power of 256, and the signed view derived from
+  /// the top byte rather than from a second traversal. A transposed byte, an
+  /// off-by-one offset or a dropped high byte all fail here.
+  @Test
+  void arbitraryWidthReadsAgreeWithAPositionalOracle() {
+    final var random = new Random(192L);
+    final byte[] data = new byte[64];
+    for (int t = 0; t < 2_000; ++t) {
+      random.nextBytes(data);
+      final int byteSize = 1 + random.nextInt(33);
+      final int offset = random.nextInt(data.length - byteSize + 1);
+
+      var unsigned = BigInteger.ZERO;
+      for (int i = 0; i < byteSize; ++i) {
+        unsigned = unsigned.add(BigInteger.valueOf(data[offset + i] & 0xFF).shiftLeft(i * Byte.SIZE));
+      }
+      assertEquals(unsigned, ByteUtil.getUIntLE(data, offset, byteSize),
+          "unsigned " + byteSize + " bytes at " + offset);
+      assertTrue(ByteUtil.getUIntLE(data, offset, byteSize).signum() >= 0);
+
+      final var signed = data[offset + byteSize - 1] < 0
+          ? unsigned.subtract(BigInteger.TWO.pow(byteSize * Byte.SIZE))
+          : unsigned;
+      assertEquals(signed, ByteUtil.getIntLE(data, offset, byteSize),
+          "signed " + byteSize + " bytes at " + offset);
+    }
+  }
+
+  /// The named widths and the arbitrary-width ones are the same field read two
+  /// ways; if they ever disagreed, one of the two families would be wrong about
+  /// the layout of every account that uses it.
+  @Test
+  void namedWidthsAgreeWithTheArbitraryWidthReaders() {
+    final var random = new Random(128L);
+    final byte[] data = new byte[64];
+    for (int t = 0; t < 500; ++t) {
+      random.nextBytes(data);
+      for (int offset = 0; offset <= 16; ++offset) {
+        assertEquals(ByteUtil.getIntLE(data, offset, 16), ByteUtil.getInt128LE(data, offset));
+        assertEquals(ByteUtil.getUIntLE(data, offset, 16), ByteUtil.getUInt128LE(data, offset));
+        assertEquals(ByteUtil.getIntLE(data, offset, 32), ByteUtil.getInt256LE(data, offset));
+        assertEquals(ByteUtil.getUIntLE(data, offset, 32), ByteUtil.getUInt256LE(data, offset));
+      }
+    }
+  }
+
+  private static void assertRejectsWidth(final Executable executable) {
+    final var thrown = assertThrows(IllegalArgumentException.class, executable);
+    // NumberFormatException is an IllegalArgumentException: without the width
+    // check, an empty field reaches the BigInteger constructor and throws one,
+    // which a type-only assertion cannot tell apart from the rejection.
+    assertEquals(IllegalArgumentException.class, thrown.getClass(), "wrong exception: " + thrown);
+    assertTrue(thrown.getMessage().startsWith("byteSize must be positive"), thrown.getMessage());
+  }
+
+  /// A width that addresses no bytes is a caller mistake, not a value: unchecked,
+  /// `byteSize == 0` reads as zero through the unsigned reader, throws a
+  /// `NumberFormatException` through the signed one and writes nothing at all
+  /// through the writers — three answers to one question.
+  @Test
+  void testNonPositiveWidthIsRejected() {
+    final byte[] data = new byte[8];
+    for (final int byteSize : new int[]{0, -1, Integer.MIN_VALUE}) {
+      assertRejectsWidth(() -> ByteUtil.getIntLE(data, 0, byteSize));
+      assertRejectsWidth(() -> ByteUtil.getUIntLE(data, 0, byteSize));
+      assertRejectsWidth(() -> ByteUtil.putIntLE(data, 0, BigInteger.ZERO, byteSize));
+      assertRejectsWidth(() -> ByteUtil.putUIntLE(data, 0, BigInteger.ZERO, byteSize));
+    }
+  }
+
+  /// The field is bounds-checked before the first byte moves, so a write that
+  /// cannot fit leaves the buffer as it found it rather than half-updated.
+  @Test
+  void testFieldIsBoundsCheckedBeforeAnythingIsWritten() {
+    final byte[] data = new byte[16];
+    Arrays.fill(data, (byte) 0x5A);
+
+    assertThrows(IndexOutOfBoundsException.class, () -> ByteUtil.putIntLE(data, 1, BigInteger.ONE, 16));
+    assertThrows(IndexOutOfBoundsException.class, () -> ByteUtil.putUIntLE(data, 9, BigInteger.ONE, 8));
+    assertThrows(IndexOutOfBoundsException.class, () -> ByteUtil.putInt256LE(data, 0, BigInteger.ONE));
+    assertThrows(IndexOutOfBoundsException.class, () -> ByteUtil.putIntLE(data, -1, BigInteger.ONE, 4));
+    for (final byte b : data) {
+      assertEquals((byte) 0x5A, b, "a rejected write reached the buffer");
+    }
+
+    assertThrows(IndexOutOfBoundsException.class, () -> ByteUtil.getIntLE(data, 9, 8));
+    assertThrows(IndexOutOfBoundsException.class, () -> ByteUtil.getUIntLE(data, 9, 8));
+    assertThrows(IndexOutOfBoundsException.class, () -> ByteUtil.getUIntLE(data, -1, 4));
+
+    // a field ending exactly at the last byte is in bounds, at either end
+    assertEquals(16, ByteUtil.putIntLE(data, 0, BigInteger.ONE, 16));
+    assertEquals(BigInteger.ONE, ByteUtil.getUIntLE(data, 0, 16));
+    assertEquals(1, ByteUtil.putIntLE(data, 15, BigInteger.ONE, 1));
+    assertEquals(BigInteger.ONE, ByteUtil.getUIntLE(data, 15, 1));
+  }
+
+  /// `putUIntLE` differs from `putIntLE` by one rejected operand, and that is the
+  /// point: sign extension is correct for an `i128` field and is silently
+  /// `2^n - 1` for an unsigned one.
+  @Test
+  void testUnsignedWriterRejectsNegatives() {
+    final byte[] write = new byte[24];
+    Arrays.fill(write, (byte) 0x5A);
+    final var thrown = assertThrows(IllegalArgumentException.class,
+        () -> ByteUtil.putUIntLE(write, 0, BigInteger.ONE.negate(), 24));
+    assertTrue(thrown.getMessage().contains("negative"), thrown.getMessage());
+    for (final byte b : write) {
+      assertEquals((byte) 0x5A, b, "a rejected write reached the buffer");
+    }
+
+    // zero is not negative, and the full unsigned range is accepted
+    assertEquals(24, ByteUtil.putUIntLE(write, 0, BigInteger.ZERO, 24));
+    assertEquals(BigInteger.ZERO, ByteUtil.getUIntLE(write, 0, 24));
+    final var uMax = TWO_POW_192.subtract(BigInteger.ONE);
+    assertEquals(24, ByteUtil.putUIntLE(write, 0, uMax, 24));
+    assertEquals(uMax, ByteUtil.getUIntLE(write, 0, 24));
+    assertThrows(IllegalArgumentException.class, () -> ByteUtil.putUIntLE(write, 0, TWO_POW_192, 24));
+
+    // what the signed writer does with the operand the unsigned one refuses
+    assertEquals(24, ByteUtil.putIntLE(write, 0, BigInteger.ONE.negate(), 24));
+    assertEquals(uMax, ByteUtil.getUIntLE(write, 0, 24));
+  }
+
+  /// The narrow unsigned readers against the arbitrary-width one: the same bytes
+  /// read as a `u16`, `u32` or `u64` must be the number the generic reader sees,
+  /// and must never come back negative the way the signed readers do.
+  @Test
+  void testUnsignedNarrowReaders() {
+    final byte[] data = new byte[24];
+    final var random = new Random(64L);
+    for (int t = 0; t < 1_000; ++t) {
+      random.nextBytes(data);
+      for (int offset = 0; offset <= 16; ++offset) {
+        assertEquals(ByteUtil.getUIntLE(data, offset, Short.BYTES).intValueExact(),
+            ByteUtil.getUInt16LE(data, offset));
+        assertEquals(ByteUtil.getUIntLE(data, offset, Integer.BYTES).longValueExact(),
+            ByteUtil.getUInt32LE(data, offset));
+        assertEquals(ByteUtil.getUIntLE(data, offset, Long.BYTES),
+            ByteUtil.getUInt64LE(data, offset));
+      }
+    }
+
+    // the values the signed readers get wrong
+    ByteUtil.putInt16LE(data, 0, (short) 0xFFFF);
+    assertEquals(-1, ByteUtil.getInt16LE(data, 0));
+    assertEquals(65_535, ByteUtil.getUInt16LE(data, 0));
+    ByteUtil.putInt16LE(data, 2, Short.MIN_VALUE);
+    assertEquals(32_768, ByteUtil.getUInt16LE(data, 2));
+
+    ByteUtil.putInt32LE(data, 4, -1);
+    assertEquals(4_294_967_295L, ByteUtil.getUInt32LE(data, 4));
+    ByteUtil.putInt32LE(data, 8, Integer.MIN_VALUE);
+    assertEquals(2_147_483_648L, ByteUtil.getUInt32LE(data, 8));
+
+    ByteUtil.putInt64LE(data, 12, -1L);
+    assertEquals(new BigInteger("18446744073709551615"), ByteUtil.getUInt64LE(data, 12));
+    ByteUtil.putInt64LE(data, 12, Long.MIN_VALUE);
+    assertEquals(new BigInteger("9223372036854775808"), ByteUtil.getUInt64LE(data, 12));
+    ByteUtil.putInt64LE(data, 12, 1L);
+    assertEquals(BigInteger.ONE, ByteUtil.getUInt64LE(data, 12));
   }
 
   @Test

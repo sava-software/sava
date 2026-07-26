@@ -251,6 +251,22 @@ final class ExtensionEdgeCaseTests {
         new LinkedHashSet<>(List.of(pausableConfig, unknown))
     );
     assertEquals(Map.of(ExtensionType.Pausable, pausableConfig), token2022.extensions());
+
+    // Token2022Account carries its own copy of the deprecated map, which nothing
+    // reached — the mint's map passing says nothing about the account's
+    final var tokenAccount = new TokenAccount(
+        key(4), key(5), key(6), 42L,
+        1, key(7),
+        AccountState.Initialized,
+        0, 0L, 21L,
+        1, key(8)
+    );
+    final var account = new Token2022Account(
+        tokenAccount,
+        AccountType.Account,
+        new LinkedHashSet<>(List.of(pausableConfig, unknown))
+    );
+    assertEquals(Map.of(ExtensionType.Pausable, pausableConfig), account.extensions());
   }
 
   @Test

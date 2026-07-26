@@ -21,9 +21,9 @@ pluginManagement {
   }
   // Resolve sava-build from GitHub Packages. Uncomment only while depending on an
   // unpublished sava-build change, then publish, bump the versions below, re-comment.
-//  if (settingsDir.resolve("../sava-build").isDirectory) {
-//    includeBuild("../sava-build")
-//  }
+  if (settingsDir.resolve("../sava-build").isDirectory) {
+    includeBuild("../sava-build")
+  }
   // Repo-local convention plugins (e.g. 'sava.docs-in-sync') — conventions that
   // belong to this repo rather than sava-build.
   includeBuild("gradle/plugins")

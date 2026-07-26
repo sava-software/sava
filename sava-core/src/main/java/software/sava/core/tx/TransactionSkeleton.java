@@ -32,14 +32,17 @@ public interface TransactionSkeleton {
     int version = data[o++] & 0xFF;
     final int numRequiredSignatures;
     if (signedByte(version)) {
-      numRequiredSignatures = data[o++];
+      // the three message header counts are u8 on the wire like the version byte above;
+      // read as signed bytes, a value past 0x7F is a negative count that inflates the
+      // signer loops in TransactionSkeletonRecord instead of being rejected as malformed
+      numRequiredSignatures = data[o++] & 0xFF;
       version &= 0x7F;
     } else {
       numRequiredSignatures = version;
       version = VERSIONED_BIT_MASK;
     }
-    final int numReadonlySignedAccounts = data[o++];
-    final int numReadonlyUnsignedAccounts = data[o++];
+    final int numReadonlySignedAccounts = data[o++] & 0xFF;
+    final int numReadonlyUnsignedAccounts = data[o++] & 0xFF;
 
     final int numIncludedAccounts = decode(data, o);
     o += getByteLen(data, o);

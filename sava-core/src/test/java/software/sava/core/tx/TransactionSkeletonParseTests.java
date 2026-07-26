@@ -32,6 +32,33 @@ final class TransactionSkeletonParseTests {
     return TransactionSkeleton.deserializeSkeleton(Base64.getDecoder().decode(base64));
   }
 
+  /// The three message-header counts are `u8` on the wire, like the version byte they sit
+  /// next to. Read as signed bytes, a value past `0x7F` came back negative, and
+  /// `numSignatures - numReadonlySignedAccounts` then walked the writable-signer loop
+  /// past the accounts it was slicing instead of the count being reported as read.
+  @Test
+  void headerCountsPastTheSignBitReadUnsigned() {
+    final byte[] data = new byte[1 + Transaction.SIGNATURE_LENGTH + 1 + 1 + 1 + 1 + 1
+        + (PublicKey.PUBLIC_KEY_LENGTH * 3) + Transaction.BLOCK_HASH_LENGTH + 1];
+    int o = 0;
+    data[o++] = 1;                                   // compact-u16: one signature blob
+    o += Transaction.SIGNATURE_LENGTH;
+    data[o++] = (byte) 0x80;                         // versioned marker, version 0
+    data[o++] = (byte) 0x80;                         // numRequiredSignatures
+    data[o++] = (byte) 0x81;                         // numReadonlySignedAccounts
+    data[o++] = (byte) 0xFF;                         // numReadonlyUnsignedAccounts
+    data[o++] = 3;                                   // compact-u16 numIncludedAccounts
+    o += PublicKey.PUBLIC_KEY_LENGTH * 3;
+    o += Transaction.BLOCK_HASH_LENGTH;
+    data[o] = 0;                                     // compact-u16 numInstructions
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    assertEquals(0, skeleton.version());
+    assertEquals(128, skeleton.numSignatures());
+    assertEquals(129, skeleton.numReadonlySignedAccounts());
+    assertEquals(255, skeleton.numReadonlyUnsignedAccounts());
+  }
+
   private void assertSignerSplit(final TransactionSkeleton skeleton) {
     final var accounts = skeleton.parseAccounts();
     final var signerAccounts = skeleton.parseSignerAccounts();

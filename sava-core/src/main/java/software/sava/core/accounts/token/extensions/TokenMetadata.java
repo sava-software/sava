@@ -55,8 +55,12 @@ public record TokenMetadata(PublicKey updateAuthority,
       additionalMetadata = Map.of();
     } else {
       // each entry needs at least two u32 length prefixes; validating the count against
-      // the bytes actually present bounds the allocation below against a corrupt count
-      if (numExtras > ((data.length - i) >> 3)) {
+      // the bytes actually present bounds the allocation below against a corrupt count.
+      // Compared unsigned because the count is a u32: read into an int, one with the top
+      // bit set is negative, and a signed comparison finds it smaller than the bound
+      // rather than larger, passing it through to the array constructor as a
+      // NegativeArraySizeException
+      if (Integer.compareUnsigned(numExtras, (data.length - i) >> 3) > 0) {
         throw new IllegalArgumentException("Invalid additional metadata count: " + numExtras);
       }
       final var entries = new Map.Entry[numExtras];

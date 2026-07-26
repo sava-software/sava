@@ -18,7 +18,10 @@ public record TransferFee(long epoch,
     i += Long.BYTES;
     final var maximumFee = ByteUtil.getInt64LE(data, i);
     i += Long.BYTES;
-    final int transferFeeBasisPoints = ByteUtil.getInt16LE(data, i);
+    // PodU16 on the wire: the program caps it at MAX_FEE_BASIS_POINTS, so the
+    // sign bit is unreachable through its own instructions, but this parses
+    // whatever bytes it is handed and a negative fee reads as valid downstream
+    final int transferFeeBasisPoints = ByteUtil.getUInt16LE(data, i);
     return new TransferFee(
         epoch,
         maximumFee,

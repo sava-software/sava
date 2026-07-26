@@ -5,6 +5,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.AccountState;
 import software.sava.core.accounts.token.Token2022;
 import software.sava.core.accounts.token.Token2022Account;
+import software.sava.core.encoding.ByteUtil;
 
 import java.time.Duration;
 import java.util.Base64;
@@ -56,6 +57,28 @@ final class ParseExtensionsTests {
   }
 
   @Test
+  void unsignedTransferFeeBasisPoints() {
+    // PodU16 on the wire: read as signed i16, a value with the top bit set came back
+    // negative, which passes a `fee <= MAX_FEE_BASIS_POINTS` sanity check at the caller
+    // rather than failing it. The program caps the field at 10_000, so only a corrupt or
+    // fabricated account reaches this — which is what a client-side parser is handed.
+    final byte[] data = new byte[TransferFee.BYTES];
+    ByteUtil.putInt64LE(data, 0, 605L);
+    ByteUtil.putInt64LE(data, Long.BYTES, Long.MAX_VALUE);
+    ByteUtil.putInt16LE(data, Long.BYTES + Long.BYTES, (short) 0xFFFF);
+
+    final var transferFee = TransferFee.read(data, 0);
+    assertEquals(605L, transferFee.epoch());
+    assertEquals(Long.MAX_VALUE, transferFee.maximumFee());
+    assertEquals(65_535, transferFee.transferFeeBasisPoints());
+
+    // the widened value still serialises back to the bytes it was read from
+    final byte[] written = new byte[TransferFee.BYTES];
+    assertEquals(TransferFee.BYTES, transferFee.write(written, 0));
+    assertArrayEquals(data, written);
+  }
+
+  @Test
   void corruptAdditionalMetadataCount() {
     // updateAuthority + mint + empty name/symbol/uri, then a count claiming far more
     // entries than the remaining bytes could hold; the reader must reject the count
@@ -66,6 +89,13 @@ final class ParseExtensionsTests {
     data[32 + 32 + 4 + 4 + 4 + 2] = (byte) 0xFF;
     data[32 + 32 + 4 + 4 + 4 + 3] = 0x7F;
     assertThrows(IllegalArgumentException.class, () -> TokenMetadata.read(data, 0));
+
+    // the count is a u32, so the other half of the range is negative as an int and is
+    // not caught by the upper bound: unguarded it reached `new Map.Entry[-16777216]`
+    final byte[] topBitSet = new byte[32 + 32 + 4 + 4 + 4 + 4];
+    topBitSet[32 + 32 + 4 + 4 + 4 + 3] = (byte) 0xFF;
+    final var thrown = assertThrows(IllegalArgumentException.class, () -> TokenMetadata.read(topBitSet, 0));
+    assertEquals("Invalid additional metadata count: -16777216", thrown.getMessage());
   }
 
   @Test
