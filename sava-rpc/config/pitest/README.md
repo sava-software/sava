@@ -278,7 +278,7 @@ connect future and the joining test parks. Expect membership to accrete a
 run at a time — each run samples a few racers — and admit a newcomer only
 with its structural cause written here:
 
-- `run` while-condition forced always-true (`RemoveConditionalMutator`
+- `run:205` while-condition forced always-true (`RemoveConditionalMutator`
   `EQUAL_IF`): the loop that never exits, caught by PIT's timeout — the
   stable detection documented in the ws triage section above.
 - `checkCycle:235` `unlock()` removal (`VoidMethodCall`): baselined

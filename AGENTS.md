@@ -52,7 +52,7 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
-<!-- hardening-template sha256:7f9eb869ee7e -->
+<!-- hardening-template sha256:f6dea3f41ab7 -->
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
@@ -123,9 +123,10 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   not `-PupdateMutationBaseline`.** Prune drops rows matching nothing this run and
   writes nothing new, so no coin-flip from a single run can be baked in; it keeps
   rows whose coordinate `TIMED_OUT` or is still unkilled at another status, and
-  names both. The verify's stale-entry hint still says "refresh with
-  `-PupdateMutationBaseline`" — prefer prune when the only news is *fewer*
-  survivors. The three flags are mutually exclusive and the build refuses a
+  names both. The verify's stale-entry hint points the same way — prune when the
+  only news is *fewer* survivors, update (after triage) when new rows are also
+  present — and reports baseline rows that merely read `TIMED_OUT` this run
+  separately, as the load flip they are rather than as debt to refresh away. The three flags are mutually exclusive and the build refuses a
   combination. Never hand-roll a pruning script: matching rows without the status
   field deletes the wrong one (casebook: the status-blind prune).
 - **Identical baseline rows are sibling mutants, not duplicates.** One compound
@@ -169,6 +170,20 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   is the benign flavour and gets a count, `SURVIVED -> TIMED_OUT` gets a warning —
   a mutant nobody killed now reading as detected purely through load. Never let a
   refresh drop those rows from the baseline.
+- **A new timed-out mutant is a reviewer-stop, not detection noise.** Behind a
+  timeout the ratchet cannot see a weakened covering assertion — soften the test to
+  uselessness and the timeout keeps "detecting" — so each suite's timeouts are an
+  audited set, not a count: `config/pitest/<suite>-timeouts.csv` holds the line-less
+  `class,method,mutator` keys and the suite `README.md` the structural cause per
+  member. Adopted for the five suites that time out here: `ed25519` (4), `encoding`
+  (2), `tx` (1), `vanity` (1), `ws` (7). The verify warns on any timeout outside the
+  set — paste the printed row, then write the cause — and on members matching no
+  mutant or whose method appears nowhere in the README. The key is also the check's
+  resolution: a *new* timed-out mutant in an already-audited method+mutator draws no
+  warning, which is why every cause names its line — re-read it when that code
+  changes. Expect `ws` membership to accrete a run at a time (one family: make
+  `closed()` lie or strand the connect future); admit a newcomer only with its cause
+  written.
 - **A wandering unkilled count is a defect to chase, not re-ratchet past** — a
   lucky run bakes in a row later runs fail on. Causes and the convergence
   method: `HARDENING.md`. The abstract-base annotation cause is ruled out here
