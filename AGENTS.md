@@ -178,7 +178,10 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   member. Adopted for the five suites that time out here: `ed25519` (4), `encoding`
   (2), `tx` (1), `vanity` (1), `ws` (7). The verify warns on any timeout outside the
   set — paste the printed row, then write the cause — and on members matching no
-  mutant or whose method appears nowhere in the README. The key is also the check's
+  mutant or whose class and method appear nowhere together in the README;
+  `pitest<Suite>Debt` checks row shape and cause presence too, from committed files
+  alone, so confirm a paste or a fresh cause there without a mutation run.
+  The key is also the check's
   resolution: a *new* timed-out mutant in an already-audited method+mutator draws no
   warning, which is why every cause names its line — re-read it when that code
   changes. Expect `ws` membership to accrete a run at a time (one family: make
