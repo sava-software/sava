@@ -533,3 +533,29 @@ getter seeded was pruned once the member went abstract.
 The refresh's PAIRING OUTLIER warnings on `close`/`handlePendingSubscriptions`
 were verified as crosswise pairing of ambiguous same-mutator siblings — the
 per-method line-less multiset is identical on both sides of the diff.
+
+Review follow-ups (same day, from the commit review): `ensureCapacity` now
+clamps the doubling overshoot to `maxMessageLength` — the `onText` gate
+guarantees `minCapacity <= cap`, so the clamp never under-allocates, and
+without it the buffer could reach nearly twice a caller-set cap (the
+javadoc's "128 MiB buffer" only held for the default). Footprint-only:
+`Math.min` generates no mutants under STRONGER, so the fix cost a pure
+34-row drift refresh. `fuzz.yml` (here and in ix-proxy) gained `--continue`
+— a crashing target no longer skips the rest of the weekly soak, and the
+nonzero exit still fires the findings upload — plus a step-level
+`timeout-minutes` scaled from `max-fuzz-time`: a job-level timeout marks the
+job *cancelled*, which skips the `if: failure()` upload, while a step-level
+one fails the step and the upload fires. Declined: shrinking the reassembly
+buffer after a large message — high-water retention is arguably right for
+streams that regularly carry large accounts, and the clamp bounds the worst
+case at the cap. The inverted `BREAKING CHANGE` footer on 1611541 (test/CI
+prerequisites, not a consumer-visible change — while bcf991b's actual
+interface addition carries no note) is published history: remediate by
+editing the changelog in the release-please PR rather than rewriting main.
+Also declined: `default` bodies for the two `SolanaRpcWebsocket.Builder`
+methods bcf991b added. Adding an abstract method to a published interface
+breaks external implementors at compile and link time, and release-please's
+always-bump-patch ships it as a patch — but every implementor of `Builder`
+is one we develop, so the additive form buys nothing over the plain
+abstract declaration. Treat `Builder` as sava-implemented: if that ever
+stops being true, this is the decision to revisit.

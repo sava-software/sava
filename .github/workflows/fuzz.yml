@@ -31,9 +31,25 @@ jobs:
           jdk-src: ${{ vars.JDK_SRC }}
           gradle-java-version: ${{ vars.GRADLE_JAVA_VERSION }}
 
+      # Integer ceiling in bash rather than expression math, which has no rounding
+      # and would hand the runner a fraction whenever max-fuzz-time is not a
+      # multiple of 60.
+      - id: budget
+        name: Compute fuzz time budget
+        env:
+          MAX_FUZZ_TIME: ${{ inputs.max-fuzz-time || '900' }}
+        run: echo "timeout-minutes=$(( (7 * MAX_FUZZ_TIME + 59) / 60 + 30 ))" >> "$GITHUB_OUTPUT"
+
       - name: Fuzz
+        # --continue: a crashing target must not skip the remaining targets — the
+        # build still exits nonzero at the end, so the findings upload fires with
+        # every target's results. The step-level timeout keeps a long
+        # workflow_dispatch run from hitting the 360-minute job default, which
+        # would cancel (not fail) the job and silently skip that upload.
+        timeout-minutes: ${{ fromJSON(steps.budget.outputs.timeout-minutes) }}
         run: >
-          ./gradlew --stacktrace -PjavaVersion=${{ steps.setup.outputs.java-version }}
+          ./gradlew --stacktrace --continue
+          -PjavaVersion=${{ steps.setup.outputs.java-version }}
           -PmaxFuzzTime=${{ inputs.max-fuzz-time || '900' }}
           :sava-core:fuzzBase58 :sava-core:fuzzBorsh :sava-core:fuzzEd25519
           :sava-core:fuzzToken2022 :sava-core:fuzzTxSkeleton

@@ -928,8 +928,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   private void ensureCapacity(final int minCapacity) {
     if (minCapacity - this.buffer.length > 0) {
-      final int newCapacity = (this.buffer.length << 1) + 2;
-      this.buffer = Arrays.copyOf(this.buffer, Math.max(newCapacity, minCapacity));
+      // the onText gate guarantees minCapacity <= maxMessageLength, so the clamp
+      // never under-allocates, and unclamped doubling could reach nearly twice the
+      // declared budget; widened so the shift cannot wrap — near-MAX_VALUE caps land
+      // on maxMessageLength, one terminal allocation, not an exact-fit re-copy per fragment
+      final long newCapacity = ((long) this.buffer.length << 1) + 2;
+      this.buffer = Arrays.copyOf(this.buffer, Math.clamp(newCapacity, minCapacity, this.maxMessageLength));
     }
   }
 
