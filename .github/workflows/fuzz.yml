@@ -38,7 +38,11 @@ jobs:
         name: Compute fuzz time budget
         env:
           MAX_FUZZ_TIME: ${{ inputs.max-fuzz-time || '900' }}
-        run: echo "timeout-minutes=$(( (7 * MAX_FUZZ_TIME + 59) / 60 + 30 ))" >> "$GITHUB_OUTPUT"
+        # the regex guard is load-bearing: bash arithmetic resolves alphabetic
+        # garbage as an unset variable, silently budgeting 0 seconds of fuzzing
+        run: |
+          [[ "$MAX_FUZZ_TIME" =~ ^[1-9][0-9]*$ ]] || { echo "max-fuzz-time must be positive whole seconds, no leading zeros: '$MAX_FUZZ_TIME'" >&2; exit 1; }
+          echo "timeout-minutes=$(( (7 * MAX_FUZZ_TIME + 59) / 60 + 30 ))" >> "$GITHUB_OUTPUT"
 
       - name: Fuzz
         # --continue: a crashing target must not skip the remaining targets — the

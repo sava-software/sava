@@ -9,8 +9,8 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,closed,159,ConditionalsBou
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,930,ConditionalsBoundaryMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,930,MathMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,930,RemoveConditionalMutator_ORDER_IF,SURVIVED
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,931,MathMutator,SURVIVED
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,931,MathMutator,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,935,MathMutator,SURVIVED
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,935,MathMutator,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1014,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1015,RemoveConditionalMutator_EQUAL_IF,SURVIVED
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,handlePendingSubscriptions,1021,ConditionalsBoundaryMutator,SURVIVED

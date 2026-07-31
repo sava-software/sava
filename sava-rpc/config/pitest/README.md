@@ -280,9 +280,10 @@ connect future and the joining test parks. Expect membership to accrete a
 run at a time — each run samples a few racers — and admit a newcomer only
 with its structural cause written here:
 
-- `run:205` while-condition forced always-true (`RemoveConditionalMutator`
-  `EQUAL_IF`): the loop that never exits, caught by PIT's timeout — the
-  stable detection documented in the ws triage section above.
+- `SolanaJsonRpcWebsocket.run:205` while-condition forced always-true
+  (`RemoveConditionalMutator` `EQUAL_IF`): the loop that never exits, caught
+  by PIT's timeout — the stable detection documented in the ws triage
+  section above. (The class holds for every member below.)
 - `checkCycle:235` `unlock()` removal (`VoidMethodCall`): baselined
   `SURVIVED # unlock in finally`; under load a later test blocks on the
   leaked lock and the reading flips to `TIMED_OUT` (the 2026-07-23 migration
