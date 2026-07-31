@@ -26,10 +26,20 @@ record StakeHistory(PublicKey address, StakeHistoryEntry[] entries) implements B
     return read(address, data, 0);
   }
 
+  /// @throws IllegalArgumentException if the entry count claims more entries than the
+  ///                                  bytes after it can hold — a corrupt or hostile
+  ///                                  count must fail here, not size an allocation
   public static StakeHistory read(final PublicKey address, final byte[] data, int offset) {
-    final int numEntries = (int) ByteUtil.getInt64LE(data, offset);
+    final long numEntries = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;
-    final var entries = new StakeHistoryEntry[numEntries];
+    // validating the count against the bytes actually present bounds the allocation
+    // below against a corrupt count. Compared unsigned because the count is a u64: a
+    // signed comparison finds one with the top bit set smaller than the bound rather
+    // than larger, passing it through the int cast to the array constructor
+    if (Long.compareUnsigned(numEntries, (data.length - offset) / StakeHistoryEntry.BYTES) > 0) {
+      throw new IllegalArgumentException("Invalid stake history entry count: " + Long.toUnsignedString(numEntries));
+    }
+    final var entries = new StakeHistoryEntry[(int) numEntries];
     for (int i = 0; i < numEntries; ++i) {
       entries[i] = StakeHistoryEntry.read(data, offset);
       offset += StakeHistoryEntry.BYTES;

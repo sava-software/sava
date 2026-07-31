@@ -1,11 +1,13 @@
 package software.sava.core.accounts.sysvar;
 
 import org.junit.jupiter.api.Test;
+import software.sava.core.encoding.ByteUtil;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigInteger;
 import java.util.Base64;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -126,9 +128,53 @@ final class SysvarTests {
     assertArrayEquals(data, written);
   }
 
+  /// The u64 entry count is untrusted account data; a count the remaining bytes cannot
+  /// hold must throw before it sizes the entry array — not surface later as a huge
+  /// allocation, a NegativeArraySizeException from the int cast, or an
+  /// ArrayIndexOutOfBoundsException mid-walk.
+  @Test
+  void slotHashesRejectsCorruptCount() {
+    final byte[] oneEntry = new byte[Long.BYTES + SlotHash.BYTES];
+
+    // count claims one entry more than the bytes present
+    ByteUtil.putInt64LE(oneEntry, 0, 2L);
+    assertThrows(IllegalArgumentException.class, () -> SlotHashes.read(oneEntry));
+
+    // top bit set: unsigned it is enormous, signed it is negative — both invalid
+    ByteUtil.putInt64LE(oneEntry, 0, Long.MIN_VALUE);
+    assertThrows(IllegalArgumentException.class, () -> SlotHashes.read(oneEntry));
+
+    // the count the data can hold still parses
+    ByteUtil.putInt64LE(oneEntry, 0, 1L);
+    assertEquals(1, SlotHashes.read(oneEntry).slotHashes().length);
+
+    // a trailing partial entry does not count toward the bound
+    final byte[] truncated = new byte[Long.BYTES + SlotHash.BYTES - 1];
+    ByteUtil.putInt64LE(truncated, 0, 1L);
+    assertThrows(IllegalArgumentException.class, () -> SlotHashes.read(truncated));
+  }
+
+  @Test
+  void stakeHistoryRejectsCorruptCount() {
+    final byte[] oneEntry = new byte[Long.BYTES + StakeHistoryEntry.BYTES];
+
+    ByteUtil.putInt64LE(oneEntry, 0, 2L);
+    assertThrows(IllegalArgumentException.class, () -> StakeHistory.read(oneEntry));
+
+    ByteUtil.putInt64LE(oneEntry, 0, Long.MIN_VALUE);
+    assertThrows(IllegalArgumentException.class, () -> StakeHistory.read(oneEntry));
+
+    ByteUtil.putInt64LE(oneEntry, 0, 1L);
+    assertEquals(1, StakeHistory.read(oneEntry).entries().length);
+
+    final byte[] truncated = new byte[Long.BYTES + StakeHistoryEntry.BYTES - 1];
+    ByteUtil.putInt64LE(truncated, 0, 1L);
+    assertThrows(IllegalArgumentException.class, () -> StakeHistory.read(truncated));
+  }
+
   private static byte[] readFixture(final String fileName) {
     try (final var in = SysvarTests.class.getResourceAsStream("/sysvars/" + fileName)) {
-      return Base64.getDecoder().decode(new String(in.readAllBytes()).strip());
+      return Base64.getDecoder().decode(new String(Objects.requireNonNull(in).readAllBytes()).strip());
     } catch (final IOException e) {
       throw new UncheckedIOException(e);
     }

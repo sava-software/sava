@@ -26,10 +26,20 @@ record SlotHashes(PublicKey address, SlotHash[] slotHashes) implements Borsh {
     return read(address, data, 0);
   }
 
+  /// @throws IllegalArgumentException if the entry count claims more entries than the
+  ///                                  bytes after it can hold — a corrupt or hostile
+  ///                                  count must fail here, not size an allocation
   public static SlotHashes read(final PublicKey address, final byte[] data, int offset) {
-    final int numEntries = (int) ByteUtil.getInt64LE(data, offset);
+    final long numEntries = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;
-    final var slotHashes = new SlotHash[numEntries];
+    // validating the count against the bytes actually present bounds the allocation
+    // below against a corrupt count. Compared unsigned because the count is a u64: a
+    // signed comparison finds one with the top bit set smaller than the bound rather
+    // than larger, passing it through the int cast to the array constructor
+    if (Long.compareUnsigned(numEntries, (data.length - offset) / SlotHash.BYTES) > 0) {
+      throw new IllegalArgumentException("Invalid slot hash count: " + Long.toUnsignedString(numEntries));
+    }
+    final var slotHashes = new SlotHash[(int) numEntries];
     for (int i = 0; i < numEntries; ++i) {
       slotHashes[i] = SlotHash.read(data, offset);
       offset += SlotHash.BYTES;
