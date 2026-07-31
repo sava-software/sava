@@ -34,6 +34,7 @@ final class SubscribeOverloadTests {
         Commitment.CONFIRMED,
         null,
         TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
         new TestClock(),
         new RecordingExecutor(),
         null,

@@ -31,6 +31,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         Commitment.CONFIRMED,
         null,
         TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
         clock,
         new RecordingExecutor(),
         null,
@@ -263,7 +264,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     final var executor = new RecordingExecutor();
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
-        TIMINGS, new TestClock(), executor, null,
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(), executor, null,
         null, (_, _, _) -> {
         }, (_, _) -> {
         }, null, null
@@ -284,7 +285,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     final var executor = new RecordingExecutor();
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
-        TIMINGS, new TestClock(), executor, null,
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(), executor, null,
         null, (_, _, _) -> {
         }, (_, _) -> {
         }, null, null
@@ -305,7 +306,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     final var clock = new TestClock();
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
-        TIMINGS, clock, new RecordingExecutor(), null,
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, new RecordingExecutor(), null,
         null, (_, _, _) -> {
         }, (_, _) -> {
         }, null, null
@@ -333,7 +334,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   void checkCycleWithoutASocketLeavesTheSubscriptionPending() throws InterruptedException {
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
-        TIMINGS, new TestClock(), new RecordingExecutor(), null,
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(), new RecordingExecutor(), null,
         null, (_, _, _) -> {
         }, (_, _) -> {
         }, null, null
@@ -359,7 +360,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     final var timings = new Timings(60_000, 60_000, 0); // zero check delay: the await never parks
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
-        timings, clock, executor, null,
+        timings, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, executor, null,
         null, (_, _, _) -> {
         }, (_, _) -> {
         }, null, null

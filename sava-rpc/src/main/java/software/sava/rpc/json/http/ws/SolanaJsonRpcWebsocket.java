@@ -39,6 +39,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final SolanaAccounts solanaAccounts;
   private final Commitment defaultCommitment;
   private final Timings timings;
+  private final int maxMessageLength;
   private final NanoClock clock;
   private final WebSocket.Builder webSocketBuilder;
   private final ExecutorService executorService;
@@ -76,6 +77,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final Commitment defaultCommitment,
                          final WebSocket.Builder webSocketBuilder,
                          final Timings timings,
+                         final int maxMessageLength,
                          final NanoClock clock,
                          final ExecutorService executorService,
                          final ScheduledExecutorService scheduler,
@@ -88,6 +90,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.solanaAccounts = solanaAccounts;
     this.defaultCommitment = defaultCommitment;
     this.timings = timings;
+    this.maxMessageLength = maxMessageLength;
     this.clock = clock;
     this.webSocketBuilder = webSocketBuilder;
     this.onOpen = onOpen;
@@ -934,6 +937,23 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public CompletionStage<?> onText(final WebSocket webSocket, final CharSequence message, final boolean last) {
     final var buf = (CharBuffer) message;
     final int len = message.length();
+    // A message the cap excludes is a protocol violation, not a parse failure: the
+    // reassembly buffer would otherwise grow until OOM against a server that never
+    // stops fragmenting. Enforced on the whole prospective message regardless of
+    // framing, overflow-safely (offset never exceeds the cap, so the subtraction
+    // cannot wrap). Connection-fatal, so it takes the same seam a transport error
+    // does: drop the partial message, abort the connection, and let onError decide
+    // between the default log-and-close and the caller's reconnect policy.
+    if (len > this.maxMessageLength - this.offset) {
+      final long total = (long) this.offset + len;
+      this.offset = 0;
+      webSocket.abort();
+      onError(webSocket, new IllegalStateException(
+          total + " char message from " + endpoint.getHost()
+              + " exceeds maxMessageLength " + this.maxMessageLength
+      ));
+      return null;
+    }
     if (last) {
       if (this.offset > 0) {
         final int to = this.offset + len;

@@ -209,7 +209,9 @@ uncleared map — and ~10 dispatch rows), plus
 NO_COVERAGE rows are mostly defensive-scan interiors and DEBUG-level log
 suppliers (`lambda$onPing$0`/`lambda$onPong$0` run only with DEBUG enabled),
 plus `Builder.clock`'s throwing default, reachable only by a Builder
-implementation that does not override it.
+implementation that does not override it (`Builder.maxMessageLength` is
+abstract on purpose — no external Builder implementation exists to keep
+compiling, so it carries no default and no unreachable mutant).
 
 ## Triaged equivalent mutants (accepted with reasons)
 

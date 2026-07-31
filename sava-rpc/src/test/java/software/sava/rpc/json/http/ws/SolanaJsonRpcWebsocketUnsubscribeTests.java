@@ -36,6 +36,7 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
         Commitment.CONFIRMED,
         null,
         TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
         clock,
         new RecordingExecutor(),
         null,

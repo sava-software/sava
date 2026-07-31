@@ -314,6 +314,18 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
       return NanoClock.SYSTEM;
     }
 
+    /// Cap on a single (possibly fragmented) text message, in chars, defaulting to
+    /// 2^26 — 67,108,864 chars, a 128 MiB buffer, which a 10 MiB account (the
+    /// network's account data cap) base64-encodes well inside. A message the cap
+    /// excludes aborts the connection and surfaces through `onError` — without
+    /// one, the fragment reassembly buffer grows until OOM against a server that
+    /// never sends a final frame.
+    ///
+    /// @throws IllegalArgumentException if maxMessageLength is not positive.
+    Builder maxMessageLength(final int maxMessageLength);
+
+    int maxMessageLength();
+
     Builder reConnectDelay(final long reConnectDelay);
 
     Builder pingDelay(final long pingDelay);

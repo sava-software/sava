@@ -41,16 +41,17 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
   private static SolanaJsonRpcWebsocket websocket(final Timings timings) {
-    return websocket(timings, new TestClock(), null, null);
+    return websocket(timings, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(), null, null);
   }
 
   private static SolanaJsonRpcWebsocket websocket(final Timings timings,
                                                   final Consumer<SolanaRpcWebsocket> onOpen,
                                                   final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
-    return websocket(timings, new TestClock(), onOpen, onError);
+    return websocket(timings, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(), onOpen, onError);
   }
 
   private static SolanaJsonRpcWebsocket websocket(final Timings timings,
+                                                  final int maxMessageLength,
                                                   final NanoClock clock,
                                                   final Consumer<SolanaRpcWebsocket> onOpen,
                                                   final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
@@ -60,6 +61,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
         Commitment.CONFIRMED,
         null,
         timings,
+        maxMessageLength,
         clock,
         new RecordingExecutor(),
         null,
@@ -111,7 +113,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   @Test
   void unconfirmedSubscriptionIsResentOnceTheReconnectDelayElapses() {
     final var clock = new TestClock();
-    try (final var ws = websocket(TIMINGS, clock, null, null)) {
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
       assertTrue(ws.slotSubscribe(_ -> {
       }));
 
@@ -143,7 +145,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   @Test
   void quietConnectionIsPingedOnlyAfterPingDelay() {
     final var clock = new TestClock();
-    try (final var ws = websocket(TIMINGS, clock, null, null)) {
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
       // no subscriptions: every check is a pure ping decision
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
@@ -258,7 +260,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   @Test
   void closeClearsSubscriptionsSoNothingIsResent() {
     final var clock = new TestClock();
-    final var ws = websocket(TIMINGS, clock, null, null);
+    final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null);
     ws.accountSubscribe(ACCOUNT_A, _ -> {
     });
     ws.slotSubscribe(_ -> {

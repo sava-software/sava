@@ -18,6 +18,15 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   private NanoClock clock = NanoClock.SYSTEM;
   private ExecutorService executorService;
   private ScheduledExecutorService scheduler;
+  /// Default cap on a single (possibly fragmented) text message, in chars:
+  /// 67,108,864 (a 128 MiB `char[]`). A 10 MiB account — the network's account
+  /// data cap — base64-encodes to under 14M chars, so legitimate notifications
+  /// sit well inside it; a server that exceeds it is violating the protocol, not
+  /// sending a bigger account. Package-private on purpose: the public surface is
+  /// the builder knob, not the constant.
+  static final int DEFAULT_MAX_MESSAGE_LENGTH = 1 << 26;
+
+  private int maxMessageLength = DEFAULT_MAX_MESSAGE_LENGTH;
   private long reConnectDelay = 3_000;
   private long pingDelay = 15_000;
   private long subscriptionAndPingCheckDelay = 2_000;
@@ -38,6 +47,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
         wsUri, solanaAccounts, commitment,
         webSocketBuilder.connectTimeout(Duration.ofMillis(reConnectDelay)),
         new Timings(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay),
+        maxMessageLength,
         clock == null ? NanoClock.SYSTEM : clock,
         executorService,
         scheduler,
@@ -135,6 +145,20 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
 
   ScheduledExecutorService scheduler() {
     return scheduler;
+  }
+
+  @Override
+  public SolanaRpcWebsocket.Builder maxMessageLength(final int maxMessageLength) {
+    if (maxMessageLength <= 0) {
+      throw new IllegalArgumentException("maxMessageLength must be positive: " + maxMessageLength);
+    }
+    this.maxMessageLength = maxMessageLength;
+    return this;
+  }
+
+  @Override
+  public int maxMessageLength() {
+    return maxMessageLength;
   }
 
   @Override

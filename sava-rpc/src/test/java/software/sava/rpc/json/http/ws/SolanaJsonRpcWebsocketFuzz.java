@@ -80,6 +80,7 @@ public final class SolanaJsonRpcWebsocketFuzz {
         Commitment.CONFIRMED,
         null,
         TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
         new TestClock(),
         new RecordingExecutor(),
         null,

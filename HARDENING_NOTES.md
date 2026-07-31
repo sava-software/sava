@@ -495,12 +495,41 @@ seed corpora and what each seed pins are in each module's
   fuzzed frames and a flush, a canonical notification must either dispatch or
   draw the unknown-id auto-unsubscribe — exactly one, never neither.
 
-Open finding from the same review, deliberately not fixed here:
-`ensureCapacity` (SolanaJsonRpcWebsocket) doubles the reassembly buffer with
-no upper bound, so a server that never sends a `last` frame grows it until
-OOM. The fuzzer cannot surface this — a carve harness's growth is bounded by
-its input length — which is exactly why it is recorded as a review finding.
-Closing it means a max-message-size cap (probably builder-configurable, with
-"close the connection" as the overflow behavior) plus a named regression
-test; the `fuzzWs` maxLen of 16384 was chosen so the growth arithmetic is at
-least reachable and its large seed replays it inside `check`.
+Finding from the same review, closed same day: `ensureCapacity`
+(SolanaJsonRpcWebsocket) doubled the reassembly buffer with no upper bound,
+so a server that never sends a `last` frame grew it until OOM. The fuzzer
+could not have surfaced this — a carve harness's growth is bounded by its
+input length — which is why it was recorded as a review finding rather than
+waited for. Closed by `maxMessageLength`: builder-configurable
+(`Builder.maxMessageLength`, default 2^26 chars — a 128 MiB buffer, ~5x a
+10 MiB account's base64), enforced on the whole prospective message in
+`onText` regardless of framing. Overflow is connection-fatal, not a parse
+failure: partial message dropped, connection aborted, routed through the
+same `onError` seam a transport error takes (default log-and-close, or the
+caller's reconnect policy). Pinned by `MessageSizeCapTests` (both boundary
+sides, recovery after abort, builder validation and fluent identity). The
+`fuzzWs` maxLen of 16384 sits far under the default cap, so the harness
+still reaches the growth arithmetic and its large seed replays it inside
+`check`.
+
+Ratchet effects of the same pass, all verified green: the ws and client
+suites gained `*Fuzz*` exclusions (the sava-core suites always had them —
+harnesses are killers, not mutant population); the ws seed replay joining
+`pitestWs`'s targetTests newly covered previously-unobserved `onText`
+interiors, and the six unexplained rows it surfaced were all killed with
+named tests (`notificationDispatchFlushesPendingSubscriptions`,
+`dispatchFailureReachesExceptionSubscribers`,
+`wholeArrayBackedNotificationDispatchesInPlace`,
+`largeArrayLessNotificationGrowsTheBuffer`,
+`slicedNonLastFragmentAccumulatesFromItsArrayOffset`) rather than accepted —
+the ws baseline shrank 139 → 131 rows across the refresh and a follow-up
+prune, including all four old `onText` NO_COVERAGE rows. The
+`Builder.maxMessageLength` members are abstract rather than
+default-with-throw (Jim: no external Builder implementation exists to keep
+compiling — only the unpublished helius client, which wraps rather than
+implements), so unlike `Builder.clock`'s default they contribute no
+unreachable interface-default mutant at all; the row its briefly-default
+getter seeded was pruned once the member went abstract.
+The refresh's PAIRING OUTLIER warnings on `close`/`handlePendingSubscriptions`
+were verified as crosswise pairing of ambiguous same-mutator siblings — the
+per-method line-less multiset is identical on both sides of the diff.

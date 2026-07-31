@@ -29,6 +29,7 @@ hardening {
       "software.sava.rpc.json.http.client.*Test*",
       "software.sava.rpc.json.http.client.*Check*",
       "software.sava.rpc.json.http.client.Stub*",
+      "software.sava.rpc.json.http.client.*Fuzz*",
       // a git-ignored local scratch driver; not part of the build contract
       "software.sava.rpc.json.http.client.Integ*"
     )
@@ -44,7 +45,8 @@ hardening {
     excludedClasses = listOf(
       // TestClock matches *Test*; the no-network fakes are named for their role
       "software.sava.rpc.json.http.ws.*Test*",
-      "software.sava.rpc.json.http.ws.Recording*"
+      "software.sava.rpc.json.http.ws.Recording*",
+      "software.sava.rpc.json.http.ws.*Fuzz*"
     )
     targetTests = "software.sava.rpc.json.http.ws.*Test*"
     // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)

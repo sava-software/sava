@@ -33,6 +33,7 @@ final class SolanaJsonRpcWebsocketTests {
         Commitment.CONFIRMED,
         null,
         TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
         new TestClock(),
         new RecordingExecutor(),
         null,
@@ -98,6 +99,157 @@ final class SolanaJsonRpcWebsocketTests {
       assertEquals("""
           {"jsonrpc":"2.0","id":3,"method":"accountUnsubscribe","params":[999]}""", socket.sentText.getLast()
       );
+    }
+  }
+
+  /// An inbound notification is a write opportunity: after dispatch,
+  /// `lockAndHandlePendingSubscriptions` must flush any subscribe frames queued
+  /// since the last write — with no background thread, inbound traffic is what
+  /// drives them out.
+  @Test
+  void notificationDispatchFlushesPendingSubscriptions() {
+    try (final var ws = createWebsocket()) {
+      final var confirmed = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(confirmed, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""
+      );
+
+      final var pending = PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+      assertTrue(ws.accountSubscribe(pending, received::add));
+      final int sentBefore = socket.sentText.size();
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["dGVzdA==","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}},"subscription":23784}}"""
+      );
+
+      assertEquals(1, received.size());
+      assertTrue(
+          socket.sentText.stream().skip(sentBefore)
+              .anyMatch(m -> m.contains("\"method\":\"accountSubscribe\"")
+                  && m.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")),
+          "pending subscribe frame not flushed by the notification: " + socket.sentText
+      );
+    }
+  }
+
+  /// The dispatch catch is log *plus* notify, never log alone: a RuntimeException
+  /// thrown by a notification's parser must reach every exception subscriber.
+  @Test
+  void dispatchFailureReachesExceptionSubscribers() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      final var exceptions = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(exceptions::add);
+      assertTrue(ws.accountSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""
+      );
+
+      // "!!!" is not base64, so the account parser throws mid-dispatch
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["!!!","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}},"subscription":23784}}"""
+      );
+
+      assertTrue(received.isEmpty());
+      assertEquals(1, exceptions.size());
+    }
+  }
+
+  /// A whole array-backed frame takes the zero-copy path: the message is parsed in
+  /// place at `position + arrayOffset`. Both terms must survive, so one frame puts
+  /// the pad in position and the other slices it into arrayOffset.
+  @Test
+  void wholeArrayBackedNotificationDispatchesInPlace() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""
+      );
+
+      final var notification = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["dGVzdA==","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}},"subscription":23784}}""";
+      final char[] backing = new char[7 + notification.length() + 5];
+      notification.getChars(0, notification.length(), backing, 7);
+
+      ws.onText(socket, CharBuffer.wrap(backing, 7, notification.length()), true);
+      assertEquals(1, received.size());
+
+      ws.onText(socket, CharBuffer.wrap(backing, 7, notification.length()).slice(), true);
+      assertEquals(2, received.size());
+      assertEquals(33594L, received.getLast().lamports());
+    }
+  }
+
+  /// A whole array-less frame longer than the 4096-char starting buffer must grow
+  /// it before copying; the fragmented growth test never reaches this single-frame
+  /// branch.
+  @Test
+  void largeArrayLessNotificationGrowsTheBuffer() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""
+      );
+
+      final var data = "A".repeat(6000);
+      final var notification = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["%s","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4500}},"subscription":23784}}"""
+          .formatted(data);
+      // CharBuffer.wrap(String) has no backing array: the copy must grow the buffer first
+      ws.onText(socket, CharBuffer.wrap(notification), true);
+
+      assertEquals(1, received.size());
+      assertEquals(4500, received.getFirst().data().length);
+    }
+  }
+
+  /// A sliced fragment carries its pad in arrayOffset with position zero — the
+  /// accumulate copy's source index is the sum of both, and a sliced *non-last*
+  /// fragment is the only shape that separates the terms on that path.
+  @Test
+  void slicedNonLastFragmentAccumulatesFromItsArrayOffset() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""
+      );
+
+      final var notification = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["dGVzdA==","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}},"subscription":23784}}""";
+      final int half = notification.length() / 2;
+      final char[] backing = new char[9 + half];
+      notification.getChars(0, half, backing, 9);
+
+      ws.onText(socket, CharBuffer.wrap(backing, 9, half).slice(), false);
+      assertTrue(received.isEmpty());
+      ws.onText(socket, CharBuffer.wrap(notification.substring(half)), true);
+
+      assertEquals(1, received.size());
+      assertEquals(33594L, received.getFirst().lamports());
     }
   }
 
