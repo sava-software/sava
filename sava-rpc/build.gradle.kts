@@ -62,6 +62,29 @@ hardening {
     mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
 
+  fuzz.register("responses") {
+    targetClass = "software.sava.rpc.json.http.client.SolanaRpcResponseFuzz"
+    // response boundaries live well under real payload sizes; big enough to hold the
+    // committed fixture-derived seeds untruncated, small enough not to burn
+    // executions on the megabyte tail real nodes can return
+    maxLen = 8192
+    // bootstrap corpus: real and hand-minimized RPC envelopes routed to their parser
+    // family by the selector byte; a from-scratch mutator is a long way from a valid
+    // envelope + context + base64 account body
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/responses")
+  }
+  fuzz.register("ws") {
+    targetClass = "software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocketFuzz"
+    // the reassembly buffer starts at 4096 chars, so the ensureCapacity growth
+    // arithmetic is only reachable when accumulated fragments exceed that; the cap
+    // leaves room for two doublings without wasting executions on the megabyte tail
+    maxLen = 16384
+    // bootstrap corpus: a JSON-RPC envelope with a method name, a parseable params
+    // body, and a subscription id matching the harness's confirmed subs is far more
+    // than a from-scratch mutator assembles; also the regression home for findings
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/ws")
+  }
+
   // PIT's default per-test allowance is `recorded time x 1.25 + 4000ms`, and every
   // hanging-mutant detection pays that flat fee. This module's whole test set runs in
   // ~1.2s, slowest test 0.25s (ranking in HARDENING_NOTES.md), so the constant is cut

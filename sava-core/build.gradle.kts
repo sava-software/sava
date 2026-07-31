@@ -156,6 +156,19 @@ hardening {
     // a from-scratch mutator would take a long time to assemble a valid TLV chain
     seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/token2022")
   }
+  fuzz.register("ed25519") {
+    targetClass = "software.sava.core.crypto.ed25519.Ed25519Fuzz"
+    // one input is one 32-byte point encoding and one keygen seed; anything longer
+    // is truncated by the harness, so cap the mutator at exactly that
+    maxLen = 32
+    // NOT a bootstrap corpus — the structurally interesting subspaces (small-order
+    // points, the 19 non-canonical encodings, boundary y values) are finite and
+    // reachable by mutation from these seeds in seconds. They are the regression
+    // half: a home for findings, replayed by 'check'. The campaign's value is
+    // volume — carry and recoding bugs in the limb arithmetic have no branch
+    // signature for coverage to steer by, only differential disagreement at depth
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/ed25519")
+  }
   fuzz.register("txSkeleton") {
     targetClass = "software.sava.core.tx.TransactionSkeletonFuzz"
     // transactions cap at 1232 bytes on-chain; a little headroom lets the fuzzer probe

@@ -462,3 +462,45 @@ Measured, not assumed:
 The value delivered is a home for future findings and deterministic
 `check`-time execution of both harnesses — not a tighter ratchet. Do not expect
 seeds to move these two baselines.
+
+### Three new fuzz targets: ed25519, responses, ws — 2026-07-31
+
+The fuzz roster grew from four targets to seven, and a weekly `fuzz.yml`
+workflow (ported from ix-proxy's) now soaks all of them on a schedule; the
+seed corpora and what each seed pins are in each module's
+`src/test/resources/fuzz/README.md`.
+
+- **`fuzzEd25519`** (sava-core) — differential over the first 32 bytes as
+  both a point encoding and a keygen seed: `isNotOnCurve` against
+  BouncyCastle where it has a verdict and a BigInteger decompression
+  reference where it does not (non-canonical y, BC's small-order reject set),
+  `generatePublicKey` against BouncyCastle's, sign-bit invariance throughout.
+  A regression corpus in the base58/borsh sense: the structured subspaces are
+  finite and enumerated as seeds; coverage guidance has nothing to steer by
+  in branch-poor limb arithmetic, so the campaign's value is volume against
+  rare-carry and signed-digit-recoding bugs, which have no branch signature.
+- **`fuzzResponses`** (sava-rpc) — the http half of the untrusted-node
+  surface: a selector byte routes the body through the same
+  envelope-gate-plus-parser controllers `SolanaJsonRpcClient` holds, over 14
+  parser families. Contract "garbage in -> RuntimeException out", plus one
+  asserted invariant: the controllers are shared static state applied
+  concurrently in production, so the same body must classify identically on
+  repeat application — a disagreement is a stateful parser predicate.
+- **`fuzzWs`** (sava-rpc) — hostile framing against `onText`'s fragment
+  reassembly (carved split points and all four CharBuffer copy flavors) and
+  the notification dispatch behind it, with every channel subscribed and
+  confirmed in a fixed preamble. Fresh websocket per input, or crashes become
+  input-order-dependent. Beyond Jazzer's own no-hang/no-Error checks, the
+  harness asserts the reassembly state machine always recovers: after the
+  fuzzed frames and a flush, a canonical notification must either dispatch or
+  draw the unknown-id auto-unsubscribe — exactly one, never neither.
+
+Open finding from the same review, deliberately not fixed here:
+`ensureCapacity` (SolanaJsonRpcWebsocket) doubles the reassembly buffer with
+no upper bound, so a server that never sends a `last` frame grows it until
+OOM. The fuzzer cannot surface this — a carve harness's growth is bounded by
+its input length — which is exactly why it is recorded as a review finding.
+Closing it means a max-message-size cap (probably builder-configurable, with
+"close the connection" as the overflow behavior) plus a named regression
+test; the `fuzzWs` maxLen of 16384 was chosen so the growth arithmetic is at
+least reachable and its large seed replays it inside `check`.

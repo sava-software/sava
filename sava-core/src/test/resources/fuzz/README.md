@@ -60,6 +60,31 @@ consume exactly the promised `len*` bytes and re-read equal:
 - `int_matrix` — two 2-element vectors: the multi-dimension reader, whose outer
   and inner counts are separate prefixes.
 
+## `ed25519` — [Ed25519Fuzz](../../java/software/sava/core/crypto/ed25519/Ed25519Fuzz.java)
+
+Regression corpus. Every input is one 32-byte point encoding and one keygen
+seed at once, and the harness is differential — sava must agree with
+BouncyCastle where BouncyCastle has a verdict, with a BigInteger decompression
+reference where it does not, and with itself under a sign-bit flip — so each
+seed pins one oracle path:
+
+- `base_point` — the ed25519 base point: the canonical on-curve verdict
+  BouncyCastle and sava share.
+- `small_order_identity` — y = 1, the identity: on-curve for sava (dalek
+  semantics), rejected up front by BouncyCastle, so the reference owns it.
+- `small_order_order8` — an order-8 torsion point: the other
+  BouncyCastle-reject-set shape, dense rather than degenerate.
+- `boundary_p_minus_one` — y = p - 1: the largest canonical y, also in
+  BouncyCastle's reject set.
+- `non_canonical_p` — y = p, the smallest non-canonical encoding: must
+  decompress as its reduced form, y = 0.
+- `high_bytes` — 32 `0xFF` bytes: non-canonical y with the sign bit set, and
+  the keygen seed with every clamp bit initially wrong.
+- `rfc8032_seed` — RFC 8032 test vector 1's seed: the keygen agreement on a
+  pinned known answer.
+- `all_zero` — 32 zero bytes: y = 0 (reject-set path) and the degenerate
+  keygen seed.
+
 ## `token2022` — [Token2022Fuzz](../../java/software/sava/core/accounts/token/Token2022Fuzz.java)
 
 Bootstrap corpus. Real TLV chains that from-scratch tests don't assemble,

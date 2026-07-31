@@ -64,7 +64,9 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 - **The full `qualityGate` is the pre-release check, owned by the local
   release checklist.** CI deliberately runs only `check` (serialized PIT is
   too slow for hosted runners) — run the gate locally before deciding to
-  release and don't wire it into CI to "fix" that. Once an
+  release and don't wire it into CI to "fix" that. The scheduled `fuzz.yml`
+  workflow is not an exception to this: it runs long fuzz campaigns weekly,
+  which are exploration, not the gate. Once an
   `arcmutate-licence.txt` sits at the repo root, suite runs reuse prior
   results (`[history]` in the summary marks reuse) and the gate takes
   `-PnoMutationHistory` so release numbers are re-earned from scratch.
@@ -220,16 +222,20 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   depends on which task ran it is never committed.
 - Fuzz findings become a committed seed input **and** a named regression test, never
   just a fix — and every committed corpus is replayed inside `check` by a generated
-  `<Harness>SeedReplayTest` (`Base58Fuzz`, `BorshFuzz`, `Token2022Fuzz`,
-  `TransactionSkeletonFuzz`), so a new seed replays automatically and the corpus
-  cannot rot between fuzz runs. **Every fuzz target carries a corpus**, including the
-  two whose formats a mutator reaches from scratch: `base58` and `borsh` are
-  regression corpora, not bootstrap ones (the distinction, and what each seed pins,
-  is in `src/test/resources/fuzz/README.md`) — a target with nowhere to put a finding
+  `<Harness>SeedReplayTest` (`Base58Fuzz`, `BorshFuzz`, `Ed25519Fuzz`,
+  `Token2022Fuzz`, `TransactionSkeletonFuzz` in sava-core;
+  `SolanaRpcResponseFuzz`, `SolanaJsonRpcWebsocketFuzz` in sava-rpc), so a new seed
+  replays automatically and the corpus cannot rot between fuzz runs. **Every fuzz
+  target carries a corpus**, including those whose formats a mutator reaches from
+  scratch: `base58`, `borsh`, and `ed25519` are regression corpora, not bootstrap
+  ones (the distinction, and what each seed pins, is in each module's
+  `src/test/resources/fuzz/README.md`) — a target with nowhere to put a finding
   cannot satisfy the seed-plus-test rule above. Dedupe with `fuzz<Target>Minimize`
-  rather than by hand; all four corpora were verified already-minimal (token2022 and
-  txSkeleton on 2026-07-23, base58 and borsh on 2026-07-25, each a 0-removed no-op),
-  and every seed is named for its provenance, so a future run that proposes
+  rather than by hand; the original four corpora were verified already-minimal
+  (token2022 and txSkeleton on 2026-07-23, base58 and borsh on 2026-07-25, each a
+  0-removed no-op — ed25519, responses, and ws were seeded 2026-07-31 and have not
+  yet had a minimize pass), and every seed is named for its provenance, so a future
+  run that proposes
   *removing* one is deleting a documented regression input — read the diff before
   keeping it.
 - **When one thing has two representations, fuzz the differential.** An

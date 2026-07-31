@@ -1,0 +1,61 @@
+name: Fuzz
+
+on:
+  schedule:
+    # weekly soak; findings surface as workflow failures with the crash
+    # input attached — commit each one as a named seed + regression test
+    # (see the fuzz READMEs under sava-core and sava-rpc src/test/resources/fuzz)
+    - cron: "43 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      max-fuzz-time:
+        description: Seconds to run each fuzz target.
+        required: false
+        default: "900"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - id: setup
+        uses: sava-software/sava-build@main
+        with:
+          default-java-version: ${{ vars.JAVA_VERSION }}
+          jdk-src: ${{ vars.JDK_SRC }}
+          gradle-java-version: ${{ vars.GRADLE_JAVA_VERSION }}
+
+      - name: Fuzz
+        run: >
+          ./gradlew --stacktrace -PjavaVersion=${{ steps.setup.outputs.java-version }}
+          -PmaxFuzzTime=${{ inputs.max-fuzz-time || '900' }}
+          :sava-core:fuzzBase58 :sava-core:fuzzBorsh :sava-core:fuzzEd25519
+          :sava-core:fuzzToken2022 :sava-core:fuzzTxSkeleton
+          :sava-rpc:fuzzResponses :sava-rpc:fuzzWs
+        env:
+          ORG_GRADLE_PROJECT_savaGithubPackagesUsername: ${{ github.actor }}
+          ORG_GRADLE_PROJECT_savaGithubPackagesPassword: ${{ secrets.READ_SAVA_PACKAGES }}
+
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-findings
+          # Jazzer writes crash-*/oom-*/timeout-* reproducers into the module
+          # working directory; the working corpora hold the inputs that led there
+          path: |
+            sava-core/crash-*
+            sava-core/oom-*
+            sava-core/timeout-*
+            sava-core/build/fuzz/
+            sava-rpc/crash-*
+            sava-rpc/oom-*
+            sava-rpc/timeout-*
+            sava-rpc/build/fuzz/
+          if-no-files-found: ignore
