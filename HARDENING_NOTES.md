@@ -131,6 +131,35 @@ resolution) but no PIT suite. It is an application module whose `module-info`
 exports nothing, so its helpers are package-private by choice rather than by
 accident.
 
+## What the ratchet cannot see (sava's instance)
+
+Per the inventory rule in sava-build's HARDENING.md: the repo-specific edges
+of what a clean ratchet proves here, kept in one place (adopted 2026-07-31
+from a downstream Rust adaptation's practice).
+
+- **Kills come only from `targetTests`.** `LiveMainNetDriftCheck`, the
+  `integ.sh` example flows, and the jmh benchmarks are invisible to PIT —
+  code exercised only through them reads `NO_COVERAGE` despite being
+  exercised for real.
+- **Packages without a suite are deliberate scope decisions** (the suite
+  tables above): `core.accounts.*` outside token/meta/lookup/vanity,
+  `core.borsh`-adjacent serial/programs/zk helpers, and sava-vanity's
+  application module. A clean gate says nothing about them.
+- **The ws suites' timing seams have a background-thread ceiling** — the
+  check-loop and ping-pacing rows detectable only under load are the audited
+  timeout set, not ordinary kills (the audited-set section above).
+- **`pitestClient`'s 39 `NO_COVERAGE` transport rows** are an
+  unreachable-in-harness acceptance from 2026-07-20 whose escape (a local
+  server driving the GET/no-wrap routes) has not been attempted since —
+  under the expiry-date rule, the next triage pass should try the harness
+  before re-inheriting the claim.
+- **Excluded main-source classes**: `Integ` (git-ignored scratch driver) is
+  the one deliberate production-class exclusion; fuzz harnesses are
+  test-source and auto-excluded by the plugin.
+- **No JPMS services** (verified 2026-07-22), so the class-path/module-path
+  divergence PIT introduces is currently moot — revisit if a service is ever
+  declared.
+
 ## Per-package hardening history
 
 The per-surface notes — what each package's fuzz corpus covers, which invariants

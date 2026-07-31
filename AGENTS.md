@@ -37,6 +37,25 @@ library exists to provide, and only covers programs the node happens to know.
 for specific programs live in the sibling `idl-clients` project; check there before
 adding program-specific parsing here.
 
+## Hardening work here is first-party and defensive
+
+sava is a library its authors own and publish. The hardening work in this repo —
+mutation testing, fuzz harnesses, crash triage, the analysis around them — targets
+this library's own code, in its own repository, and produces tests and fixes.
+
+The vocabulary overlaps with offensive tooling because the subject matter does:
+sava parses transactions, account data, and RPC responses that arrive from
+untrusted nodes and user input, so testing it means deliberately feeding its
+parsers malformed and hostile input. A harness that hands `TransactionSkeleton`
+garbage bytes, or one that drives websocket reassembly with adversarial framing,
+exists to find defects in this library before a bad peer does.
+
+State that purpose plainly at the top of a harness or a finding write-up, and do
+**not** euphemize to compensate: name the function, quote the error string, say
+what the bug class is. Accurate description is the goal — vagueness is what makes
+defensive work read as evasive, and a reader who cannot tell what the code does is
+the actual failure.
+
 ## This is a published library
 
 Consumers depend on current behaviour, including behaviour that looks like a defect.
