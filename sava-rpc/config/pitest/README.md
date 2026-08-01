@@ -56,17 +56,23 @@ cases after all, distinguished by their options objects. What the coverage
 surfaced became the `# logging only` family below; everything else was an
 ordinary kill.
 
-**Log-and-rethrow diagnostics** — baseline label `# logging only`
-(`BaseJsonResponseController.applyResponse:42–43`,
-`BaseJsonRpcResponseParser.parseRpcException:22`): the parse-failure tails log
-and rethrow. The rethrow — the behavior a caller can see — is pinned by
-identity (`parserFailuresAreRethrownAsThemselves`,
-`malformedErrorEnvelopeRethrowsTheParseFailure`); what survives is removing
-the `logger.log` call itself and forcing the null-guard ternary inside its
-message argument. Diagnostics only, on a path whose outcome is already
-asserted — unlike the ws check-loop funnel, where the log was the *only*
-signal and earned a JUL-backend assertion. Revisit if the log line ever
-becomes load-bearing.
+**Log-and-rethrow diagnostics — killed 2026-07-31, same day they surfaced.**
+The parse-failure tails (`BaseJsonResponseController.applyResponse:42–43`,
+`BaseJsonRpcResponseParser.parseRpcException:22`) log and rethrow; the first
+triage read them as logging-only because the rethrow is pinned by identity.
+The second read noticed the log line is load-bearing after all: the rethrown
+exception is the JSON parser's own and carries no record of the exchange, so
+the logged status and body are the *only* copy of what the provider sent —
+the same only-observable standing as the ws check-loop funnel. Both tails are
+now asserted through the JUL backend (`TestLogs`, the funnel's technique),
+including message content, which kills the log-call removals and the
+forced-empty side of the message's null-guard ternary. One row remains —
+baseline label `# dead null arm`
+(`applyResponse:43`, `RemoveConditionalMutator_EQUAL_ELSE`): forcing the
+`body == null` guard false inside the log argument is equivalent *in
+context*, because `checkResponse` returns before the parser runs whenever the
+body is null, so the catch block never sees one — the guard's null arm is
+defensive dead code there, unreachable by construction rather than untested.
 
 **Fast-path and defensive conditionals** (SURVIVED): `joinKeys` and
 `ProgramAccountsRequestRecord.toJson` null/empty guards, `readBytes` and

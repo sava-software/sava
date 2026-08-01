@@ -196,7 +196,8 @@ final class JsonRpcResponseParserTests {
     final BiFunction<JsonIterator, Context, String> parser = (ji, _) -> ji.readString();
     final var controller = new JsonRpcBytesValueParseController<>(parser);
     final var ex = assertThrows(JsonRpcException.class, () -> controller.apply(
-        StubHttpResponse.of(200, json("{\"error\":{\"code\":-32004,\"message\":\"not available\"},\"id\":1}"))));
+        StubHttpResponse.of(200, json("""
+            {"error":{"code":-32004,"message":"not available"},"id":1}"""))));
     assertEquals(-32004, ex.code());
   }
 
@@ -204,7 +205,8 @@ final class JsonRpcResponseParserTests {
   /// response, the raw body, and the iterator already positioned at `result`.
   @Test
   void fullContextParserReceivesTheResponseBodyAndIterator() {
-    final byte[] body = json("{\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"id\":1}");
+    final byte[] body = json("""
+        {"jsonrpc":"2.0","result":"ok","id":1}""");
     final var stub = StubHttpResponse.of(200, body, "retry-after", "17");
     final var controller = JsonRpcHttpClient.applyGenericResponseResult(
         (httpResponse, parsedBody, ji) -> {
@@ -217,12 +219,22 @@ final class JsonRpcResponseParserTests {
 
   /// An error envelope whose `error` value is not an object fails inside
   /// `JsonRpcException.parseException`; that failure must escape as itself, not
-  /// be mistaken for a parsed protocol error or swallowed.
+  /// be mistaken for a parsed protocol error or swallowed — and the body must
+  /// be logged, because the escaping exception is the JSON parser's own and
+  /// carries no record of what the provider sent.
   @Test
   void malformedErrorEnvelopeRethrowsTheParseFailure() {
-    final var ex = assertThrows(RuntimeException.class,
-        () -> parseResult("{\"jsonrpc\":\"2.0\",\"error\":\"boom\",\"id\":1}"));
-    assertFalse(ex instanceof JsonRpcException, "a malformed error is not a parsed protocol error");
-    assertFalse(ex instanceof UncheckedIOException, "the parse failure itself must escape");
+    final var thrown = new RuntimeException[1];
+    final var records = TestLogs.capture(BaseJsonRpcResponseParser.class, () -> {
+      final var ex = assertThrows(RuntimeException.class,
+          () -> parseResult("""
+              {"jsonrpc":"2.0","error":"boom","id":1}"""));
+      assertFalse(ex instanceof JsonRpcException, "a malformed error is not a parsed protocol error");
+      assertFalse(ex instanceof UncheckedIOException, "the parse failure itself must escape");
+      thrown[0] = ex;
+    });
+    assertTrue(records.stream().anyMatch(record ->
+            record.getThrown() == thrown[0] && record.getMessage().contains("boom")),
+        "the malformed envelope must be logged with its body: " + records);
   }
 }

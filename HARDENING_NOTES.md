@@ -71,12 +71,16 @@ and path it saw, so payload assertions pin the built request end to end;
 wrapped-vs-no-wrap pinned by whether the parser receives a
 `ReadHttpResponse`), plus `StubHttpResponse`-driven tests for the
 never-constructed parser controllers and ordinary `registerRequest` cases for
-the `Transaction`-taking simulate overloads. 578/601 (96%), zero
-`NO_COVERAGE`, 23 baseline rows. The same pass withdrew the `checkResponse`
+the `Transaction`-taking simulate overloads. 581/601 (97%), zero
+`NO_COVERAGE`, 20 baseline rows. The same pass withdrew the `checkResponse`
 `< 200` "unreachable in-harness" acceptance — a 199 is constructible with the
-stub the suite already owned; the raw-socket escape hatch was never needed —
-and added the `# logging only` family (log-and-rethrow tails whose rethrow is
-pinned by identity). Reasons are grouped by family in
+stub the suite already owned; the raw-socket escape hatch was never needed.
+The log-and-rethrow tails surfaced by the new coverage were first read as
+logging-only, then killed the same day through the JUL backend (`TestLogs`,
+the ws funnel's technique) once a second read noticed the logged status and
+body are the *only* record of what the provider sent — the rethrown exception
+is the JSON parser's own. One `# dead null arm` acceptance remains from that
+family. Reasons are grouped by family in
 `sava-rpc/config/pitest/README.md`.
 
 Exclusions must name `*Check*` and `Stub*` as well as `*Test*`: test sources share
@@ -163,9 +167,9 @@ from a downstream Rust adaptation's practice).
   The escape was attempted and it worked: the whole family fell to the
   transport harness (`pitestClient` section above), a same-day demonstration
   of why unreachable-has-an-expiry-date. The suite's remaining blind spot is
-  the ordinary one — its 23 surviving rows are argued acceptances, and the
-  `# logging only` family stays invisible unless a test asserts through the
-  logging backend.
+  the ordinary one — its 20 surviving rows are argued acceptances; the
+  parse-failure diagnostic logs are asserted through the JUL backend and no
+  longer count among them.
 - **Excluded main-source classes**: `Integ` (git-ignored scratch driver) is
   the one deliberate production-class exclusion; fuzz harnesses are
   test-source and auto-excluded by the plugin.

@@ -29,7 +29,8 @@ final class GenericJsonResponseParserTests {
 
   @Test
   void parserReceivesTheRawBodyAndAPositionedIterator() {
-    final byte[] body = json("{\"ok\":true}");
+    final byte[] body = json("""
+        {"ok":true}""");
     final var controller = controller((parsedBody, ji) -> {
       assertSame(body, parsedBody, "the raw body must be handed through");
       assertNotNull(ji.skipUntil("ok"), "the iterator must be positioned at the document start");
@@ -53,7 +54,8 @@ final class GenericJsonResponseParserTests {
     final var controller = controller((_, _) -> fail("the parser must not see a failed response"));
     for (final int status : new int[]{199, 300, 404, 500}) {
       final var ex = assertThrows(UncheckedIOException.class,
-          () -> controller.apply(StubHttpResponse.of(status, json("{\"why\":\"down\"}"))), "status " + status);
+          () -> controller.apply(StubHttpResponse.of(status, json("""
+              {"why":"down"}"""))), "status " + status);
       assertInstanceOf(UnknownServiceException.class, ex.getCause(), "status " + status);
       assertTrue(ex.getMessage().contains("httpCode:" + status), ex.getMessage());
       assertTrue(ex.getMessage().contains("down"), ex.getMessage());
@@ -64,7 +66,8 @@ final class GenericJsonResponseParserTests {
   void successStatusesAllParse() {
     final var controller = controller((_, ji) -> Integer.toString(ji.skipUntil("ok").readInt()));
     for (final int status : new int[]{200, 201, 299}) {
-      assertEquals("1", controller.apply(StubHttpResponse.of(status, json("{\"ok\":1}"))), "status " + status);
+      assertEquals("1", controller.apply(StubHttpResponse.of(status, json("""
+          {"ok":1}"""))), "status " + status);
     }
   }
 
@@ -79,16 +82,27 @@ final class GenericJsonResponseParserTests {
     assertTrue(ex.getMessage().contains("body="), ex.getMessage());
   }
 
-  /// A parser failure on a well-formed response escapes as itself — logged, but
-  /// neither swallowed nor rewrapped.
+  /// A parser failure on a well-formed response escapes as itself — neither
+  /// swallowed nor rewrapped — and is logged with the status and body. The
+  /// rethrown exception is the parser's own and knows nothing about the HTTP
+  /// exchange, so that log line is the only record of what the provider
+  /// actually sent; it is asserted through the JUL backend rather than assumed.
   @Test
-  void parserFailuresAreRethrownAsThemselves() {
+  void parserFailuresAreRethrownAsThemselvesAndLoggedWithTheBody() {
     final var failure = new IllegalStateException("parser blew up");
     final var controller = controller((_, _) -> {
       throw failure;
     });
-    final var thrown = assertThrows(IllegalStateException.class,
-        () -> controller.apply(StubHttpResponse.of(200, json("{}"))));
-    assertSame(failure, thrown);
+    final var records = TestLogs.capture(BaseJsonResponseController.class, () -> {
+      final var thrown = assertThrows(IllegalStateException.class,
+          () -> controller.apply(StubHttpResponse.of(200, json("""
+              {"poison":1}"""))));
+      assertSame(failure, thrown);
+    });
+    assertTrue(records.stream().anyMatch(record ->
+            record.getThrown() == failure
+                && record.getMessage().contains("httpCode:200")
+                && record.getMessage().contains("poison")),
+        "the parse failure must be logged with the status and the body: " + records);
   }
 }

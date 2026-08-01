@@ -103,6 +103,13 @@ final class JsonHttpClientTransportTests {
     this.plain = new TransportClient(endpoint, TIMEOUT, null, null);
   }
 
+  /// What the server echoes back, and therefore what a route's parser must
+  /// produce — asserting method and path in one move.
+  private static String echoOf(final String method, final String path) {
+    return """
+        {"method":"%s","path":"%s"}""".formatted(method, path);
+  }
+
   private void echo(final HttpExchange exchange) throws IOException {
     final var requestBody = new String(exchange.getRequestBody().readAllBytes(), UTF_8);
     final var requestHeaders = exchange.getRequestHeaders();
@@ -113,9 +120,7 @@ final class JsonHttpClientTransportTests {
         requestHeaders.getFirst(EXTEND_HEADER),
         requestBody
     ));
-    final var response = String
-        .format("{\"method\":\"%s\",\"path\":\"%s\"}", exchange.getRequestMethod(), exchange.getRequestURI().getPath())
-        .getBytes(UTF_8);
+    final var response = echoOf(exchange.getRequestMethod(), exchange.getRequestURI().getPath()).getBytes(UTF_8);
     exchange.sendResponseHeaders(200, response.length);
     try (final var os = exchange.getResponseBody()) {
       os.write(response);
@@ -131,11 +136,6 @@ final class JsonHttpClientTransportTests {
     final var last = recorded.pollLast();
     assertNotNull(last, "the server saw no request");
     return last;
-  }
-
-  /// The echoed body a route must produce, asserting method and path in one move.
-  private static String echoOf(final String method, final String path) {
-    return String.format("{\"method\":\"%s\",\"path\":\"%s\"}", method, path);
   }
 
   /// For the wrapped routes of [#wrapping]: the parser must receive the
@@ -225,41 +225,55 @@ final class JsonHttpClientTransportTests {
   @Test
   void postByExplicitUriWraps() {
     final var uri = endpoint.resolve("/post-uri");
-    assertEquals(echoOf("POST", "/post-uri"), wrapping.sendPostRequest(uri, WRAPPED_PARSER, "{\"post\":1}").join());
+    final var body = """
+        {"post":1}""";
+    assertEquals(echoOf("POST", "/post-uri"), wrapping.sendPostRequest(uri, WRAPPED_PARSER, body).join());
     final var request = lastRecorded();
     assertEquals("POST", request.method());
     assertEquals("application/json", request.contentType());
-    assertEquals("{\"post\":1}", request.body());
+    assertEquals(body, request.body());
   }
 
   @Test
   void postNoWrapSendsTheBodyToTheEndpoint() {
-    assertEquals(echoOf("POST", "/"), wrapping.sendPostRequestNoWrap(RAW_PARSER, "{\"noWrap\":1}").join());
-    assertEquals("{\"noWrap\":1}", lastRecorded().body());
-    assertEquals(echoOf("POST", "/"), wrapping.sendPostRequestNoWrap(RAW_PARSER, TIMEOUT, "{\"noWrap\":2}").join());
-    assertEquals("{\"noWrap\":2}", lastRecorded().body());
+    final var body = """
+        {"noWrap":1}""";
+    assertEquals(echoOf("POST", "/"), wrapping.sendPostRequestNoWrap(RAW_PARSER, body).join());
+    assertEquals(body, lastRecorded().body());
+    final var timeoutBody = """
+        {"noWrap":2}""";
+    assertEquals(echoOf("POST", "/"), wrapping.sendPostRequestNoWrap(RAW_PARSER, TIMEOUT, timeoutBody).join());
+    assertEquals(timeoutBody, lastRecorded().body());
   }
 
   @Test
   void postNoWrapByExplicitUri() {
     final var uri = endpoint.resolve("/raw-post");
-    assertEquals(echoOf("POST", "/raw-post"), wrapping.sendPostRequestNoWrap(uri, RAW_PARSER, "{\"noWrap\":3}").join());
-    assertEquals("{\"noWrap\":3}", lastRecorded().body());
+    final var body = """
+        {"noWrap":3}""";
+    assertEquals(echoOf("POST", "/raw-post"), wrapping.sendPostRequestNoWrap(uri, RAW_PARSER, body).join());
+    assertEquals(body, lastRecorded().body());
+    final var timeoutBody = """
+        {"noWrap":4}""";
     assertEquals(
         echoOf("POST", "/raw-post"),
-        wrapping.sendPostRequestNoWrap(uri, RAW_PARSER, TIMEOUT, "{\"noWrap\":4}").join()
+        wrapping.sendPostRequestNoWrap(uri, RAW_PARSER, TIMEOUT, timeoutBody).join()
     );
-    assertEquals("{\"noWrap\":4}", lastRecorded().body());
+    assertEquals(timeoutBody, lastRecorded().body());
   }
 
   @Test
   void postNoWrapWithABodyHandler() {
     final Function<HttpResponse<String>, String> parser = HttpResponse::body;
     final var asString = HttpResponse.BodyHandlers.ofString();
-    assertEquals(echoOf("POST", "/"), plain.sendPostRequestNoWrap(asString, parser, "{\"handled\":1}").join());
-    assertEquals("{\"handled\":1}", lastRecorded().body());
-    assertEquals(echoOf("POST", "/"), plain.sendPostRequestNoWrap(asString, parser, TIMEOUT, "{\"handled\":2}").join());
-    assertEquals("{\"handled\":2}", lastRecorded().body());
+    final var body = """
+        {"handled":1}""";
+    assertEquals(echoOf("POST", "/"), plain.sendPostRequestNoWrap(asString, parser, body).join());
+    assertEquals(body, lastRecorded().body());
+    final var timeoutBody = """
+        {"handled":2}""";
+    assertEquals(echoOf("POST", "/"), plain.sendPostRequestNoWrap(asString, parser, TIMEOUT, timeoutBody).join());
+    assertEquals(timeoutBody, lastRecorded().body());
   }
 
   @Test
@@ -267,16 +281,20 @@ final class JsonHttpClientTransportTests {
     final Function<HttpResponse<String>, String> parser = HttpResponse::body;
     final var asString = HttpResponse.BodyHandlers.ofString();
     final var uri = endpoint.resolve("/handled-post");
+    final var body = """
+        {"handled":3}""";
     assertEquals(
         echoOf("POST", "/handled-post"),
-        plain.sendPostRequestNoWrap(uri, asString, parser, "{\"handled\":3}").join()
+        plain.sendPostRequestNoWrap(uri, asString, parser, body).join()
     );
-    assertEquals("{\"handled\":3}", lastRecorded().body());
+    assertEquals(body, lastRecorded().body());
+    final var timeoutBody = """
+        {"handled":4}""";
     assertEquals(
         echoOf("POST", "/handled-post"),
-        plain.sendPostRequestNoWrap(uri, asString, parser, TIMEOUT, "{\"handled\":4}").join()
+        plain.sendPostRequestNoWrap(uri, asString, parser, TIMEOUT, timeoutBody).join()
     );
-    assertEquals("{\"handled\":4}", lastRecorded().body());
+    assertEquals(timeoutBody, lastRecorded().body());
   }
 
   // Request builders — the built request is inspectable directly, no server round
