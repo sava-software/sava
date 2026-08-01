@@ -71,7 +71,7 @@ When you find one:
 
 ## Quality gate & mutation ratchet
 
-<!-- hardening-template sha256:f6dea3f41ab7 -->
+<!-- hardening-template sha256:e035f8cc1fec -->
 
 Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
 
@@ -133,13 +133,18 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   is exempt). Never run `-PupdateMutationBaseline` just to make the build pass. Sweepable
   equivalence claims are verified empirically with the range recorded, not argued in
   prose.
-- **Pure line drift passes on its own.** Editing above a mutated method moves its
-  rows; when every new baseline entry is a same-status shift of a stale one *and*
-  the per-`(class, method, mutator, status)` population is unchanged, the verify
-  passes with a notice and the refresh can wait for a convenient moment. Anything
-  mixed in — a newly covered row, an unexplained one, changed counts — still fails
-  and is triage first, refresh after. `-PnoDriftTolerance` restores the strict
-  diff for a certifying run, alongside `-PnoMutationHistory`.
+- **Baseline keys are line-less** (`class,method,mutator,STATUS`) — editing above
+  a mutated method churns nothing, and the trailing `# line N` tags are metadata
+  every refresh rewrites: triage pointers and the line-drift advisory's anchor,
+  never identity. The trade is one documented hole: a new mutant replacing a
+  killed one at the same key inherits its acceptance silently, so when the
+  line-drift advisory names a key whose README argument no longer reads against
+  the current code, treat it as that swap until shown otherwise. Legacy
+  five-field files migrate on any refresh, or all at once with
+  `migrateMutationBaselines` (no mutation run needed) — but only after every pin
+  resolving the plugin is bumped (root `settings.gradle.kts` *and* the jmh
+  `build.gradle.kts` pin), because pre-line-less plugin versions cannot read a
+  migrated file.
 - **After a pass that killed baseline rows, shrink with `-PpruneMutationBaseline`,
   not `-PupdateMutationBaseline`.** Prune drops rows matching nothing this run and
   writes nothing new, so no coin-flip from a single run can be baked in; it keeps
@@ -151,13 +156,16 @@ Full policy: sava-build's `HARDENING.md`. The parts that bite most often:
   combination. Never hand-roll a pruning script: matching rows without the status
   field deletes the wrong one (casebook: the status-blind prune).
 - **Identical baseline rows are sibling mutants, not duplicates.** One compound
-  condition emits several mutants at the same `class,method,line,mutator`
-  coordinate — one per operand or branch direction — and the comparison is a
+  condition emits several mutants at the same `class,method,mutator,STATUS`
+  key — one per operand, branch direction, or occurrence in the method (their
+  `# line` tags telling them apart for a reader) — and the comparison is a
   multiset, so never hand-dedupe a baseline CSV: a collapsed row lets a killed
-  sibling regress to `SURVIVED` invisibly. When one sibling survives, the verify
-  prints the killed sibling's test (in the ratchet failure, a scoped run and
-  `-PlistUnkilled` alike); the survivor is that test's opposite branch direction
-  and is triaged as its own mutant.
+  sibling regress to `SURVIVED` invisibly. A "new" row sharing an accepted key
+  is either sibling debt surfaced or a genuinely new mutant landing at that
+  key — read the report's line numbers before accepting. When one sibling
+  survives, the verify prints the killed sibling's test (in the ratchet failure,
+  a scoped run and `-PlistUnkilled` alike); the survivor is that test's opposite
+  branch direction and is triaged as its own mutant.
 - **Stubs and fixtures return distinguishable, non-default values.** A stub
   method returning null, `0`, `""`, `true`, an empty `Optional` or an empty
   collection makes the matching return-value mutant equivalent by accident of the

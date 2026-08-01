@@ -152,6 +152,13 @@ Per the inventory rule in sava-build's HARDENING.md: the repo-specific edges
 of what a clean ratchet proves here, kept in one place (adopted 2026-07-31
 from a downstream Rust adaptation's practice).
 
+- **A same-key swap is invisible** (line-less baseline keys, adopted at the
+  post-21.5.19 bump): kill one mutant and introduce a new one at the same
+  `class,method,mutator,STATUS` in one change and the multiset is unchanged —
+  the new mutant inherits the old row's acceptance. The tripwire is the
+  line-drift advisory (row-level once every row carries a `# line` tag and
+  counts match): when it names a key whose README argument no longer reads
+  against the current code, treat it as the swap until shown otherwise.
 - **Kills come only from `targetTests`.** `LiveMainNetDriftCheck`, the
   `integ.sh` example flows, and the jmh benchmarks are invisible to PIT —
   code exercised only through them reads `NO_COVERAGE` despite being
@@ -273,6 +280,12 @@ already-accepted twin — a hole in the ratchet, not an ergonomic nit.
 Migrating all twelve suites materialized **18 previously absorbed copies**, and
 nothing else: every one sat at a coordinate already in the baseline, no suite
 gained a new coordinate.
+
+*Postscript (line-less keys, 2026-08-01):* the multiset doctrine is unchanged
+and the key it applies to is now `class,method,mutator,STATUS` — lines left
+identity entirely, so the copies above are told apart by their `# line` tags
+rather than by the key. Sibling copies still repeat legitimately and still
+must never be hand-deduped.
 
 | Suite | Copies | Where |
 | --- | --- | --- |

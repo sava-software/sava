@@ -3,22 +3,27 @@
 Each `pitest<Suite>` run is finalized by `pitest<Suite>Verify`, which diffs the
 run's unkilled mutants (`SURVIVED` and `NO_COVERAGE`) against the accepted
 baseline in `<suite>-accepted.csv` and **fails on anything new**. Baseline row
-format: `class,method,line,mutator,status`. Full policy — the three legal
-outcomes for a new survivor, determinism requirements, targeting rules —
-lives in sava-build's `HARDENING.md`.
+format: `class,method,mutator,STATUS` — line numbers are metadata, carried as
+a trailing `# line N` tag every refresh rewrites, so editing above a mutated
+method churns nothing. Full policy — the three legal outcomes for a new
+survivor, determinism requirements, targeting rules — lives in sava-build's
+`HARDENING.md`.
 
 Never refresh with `-PupdateMutationBaseline` just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence
-reason below. Line numbers are part of the baseline key, so edits to a
-mutated file shift entries — but *pure* drift (every new row a same-status
-shift, populations unchanged) now passes with a notice, so a refresh for
-churn alone can wait; anything mixed in still fails and is triage first.
+reason below. A failure classifies each new row (`newly covered` vs shares an
+accepted key vs unexplained) and closes with a churn tally. A key unkilled at
+a line no row's `# line` tag names draws the line-drift advisory: the code an
+acceptance argues about moved, or a new mutant sits under an old acceptance
+(the line-less key's one documented blind spot) — re-read the argument below,
+then let the next refresh rewrite the tag.
 
 **Identical rows are sibling mutants — never dedupe these files.** One
 compound condition emits a mutant per operand or branch direction at the same
-`class,method,line,mutator` key (and one `MathMutator` key can cover two
-different operations on a line — `ensureCapacity:928` is a shift *and* an
-add), so a coordinate legitimately repeats. The comparison is a multiset: the
+`class,method,mutator,STATUS` key (and one `MathMutator` key can cover
+different operations across a method — `ensureCapacity`'s line 928 was a
+shift *and* an add — the `# line` tags telling the copies apart), so a key
+legitimately repeats. The comparison is a multiset: the
 copies were collapsed until 2026-07-23, which let a killed sibling regress
 unnoticed behind its accepted twin. Migrating these baselines materialized 13
 copies — 9 in `ws`, 3 in `responses`, all inside the families below, and one

@@ -1,4 +1,4 @@
-software.sava.core.util.DecimalInteger,toDecimal,30,ConditionalsBoundaryMutator,SURVIVED
-software.sava.core.util.DecimalInteger,toDecimal,30,RemoveConditionalMutator_ORDER_IF,SURVIVED
-software.sava.core.util.DecimalIntegerAmount,amount,12,ConditionalsBoundaryMutator,SURVIVED
-software.sava.core.util.DecimalIntegerAmount,amount,12,RemoveConditionalMutator_ORDER_IF,SURVIVED
+software.sava.core.util.DecimalInteger,toDecimal,ConditionalsBoundaryMutator,SURVIVED # line 30
+software.sava.core.util.DecimalInteger,toDecimal,RemoveConditionalMutator_ORDER_IF,SURVIVED # line 30
+software.sava.core.util.DecimalIntegerAmount,amount,ConditionalsBoundaryMutator,SURVIVED # line 12
+software.sava.core.util.DecimalIntegerAmount,amount,RemoveConditionalMutator_ORDER_IF,SURVIVED # line 12
