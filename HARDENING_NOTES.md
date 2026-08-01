@@ -53,20 +53,31 @@ mutators can reach, so do not re-enable them on a hunch.
 | Suite | Target | Notes |
 | --- | --- | --- |
 | `pitestResponses` | `json.http.response.*` | Debt free — keep it that way. |
-| `pitestClient` | `json.http.client.*` | Carries real coverage debt; see below. |
+| `pitestClient` | `json.http.client.*` | Coverage debt cleared 2026-07-31; see below. |
 | `pitestWs` | `json.http.ws.*` | Seeded at 50%, worked to 73% same day; see below. |
 
 ### `pitestClient` — the debt is deliberate and documented
 
 Registered over the whole package and worked from 54% to 89% rather than being
-narrowed to fit. What remains is 24 survivors (triaged for equivalence) and 39
-`NO_COVERAGE` — almost all the `sendPostRequestNoWrap` / `sendGetRequestNoWrap` /
-`sendGetRequest` transport paths, which `RpcRequestTests` never enters because it
-routes everything through `sendPostRequest`.
+narrowed to fit. What remained after that was two dozen survivors (triaged for
+equivalence) and 39 `NO_COVERAGE` — almost all the `sendPostRequestNoWrap` /
+`sendGetRequestNoWrap` / `sendGetRequest` transport paths, which
+`RpcRequestTests` never enters because it routes everything through
+`sendPostRequest`.
 
-Clearing those needs new harness scaffolding — a local server exercising the GET
-and no-wrap routes — not another `registerRequest` line. Reasons are grouped by
-family in `sava-rpc/config/pitest/README.md`.
+**Coverage debt cleared 2026-07-31** by the scaffolding the acceptance named:
+`JsonHttpClientTransportTests` (a local echo server answering with the method
+and path it saw, so payload assertions pin the built request end to end;
+wrapped-vs-no-wrap pinned by whether the parser receives a
+`ReadHttpResponse`), plus `StubHttpResponse`-driven tests for the
+never-constructed parser controllers and ordinary `registerRequest` cases for
+the `Transaction`-taking simulate overloads. 578/601 (96%), zero
+`NO_COVERAGE`, 23 baseline rows. The same pass withdrew the `checkResponse`
+`< 200` "unreachable in-harness" acceptance — a 199 is constructible with the
+stub the suite already owned; the raw-socket escape hatch was never needed —
+and added the `# logging only` family (log-and-rethrow tails whose rethrow is
+pinned by identity). Reasons are grouped by family in
+`sava-rpc/config/pitest/README.md`.
 
 Exclusions must name `*Check*` and `Stub*` as well as `*Test*`: test sources share
 this package and shared fakes are named for their role. Trailing wildcards
@@ -148,11 +159,13 @@ from a downstream Rust adaptation's practice).
 - **The ws suites' timing seams have a background-thread ceiling** — the
   check-loop and ping-pacing rows detectable only under load are the audited
   timeout set, not ordinary kills (the audited-set section above).
-- **`pitestClient`'s 39 `NO_COVERAGE` transport rows** are an
-  unreachable-in-harness acceptance from 2026-07-20 whose escape (a local
-  server driving the GET/no-wrap routes) has not been attempted since —
-  under the expiry-date rule, the next triage pass should try the harness
-  before re-inheriting the claim.
+- **`pitestClient`'s 39 `NO_COVERAGE` transport rows — expired 2026-07-31.**
+  The escape was attempted and it worked: the whole family fell to the
+  transport harness (`pitestClient` section above), a same-day demonstration
+  of why unreachable-has-an-expiry-date. The suite's remaining blind spot is
+  the ordinary one — its 23 surviving rows are argued acceptances, and the
+  `# logging only` family stays invisible unless a test asserts through the
+  logging backend.
 - **Excluded main-source classes**: `Integ` (git-ignored scratch driver) is
   the one deliberate production-class exclusion; fuzz harnesses are
   test-source and auto-excluded by the plugin.

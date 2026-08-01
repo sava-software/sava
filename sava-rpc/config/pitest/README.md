@@ -32,23 +32,41 @@ and it is triaged as its own mutant rather than assumed covered.
 Seeded 2026-07-20 when the `client` suite was added over
 `software.sava.rpc.json.http.client.*`. 56 entries: 27 SURVIVED and 30
 NO_COVERAGE (one shared baseline key), from a population of 501 (88%
-detected).
+detected). The 2026-07-31 transport-harness pass resolved the coverage debt:
+578/601 detected (96%), 23 rows, all SURVIVED, zero NO_COVERAGE.
 
 Unlike the `responses` suite below, this one **does** carry debt. It was
 registered deliberately red and worked down from 54% over several passes; what
 remains is recorded here rather than hidden by narrowing the suite.
 
-**Transport paths not driven by the harness** (38 NO_COVERAGE — the bulk):
-`sendPostRequestNoWrap`, `sendGetRequestNoWrap`, `sendGetRequest` and the
-`applyResponse` tail of `BaseJsonResponseController`. `RpcRequestTests` drives
-requests through `sendPostRequest`, so the unwrapped and GET variants are never
-entered. Killing these needs new harness scaffolding — a local server exercising
-the GET and no-wrap routes — rather than another `registerRequest` line. The
-remaining `simulateTransaction` / `simulateTransactionWithInnerInstructions`
-entries are `Transaction`-plus-accounts overloads in the same position. The
-2026-07-22 `NakedReceiverMutator` rows (`JsonHttpClient` request-builder chains,
-`JsonRpcBytesValueParseController.parseResponse`) sit on the same never-entered
-lines and join the family unchanged.
+**Transport paths not driven by the harness — RESOLVED 2026-07-31, the whole
+family (38 NO_COVERAGE, the baseline's bulk) left in the refresh.** The escape
+this entry named — a local server exercising the GET and no-wrap routes — is
+`JsonHttpClientTransportTests`: an echo server answering with the method and
+path it saw, so a parser asserting the payload asserts end to end which HTTP
+request the route built, plus wrapped-vs-no-wrap pinned by whether the parser
+receives a `ReadHttpResponse`. The never-constructed parser controllers
+(`JsonRpcBytesValueParseController`, `FullContextJsonRpcResponseParser`, the
+`applyGenericResponse` bytes variant) needed no server at all —
+`StubHttpResponse` drives them in `JsonRpcResponseParserTests` and
+`GenericJsonResponseParserTests`. The `simulateTransaction` /
+`simulateTransactionWithInnerInstructions` `Transaction` overloads and the
+`BigInteger` `getProgramAccounts` overload were ordinary `registerRequest`
+cases after all, distinguished by their options objects. What the coverage
+surfaced became the `# logging only` family below; everything else was an
+ordinary kill.
+
+**Log-and-rethrow diagnostics** — baseline label `# logging only`
+(`BaseJsonResponseController.applyResponse:42–43`,
+`BaseJsonRpcResponseParser.parseRpcException:22`): the parse-failure tails log
+and rethrow. The rethrow — the behavior a caller can see — is pinned by
+identity (`parserFailuresAreRethrownAsThemselves`,
+`malformedErrorEnvelopeRethrowsTheParseFailure`); what survives is removing
+the `logger.log` call itself and forcing the null-guard ternary inside its
+message argument. Diagnostics only, on a path whose outcome is already
+asserted — unlike the ws check-loop funnel, where the log was the *only*
+signal and earned a JUL-backend assertion. Revisit if the log line ever
+becomes load-bearing.
 
 **Fast-path and defensive conditionals** (SURVIVED): `joinKeys` and
 `ProgramAccountsRequestRecord.toJson` null/empty guards, `readBytes` and
@@ -58,16 +76,21 @@ input a test can construct — the empty-collection and null cases are covered,
 and the mutants that survive flip a check whose other side produces an
 identical request or an identical parse.
 
-**`checkResponse` status-range boundaries** (SURVIVED): **unreachable
-in-harness**, not equivalent — this is the worked example in HARDENING.md's
-acceptance-categories note. A real 199 *would* distinguish the `< 200` mutant,
-but the JDK client treats 1xx as interim responses and never surfaces one as a
-final status; a mock server replying 199 kills the connection before the guard
-runs. Reaching it needs a raw-socket stub speaking HTTP/1.1 by hand — that
-named escape hatch is what a later reader re-checks before assuming the
-acceptance still holds.
+**`checkResponse` status-range boundaries** — **withdrawn 2026-07-31, the
+`< 200` side was never unreachable.** The acceptance read "the JDK client
+never surfaces a 1xx as a final status; reaching the guard needs a raw-socket
+stub speaking HTTP/1.1 by hand" — but the transport was never the only way
+in: the gate's contract is over any `HttpResponse`, and `StubHttpResponse`
+constructs a 199 directly, exactly as every other envelope-gate case in
+`JsonRpcResponseParserTests` is driven. The 199 case joined
+`resultEnvelopeUnderANonSuccessStatusIsRejected` (and the generic
+controller's `nonSuccessStatusesAreRejectedWithStatusAndBody`), and both
+suites' `< 200` rows are ordinary kills. Same lesson as the
+`ReadHttpResponse` withdrawal below: the unreachability was the fixture
+strategy's, not the code's — re-read "needs a harness we don't have"
+acceptances against every fixture the suite already owns.
 
-The acceptance is now scoped to the `< 200` side only. The multiset migration
+The `>= 300` side had already been killed the same way. The multiset migration
 (2026-07-23) materialized a second `RemoveConditionalMutator_ORDER_IF` copy at
 `checkResponse:32` that the old set-based baseline had absorbed: the `>= 300`
 operand, which is distinguishable by a case the harness simply never had — an

@@ -135,7 +135,10 @@ final class JsonRpcResponseParserTests {
   /// the parser a result nobody vouched for.
   @Test
   void resultEnvelopeUnderANonSuccessStatusIsRejected() {
-    for (final int status : new int[]{300, 400, 500, 503}) {
+    // 199 is constructible here even though the JDK client never surfaces one:
+    // the gate's contract is over any HttpResponse, not only those the default
+    // transport can produce
+    for (final int status : new int[]{199, 300, 400, 500, 503}) {
       final var ex = assertThrows(UncheckedIOException.class,
           () -> parseResult(status, "{\"result\":\"ok\",\"id\":1}"), "status " + status);
       assertInstanceOf(UnknownServiceException.class, ex.getCause(), "status " + status);
@@ -174,5 +177,52 @@ final class JsonRpcResponseParserTests {
     final var ex = assertThrows(JsonRpcException.class, () -> controller.apply(
         StubHttpResponse.of(200, json("{\"error\":{\"code\":-32002,\"message\":\"blocked\"},\"id\":1}"))));
     assertEquals(-32002, ex.code());
+  }
+
+  /// The `HttpResponse<byte[]>`-typed sibling of [JsonRpcValueResponseParser]:
+  /// same context/value unwrapping, same gate.
+  @Test
+  void bytesValueParserSplitsContextFromValue() {
+    final BiFunction<JsonIterator, Context, String> parser =
+        (ji, context) -> context.slot() + ":" + ji.readString();
+    final var controller = new JsonRpcBytesValueParseController<>(parser);
+    final var result = controller.apply(StubHttpResponse.of(200, json("""
+        {"jsonrpc":"2.0","result":{"context":{"apiVersion":"2.0.5","slot":4321},"value":"payload"},"id":1}""")));
+    assertEquals("4321:payload", result);
+  }
+
+  @Test
+  void bytesValueParserPropagatesErrorEnvelopes() {
+    final BiFunction<JsonIterator, Context, String> parser = (ji, _) -> ji.readString();
+    final var controller = new JsonRpcBytesValueParseController<>(parser);
+    final var ex = assertThrows(JsonRpcException.class, () -> controller.apply(
+        StubHttpResponse.of(200, json("{\"error\":{\"code\":-32004,\"message\":\"not available\"},\"id\":1}"))));
+    assertEquals(-32004, ex.code());
+  }
+
+  /// The full-context variant hands the parser everything the gate saw — the
+  /// response, the raw body, and the iterator already positioned at `result`.
+  @Test
+  void fullContextParserReceivesTheResponseBodyAndIterator() {
+    final byte[] body = json("{\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"id\":1}");
+    final var stub = StubHttpResponse.of(200, body, "retry-after", "17");
+    final var controller = JsonRpcHttpClient.applyGenericResponseResult(
+        (httpResponse, parsedBody, ji) -> {
+          assertSame(stub, httpResponse, "the original response must be handed through");
+          assertSame(body, parsedBody, "the raw body must be handed through");
+          return httpResponse.headers().firstValue("retry-after").orElseThrow() + ":" + ji.readString();
+        });
+    assertEquals("17:ok", controller.apply(stub));
+  }
+
+  /// An error envelope whose `error` value is not an object fails inside
+  /// `JsonRpcException.parseException`; that failure must escape as itself, not
+  /// be mistaken for a parsed protocol error or swallowed.
+  @Test
+  void malformedErrorEnvelopeRethrowsTheParseFailure() {
+    final var ex = assertThrows(RuntimeException.class,
+        () -> parseResult("{\"jsonrpc\":\"2.0\",\"error\":\"boom\",\"id\":1}"));
+    assertFalse(ex instanceof JsonRpcException, "a malformed error is not a parsed protocol error");
+    assertFalse(ex instanceof UncheckedIOException, "the parse failure itself must escape");
   }
 }

@@ -247,4 +247,13 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
     expect("\"commitment\":\"confirmed\",\"minContextSlot\":18446744073709551615,\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(PROGRAM_ID, -1L, FILTERS).join());
   }
+
+  /// The BigInteger overload carries a full u64 without the long sentinel dance.
+  @Test
+  void timeoutCommitmentBigIntegerMinContextSlotFiltersFactory() {
+    expect("\"commitment\":\"finalized\",\"minContextSlot\":18446744073709551615,\"filters\":[{\"dataSize\":165}]");
+    assertParsed(rpcClient.getProgramAccounts(
+        TIMEOUT, PROGRAM_ID, Commitment.FINALIZED,
+        new java.math.BigInteger("18446744073709551615"), FILTERS, (_, data) -> data).join());
+  }
 }

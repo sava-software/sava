@@ -139,4 +139,54 @@ final class SignedTransactionRpcRequestTests extends RpcRequestTests {
     assertEquals(150, rpcClient.simulateTransaction(Commitment.FINALIZED, tx, false)
         .join().unitsConsumed().orElseThrow());
   }
+
+  // The remaining Transaction-taking simulate overloads. Each fixes a different
+  // subset of (commitment, replaceRecentBlockhash, innerInstructions); the
+  // options object in the request body is what distinguishes them.
+
+  @Test
+  void simulateWithTheBlockhashFlagUsesTheDefaultCommitment() {
+    final var tx = transaction(signer());
+    tx.setRecentBlockHash(BLOCK_HASH);
+    expectSimulate(tx.base64EncodeToString(),
+        "\"sigVerify\":false,\"replaceRecentBlockhash\":false,"
+            + "\"innerInstructions\":false,\"commitment\":\"confirmed\"");
+
+    assertEquals(150, rpcClient.simulateTransaction(tx, false).join().unitsConsumed().orElseThrow());
+  }
+
+  @Test
+  void simulateWithBothFlagsUsesTheDefaultCommitment() {
+    final var tx = transaction(signer());
+    tx.setRecentBlockHash(BLOCK_HASH);
+    expectSimulate(tx.base64EncodeToString(),
+        "\"sigVerify\":false,\"replaceRecentBlockhash\":false,"
+            + "\"innerInstructions\":true,\"commitment\":\"confirmed\"");
+
+    assertEquals(150, rpcClient.simulateTransaction(tx, false, true).join().unitsConsumed().orElseThrow());
+  }
+
+  @Test
+  void simulateWithInnerInstructionsReplacesTheBlockhash() {
+    final var tx = transaction(signer());
+    tx.setRecentBlockHash(BLOCK_HASH);
+    expectSimulate(tx.base64EncodeToString(),
+        "\"sigVerify\":false,\"replaceRecentBlockhash\":true,"
+            + "\"innerInstructions\":true,\"commitment\":\"confirmed\"");
+
+    assertEquals(150, rpcClient.simulateTransactionWithInnerInstructions(tx)
+        .join().unitsConsumed().orElseThrow());
+  }
+
+  @Test
+  void simulateWithInnerInstructionsAtAnExplicitCommitment() {
+    final var tx = transaction(signer());
+    tx.setRecentBlockHash(BLOCK_HASH);
+    expectSimulate(tx.base64EncodeToString(),
+        "\"sigVerify\":false,\"replaceRecentBlockhash\":true,"
+            + "\"innerInstructions\":true,\"commitment\":\"finalized\"");
+
+    assertEquals(150, rpcClient.simulateTransactionWithInnerInstructions(Commitment.FINALIZED, tx)
+        .join().unitsConsumed().orElseThrow());
+  }
 }
