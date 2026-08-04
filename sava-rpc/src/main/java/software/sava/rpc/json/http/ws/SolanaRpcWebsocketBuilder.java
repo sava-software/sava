@@ -95,25 +95,29 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder uri(final URI uri) {
+  public SolanaRpcWebsocketBuilder uri(final URI uri) {
     this.wsUri = uri;
     return this;
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder webSocketBuilder(final WebSocket.Builder webSocketBuilder) {
+  public SolanaRpcWebsocketBuilder webSocketBuilder(final WebSocket.Builder webSocketBuilder) {
     this.webSocketBuilder = webSocketBuilder;
     return this;
   }
 
-  @Override
-  public SolanaRpcWebsocket.Builder clock(final NanoClock clock) {
+  /// Deliberately not on the public [SolanaRpcWebsocket.Builder] interface, like
+  /// [#executorService(ExecutorService)]: the clock exists so tests can advance
+  /// time instead of waiting on the reconnect throttle and ping pacing, and no
+  /// caller outside this package has a reason to replace it. Null leaves
+  /// [NanoClock#SYSTEM] in place — [#create()] substitutes it — so a builder that
+  /// never touches this method behaves exactly as it always has.
+  SolanaRpcWebsocketBuilder clock(final NanoClock clock) {
     this.clock = clock;
     return this;
   }
 
-  @Override
-  public NanoClock clock() {
+  NanoClock clock() {
     return clock;
   }
 
@@ -148,7 +152,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder maxMessageLength(final int maxMessageLength) {
+  public SolanaRpcWebsocketBuilder maxMessageLength(final int maxMessageLength) {
     if (maxMessageLength <= 0) {
       throw new IllegalArgumentException("maxMessageLength must be positive: " + maxMessageLength);
     }
@@ -162,31 +166,31 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder reConnectDelay(final long reConnectDelay) {
+  public SolanaRpcWebsocketBuilder reConnectDelay(final long reConnectDelay) {
     this.reConnectDelay = reConnectDelay;
     return this;
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder pingDelay(final long pingDelay) {
+  public SolanaRpcWebsocketBuilder pingDelay(final long pingDelay) {
     this.pingDelay = pingDelay;
     return this;
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay) {
+  public SolanaRpcWebsocketBuilder subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay) {
     this.subscriptionAndPingCheckDelay = subscriptionAndPingCheckDelay;
     return this;
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder commitment(final Commitment commitment) {
+  public SolanaRpcWebsocketBuilder commitment(final Commitment commitment) {
     this.commitment = commitment;
     return this;
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder solanaAccounts(final SolanaAccounts solanaAccounts) {
+  public SolanaRpcWebsocketBuilder solanaAccounts(final SolanaAccounts solanaAccounts) {
     this.solanaAccounts = solanaAccounts;
     return this;
   }
@@ -197,7 +201,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder onOpen(final Consumer<SolanaRpcWebsocket> onOpen) {
+  public SolanaRpcWebsocketBuilder onOpen(final Consumer<SolanaRpcWebsocket> onOpen) {
     this.onOpen = onOpen;
     return this;
   }
@@ -208,7 +212,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder onClose(final SolanaRpcWebsocket.OnClose onClose) {
+  public SolanaRpcWebsocketBuilder onClose(final SolanaRpcWebsocket.OnClose onClose) {
     this.onClose = onClose;
     return this;
   }
@@ -219,7 +223,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
+  public SolanaRpcWebsocketBuilder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
     this.onError = onError;
     return this;
   }
@@ -230,7 +234,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder onSendTextError(final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError) {
+  public SolanaRpcWebsocketBuilder onSendTextError(final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError) {
     this.onSendTextError = onSendTextError;
     return this;
   }
@@ -241,7 +245,7 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
-  public SolanaRpcWebsocket.Builder onPingError(final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
+  public SolanaRpcWebsocketBuilder onPingError(final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
     this.onPingError = onPingError;
     return this;
   }

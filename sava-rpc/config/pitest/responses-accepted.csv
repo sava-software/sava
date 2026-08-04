@@ -1,12 +1,13 @@
-software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 28
-software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NakedReceiverMutator,SURVIVED # line 37
-software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NullReturnValsMutator,NO_COVERAGE # line 40
-software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,VoidMethodCallMutator,SURVIVED # line 45
-software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # line 57
-software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # line 57
-software.sava.rpc.json.http.response.Lamports,amount,ConditionalsBoundaryMutator,SURVIVED # line 24
-software.sava.rpc.json.http.response.Lamports,amount,RemoveConditionalMutator_ORDER_IF,SURVIVED # line 24
-software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # line 58
-software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # line 58
-software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # line 66
-software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # line 66
+!sava-hardening-baseline-schema,1
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,RemoveConditionalMutator_EQUAL_IF,SURVIVED # single element array # line 28
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NakedReceiverMutator,SURVIVED # reset position equivalent # line 37
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NullReturnValsMutator,NO_COVERAGE # single element array # line 40
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,VoidMethodCallMutator,SURVIVED # logging only # line 45
+software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # capacity math # line 57
+software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # capacity math # line 57
+software.sava.rpc.json.http.response.Lamports,amount,ConditionalsBoundaryMutator,SURVIVED # allocation routing # line 24
+software.sava.rpc.json.http.response.Lamports,amount,RemoveConditionalMutator_ORDER_IF,SURVIVED # allocation routing # line 24
+software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 58
+software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 58
+software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 66
+software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 66

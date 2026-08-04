@@ -1,25 +1,26 @@
-software.sava.core.encoding.Base58,beginMutableEncode,ConditionalsBoundaryMutator,SURVIVED # line 377
-software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 377
-software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 377
-software.sava.core.encoding.Base58,continueMutableEncode,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 356
-software.sava.core.encoding.Base58,continueMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 356
-software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # line 196
-software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # line 217
-software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # line 236
-software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # line 257
-software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # line 273
-software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # line 294
-software.sava.core.encoding.Base58,encode,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 70
-software.sava.core.encoding.Base58,encode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 70
-software.sava.core.encoding.Base58,limbsLength,MathMutator,SURVIVED # line 94
-software.sava.core.encoding.Base58,limbsLength,MathMutator,SURVIVED # line 94
-software.sava.core.encoding.Base58,mutableEncode,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 326
-software.sava.core.encoding.Base58,mutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 326
-software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 116
-software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 116
-software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 129
-software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 129
-software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 142
-software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # line 142
-software.sava.core.encoding.Jex,decodePrimIterChecked,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 905
-software.sava.core.encoding.Jex,decodePrimIterChecked,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 938
+!sava-hardening-baseline-schema,1
+software.sava.core.encoding.Base58,beginMutableEncode,ConditionalsBoundaryMutator,SURVIVED # surplus zero strip # line 377
+software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 377
+software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 377
+software.sava.core.encoding.Base58,continueMutableEncode,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # surplus zero strip # line 356
+software.sava.core.encoding.Base58,continueMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 356
+software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # allocation size # line 196
+software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # allocation size # line 217
+software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # allocation size # line 236
+software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # allocation size # line 257
+software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # allocation size # line 273
+software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # allocation size # line 294
+software.sava.core.encoding.Base58,encode,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # surplus zero strip # line 70
+software.sava.core.encoding.Base58,encode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 70
+software.sava.core.encoding.Base58,limbsLength,MathMutator,SURVIVED # allocation size # line 94
+software.sava.core.encoding.Base58,limbsLength,MathMutator,SURVIVED # allocation size # line 94
+software.sava.core.encoding.Base58,mutableEncode,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # surplus zero strip # line 326
+software.sava.core.encoding.Base58,mutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 326
+software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # slow path routing # line 116
+software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # slow path routing # line 116
+software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # slow path routing # line 129
+software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # slow path routing # line 129
+software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # slow path routing # line 142
+software.sava.core.encoding.Base58,toLimbs,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # slow path routing # line 142
+software.sava.core.encoding.Jex,decodePrimIterChecked,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # slow path routing # line 905
+software.sava.core.encoding.Jex,decodePrimIterChecked,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # slow path routing # line 938

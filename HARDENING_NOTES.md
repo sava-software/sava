@@ -21,23 +21,40 @@ suite are deliberate scope decisions rather than omissions.
 | `pitestMeta` | `core.accounts.meta.*` | |
 | `pitestDecimal` | `core.util.*` | |
 | `pitestCrypto` | `core.crypto.*` | Excludes the `ed25519` subpackage, which has its own suite — the `crypto.*` wildcard spans dots. |
-| `pitestVanity` | `core.accounts.vanity.Subsequence*` | **Deliberate allowlist.** See below. |
+| `pitestVanity` | `core.accounts.vanity.*` | Widened from a `Subsequence*` allowlist 2026-08-04; 8 audited timeouts are the price. See below. |
+| `pitestAccounts` | `core.accounts.*` | Top-level only: every sub-package with its own suite is subtracted, since the wildcard spans dots. |
+| `pitestSysvar` | `core.accounts.sysvar.*` | Parsers over untrusted account data. |
+| `pitestPbkdf` | `core.accounts.pbkdf.*` | Tests pin PBKDF2 to `MIN_ITERATIONS` and lock around Argon2id; keep that or the suite cost multiplies by mutant count. |
+| `pitestPrimitives` | `core.rpc.*`, `core.programs.*`, `core.serial.*`, `core.zk.*` | The small cross-cutting types belonging to no larger package. |
 
-### `pitestVanity` — the one allowlist
+### `pitestVanity` — the allowlist, retired 2026-08-04
 
-The mask workers search in an unbounded loop, so every mutant that breaks the
-match predicate runs to the PIT timeout instead of failing fast. PIT scores
-`TIMED_OUT` as killed, so the ratchet stays correct, but a whole-package suite
-would cost a timeout window per such mutant.
+This suite used to allowlist `core.accounts.vanity.Subsequence*` instead of taking
+the package, on the argument that the mask workers search an unbounded loop, so
+every mutant breaking the match predicate would run to the PIT timeout rather than
+fail fast — a timeout window per such mutant. The note closed by naming the fix:
+"giving the workers a bounded-attempts seam so a broken predicate fails fast;
+`maxSearches` already exists for exactly that and could let the suite widen to the
+package."
 
-The mask logic — where a wrong answer is silent rather than a hang — is what the
-suite targets. The workers stay covered by `MaskWorkerTests` without being
-mutated. The reasoning is repeated at the registration site in
-`sava-core/build.gradle.kts`.
+**It already had one.** `BaseMaskWorker.searchExhausted(attempts)` is that seam,
+and its javadoc names tests as the reason it exists ("callers that cannot afford
+that — tests, and any caller wanting a deadline — cap the number of key pairs
+generated"). `MaskWorkerTests` has been driving every worker with a finite
+`maxSearches` all along. The argument was stale rather than wrong: it described
+the code before the seam landed and was never re-measured afterwards.
 
-Closing this properly would mean giving the workers a bounded-attempts seam so a
-broken predicate fails fast; `maxSearches` already exists for exactly that and
-could let the suite widen to the package.
+Measured on the widened suite: **235 mutants, 73% detected, 9 timed out** — not a
+timeout per predicate-breaking mutant. Eight of those nine are one family with one
+cause (the `for (;;)` search has exactly two exits, and each mutant disables the
+cap that is the only one a test can reach), audited in
+`sava-core/config/pitest/README.md`. Eight timeout windows is the whole price of
+mutating the package, and it closed the last ownership gap in this module.
+
+Reusable lesson: **an exception argued from a code property expires when that
+property changes.** This one outlived its cause by however long it took someone to
+re-run the measurement — which is the same rule the `pitestClient` transport
+expiry taught, applied to a scope decision instead of an acceptance.
 
 ### `pitestDecimal` — plain `STRONGER` on purpose
 
@@ -55,6 +72,7 @@ mutators can reach, so do not re-enable them on a hunch.
 | `pitestResponses` | `json.http.response.*` | Debt free — keep it that way. |
 | `pitestClient` | `json.http.client.*` | Coverage debt cleared 2026-07-31; see below. |
 | `pitestWs` | `json.http.ws.*` | Seeded at 50%, worked to 73% same day; see below. |
+| `pitestEncoding` | `json.*`, `json.http.request.*` | Added 2026-08-04 to close ownership; subtracts the three sibling suites' packages, since the wildcard spans dots. |
 
 ### `pitestClient` — the debt is deliberate and documented
 
@@ -102,7 +120,7 @@ client supplied its own; the class went to 29/29. The generalisation worth
 keeping: a builder test that always configures a value cannot see the default it
 replaces, so each defaulted field needs one build that omits it. `pitestClient`
 is now 538/601 with a 63-row baseline (was 64), pruned via
-`-PpruneMutationBaseline`.
+`pitestWsBaselinePrune` (then spelled `-PpruneMutationBaseline`).
 
 ### `pitestWs` — the clock seam, and the background-thread ceiling
 
@@ -163,10 +181,22 @@ from a downstream Rust adaptation's practice).
   `integ.sh` example flows, and the jmh benchmarks are invisible to PIT —
   code exercised only through them reads `NO_COVERAGE` despite being
   exercised for real.
-- **Packages without a suite are deliberate scope decisions** (the suite
-  tables above): `core.accounts.*` outside token/meta/lookup/vanity,
-  `core.borsh`-adjacent serial/programs/zk helpers, and sava-vanity's
-  application module. A clean gate says nothing about them.
+- **Unowned packages — closed 2026-08-04, this edge is gone.** The candidate
+  plugin's `mutationOwnershipAudit` (advisory alone, mandatory under
+  `hardeningCertify`) put a number on what "deliberate scope decision" had been
+  costing: **56 production classes** owned by no suite — 45 in sava-core
+  (`accounts` 11, `accounts.vanity` 11, `accounts.sysvar` 9, `accounts.pbkdf` 6,
+  `rpc` 3, `serial` 2, `programs` 2, `zk` 1) and 11 in sava-rpc
+  (`json.PrivateKeyEncoding` and its nests, `json.PublicKeyEncoding`,
+  `json.http.SolanaNetwork`, and six `json.http.request` enums). All 56 were
+  closed by **targeting** them — four new sava-core suites, one new sava-rpc
+  suite, and the `pitestVanity` widening — so the repo carries **no**
+  `declineExclusionAudit` record and the audit reports 0 explicitly declined in
+  both modules. The cost was 413 seeded `# untriaged` rows in sava-core and 17
+  in sava-rpc, itemised in each module's `config/pitest/README.md`; that debt is
+  now visible instead of invisible, which is the whole point. What a clean gate
+  still says nothing about: **sava-vanity's application module**, which registers
+  no suite at all.
 - **The ws suites' timing seams have a background-thread ceiling** — the
   check-loop and ping-pacing rows detectable only under load are the audited
   timeout set, not ordinary kills (the audited-set section above).
@@ -306,8 +336,8 @@ the same line — the 300 case separates `>= 300` from `> 300`. So the migration
 converted one silent acceptance into a test and shrank the `client` baseline by
 a row. Details in `sava-rpc/config/pitest/README.md`.
 
-`ws` was refreshed with `-PunionMutationBaseline`, not
-`-PupdateMutationBaseline`: its accepted `checkCycle:235` `unlock()` row read
+`ws` was refreshed with the union writer, not the full
+rewrite: its accepted `checkCycle:235` `unlock()` row read
 `TIMED_OUT` in the migration run (removing an `unlock()` in a `finally` wedges a
 later test rather than failing it), and a plain refresh would have dropped
 flip insurance on the strength of a load-dependent detection.
@@ -366,20 +396,42 @@ expected rather than a signal to retune. `ws` is the suite to watch — its `che
   socket. Enable it if a suite ever needs a real server or a parked-thread
   assertion; do not turn it on speculatively.
 
-## Arcmutate incremental analysis — wired, awaiting licence
+## Arcmutate incremental analysis — licensed 2026-08-03
 
 Support landed in the sava-build plugin 2026-07-21 (licence requested from
-arcmutate the same day — free for open-source projects). Activation is
-dropping the `arcmutate-licence.txt` at the repo root: history files appear at
-`<module>/.pitest-history/<suite>.hist` (git-ignored, survive `clean`), each
-assisted summary carries a `[history]` marker, and the pre-release gate runs
-with `-PnoMutationHistory`. Wiring was verified end-to-end with a dummy
-licence file: config cache invalidates on the file appearing,
+arcmutate the same day — free for open-source projects). The signed OSS
+certificate arrived 2026-08-03 and is committed at the repo root as
+`arcmutate-licence.txt` with a `.gitignore` allow-rule, which is safe because it
+is a signed certificate rather than a secret: its only fields are `expires`,
+`keyVersion`, `packages` (`software.sava.*`), `type` (`OSSS`) and `signature`,
+with no private subscription download endpoint anywhere in it — do not paste one
+into this repo either. It expires 15/08/2027. Activation is the file's
+presence: history files appear at
+`<module>/.pitest-history/<suite>.hist` (git-ignored, survive `clean`), and each
+assisted summary carries a `[history]` marker. Anything that writes or certifies
+the record disables reuse by itself — `hardeningCertify` automatically, the
+per-suite writer tasks by refusing a history-assisted report — so
+`-PnoMutationHistory` is only the explicit override for other fresh runs. Wiring
+was verified end-to-end with a dummy
+licence file before the real one: config cache invalidates on the file appearing,
 `com.arcmutate:base:1.7.1` resolves, PIT runs with `+arcmutate_history`, and
-arcmutate's signature check rejects the dummy — so the only untested step is
-a valid certificate. A DIY changed-classes-only mode was considered and
-declined: subsumed by history, and the savings did not survive arithmetic
-(the coverage phase and JVM floor dominate every suite under ~30s).
+arcmutate's signature check rejects the dummy. A DIY changed-classes-only mode was
+considered and declined: subsumed by history, and the savings did not survive
+arithmetic (the coverage phase and JVM floor dominate every suite under ~30s).
+
+**The licence changes the mutant population, and every baseline here predates it.**
+Measured 2026-08-04 on identical `ws` code, holding everything but the certificate
+constant: **605 mutants unlicensed, 573 licensed** — a 32-mutant difference, of
+which 7 are rows this repo has accepted (all `RemoveConditional*` survivors in
+`ensureCapacity`, `handlePendingSubscriptions` ×2, `lambda$queueUnsubscribe$0` ×2,
+`onText`, `onWholeMessage`). The licensed run reports them as unmatched and offers
+them as prune candidates; they are not kills, and pruning them would delete
+argued acceptances that reappear the moment the certificate is absent or expires.
+Two consequences: read the first licensed run of any suite as a toolchain diff, and
+note that `-PnoMutationHistory` under the *pinned* 21.5.20 plugin removes
+`com.arcmutate:base` outright (fixed in candidate `181b4c5`), so mode snapshots,
+convergence runs and mode-flip-insurance evidence taken with the licence present and
+that pin are measuring a third population again — re-derive them after the bump.
 
 ## Convergence check — 2026-07-21 (pre-release)
 

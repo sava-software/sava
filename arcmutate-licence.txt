@@ -1,0 +1,7 @@
+#Licence file for arcmutate mutation testing https://www.arcmutate.com
+#Mon Aug 03 12:39:44 BST 2026
+expires=15/08/2027
+keyVersion=1
+packages=software.sava.*
+signature=FhRcVg8ddZy+jXAaIYFZXZYMxNdifT7/fUENknSSQcP9L1NlOCEsmOLG+IfoncC4IG2Kpt8xOVERGQWfJ1d/YleQb5tCO82LVx01C4AdBAdvZPrgCO2wmcUlF4Z6kXFiZLCCMGAKPkfckGbVPomUqgqo9WkQ3s5bbLDjO+8OzFM\=
+type=OSSS

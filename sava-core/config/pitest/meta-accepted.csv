@@ -1,18 +1,19 @@
-software.sava.core.accounts.meta.AccountMetaFeePayer,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 33
-software.sava.core.accounts.meta.AccountMetaInvoked,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 27
-software.sava.core.accounts.meta.AccountMetaInvoked,hashCode,MathMutator,SURVIVED # line 35
-software.sava.core.accounts.meta.AccountMetaInvoked,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 19
-software.sava.core.accounts.meta.AccountMetaInvokedAndWrite,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 28
-software.sava.core.accounts.meta.AccountMetaInvokedAndWrite,hashCode,MathMutator,SURVIVED # line 35
-software.sava.core.accounts.meta.AccountMetaInvokedAndWrite,hashCode,MathMutator,SURVIVED # line 36
-software.sava.core.accounts.meta.AccountMetaReadOnly,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 54
-software.sava.core.accounts.meta.AccountMetaReadOnlySigner,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 28
-software.sava.core.accounts.meta.AccountMetaReadOnlySigner,hashCode,MathMutator,SURVIVED # line 34
-software.sava.core.accounts.meta.AccountMetaReadOnlySigner,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 18
-software.sava.core.accounts.meta.AccountMetaReadOnlySigner,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 22
-software.sava.core.accounts.meta.AccountMetaSignerWriter,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 28
-software.sava.core.accounts.meta.AccountMetaWrite,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 37
-software.sava.core.accounts.meta.AccountMetaWrite,hashCode,MathMutator,SURVIVED # line 44
-software.sava.core.accounts.meta.AccountMetaWrite,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 18
-software.sava.core.accounts.meta.AccountMetaWrite,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 26
-software.sava.core.accounts.meta.AccountMetaWrite,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 29
+!sava-hardening-baseline-schema,1
+software.sava.core.accounts.meta.AccountMetaFeePayer,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # equals identity # line 33
+software.sava.core.accounts.meta.AccountMetaInvoked,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # equals identity # line 27
+software.sava.core.accounts.meta.AccountMetaInvoked,hashCode,MathMutator,SURVIVED # hashcode arithmetic # line 35
+software.sava.core.accounts.meta.AccountMetaInvoked,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # merge redundant # line 19
+software.sava.core.accounts.meta.AccountMetaInvokedAndWrite,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # equals identity # line 28
+software.sava.core.accounts.meta.AccountMetaInvokedAndWrite,hashCode,MathMutator,SURVIVED # hashcode arithmetic # line 35
+software.sava.core.accounts.meta.AccountMetaInvokedAndWrite,hashCode,MathMutator,SURVIVED # hashcode arithmetic # line 36
+software.sava.core.accounts.meta.AccountMetaReadOnly,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # equals identity # line 54
+software.sava.core.accounts.meta.AccountMetaReadOnlySigner,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # equals identity # line 28
+software.sava.core.accounts.meta.AccountMetaReadOnlySigner,hashCode,MathMutator,SURVIVED # hashcode arithmetic # line 34
+software.sava.core.accounts.meta.AccountMetaReadOnlySigner,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # merge redundant # line 18
+software.sava.core.accounts.meta.AccountMetaReadOnlySigner,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # merge redundant # line 22
+software.sava.core.accounts.meta.AccountMetaSignerWriter,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # equals identity # line 28
+software.sava.core.accounts.meta.AccountMetaWrite,equals,RemoveConditionalMutator_EQUAL_IF,SURVIVED # equals identity # line 37
+software.sava.core.accounts.meta.AccountMetaWrite,hashCode,MathMutator,SURVIVED # hashcode arithmetic # line 44
+software.sava.core.accounts.meta.AccountMetaWrite,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # merge redundant # line 18
+software.sava.core.accounts.meta.AccountMetaWrite,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # merge redundant # line 26
+software.sava.core.accounts.meta.AccountMetaWrite,merge,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # merge redundant # line 29

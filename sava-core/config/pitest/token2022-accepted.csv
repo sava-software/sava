@@ -1,21 +1,22 @@
-software.sava.core.accounts.token.Token2022,parseExtensions,RemoveConditionalMutator_EQUAL_IF,SURVIVED # line 78
-software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # line 81
-software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # line 82
-software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # line 83
-software.sava.core.accounts.token.extensions.ConfidentialMintBurn,read,MathMutator,SURVIVED # line 36
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 162
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 163
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 164
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 165
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 166
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 167
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 168
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 169
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 170
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 171
-software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # line 172
-software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # line 69
-software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # line 70
-software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # line 71
-software.sava.core.accounts.token.extensions.TokenMetadata,read,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # line 54
-software.sava.core.accounts.token.extensions.UnknownTokenExtension,hashCode,MathMutator,SURVIVED # line 42
+!sava-hardening-baseline-schema,1
+software.sava.core.accounts.token.Token2022,parseExtensions,RemoveConditionalMutator_EQUAL_IF,SURVIVED # extension null guard # line 78
+software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # hash mixing # line 81
+software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # hash mixing # line 82
+software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # hash mixing # line 83
+software.sava.core.accounts.token.extensions.ConfidentialMintBurn,read,MathMutator,SURVIVED # dead cursor advance # line 36
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 162
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 163
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 164
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 165
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 166
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 167
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 168
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 169
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 170
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 171
+software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 172
+software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 69
+software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 70
+software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 71
+software.sava.core.accounts.token.extensions.TokenMetadata,read,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # slow path routing # line 54
+software.sava.core.accounts.token.extensions.UnknownTokenExtension,hashCode,MathMutator,SURVIVED # hash mixing # line 42

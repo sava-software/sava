@@ -9,7 +9,47 @@ method churns nothing. Full policy — the three legal outcomes for a new
 survivor, determinism requirements, targeting rules — lives in sava-build's
 `HARDENING.md`.
 
-Never refresh with `-PupdateMutationBaseline` just to make the build pass:
+## Newly adopted suites — 2026-08-04, seeded debt, not acceptance
+
+`accounts`, `sysvar`, `pbkdf` and `primitives` were registered, and `vanity` was
+widened from its `Subsequence*` allowlist to the whole package, to close
+`mutationOwnershipAudit` — every compiled production class in this module now
+sits in some suite's target universe, with no `declineExclusionAudit` anywhere.
+Adding a suite is expected to go red first, and these did. Their first baselines
+were seeded from the full unkilled population and every row carries
+`# untriaged`:
+
+| Suite | Population | Detected | Seeded rows |
+| --- | --- | --- | --- |
+| `accounts` | 304 | 34% | 199 (44 SURVIVED, 155 NO_COVERAGE) |
+| `sysvar` | 164 | 72% | 45 (13 SURVIVED, 32 NO_COVERAGE) |
+| `pbkdf` | 80 | 30% | 56 (14 SURVIVED, 42 NO_COVERAGE) |
+| `primitives` | 58 | 13% | 50 (all NO_COVERAGE) |
+| `vanity` | 235 | 73% | 63 (32 SURVIVED, 31 NO_COVERAGE) |
+
+**PIT 1.25.9 restored record compact-constructor mutants — all of them killed,
+2026-08-04.** The tool bump from 1.25.8 grew this module by 19 mutants and left
+every one of them unkilled at first: `pbkdf` +16 (population 80 → 96, of which 15
+new survivors), `primitives` +1, `tx` +3 (those three killed on arrival). The +15
+were the `Argon2id` and `PBKDF2WithHmacSHA512` compact constructors — the guards
+that bound KDF parameters read out of an externally-supplied key file, so a mutant
+there accepts a silently-weak derivation or a memory/CPU-exhaustion setting and
+says nothing. `KeyDerivationBoundsTests` kills all of them by asserting each bound
+at its extremes: the boundary value that must be accepted and the first value past
+it that must be rejected, which is the only shape that separates `<` from `<=`.
+`DiscriminatorTests` did the same for `primitives`, taking it from 8/59 to 16/59.
+**No accepted row was added for the version bump** — every new mutant was killed,
+not argued.
+
+**Those 413 rows are debt made explicit, not equivalence claims.** Nothing below
+argues them yet, which is exactly what `# untriaged` means, and the
+`NO_COVERAGE` majority is mechanical work — untested lines, not judgement calls.
+Triage replaces the label with a family label whose argument is written here.
+The heavy `NO_COVERAGE` counts are honest: `primitives` has one covering test
+(`FilterTests`) for four packages, and `accounts` covers the library's central
+value types with three test classes.
+
+Never run a `pitest<Suite>BaselineUpdate` task just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence
 reason below. A failure classifies each new row (`newly covered` vs shares an
 accepted key vs unexplained) and closes with a churn tally. A key unkilled at
@@ -17,6 +57,13 @@ a line no row's `# line` tag names draws the line-drift advisory: the code an
 acceptance argues about moved, or a new mutant sits under an old acceptance
 (the line-less key's one documented blind spot) — re-read the argument below,
 then let the next refresh rewrite the tag.
+
+Arguments below name **methods and constructs, not line numbers**: prose
+anchors are not machine-checked and rot silently on the first refactor (the
+ws family's did, wholesale, before 2026-08-01). The authoritative anchor is
+each row's `# line` tag in the CSV, which every refresh rewrites and the
+line-drift advisory checks. Cite a line here only where it is the historical
+record of a past state.
 
 **Identical rows are sibling mutants — never dedupe this file.** One compound
 condition emits a mutant per operand or branch direction at the same
@@ -35,8 +82,8 @@ population remains debt — see below); grouped by the principle that makes
 them equivalent. The baseline CSVs carry the exact keys. `borsh` seeded
 empty: keep it that way.
 
-**Allocation-size only** — the mutant changes how much is allocated, never
-what is computed:
+**Allocation-size only** — baseline label `# allocation size` — the mutant
+changes how much is allocated, never what is computed:
 - `Base58.decode` (all six variants): the limb-array sizing
   `limbsLength(to - i)` → `to + i` only over-allocates; `used` from
   `toLimbs` bounds what is read back out.
@@ -46,8 +93,8 @@ what is computed:
   this family to killable (json-iterator's `TestAllocation` pattern) —
   accepted instead because decode has no zero-allocation contract.
 
-**Slow-path / alternate-path routing** — both paths are result-identical,
-the mutant only changes which one runs:
+**Slow-path / alternate-path routing** — baseline label `# slow path routing`
+— both paths are result-identical, the mutant only changes which one runs:
 - `Base58.toLimbs` (three source variants): disabling the 5-digit chunk
   batching (`numDigits < 5` / `i < to` → false) degrades to per-digit
   `mulAdd` with `POW_58[1]`; same accumulated limbs, more calls.
@@ -57,7 +104,9 @@ the mutant only changes which one runs:
 - `TokenMetadata.read`: removing the `numExtras == 0` → `Map.of()` fast
   path builds the same empty immutable map via the zero-length entry array.
 
-**Defensive code unreachable in context**:
+**Defensive code unreachable in context** (baseline labels `# surplus zero strip`
+for the Base58 encode family, `# extension null guard` for `parseExtensions`,
+`# pack25519 passes` for the dropped `car25519` passes):
 - `Base58` encode family (`encode`, `mutableEncode`,
   `continueMutableEncode`, `beginMutableEncode`): the surplus-`ENCODED_ZERO`
   strip loop after digit emission (and its boundary variant). No entry point
@@ -72,13 +121,15 @@ the mutant only changes which one runs:
   the exact double conditional-subtract reduction still fully normalize
   every limb state reachable from 32-byte `Codec.decode32` inputs.
 
-**Static-initializer construction** (`Ed25519Util$PointAccum.create`,
+**Static-initializer construction** — baseline label `# static init`
+(`Ed25519Util$PointAccum.create`,
 `$PointExtended.create`): called only while the `static {}` block builds
 the comb precomputation tables, once per PIT minion JVM before any mutant
 activates — unkillable by construction (same family as json-iterator's
 `JHex$INIT_DIGITS`).
 
-**Verdict-invisible arithmetic in the TweetNaCl path** (`car25519` bias
+**Verdict-invisible arithmetic in the TweetNaCl path** — baseline label
+`# verdict invisible` (`car25519` bias
 terms, `sel25519` XOR→AND, `pack25519` tail mask/shift mutants,
 `scalarMultBase`'s final `cnegate`, `Scalar25519.toSignedDigits`): the
 on-curve verdict consumes packed values only through equality of two
@@ -88,13 +139,16 @@ full input domain, including torsion points and non-canonical encodings)
 pass with these mutants active. Verified individually 2026-07-16 — see the
 Ed25519 hardening section of `AGENTS.md`.
 
-**Hash-mixing operator swaps** (19 keys across `ConfidentialMintBurn`,
-`ConfidentialTransferAccount`, `ConfidentialTransferFeeConfig`,
-`UnknownTokenExtension` `hashCode`s): `31 * h + x` → `31 * h - x` still
+**Hash-mixing operator swaps** — baseline label `# hash mixing` (18 sibling rows
+across 4 line-less keys — one `hashCode,MathMutator` key per class, carrying
+11 siblings in `ConfidentialTransferAccount`, 3 each in
+`ConfidentialTransferFeeConfig` and `ConfidentialMintBurn`, 1 in
+`UnknownTokenExtension`; one sibling per mixed field): `31 * h + x` → `31 * h - x` still
 yields a consistent, equals-compatible hash; only exact-hash-value
 assertions could kill these, and hash values are not part of the contract.
 
-**Dead final cursor advance** (`ConfidentialMintBurn.read` line 36): the
+**Dead final cursor advance** — baseline label `# dead cursor advance`
+(`ConfidentialMintBurn.read` line 36): the
 last `i += pendingBurn.length` before the return is a dead store — nothing
 reads `i` afterwards. Kept for symmetry with the preceding field reads;
 refactoring it away would remove the mutant.
@@ -104,12 +158,14 @@ refactoring it away would remove the mutant.
 Seeded 2026-07-20 with the suite, 18 entries across three families. No
 `NO_COVERAGE`.
 
-**Identity short circuit in equals** (7 keys, `RemoveConditionalMutator_EQUAL_IF`
+**Identity short circuit in equals** — baseline label `# equals identity`
+(7 keys, `RemoveConditionalMutator_EQUAL_IF`
 on the `this == o ||` prefix of every `equals`): removing the reference check
 falls through to the class-and-key comparison, which returns the same answer
 for every input. It is a fast path, not a branch.
 
-**Redundant or equal-returning branches in merge** (6 keys,
+**Redundant or equal-returning branches in merge** — baseline label
+`# merge redundant` (6 keys,
 `RemoveConditionalMutator_EQUAL_ELSE`), two sub-cases:
 - `AccountMetaWrite.merge` line 18 and `AccountMetaReadOnlySigner.merge`
   line 18: the `accountMeta.feePayer()` guard is subsumed by the `signer()`
@@ -122,7 +178,8 @@ for every input. It is a fast path, not a branch.
   the same instance. Killable only by asserting identity, which the API does
   not promise.
 
-**hashCode arithmetic** (5 keys, `MathMutator` on the `31 * result + 1` mixing):
+**hashCode arithmetic** — baseline label `# hashcode arithmetic` (5 keys,
+`MathMutator` on the `31 * result + 1` mixing):
 the surviving mutations still produce hashes that are distinct across the
 privilege types, which is the only property that matters and the one
 `hashCodeDistinguishesPrivileges` asserts. Killing them would mean pinning
@@ -188,7 +245,8 @@ by `MaskWorkerTests` without being mutated.
 `DecimalInteger.toDecimal`, and its `BigInteger` twin in
 `DecimalIntegerAmount.amount`.
 
-**Allocation routing only.** Both branches build an identical value for every
+**Allocation routing only** — baseline label `# allocation routing`. Both
+branches build an identical value for every
 non-negative long — verified exhaustively over the boundaries and 2M random
 values — so `<` → `<=` (which differs only at zero, where both give zero) and
 forced-true (which always widens) cannot be told apart by any assertion on the
@@ -227,7 +285,8 @@ kill pass the same day (`AccountIndexLookupTableTests`,
 are accepted equivalents, and the 13 skeleton keys under Untriaged debt
 are all that remain unclassified.
 
-**Shadowed defaults / single-implementation dispatch**:
+**Shadowed defaults / single-implementation dispatch** — baseline label
+`# shadowed default`:
 - `Transaction.exceedsSizeLimit` line 652 (4 NC keys): the interface
   default is overridden by `TransactionRecord`, the only implementation —
   structurally unreachable. The record's own boundary is pinned by
@@ -237,7 +296,7 @@ are all that remain unclassified.
   through the public `setRecentBlockHash` with identical bytes, and the
   unmutated else-branch line is unreachable (NC).
 
-**Result-identical routing**:
+**Result-identical routing** — baseline label `# result identical routing`:
 - `Transaction.createTx` 386: one table meta forced through the generic
   multi-table path builds the same transaction the single-table shortcut
   does.
@@ -248,7 +307,8 @@ are all that remain unclassified.
 - `TransactionRecord.sign` 154: the multi-signer scan resolves a single
   signer to the same slot the fast path uses.
 
-**No-op displacement boundaries** (`createTx` 253/427, 255/429): at
+**No-op displacement boundaries** — baseline label `# displacement boundary`
+(`createTx` 253/427, 255/429): at
 `i == numIncludedAccounts` the compaction degenerates to a zero-length
 arraycopy plus a self-assignment, and at `len == 1` the swap fast path and
 a one-element arraycopy produce identical arrays — both directions of each
@@ -256,7 +316,7 @@ check are result-identical at the boundary. The real displacement paths
 (single swap and `len > 1` arraycopy) are killed by the rank-displacement
 shapes in `TransactionFactoryTests`.
 
-**Redundant work**:
+**Redundant work** — baseline label `# redundant work`:
 - `Transaction.createTx` 432: the multi-table compaction arraycopy shifts
   tail slots that hold already-consumed indexed accounts (captured inside
   the table metas via `addAccountIfExists`); only the front assignment is
@@ -269,7 +329,7 @@ shapes in `TransactionFactoryTests`.
 - `InstructionRecord.toString` 188 (3 keys): at `len == 0` the base64 of an
   empty range equals the `""` fast-path constant.
 
-**Dead defensive code**:
+**Dead defensive code** — baseline label `# dead defensive`:
 - `TransactionRecord.lambda$static$0` 29: `Map.merge` never invokes the
   remapping function with a null existing value.
 - `TransactionRecord.sign` 156: widening the signer scan by one slot probes
@@ -339,9 +399,40 @@ gate load in the 2026-07-22 mode comparison)
   `i -> i + PUBLIC_KEY_LENGTH` → `0`): the offset cursor collapses to 0,
   stays below `to` forever, and the join accumulates keys until the watchdog.
 
-**vanity** (1)
+**vanity** (8, grown from 1 when the suite widened from the `Subsequence*`
+allowlist to the whole package on 2026-08-04)
 - `SubsequenceRecord.formatCharOptions:148` (`ORDER_IF` on
   `level < Subsequence.MAX_OPTIONS`): the row loop loses its exit and appends
   rows until the watchdog — the growing `StringBuilder` races it, so this
   member flips `KILLED`↔`TIMED_OUT` between runs (the known flapper in the
   `HARDENING_NOTES.md` mode comparisons).
+
+The remaining seven are one family with one structural cause, and it is worth
+stating once: every mask worker's search is a `for (;;)` with exactly **two**
+exits — "found enough" (`foundHitLimitOrInterrupted` / `foundLimitOrInterrupted`)
+and "cap reached" (`searchExhausted(attempts)`, the bounded-attempts seam whose
+javadoc names tests as its reason for existing). A test asks for a subsequence
+the encoder will not produce quickly, so the found-exit never fires and the cap
+is the only one left. Each of these mutants disables that cap — by breaking the
+counter that feeds it or the branch that consumes it — and the loop then has no
+exit at all.
+
+- `MaskWorker.run:46/54` and `BeginsWithMaskWorker.run:38` (`MathMutator` on
+  `++attempts`): the attempt counter stops advancing, so
+  `searchExhausted(attempts)` compares a frozen value against `maxSearches` and
+  never becomes true.
+- `MaskWorker.run:50/79` and `BeginsWithMaskWorker.run:56`
+  (`RemoveConditionalMutator_EQUAL_ELSE`): the branch that acts on the exhausted
+  cap — and, at `MaskWorker.run:50`, the endsWith match that would have queued a
+  result — is forced the way that keeps the loop going.
+- `MaskWorker.run:45` and `BaseMaskWorker.generateKeyPair:234`
+  (`VoidMethodCallMutator`): dropping the key-pair generation leaves the same
+  bytes under test on every pass, so no candidate ever matches and the loop
+  spins to the cap it can no longer reach.
+- `BaseMaskWorker.queueResult:119` (`RemoveConditionalMutator_EQUAL_ELSE`): the
+  result-queuing predicate is forced false, so a found key is never recorded,
+  the found-count never rises, and the found-exit is removed as well.
+
+These are the mutants the retired allowlist was avoiding. They are worth paying
+for: eight timeout windows buys mutation coverage of the whole vanity package,
+and every one of them names a real loop exit whose removal a reader can check.

@@ -1,5 +1,5 @@
 # Audited timed-out mutants (class,method,mutator — line-less; the verify warns on
 # timeouts missing from this set). Structural causes: README.md "Timed-out mutants
 # (audited set)".
-software.sava.core.encoding.Jex,isValid,IncrementsMutator
-software.sava.core.encoding.Base58,limbsLength,MathMutator
+software.sava.core.encoding.Jex,isValid,IncrementsMutator # line 571
+software.sava.core.encoding.Base58,limbsLength,MathMutator # line 94

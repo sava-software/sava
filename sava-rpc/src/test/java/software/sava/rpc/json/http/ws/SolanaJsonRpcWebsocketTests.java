@@ -164,6 +164,150 @@ final class SolanaJsonRpcWebsocketTests {
     }
   }
 
+  /// An un-subscription is confirmed with a boolean `result`, which parses to a
+  /// `SubConfirmation` carrying no subscription id — the one shape that reaches
+  /// the confirmation branch's `else`. Nothing should be recorded and nothing
+  /// should be reported: forcing the `jsonRpcException() != null` test true
+  /// dereferences a null exception, and the resulting NPE lands in the method's
+  /// catch, which reports to the exception subscribers. Asserting they stay
+  /// empty is what makes that mutant observable.
+  @Test
+  void unsubscribeConfirmationIsAcceptedSilently() {
+    try (final var ws = createWebsocket()) {
+      final var exceptions = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(exceptions::add);
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":true,"id":7}"""
+      );
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":false,"id":8}"""
+      );
+
+      assertTrue(exceptions.isEmpty(), () -> "un-subscription confirmation reported an error: " + exceptions);
+    }
+  }
+
+  /// The unknown-subscription auto-unsubscribe has two implementations: the
+  /// generic one (pinned by `unknownGenericSubscriptionIdUnsubscribes`) and the
+  /// eagerly-parsed *item* overload the `logs` channel dispatches through. Only
+  /// the generic one was covered, leaving the item overload's miss branch and its
+  /// `sendUnSubscription` call unexercised — a stale server-side subscription
+  /// would have gone on delivering with nothing to cancel it.
+  @Test
+  void anUnknownLogsSubscriptionIdUnsubscribes() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var logs = new ArrayList<TxLogs>();
+      assertTrue(ws.logsSubscribe(Commitment.CONFIRMED, key, logs::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":24040,"id":2}"""
+      );
+
+      // a notification for a subscription this client does not know about
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"logsNotification","params":{"subscription":999,"result":{"value":{"signature":"sigR","err":null,"logs":["log line"]},"context":{"slot":5208470}}}}"""
+      );
+
+      assertTrue(logs.isEmpty(), "an unknown subscription must not deliver");
+      assertTrue(socket.sentText.getLast().contains("logsUnsubscribe"),
+          () -> "no un-subscription was sent for the unknown id: " + socket.sentText);
+      assertTrue(socket.sentText.getLast().contains("999"),
+          () -> "the un-subscription named the wrong id: " + socket.sentText);
+    }
+  }
+
+  /// A duplicate subscribe must be rejected by the channel method's own
+  /// `sub == null || !sub.containsKey(commitment)` guard, *before* reaching
+  /// `queueSubscription` — which opens with `msgId.incrementAndGet()` and would
+  /// burn a message id on the way to returning false.
+  ///
+  /// Both routes answer `false`, so asserting the return value alone cannot tell
+  /// them apart, which is why the forced-true operand survived every existing
+  /// duplicate-subscribe test. The id sequence can: a rejected duplicate that
+  /// consumed an id leaves a gap in the ids actually written to the socket.
+  @Test
+  void aRejectedDuplicateSubscribeConsumesNoMessageId() {
+    try (final var ws = createWebsocket()) {
+      final var first = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var second = PublicKey.fromBase58Encoded("11111111111111111111111111111111");
+      final var logs = new ArrayList<TxLogs>();
+
+      final var accounts = new ArrayList<AccountInfo<byte[]>>();
+      final var sigs = new ArrayList<TxResult>();
+      final var sig = "5j7s6NiJS3JAkvgkoc18WVAsiSaci2pxB2A6ueCJP4tprA2TFg9wSyTLeYouxPBJEMzJinENTkpA52YStRW5Dia7";
+
+      // one accepted + one rejected duplicate per channel: each channel carries its
+      // own copy of the guard, so each needs its own duplicate to pin it
+      assertTrue(ws.logsSubscribe(Commitment.CONFIRMED, first, logs::add));
+      assertFalse(ws.logsSubscribe(Commitment.CONFIRMED, first, logs::add), "duplicate logs subscribe");
+      assertTrue(ws.programSubscribe(first, accounts::add));
+      assertFalse(ws.programSubscribe(first, accounts::add), "duplicate program subscribe");
+      assertTrue(ws.signatureSubscribe(sig, true, sigs::add));
+      assertFalse(ws.signatureSubscribe(sig, true, sigs::add), "duplicate signature subscribe");
+      assertTrue(ws.logsSubscribe(Commitment.CONFIRMED, second, logs::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      final var ids = new ArrayList<Long>();
+      final var idPattern = java.util.regex.Pattern.compile("\"id\":(\\d+)");
+      for (final var sent : socket.sentText) {
+        final var matcher = idPattern.matcher(sent);
+        if (matcher.find()) {
+          ids.add(Long.parseLong(matcher.group(1)));
+        }
+      }
+
+      assertEquals(4, ids.size(), () -> "expected one frame per accepted subscription: " + socket.sentText);
+      for (int i = 1; i < ids.size(); i++) {
+        final int index = i;
+        assertEquals(ids.get(i - 1) + 1, ids.get(i),
+            () -> "a rejected duplicate burned message id " + (ids.get(index - 1) + 1) + ", so it reached "
+                + "queueSubscription instead of being stopped by its channel guard: " + ids);
+      }
+    }
+  }
+
+  /// The invariant the accepted `# defensive scan` family rests on, made
+  /// executable. Those rows are the *match* inside `removeDanglingSub` and the
+  /// generic `unsubscribe` scan — the recovery path for a subscription present
+  /// in `subscriptionsBySubId` but gone from its channel map. It is accepted as
+  /// unreachable because `queueUnsubscribe(Subscription)` removes from **both**
+  /// maps, so they cannot diverge through any public sequence.
+  ///
+  /// That is a claim about code that can change, so it is pinned rather than
+  /// asserted in prose: a second un-subscribe of an already-confirmed,
+  /// already-removed subscription must report `false`. If a future edit ever
+  /// leaves the by-sub-id entry behind, the scan finds it, this returns `true`,
+  /// and the acceptance is revisited — instead of the family quietly becoming
+  /// reachable while the README still says it is not.
+  @Test
+  void unsubscribingTwiceFindsNothingDangling() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(Commitment.CONFIRMED, key, received::add));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""
+      );
+
+      assertTrue(ws.accountUnsubscribe(Commitment.CONFIRMED, key), "the map-first removal should report true");
+      assertFalse(ws.accountUnsubscribe(Commitment.CONFIRMED, key),
+          "a second un-subscribe found a dangling by-sub-id entry: the two maps diverged, "
+              + "so the accepted defensive-scan family is reachable and needs re-triage");
+    }
+  }
+
   /// A whole array-backed frame takes the zero-copy path: the message is parsed in
   /// place at `position + arrayOffset`. Both terms must survive, so one frame puts
   /// the pad in position and the other slices it into arrayOffset.

@@ -300,20 +300,6 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder webSocketBuilder(final WebSocket.Builder webSocketBuilder);
 
-    /// Clock used for the reconnect throttle and ping pacing, so tests can advance
-    /// time instead of waiting. Defaults to [NanoClock#SYSTEM].
-    ///
-    /// Default methods rather than abstract, so existing implementations of this
-    /// interface keep compiling; the setter throws for an implementation that has
-    /// not opted in rather than silently ignoring the clock.
-    default Builder clock(final NanoClock clock) {
-      throw new UnsupportedOperationException(getClass() + " does not support a NanoClock");
-    }
-
-    default NanoClock clock() {
-      return NanoClock.SYSTEM;
-    }
-
     /// Cap on a single (possibly fragmented) text message, in chars, defaulting to
     /// 2^26 — 67,108,864 chars, a 128 MiB buffer, which a 10 MiB account (the
     /// network's account data cap) base64-encodes well inside. A message the cap

@@ -17,6 +17,7 @@ final class RecordingWebSocket implements WebSocket {
   final List<String> sentText = new ArrayList<>();
   final List<String> closeReasons = new ArrayList<>();
   int pings;
+  long requested;
   boolean aborted;
   boolean outputClosed;
   Throwable failText;
@@ -58,8 +59,12 @@ final class RecordingWebSocket implements WebSocket {
     return CompletableFuture.completedFuture(this);
   }
 
+  /// Recorded rather than ignored: `onOpen`'s `request(Long.MAX_VALUE)` is what
+  /// starts message delivery, and a stub that drops it on the floor makes its
+  /// removal unobservable by accident of the fixture.
   @Override
   public void request(final long n) {
+    requested += n;
   }
 
   @Override

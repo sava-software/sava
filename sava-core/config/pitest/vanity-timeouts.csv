@@ -1,4 +1,11 @@
 # Audited timed-out mutants (class,method,mutator — line-less; the verify warns on
 # timeouts missing from this set). Structural causes: README.md "Timed-out mutants
 # (audited set)".
-software.sava.core.accounts.vanity.SubsequenceRecord,formatCharOptions,RemoveConditionalMutator_ORDER_IF
+software.sava.core.accounts.vanity.SubsequenceRecord,formatCharOptions,RemoveConditionalMutator_ORDER_IF # line 148
+software.sava.core.accounts.vanity.MaskWorker,run,MathMutator # lines 46/54
+software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL_ELSE # lines 50/79
+software.sava.core.accounts.vanity.MaskWorker,run,VoidMethodCallMutator # line 45
+software.sava.core.accounts.vanity.BeginsWithMaskWorker,run,MathMutator # line 38
+software.sava.core.accounts.vanity.BeginsWithMaskWorker,run,RemoveConditionalMutator_EQUAL_ELSE # line 56
+software.sava.core.accounts.vanity.BaseMaskWorker,generateKeyPair,VoidMethodCallMutator # line 234
+software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,RemoveConditionalMutator_EQUAL_ELSE # line 119

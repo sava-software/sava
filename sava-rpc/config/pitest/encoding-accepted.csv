@@ -1,0 +1,18 @@
+!sava-hardening-baseline-schema,1
+software.sava.rpc.json.PrivateKeyEncoding$Parser,createSigner,NakedReceiverMutator,NO_COVERAGE # untriaged # line 137
+software.sava.rpc.json.PrivateKeyEncoding$Parser,createSigner,NakedReceiverMutator,NO_COVERAGE # untriaged # line 138
+software.sava.rpc.json.PrivateKeyEncoding$Parser,createSigner,RemoveConditionalMutator_EQUAL_ELSE,NO_COVERAGE # untriaged # line 133
+software.sava.rpc.json.PrivateKeyEncoding$Parser,createSigner,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 132
+software.sava.rpc.json.PrivateKeyEncoding$Parser,createSigner,RemoveConditionalMutator_EQUAL_IF,NO_COVERAGE # untriaged # line 133
+software.sava.rpc.json.PrivateKeyEncoding$Parser,test,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 153
+software.sava.rpc.json.PrivateKeyEncoding$Parser,test,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 152
+software.sava.rpc.json.PrivateKeyEncoding,fromJsonArray,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 46
+software.sava.rpc.json.PrivateKeyEncoding,fromProperties,NakedReceiverMutator,SURVIVED # untriaged # line 104
+software.sava.rpc.json.PrivateKeyEncoding,fromProperties,NakedReceiverMutator,SURVIVED # untriaged # line 109
+software.sava.rpc.json.PrivateKeyEncoding,fromProperties,NakedReceiverMutator,SURVIVED # untriaged # line 112
+software.sava.rpc.json.PrivateKeyEncoding,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 97
+software.sava.rpc.json.PrivateKeyEncoding,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 101
+software.sava.rpc.json.PrivateKeyEncoding,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 106
+software.sava.rpc.json.PublicKeyEncoding,parseIntArrayEncoded,NullReturnValsMutator,NO_COVERAGE # untriaged # line 30
+software.sava.rpc.json.http.SolanaNetwork,getEndpoint,NullReturnValsMutator,SURVIVED # untriaged # line 20
+software.sava.rpc.json.http.SolanaNetwork,getWebSocketEndpoint,NullReturnValsMutator,SURVIVED # untriaged # line 24

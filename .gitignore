@@ -6,6 +6,7 @@
 !/.github/
 !/.gitignore
 !/.release-please-manifest.json
+!/arcmutate-licence.txt
 !/CHANGELOG.md
 !/LICENSE
 !/README.md

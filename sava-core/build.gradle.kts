@@ -86,20 +86,76 @@ hardening {
     targetTests = "software.sava.core.crypto.*Tests"
   }
   mutation.register("vanity") {
-    // DELIBERATE DEVIATION from the package-wildcard rule: this suite allowlists
-    // the Subsequence pair instead of taking software.sava.core.accounts.vanity.*.
-    // The workers search in an unbounded loop, so every mutant that breaks the
-    // match predicate runs to the PIT timeout instead of failing fast. PIT scores
-    // TIMED_OUT as killed so the ratchet stays correct, but a whole-package suite
-    // would cost a timeout window per such mutant. The mask logic — where a wrong
-    // answer is silent rather than a hang — is here; the workers stay covered by
-    // MaskWorkerTests without being mutated.
-    targetClasses = listOf("software.sava.core.accounts.vanity.Subsequence*")
-    // SubsequenceTests itself matches that prefix
-    excludedClasses = listOf("software.sava.core.accounts.vanity.*Test*")
-    targetTests = "software.sava.core.accounts.vanity.SubsequenceTests"
+    // Widened to the whole package 2026-08-04, retiring the Subsequence-only
+    // allowlist. The allowlist existed because the workers search an unbounded
+    // loop, so a mutant that breaks the match predicate would spin to the PIT
+    // timeout rather than fail fast. That argument is now stale: BaseMaskWorker
+    // carries a bounded-attempts seam (`searchExhausted`, whose javadoc names
+    // tests as its reason for existing) and MaskWorkerTests already drives every
+    // worker with a finite maxSearches, so a broken predicate exhausts the cap
+    // and returns instead of hanging.
+    targetClasses = listOf("software.sava.core.accounts.vanity.*")
+    excludedClasses = listOf(
+      "software.sava.core.accounts.vanity.*Test*",
+      // a test fake named for its role, so it matches no *Test* pattern
+      "software.sava.core.accounts.vanity.FixedSeedSecureRandom"
+    )
+    targetTests = "software.sava.core.accounts.vanity.*Test*"
     // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
     mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
+  }
+  mutation.register("accounts") {
+    // the library's central value types: PublicKey and its byte-array backing,
+    // signers, PDA derivation, and the well-known-address table. A wrong offset
+    // or a reversed comparison here is silent and reaches every caller.
+    targetClasses = listOf("software.sava.core.accounts.*")
+    excludedClasses = listOf(
+      // the wildcard spans dots, so every sub-package with its own suite has to
+      // be subtracted here or two suites would mutate the same classes
+      "software.sava.core.accounts.lookup.*",
+      "software.sava.core.accounts.meta.*",
+      "software.sava.core.accounts.token.*",
+      "software.sava.core.accounts.vanity.*",
+      "software.sava.core.accounts.sysvar.*",
+      "software.sava.core.accounts.pbkdf.*",
+      "software.sava.core.accounts.*Test*"
+    )
+    targetTests = "software.sava.core.accounts.*Test*"
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
+  }
+  mutation.register("sysvar") {
+    // sysvar accounts are parsed from bytes an untrusted node hands back; a
+    // mis-sized field or a skipped bounds check is exactly this repo's threat model
+    targetClasses = listOf("software.sava.core.accounts.sysvar.*")
+    excludedClasses = listOf("software.sava.core.accounts.sysvar.*Test*")
+    targetTests = "software.sava.core.accounts.sysvar.*Test*"
+  }
+  mutation.register("pbkdf") {
+    // key derivation and envelope encryption for stored keys. Deliberately slow
+    // primitives, so the covering tests pin PBKDF2 to MIN_ITERATIONS and hold a
+    // @ResourceLock around memory-hard Argon2id; keep that when adding tests, or
+    // this suite's cost multiplies by the mutant count.
+    targetClasses = listOf("software.sava.core.accounts.pbkdf.*")
+    excludedClasses = listOf("software.sava.core.accounts.pbkdf.*Test*")
+    targetTests = "software.sava.core.accounts.pbkdf.*Test*"
+  }
+  mutation.register("primitives") {
+    // the small cross-cutting types that belong to no larger package: RPC
+    // account filters, instruction discriminators, the serialization contract,
+    // and the ElGamal pubkey wrapper
+    targetClasses = listOf(
+      "software.sava.core.rpc.*",
+      "software.sava.core.programs.*",
+      "software.sava.core.serial.*",
+      "software.sava.core.zk.*"
+    )
+    excludedClasses = listOf(
+      "software.sava.core.rpc.*Test*",
+      "software.sava.core.programs.*Test*",
+      "software.sava.core.serial.*Test*",
+      "software.sava.core.zk.*Test*"
+    )
+    targetTests = "software.sava.core.rpc.*Test*,software.sava.core.programs.*Test*,software.sava.core.serial.*Test*,software.sava.core.zk.*Test*"
   }
   mutation.register("decimal") {
     // lamport and token amount conversion: a shift in the wrong direction or by

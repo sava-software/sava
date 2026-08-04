@@ -19,6 +19,24 @@ hardening {
   // mutant population; this keeps it out of the tool class path too.
   recompileExcludes = listOf("Integ.java")
 
+  mutation.register("encoding") {
+    // key encodings crossing the JSON boundary, plus the request-shaping enums.
+    // RpcEncoding is deliberately missing a jsonParsed constant (AGENTS.md), which
+    // is the kind of API invariant a mutant should have to argue with.
+    targetClasses = listOf(
+      "software.sava.rpc.json.*",
+      "software.sava.rpc.json.http.request.*"
+    )
+    excludedClasses = listOf(
+      // the json.* wildcard spans dots, so the three suites below are subtracted
+      "software.sava.rpc.json.http.client.*",
+      "software.sava.rpc.json.http.response.*",
+      "software.sava.rpc.json.http.ws.*",
+      "software.sava.rpc.json.*Test*"
+    )
+    targetTests = "software.sava.rpc.json.*Test*"
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
+  }
   mutation.register("client") {
     // body decoding, the JSON-RPC envelope gate, and request construction — all of
     // it reading or answering an untrusted node

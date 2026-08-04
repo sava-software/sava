@@ -1,4 +1,5 @@
-software.sava.core.util.DecimalInteger,toDecimal,ConditionalsBoundaryMutator,SURVIVED # line 30
-software.sava.core.util.DecimalInteger,toDecimal,RemoveConditionalMutator_ORDER_IF,SURVIVED # line 30
-software.sava.core.util.DecimalIntegerAmount,amount,ConditionalsBoundaryMutator,SURVIVED # line 12
-software.sava.core.util.DecimalIntegerAmount,amount,RemoveConditionalMutator_ORDER_IF,SURVIVED # line 12
+!sava-hardening-baseline-schema,1
+software.sava.core.util.DecimalInteger,toDecimal,ConditionalsBoundaryMutator,SURVIVED # allocation routing # line 30
+software.sava.core.util.DecimalInteger,toDecimal,RemoveConditionalMutator_ORDER_IF,SURVIVED # allocation routing # line 30
+software.sava.core.util.DecimalIntegerAmount,amount,ConditionalsBoundaryMutator,SURVIVED # allocation routing # line 12
+software.sava.core.util.DecimalIntegerAmount,amount,RemoveConditionalMutator_ORDER_IF,SURVIVED # allocation routing # line 12

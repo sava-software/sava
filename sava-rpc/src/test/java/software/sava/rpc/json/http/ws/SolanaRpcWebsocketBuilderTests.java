@@ -16,8 +16,12 @@ import static org.junit.jupiter.api.Assertions.*;
 /// defaults are the timings a caller inherits without saying anything.
 final class SolanaRpcWebsocketBuilderTests {
 
-  private static SolanaRpcWebsocket.Builder builder() {
-    return SolanaRpcWebsocket.build();
+  /// The concrete builder, not the public interface: `clock`, `executorService` and
+  /// `scheduler` are package-private seams that deliberately do not appear on
+  /// `SolanaRpcWebsocket.Builder`, and every setter here returns the concrete type so
+  /// a chain keeps reaching them.
+  private static SolanaRpcWebsocketBuilder builder() {
+    return new SolanaRpcWebsocketBuilder();
   }
 
   @Test
