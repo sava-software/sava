@@ -1,0 +1,7 @@
+schema	1
+pitest	1.25.9
+junitPlugin	1.2.3
+toolClasspathSha256	32a71568adfa0ab06997905f75b4d0e1cae3d830bd26f73ae8b472cf96ebd3a4
+arcMutateBase	1.7.1
+arcMutateLicenceSha256	749acd033a9cc85969b08802c5cdd307eeeca0604831c1043cb566c309d7f1b5
+arcMutateLicenceExpires	2027-08-15

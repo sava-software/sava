@@ -427,11 +427,21 @@ which 7 are rows this repo has accepted (all `RemoveConditional*` survivors in
 `onText`, `onWholeMessage`). The licensed run reports them as unmatched and offers
 them as prune candidates; they are not kills, and pruning them would delete
 argued acceptances that reappear the moment the certificate is absent or expires.
-Two consequences: read the first licensed run of any suite as a toolchain diff, and
-note that `-PnoMutationHistory` under the *pinned* 21.5.20 plugin removes
-`com.arcmutate:base` outright (fixed in candidate `181b4c5`), so mode snapshots,
-convergence runs and mode-flip-insurance evidence taken with the licence present and
-that pin are measuring a third population again — re-derive them after the bump.
+Read the first licensed run of any suite as a toolchain diff, not as source churn.
+
+**That reading is now machine-checked rather than remembered.** Each record carries a
+`<suite>-pitest-toolchain.tsv` sidecar binding PIT, the JUnit plugin, the ordered tool
+artifacts, the ArcMutate base, and the certificate's own hash and expiry (2027-08-15),
+so licence renewal, expiry, appearance or disappearance is an announced toolchain
+transition that `pitest<Suite>BaselineRebase` adopts deliberately — it can no longer
+arrive disguised as a pile of unexplained prune candidates. This repo asked for that
+binding after measuring the 605/573 gap; it landed in 21.5.22. The stamp and sidecar are
+tool-authored: a hand-written one without its pair is a *torn* record and fails closed.
+`-PnoMutationHistory` disables history reuse only and keeps `com.arcmutate:base` on the
+tool classpath, so ordinary, history-free and certification runs share one licensed
+population — the earlier 21.5.20 behaviour, where the flag silently dropped ArcMutate and
+measured a third population, is fixed. Mode snapshots and convergence runs taken under
+that old pin with the licence present are still void; re-derive them if ever needed.
 
 ## Convergence check — 2026-07-21 (pre-release)
 

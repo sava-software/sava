@@ -82,7 +82,7 @@ Everything sava-specific — which suites exist, what has been measured here, wh
 mutants are accepted and why — lives under "sava-specific hardening facts" after the
 template, and in the documents that section points to.
 
-<!-- hardening-template sha256:4e2be5e1a9dd -->
+<!-- hardening-template sha256:e582607602e8 -->
 
 > - **Scale verification to the change.** Iterate with the module's `test`
 >   task; before handing off, run only the `pitest<Suite>`(s) whose mutated
@@ -107,7 +107,11 @@ template, and in the documents that section points to.
 >   its acceptance, so treat a line-drift advisory whose written argument no
 >   longer fits the code as that swap until shown otherwise. Use the installed
 >   plugin's named writer tasks and heed their candidate previews; never hand-edit
->   record structure or perform a schema migration/rollback without a fleet pin plan.
+>   record structure or provenance stamps. A PIT, PIT-plugin/tool-artifact,
+>   ArcMutate-base, or certificate change uses `pitest<Suite>BaselineRebase`: it
+>   preserves every old row, seeds new rows `# untriaged`, and stamps the reviewed
+>   toolchain only after a successful fresh observation. Perform a schema
+>   migration/rollback only with a fleet pin plan.
 > - Consumer hardening notes contain only local ownership, measurements, acceptance
 >   reasons, and provenance. `AGENTS.md` may carry this exact generated,
 >   digest-pinned template plus those local facts, but no independently maintained
@@ -278,14 +282,26 @@ leaves a baseline only when the same licensed mutant is observed and killed** �
 under one toolchain is not evidence of a kill, and the nine such `ws` rows are itemised
 in `sava-rpc/config/pitest/README.md`.
 
-**Baseline schema.** All fourteen records here are deliberately still
-*legacy-unversioned*, which the current plugin reads as the supported N-1 form.
-`migrateMutationBaselines` (which stamps the schema-1 marker) must not be run for real
-until the root `settings.gradle.kts` **and** `jmh/build.gradle.kts` pins have both moved
-to a schema-aware release; `downgradeMutationBaselines` is the rollback half. The
-round trip was exercised against the unreleased candidate on 2026-08-04: migration added
-only the marker (0 rows canonicalized), a second migration was a byte-for-byte fixed
-point, and downgrade restored every file exactly.
+**Baseline schema.** All fifteen accepted records carry the schema-1 marker, stamped by
+`migrateMutationBaselines` once all three pins had moved together; `downgradeMutationBaselines`
+is the rollback half. The round trip was exercised on 2026-08-04: migration added only the
+marker (0 rows canonicalized), a second migration was a byte-for-byte fixed point, and
+downgrade restored every file exactly. Timeout audit sets stay unversioned by design and
+were byte-identical through all of it.
+
+**Record provenance.** Each accepted record is paired with a plain `<suite>-pitest-version`
+stamp and a `<suite>-pitest-toolchain.tsv` sidecar binding PIT, the JUnit plugin, the
+ordered tool artifacts, the ArcMutate base, and the selected certificate's identity and
+expiry. **Never edit either file by hand** — that is not style advice: hand-writing a stamp
+without its sidecar produces a *torn* pair, which fails closed on every reading path with
+"exactly one of … exists". Both absent is the announced legacy state; anything else is a
+refusal. `pitest<Suite>BaselineRebase` is the only path that writes them, and the only
+sanctioned way to adopt a PIT, tool-artifact, ArcMutate-base or certificate change: it runs
+fresh and history-free, keeps every existing row, seeds genuinely new ones `# untriaged`,
+and stamps provenance only after the observation succeeds. All 17 suites were rebased on
+2026-08-04 and each reported *retained all N accepted row(s); the current population added
+nothing*, so certification now records zero legacy-unbound suites. `BaselineUpdate` is an
+ordinary report rewrite, not a toolchain operation.
 
 **Ruled out here, with the measurement.** `EXPERIMENTAL_BIG_INTEGER` fired zero times in
 every candidate suite (this code constructs and compares Big values but does no Big
