@@ -87,11 +87,20 @@ changes how much is allocated, never what is computed:
 - `Base58.decode` (all six variants): the limb-array sizing
   `limbsLength(to - i)` → `to + i` only over-allocates; `used` from
   `toLimbs` bounds what is read back out.
-- `Base58.limbsLength`: `/ 1_000` → `* 1_000` and `>> 5` → `<< 5` inflate
-  the bit-bound estimate. The formula's contract is "never under-allocate";
-  these push it further over. An allocation-bound assertion could convert
-  this family to killable (json-iterator's `TestAllocation` pattern) —
-  accepted instead because decode has no zero-allocation contract.
+- `Base58.limbsLength` — **killed 2026-08-05, acceptance withdrawn.** These
+  inflated the bit-bound estimate (`/ 1_000` → `* 1_000`, `>> 5` → `<< 5`),
+  returning identical bytes for up to a million times the memory. The old
+  reason — "an allocation-bound assertion could convert this family to
+  killable, accepted instead because decode has no zero-allocation
+  contract" — asked the wrong question. There is no zero-allocation
+  contract, but there *is* a bit bound, and it is stated in the method's own
+  comment: never under-allocate, and round up only to the limb boundary.
+  That is assertable as a value, so no allocation harness was needed:
+  `limbsLength` is package-private and `Base58LimbBoundTests` checks it
+  against an exact `BigInteger` oracle — the minimum limbs holding
+  `58^d - 1` — across every digit count from 1 to 512, in both directions.
+  All six mutants die, including the one that had been in the audited
+  timeout set. See the note on resource-detected mutants below.
 
 **Slow-path / alternate-path routing** — baseline label `# slow path routing`
 — both paths are result-identical, the mutant only changes which one runs:
@@ -369,7 +378,26 @@ Membership is machine-checked: `<suite>-timeouts.csv` holds the line-less
 Per-run counts sit at or below the set size — a dead mutant's covering test
 racing the watchdog can land either detected flavour.
 
-As of 2026-07-26 — 8 members across four suites:
+As of 2026-08-05 — 14 members across four suites (`ed25519` 4, `encoding` 1,
+`tx` 1, `vanity` 8). The set grew when `vanity` widened to its whole package and
+shrank when `Base58.limbsLength` became killable; both movements are recorded
+with their suites below.
+
+**A timeout is not one thing, and the difference decides whether a member
+belongs here at all.** Splitting these by their written cause gives two classes.
+The first is *non-termination*: a loop whose only exit the mutant removed, or a
+lock it never releases. Nothing can assert against it except the watchdog, so it
+is correctly audited and stays — every member below is of this kind. The second
+is *resource*: the mutant returns the identical answer having done far more work,
+and only crawls into the watchdog because allocation or GC caught up with it.
+That is not detection, it is a race, and it reads `TIMED_OUT` under load and
+`SURVIVED` when idle — which is exactly what `Base58.limbsLength` did for weeks.
+A resource mutant is assertable and therefore does not belong in an audited set:
+find the bound the method already claims and check it. Prefer a value assertion
+on that bound over an allocation or timing harness — `limbsLength` needed only
+package-private visibility and an exact `BigInteger` oracle, which cannot flap,
+needs no warm-up, and killed one more mutant than a measured allocation bound
+did. The harness stays what `AGENTS.md` calls it: a last resort.
 
 **ed25519** (4, all `Ed25519Util`; read `TIMED_OUT` identically solo and under
 gate load in the 2026-07-22 mode comparison)
@@ -388,10 +416,14 @@ gate load in the 2026-07-22 mode comparison)
 - `Jex.isValid:571` (`IncrementsMutator`, second `index++` → `index--`): the
   do-while cursor oscillates over the same valid digit pair and never reaches
   `len`.
-- `Base58.limbsLength:94` (`MathMutator`): inflates the limb-count allocation
-  estimate, so the run crawls under allocation/GC instead of failing — the
-  known `SURVIVED`↔`TIMED_OUT` flapper; both baseline copies are flip
-  insurance (see `HARDENING_NOTES.md`, timeout budgets).
+- `Base58.limbsLength:94` — **retired from the set 2026-08-05.** It inflated
+  the limb-count estimate so the run crawled under allocation and GC instead
+  of failing, which is why it flapped `SURVIVED`↔`TIMED_OUT` between a busy
+  and an idle machine. That is not "the loop has no exit"; it is "the method
+  does far more work for the same answer", and unlike a hang it is
+  assertable. `Base58LimbBoundTests` now kills all six mutants outright, so
+  the member matches nothing and both baseline copies were pruned. Kept here
+  as the worked example of the distinction below.
 
 **tx** (1)
 - `AddressLookupTableOverlay.lambda$keysToString$1:128`

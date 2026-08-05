@@ -2,4 +2,3 @@
 # timeouts missing from this set). Structural causes: README.md "Timed-out mutants
 # (audited set)".
 software.sava.core.encoding.Jex,isValid,IncrementsMutator # line 571
-software.sava.core.encoding.Base58,limbsLength,MathMutator # line 94

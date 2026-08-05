@@ -89,7 +89,10 @@ public final class Base58 {
     throw new IllegalArgumentException("Illegal character " + c + " at position " + position);
   }
 
-  private static int limbsLength(final int numDigits) {
+  /// Package-private rather than private so the bit bound can be asserted directly against
+  /// an exact oracle. Over-allocating here returns identical bytes for more memory, which no
+  /// value assertion on `decode` can see — see `Base58LimbBoundTests`.
+  static int limbsLength(final int numDigits) {
     // 5858/1000 > log2(58), +1 rounds the bit bound up, so the limb count never under-allocates.
     return (int) ((numDigits * 5_858L / 1_000 + 1 + 31) >> 5);
   }
