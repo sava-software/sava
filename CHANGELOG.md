@@ -1,5 +1,26 @@
 # Changelog
 
+## [25.8.3](https://github.com/sava-software/sava/compare/25.8.2...25.8.3) (2026-08-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core, rpc:** New fuzz logic and corpora require a correctly configured Jazzer harness in local and CI environments.
+
+### Features
+
+* **core, rpc:** add fuzz targets for ed25519, RPC responses, and WebSocket input ([1611541](https://github.com/sava-software/sava/commit/16115416ea62f8ae0665458d45ddb9780fae0796))
+* **core:** add regression corpus support for base58 and borsh fuzz tests ([e912abc](https://github.com/sava-software/sava/commit/e912abcd30f627345a972cadb657a16880083ed6))
+* **core:** add unsigned integer support and validation for byte utilities ([b548021](https://github.com/sava-software/sava/commit/b5480218a7a9661c18e61ab28269f0745821f98d))
+* **rpc:** add capacity clamping and fuzzing improvements ([141c295](https://github.com/sava-software/sava/commit/141c295043a16d223efe0d0b312a1db405eccf0f))
+* **rpc:** add message size cap enforcement for WebSocket reassembly ([bcf991b](https://github.com/sava-software/sava/commit/bcf991b797e3d037ac23bf315abdcc384aa2fd0a))
+
+
+### Bug Fixes
+
+* **ci:** validate max-fuzz-time input in fuzz.yml ([4739315](https://github.com/sava-software/sava/commit/473931550e0b2070a70818278e8fe88e3d3526b6))
+* **hardening:** update mutation triage labels and seed handling ([326dfe5](https://github.com/sava-software/sava/commit/326dfe50784a00ca42757433ac9692f35bb85c5f))
+
 ## [25.8.2](https://github.com/sava-software/sava/compare/25.8.1...25.8.2) (2026-07-21)
 
 
