@@ -82,7 +82,7 @@ Everything sava-specific — which suites exist, what has been measured here, wh
 mutants are accepted and why — lives under "sava-specific hardening facts" after the
 template, and in the documents that section points to.
 
-<!-- hardening-template sha256:e582607602e8 -->
+<!-- hardening-template sha256:d128cb8208fa -->
 
 > - **Scale verification to the change.** Iterate with the module's `test`
 >   task; before handing off, run only the `pitest<Suite>`(s) whose mutated
@@ -101,6 +101,17 @@ template, and in the documents that section points to.
 >   replacing that label, so the baseline always says which rows are argued
 >   and which are debt. Never run a baseline-update task just to make the build
 >   pass.
+> - **A mutant is a question, not a specification.** Before writing a killing
+>   test, state the externally intended property and an oracle independent of the
+>   current implementation: public contract, protocol specification, caller
+>   invariant, reference implementation, or domain rule. If it contradicts current
+>   behavior, first demonstrate the bug with a regression test that fails against
+>   the unmutated code, then fix production; never add a passing assertion that
+>   merely locks in the bug. At PR or handoff, report each nontrivial behavioral
+>   cluster — not each mutant — as `Property: ... | Oracle: ... | Outcome: missing
+>   assertion / production bug / accepted equivalent`. Test names and assertions
+>   normally carry the durable property; comment only when the oracle or unusual
+>   setup would otherwise be lost, and never embed PIT coordinates or line numbers.
 > - Baseline keys are line-less (`class,method,mutator,STATUS`) — editing
 >   above a mutated method churns nothing, and `# line` tags are review
 >   metadata. A new mutant replacing a killed one at the same key can inherit
@@ -227,7 +238,8 @@ template, and in the documents that section points to.
 >   test inside `check`, so it cannot rot between fuzz runs.
 > - **Run fuzz campaigns explicitly and locally.** `fuzzAll` is derived from every
 >   registered target, so it cannot drift from a hand-written workflow task list;
->   set and record `-PmaxFuzzTime=<seconds>` before release. Scheduled GitHub fuzz
+>   set and record `-PmaxFuzzTime=<seconds>` and
+>   `-PmaxParallelFuzzTargets=<count>` before release. Scheduled GitHub fuzz
 >   workflows are optional and are not release evidence.
 > - **When one thing has two representations, fuzz the differential.** Two
 >   parsers for one config, an encode/decode round trip, a fast path beside a
@@ -263,10 +275,21 @@ all, and the honest reading of a green certification is that every compiled prod
 class sits in some suite's target universe.
 
 **Where the gate runs.** CI runs only `check` — serialized PIT is too slow for hosted
-runners — so `hardeningCertify` and an explicit local `fuzzAll -PmaxFuzzTime=<seconds>`
-campaign are owned by the local release checklist, not by CI. The `fuzz.yml` workflow is
-manual-dispatch only; its scheduled trigger was removed deliberately, and it is
-exploration, never release evidence.
+runners — so `hardeningCertify` and an explicit local `fuzzAll` campaign are owned by the
+local release checklist, not by CI. Give that campaign **both** bounds, and record them
+with the result:
+
+```sh
+./gradlew :sava-core:fuzzAll :sava-rpc:fuzzAll -PmaxFuzzTime=<seconds> -PmaxParallelFuzzTargets=<count>
+```
+
+`-PmaxFuzzTime` bounds each target's depth; `-PmaxParallelFuzzTargets` bounds how many run
+at once, which matters here because seven targets at full width is what turns this machine
+over — and the load-sensitive failure this repo keeps meeting is a PIT `RUN_ERROR`, whose
+whole diagnosis is whether a coordinate repeats on a *quiet* re-run. An unbounded width
+makes that diagnosis harder to trust. Pick a width deliberately rather than inheriting the
+default. The `fuzz.yml` workflow is manual-dispatch only; its scheduled trigger was removed
+deliberately, and it is exploration, never release evidence.
 
 **ArcMutate licence.** The repo-root `arcmutate-licence.txt` is a signed `OSSS`
 certificate scoped to `software.sava.*`, expiring 15/08/2027; it is committed on purpose
@@ -330,6 +353,16 @@ in opposite directions, the published-library rule wins — the ratchet never ge
 motivate an API edit. Second, *narrowing* published surface is still a real break and
 still needs the owner to say so; the fact that the right answer here happened to shrink
 the interface does not make it a decision an agent gets to take on mutation evidence.
+
+**How that squares with contract-first triage.** The template's "a mutant is a question"
+bullet says never to add a passing assertion that merely locks in a bug — and this repo's
+published-library rule says to pin surprising behaviour with a test and report it. They
+agree on the analysis and differ only on who acts: state the property and its independent
+oracle either way, and when the oracle contradicts the code, *say so in the test* rather
+than dressing the current behaviour up as intended. `DiscriminatorTests` is the worked
+example — `createDiscriminator(byte[])` aliases the caller's array while the ranged
+overloads copy, so the test names that asymmetry as current-behaviour-pending-an-owner-fix
+instead of asserting it is correct. A fix here is additive and stays the owner's call.
 
 ## Verifying your own work
 
