@@ -26,6 +26,13 @@ final class SubscribeOverloadTests {
   private static final Timings TIMINGS = new Timings(60_000, 60_000, 60_000);
   private static final PublicKey KEY =
       PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+  /// `signatureSubscribe` decodes what it is handed, so these are real 64 byte signatures
+  /// rather than labels; the overloads only need them to be distinct from one another.
+  private static final String SIG_A = "mHhyPe2Am14FUfW89ak1Hut2cALXZyinSfJSoFShaPGjsNxYbLrZDTJwGoM66WREwYNuDzhTAa1J7Fa6EDr4k5i";
+  private static final String SIG_B = "2WMyoJh7W6GFmv4dA8yiv62VZyn7RiK8vxtNph9w3b6pwfE1KP71bnAxo67skP1XcsyEtpBxbjhX7sgHbNE3mPok";
+  private static final String SIG_C = "3FSFdDkCqRXTJMTkC8911PDPDKhimUW89xJYQJ7f7ZjhKUAmGr2YNfM8C1owM3zwGnN7jnXcGYE3gH8xKuC3bbAK";
+  private static final String SIG_D = "3zWXT8oJAknepnWYsXiEyJj5x9wqCEQemLvK5ygVFZxYxorBGQiUTLDCtr21EE9y7KUG49yfSy29sLYCRgGgT6Ta";
+  private static final String SIG_E = "4jaoH3rPTo77TvxkmGvrYPhfEArQ9zQrpMCUgFUKd9VWBszLmCv2sE45RuhrVjcU7Cm6S4iLQSribqpMXZKRNjob";
 
   private static SolanaJsonRpcWebsocket websocket() {
     return new SolanaJsonRpcWebsocket(
@@ -55,24 +62,24 @@ final class SubscribeOverloadTests {
   @Test
   void signatureSubscribeDefaultsReceivedNotificationOffOutsideProcessed() {
     try (final var ws = websocket()) {
-      assertTrue(ws.signatureSubscribe("sigA", (final TxResult _) -> {
+      assertTrue(ws.signatureSubscribe(SIG_A, (final TxResult _) -> {
       }));
-      assertFalse(ws.signatureSubscribe("sigA", (final TxResult _) -> {
+      assertFalse(ws.signatureSubscribe(SIG_A, (final TxResult _) -> {
       }), "the duplicate must be rejected through the same overload");
       assertEquals("""
-          {"jsonrpc":"2.0","id":2,"method":"signatureSubscribe","params":["sigA",{"commitment":"confirmed","enableReceivedNotification":false}]}""", onlyFrame(ws));
+          {"jsonrpc":"2.0","id":2,"method":"signatureSubscribe","params":["%s",{"commitment":"confirmed","enableReceivedNotification":false}]}""".formatted(SIG_A), onlyFrame(ws));
     }
   }
 
   @Test
   void signatureSubscribeProcessedCommitmentEnablesReceivedNotification() {
     try (final var ws = websocket()) {
-      assertTrue(ws.signatureSubscribe(Commitment.PROCESSED, "sigB", (final TxResult _) -> {
+      assertTrue(ws.signatureSubscribe(Commitment.PROCESSED, SIG_B, (final TxResult _) -> {
       }));
-      assertFalse(ws.signatureSubscribe(Commitment.PROCESSED, "sigB", (final TxResult _) -> {
+      assertFalse(ws.signatureSubscribe(Commitment.PROCESSED, SIG_B, (final TxResult _) -> {
       }));
       assertEquals("""
-          {"jsonrpc":"2.0","id":2,"method":"signatureSubscribe","params":["sigB",{"commitment":"processed","enableReceivedNotification":true}]}""", onlyFrame(ws));
+          {"jsonrpc":"2.0","id":2,"method":"signatureSubscribe","params":["%s",{"commitment":"processed","enableReceivedNotification":true}]}""".formatted(SIG_B), onlyFrame(ws));
     }
   }
 
@@ -80,32 +87,32 @@ final class SubscribeOverloadTests {
   void signatureSubscribeOnSubOverloadsCarryTheirFlags() {
     try (final var ws = websocket()) {
       final var onSub = new AtomicReference<Subscription<TxResult>>();
-      assertTrue(ws.signatureSubscribe("sigC", onSub::set, _ -> {
+      assertTrue(ws.signatureSubscribe(SIG_C, onSub::set, _ -> {
       }));
-      assertFalse(ws.signatureSubscribe("sigC", onSub::set, _ -> {
+      assertFalse(ws.signatureSubscribe(SIG_C, onSub::set, _ -> {
       }));
-      assertTrue(ws.signatureSubscribe("sigD", true, null, _ -> {
+      assertTrue(ws.signatureSubscribe(SIG_D, true, null, _ -> {
       }));
-      assertFalse(ws.signatureSubscribe("sigD", true, null, _ -> {
+      assertFalse(ws.signatureSubscribe(SIG_D, true, null, _ -> {
       }));
-      assertTrue(ws.signatureSubscribe(Commitment.PROCESSED, "sigE", null, _ -> {
+      assertTrue(ws.signatureSubscribe(Commitment.PROCESSED, SIG_E, null, _ -> {
       }));
-      assertFalse(ws.signatureSubscribe(Commitment.PROCESSED, "sigE", null, _ -> {
+      assertFalse(ws.signatureSubscribe(Commitment.PROCESSED, SIG_E, null, _ -> {
       }));
 
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
       assertEquals(List.of("""
-              {"jsonrpc":"2.0","id":2,"method":"signatureSubscribe","params":["sigC",{"commitment":"confirmed","enableReceivedNotification":false}]}""", """
-              {"jsonrpc":"2.0","id":3,"method":"signatureSubscribe","params":["sigD",{"commitment":"confirmed","enableReceivedNotification":true}]}""", """
-              {"jsonrpc":"2.0","id":4,"method":"signatureSubscribe","params":["sigE",{"commitment":"processed","enableReceivedNotification":true}]}"""
+              {"jsonrpc":"2.0","id":2,"method":"signatureSubscribe","params":["%s",{"commitment":"confirmed","enableReceivedNotification":false}]}""".formatted(SIG_C), """
+              {"jsonrpc":"2.0","id":3,"method":"signatureSubscribe","params":["%s",{"commitment":"confirmed","enableReceivedNotification":true}]}""".formatted(SIG_D), """
+              {"jsonrpc":"2.0","id":4,"method":"signatureSubscribe","params":["%s",{"commitment":"processed","enableReceivedNotification":true}]}""".formatted(SIG_E)
           ), socket.sentText
       );
 
       // the onSub callback fires once the frame has been written
       assertNotNull(onSub.get());
       assertEquals(2, onSub.get().msgId());
-      assertEquals("sigC", onSub.get().key());
+      assertEquals(SIG_C, onSub.get().key());
     }
   }
 

@@ -44,4 +44,21 @@ final class ParseCustomErrorCodeTests {
     assertEquals(7, ji.readInt());
     assertFalse(ji.readArray());
   }
+
+  /// JSON-RPC member order carries no meaning, and `data`'s interpretation depends on `code`:
+  /// when data arrived first it was parsed against code 0, so valid structured details were
+  /// misclassified as Unknown. Both orders must classify identically.
+  @Test
+  void errorMemberOrderDoesNotChangeTheClassification() {
+    final var codeFirst = JsonRpcException.parseException(JsonIterator.parse(
+        """
+            {"code":-32005,"message":"unhealthy","data":{"numSlotsBehind":42}}"""), OptionalLong.empty());
+    final var dataFirst = JsonRpcException.parseException(JsonIterator.parse(
+        """
+            {"data":{"numSlotsBehind":42},"code":-32005,"message":"unhealthy"}"""), OptionalLong.empty());
+
+    assertEquals(-32005L, dataFirst.code());
+    assertEquals(codeFirst.customError(), dataFirst.customError());
+    assertEquals(new RpcCustomError.NodeUnhealthy(OptionalLong.of(42)), dataFirst.customError());
+  }
 }

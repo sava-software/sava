@@ -6,6 +6,7 @@ import software.sava.rpc.json.http.request.Commitment;
 import java.net.URI;
 import java.net.http.WebSocket;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
@@ -25,11 +26,30 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   /// sending a bigger account. Package-private on purpose: the public surface is
   /// the builder knob, not the constant.
   static final int DEFAULT_MAX_MESSAGE_LENGTH = 1 << 26;
+  /// Default budget for the whole handshake — DNS, TCP, TLS, and the HTTP upgrade — in millis.
+  ///
+  /// This was previously the reconnect delay, 3s, which is a plausible number for pacing retries
+  /// and a tight one for a cold TLS handshake to a shared public endpoint such as
+  /// api.mainnet-beta.solana.com, where a request may also queue behind rate limiting. Exceeding
+  /// it does not yield a slow connection, it yields a failed one, then a throttled retry, then
+  /// backoff — so a latency spike became a reconnect storm against the endpoint least able to
+  /// absorb it.
+  ///
+  /// A warm handshake to a nearby endpoint completes well inside a second, so this is roughly an
+  /// order of magnitude of headroom over the normal case while still failing fast enough to be
+  /// worth retrying: a handshake that has not completed in this long is a node worth giving up
+  /// on rather than waiting out.
+  static final long DEFAULT_CONNECT_TIMEOUT = 8_000;
 
   private int maxMessageLength = DEFAULT_MAX_MESSAGE_LENGTH;
+  private long connectTimeout = DEFAULT_CONNECT_TIMEOUT;
   private long reConnectDelay = 3_000;
   private long pingDelay = 15_000;
   private long subscriptionAndPingCheckDelay = 2_000;
+  /// Unset until given, so it can track a caller-supplied pingDelay instead of a stale default.
+  private long keepAliveDelay = 0;
+  /// Unset until given, for the same reason: it follows reConnectDelay unless stated.
+  private long subscriptionResendDelay = 0;
   private SolanaAccounts solanaAccounts = SolanaAccounts.MAIN_NET;
   private Commitment commitment = Commitment.CONFIRMED;
   private Consumer<SolanaRpcWebsocket> onOpen;
@@ -43,10 +63,18 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
 
   @Override
   public SolanaRpcWebsocket create() {
+    // Fail here, not later: the constructor starts the check loop on a non-daemon thread before
+    // anything dereferences the endpoint, so an unset uri otherwise surfaces as an unlabelled
+    // NPE from inside buildAsync with a stray thread left running.
+    Objects.requireNonNull(wsUri, "uri is required to create a websocket");
+    Objects.requireNonNull(webSocketBuilder, "webSocketBuilder is required to create a websocket");
     return new SolanaJsonRpcWebsocket(
         wsUri, solanaAccounts, commitment,
-        webSocketBuilder.connectTimeout(Duration.ofMillis(reConnectDelay)),
-        new Timings(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay),
+        webSocketBuilder.connectTimeout(Duration.ofMillis(connectTimeout)),
+        // Through the getters, so the unset-means-derive rule lives in one place and what this
+        // builds is exactly what those getters report.
+        new Timings(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay,
+            keepAliveDelay(), subscriptionResendDelay()),
         maxMessageLength,
         clock == null ? NanoClock.SYSTEM : clock,
         executorService,
@@ -70,6 +98,11 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   }
 
   @Override
+  public long connectTimeout() {
+    return connectTimeout;
+  }
+
+  @Override
   public long reConnectDelay() {
     return reConnectDelay;
   }
@@ -77,6 +110,18 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   @Override
   public long pingDelay() {
     return pingDelay;
+  }
+
+  @Override
+  public long keepAliveDelay() {
+    return keepAliveDelay > 0 ? keepAliveDelay : Timings.keepAliveFor(pingDelay);
+  }
+
+  @Override
+  public long subscriptionResendDelay() {
+    return subscriptionResendDelay > 0
+        ? subscriptionResendDelay
+        : Timings.resendDelayFor(reConnectDelay, subscriptionAndPingCheckDelay);
   }
 
   @Override
@@ -165,6 +210,18 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
     return maxMessageLength;
   }
 
+  /// How long the whole handshake may take. Separate from [#reConnectDelay(long)], which paces
+  /// retries: a handshake budget and a retry cadence have no reason to be the same number, and
+  /// tuning one used to move the other.
+  @Override
+  public SolanaRpcWebsocketBuilder connectTimeout(final long connectTimeout) {
+    if (connectTimeout <= 0) {
+      throw new IllegalArgumentException("connectTimeout must be positive: " + connectTimeout);
+    }
+    this.connectTimeout = connectTimeout;
+    return this;
+  }
+
   @Override
   public SolanaRpcWebsocketBuilder reConnectDelay(final long reConnectDelay) {
     this.reConnectDelay = reConnectDelay;
@@ -174,6 +231,42 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   @Override
   public SolanaRpcWebsocketBuilder pingDelay(final long pingDelay) {
     this.pingDelay = pingDelay;
+    return this;
+  }
+
+  /// How long this end may be silent before it pokes the peer. Defaults to a multiple of the ping
+  /// delay, so tuning only the ping delay still moves this proportionately.
+  ///
+  /// Set it explicitly when something in the path enforces client liveness — that is, ages the
+  /// connection on what it receives *from us*. An ordinary proxy or load balancer is not that:
+  /// those reset on traffic in either direction, so an inbound-busy connection never looks idle
+  /// to them, and when both ends go quiet [Timings#pingDelay()] fires first. See
+  /// [Timings#keepAliveDelay()] for why the derived default is proportional rather than capped.
+  @Override
+  public SolanaRpcWebsocketBuilder keepAliveDelay(final long keepAliveDelay) {
+    if (keepAliveDelay <= 0) {
+      // Zero is how this records "not given", so accepting it would hand back the derived
+      // default while looking like it took the caller's answer.
+      throw new IllegalArgumentException("keepAliveDelay must be positive: " + keepAliveDelay);
+    }
+    this.keepAliveDelay = keepAliveDelay;
+    return this;
+  }
+
+  /// How long a FAILED subscription send waits before it is retried, in milliseconds — and,
+  /// times four, the unanswered-request deadline that replaces the connection. Defaults to the
+  /// reconnect delay floored at the check delay. Successfully sent requests are never re-sent
+  /// on their own connection; see the interface note. This delay also paces replay after a
+  /// reconnect — a re-queued subscription keeps its last attempt stamp, so a large value
+  /// chosen to space out retries delays the fresh connection's replay by the same window.
+  @Override
+  public SolanaRpcWebsocketBuilder subscriptionResendDelay(final long subscriptionResendDelay) {
+    if (subscriptionResendDelay <= 0) {
+      // Zero is how this records "not given", so accepting it would hand back the derived
+      // default while looking like it took the caller's answer.
+      throw new IllegalArgumentException("subscriptionResendDelay must be positive: " + subscriptionResendDelay);
+    }
+    this.subscriptionResendDelay = subscriptionResendDelay;
     return this;
   }
 

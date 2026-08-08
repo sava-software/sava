@@ -159,11 +159,16 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
     }
   }
 
-  /// Flushing an un-subscription counts as the cycle's write — it suppresses the
-  /// ping the cycle would otherwise send — and the flush must not repeat: the
-  /// queued frame is written exactly once.
+  /// A queued un-subscription is written exactly once, however many flush cycles run.
+  ///
+  /// This test used to also assert that the flush suppressed the cycle's ping, back when a
+  /// pending un-subscription gated pinging. That gate is gone, and the assertion had become
+  /// unfalsifiable rather than merely obsolete: the flush is driven through `onPong`, an
+  /// inbound handler which has no path that sends a ping, so `socket.pings` was structurally
+  /// zero no matter what the production code did. Asserting it read as coverage of the
+  /// suppression contract while proving nothing about it.
   @Test
-  void flushedUnsubscriptionSuppressesThePingAndIsNotResent() {
+  void aFlushedUnsubscriptionIsNotResent() {
     final var clock = new TestClock();
     try (final var ws = websocket(clock)) {
       assertTrue(ws.logsSubscribe(KEY, _ -> {
@@ -176,7 +181,6 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
 
       clock.advanceMillis(TIMINGS.pingDelay() + 1);
       flush(ws, socket);
-      assertEquals(0, socket.pings, "the flushed un-subscription is this cycle's write");
       flush(ws, socket);
 
       final long unsubFrames = socket.sentText.stream().filter(m -> m.contains("logsUnsubscribe")).count();
@@ -231,6 +235,64 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
       assertEquals(1, received.size());
 
       assertTrue(ws.accountUnsubscribe(KEY), "the exact match still unsubscribes");
+    }
+  }
+
+  /// Flushing a queued un-subscription is this end putting a frame on the wire, so it feeds the
+  /// keep-alive clock: 119s of shared silence, a flush, then 2s — past the 120s keep-alive as
+  /// measured from the open, but two seconds from the flush. An unstamped flush would ping here.
+  @Test
+  void aFlushedUnsubscriptionCountsAsAnOutboundFrame() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock)) {
+      assertTrue(ws.logsSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":555,"id":2}""");
+      assertTrue(ws.logsUnsubscribe(KEY));
+
+      clock.advanceMillis(119_000L);
+      flush(ws, socket);
+      final long unsubFrames = socket.sentText.stream().filter(m -> m.contains("logsUnsubscribe")).count();
+      assertEquals(1, unsubFrames, "the flush must actually have written the frame: " + socket.sentText);
+
+      clock.advanceMillis(2_000L);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(0, socket.pings, "the flushed un-subscription was this end's last outbound frame");
+    }
+  }
+
+  /// Queued un-subscriptions flush in subId order — a specified property, not hash luck. The
+  /// ids are chosen so a hash-ordered map would invert them (17 lands in a lower bin than 2),
+  /// which is exactly what this pins: deterministic wire order survives a well-meaning swap to
+  /// ConcurrentHashMap only if a test can tell the difference.
+  @Test
+  void queuedUnsubscriptionsFlushInSubIdOrder() {
+    try (final var ws = websocket()) {
+      final var program = PublicKey.fromBase58Encoded("GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc");
+      assertTrue(ws.logsSubscribe(KEY, _ -> {
+      }));
+      assertTrue(ws.programSubscribe(program, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":17,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":2,"id":3}""");
+
+      assertTrue(ws.logsUnsubscribe(KEY));
+      assertTrue(ws.programUnsubscribe(program));
+
+      final int before = socket.sentText.size();
+      flush(ws, socket);
+      assertEquals(before + 2, socket.sentText.size());
+      assertTrue(socket.sentText.get(before).contains("[2]"),
+          "lowest subId flushes first: " + socket.sentText);
+      assertTrue(socket.sentText.get(before + 1).contains("[17]"),
+          "highest subId flushes last: " + socket.sentText);
     }
   }
 }

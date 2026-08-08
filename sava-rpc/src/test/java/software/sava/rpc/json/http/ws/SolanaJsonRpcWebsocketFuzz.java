@@ -149,9 +149,11 @@ public final class SolanaJsonRpcWebsocketFuzz {
       }
 
       // whatever the frames did, the state machine must have recovered: a canonical
-      // notification either dispatches, or the fuzzed message legitimately removed
-      // subscription 11 (a signatureNotification routed to it does) and the unknown-id
-      // auto-unsubscribe answers instead — exactly one of the two, and never a throw
+      // notification either dispatches, or the fuzzed frames legitimately unsubscribed
+      // subscription 11 themselves and the unknown-id auto-unsubscribe answers instead —
+      // exactly one of the two, and never a throw. A fuzzed signatureNotification naming
+      // subscription 11 no longer removes it: dispatch is channel-correlated, so one
+      // channel's frame cannot terminally remove another channel's registration
       final int before = received.size();
       final int sentBefore = socket.sentText.size();
       ws.onText(socket, CharBuffer.wrap(LIVENESS_NOTIFICATION), true);

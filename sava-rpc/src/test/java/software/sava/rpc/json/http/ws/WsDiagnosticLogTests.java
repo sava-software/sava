@@ -122,6 +122,8 @@ final class WsDiagnosticLogTests {
       final var pingPayload = "ping-payload-4711";
       final var pongPayload = "pong-payload-8123";
 
+      // the socket must be current: control frames from a never-installed socket are rejected
+      ws.onOpen(socket);
       final var records = capture(Level.ALL, () -> {
         ws.onPing(socket, ByteBuffer.wrap(pingPayload.getBytes(ISO_8859_1)));
         ws.onPong(socket, ByteBuffer.wrap(pongPayload.getBytes(ISO_8859_1)));
@@ -139,7 +141,9 @@ final class WsDiagnosticLogTests {
   void closeLogsTheReasonAndDistinguishesABlankOne() {
     final var withReason = capture(Level.ALL, () -> {
       try (final var ws = createWebsocket()) {
-        ws.onClose(new RecordingWebSocket(), 1011, "upstream exploded");
+        final var socket = new RecordingWebSocket();
+        ws.onOpen(socket);
+        ws.onClose(socket, 1011, "upstream exploded");
       }
     });
     assertTrue(messages(withReason).contains("upstream exploded"),
@@ -147,7 +151,9 @@ final class WsDiagnosticLogTests {
 
     final var blankReason = capture(Level.ALL, () -> {
       try (final var ws = createWebsocket()) {
-        ws.onClose(new RecordingWebSocket(), 1011, "  ");
+        final var socket = new RecordingWebSocket();
+        ws.onOpen(socket);
+        ws.onClose(socket, 1011, "  ");
       }
     });
     // asserting only that the two differ would be satisfied by logging *nothing*
@@ -162,7 +168,9 @@ final class WsDiagnosticLogTests {
     // null` operand false would dereference it, so the branch is not a free pass
     final var nullReason = capture(Level.ALL, () -> {
       try (final var ws = createWebsocket()) {
-        assertDoesNotThrow(() -> ws.onClose(new RecordingWebSocket(), 1011, null));
+        final var socket = new RecordingWebSocket();
+        ws.onOpen(socket);
+        assertDoesNotThrow(() -> ws.onClose(socket, 1011, null));
       }
     });
     assertFalse(nullReason.isEmpty(), "a null reason logged nothing at all");
@@ -221,10 +229,12 @@ final class WsDiagnosticLogTests {
       socket.failPing = new IllegalStateException("ping rejected");
       ws.onOpen(socket);
 
-      // the ping is sent by the pending-subscription pass once the window elapses
+      // Driven through the check seam rather than an inbound frame: any frame from the peer is
+      // evidence it is there, which restarts the ping window, so it cannot also be used to make
+      // a ping fall due.
       final var records = capture(Level.ALL, () -> {
         clock.advanceMillis(TIMINGS.pingDelay() + 1);
-        ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+        assertDoesNotThrow(() -> ws.checkCycle(0L));
       });
       assertEquals(1, socket.pings, "no ping was attempted");
 

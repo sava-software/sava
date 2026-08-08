@@ -10,6 +10,21 @@ import java.net.http.HttpClient;
 
 public final class SubscribeToLookupTables {
 
+  /// A failed handshake is reported through the returned future — with no established socket
+  /// there may be no onError to retry it — so a durable client watches the future and tries
+  /// again; the implementation's reconnect throttle paces the recursion.
+  private static void connect(final SolanaRpcWebsocket webSocket) {
+    final var attempt = webSocket.connect();
+    if (attempt != null) {
+      attempt.whenComplete((_, throwable) -> {
+        if (throwable != null) {
+          System.err.println("Connect failed, retrying: " + throwable);
+          connect(webSocket);
+        }
+      });
+    }
+  }
+
   static void main() throws InterruptedException {
     try (final var httpClient = HttpClient.newHttpClient()) {
 
@@ -18,10 +33,21 @@ public final class SubscribeToLookupTables {
           .webSocketBuilder(httpClient)
           .commitment(Commitment.CONFIRMED)
           .onOpen(_ -> System.out.println("Websocket connected"))
-          .onClose((_, statusCode, reason) -> System.out.format("%d: %s%n", statusCode, reason))
-          .onError((_, throwable) -> throwable.printStackTrace())
-          .onSendTextError((_, throwable) -> throwable.printStackTrace())
-          .onPingError((_, throwable) -> throwable.printStackTrace())
+          // The examples are de-facto documentation, so they carry the minimal wiring a
+          // long-lived consumer needs: a server-side close or a transport error reconnects —
+          // logging alone would leave the check loop pinging a dead socket forever — while
+          // send and ping failures are transient and only logged; the implementation retries
+          // them on its own.
+          .onClose((ws, statusCode, reason) -> {
+            System.out.format("%d: %s — reconnecting%n", statusCode, reason);
+            connect(ws);
+          })
+          .onError((ws, throwable) -> {
+            throwable.printStackTrace(System.err);
+            connect(ws);
+          })
+          .onSendTextError((_, throwable) -> throwable.printStackTrace(System.err))
+          .onPingError((_, throwable) -> throwable.printStackTrace(System.err))
           .create();
 
       webSocket.programSubscribe(
@@ -33,9 +59,10 @@ public final class SubscribeToLookupTables {
           }
       );
 
-      webSocket.connect().join();
-
-      Thread.sleep(Integer.MAX_VALUE);
+      try (webSocket) {
+        connect(webSocket);
+        Thread.sleep(Integer.MAX_VALUE);
+      }
     }
   }
 }

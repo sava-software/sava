@@ -12,6 +12,11 @@ import java.util.concurrent.CompletableFuture;
 /// futures fail, driving the error-callback paths; `throwText` instead throws
 /// synchronously from `sendText`, driving the check loop's unhandled-exception
 /// funnel. The attempt is still recorded in every case.
+///
+/// `deferPings` holds each ping's future open instead of settling it, so a test can choose when
+/// a ping resolves relative to later cycles. The rollback on ping failure runs on whichever
+/// thread completes that future, and its ordering against a subsequent ping is the whole point
+/// of the compare-and-set guarding it — an ordering no synchronously settled future can produce.
 final class RecordingWebSocket implements WebSocket {
 
   final List<String> sentText = new ArrayList<>();
@@ -23,12 +28,24 @@ final class RecordingWebSocket implements WebSocket {
   Throwable failText;
   Throwable failPing;
   RuntimeException throwText;
+  RuntimeException throwPing;
+  boolean deferPings;
+  final List<CompletableFuture<WebSocket>> deferredPings = new ArrayList<>();
+  /// Holds each text send's future open, so a test drives the one-outstanding-send chain
+  /// deliberately: the next queued frame goes out only when the test settles its predecessor.
+  boolean deferTexts;
+  final List<CompletableFuture<WebSocket>> deferredTexts = new ArrayList<>();
 
   @Override
   public CompletableFuture<WebSocket> sendText(final CharSequence data, final boolean last) {
     sentText.add(data.toString());
     if (throwText != null) {
       throw throwText;
+    }
+    if (deferTexts) {
+      final var deferred = new CompletableFuture<WebSocket>();
+      deferredTexts.add(deferred);
+      return deferred;
     }
     return failText == null
         ? CompletableFuture.completedFuture(this)
@@ -43,6 +60,14 @@ final class RecordingWebSocket implements WebSocket {
   @Override
   public CompletableFuture<WebSocket> sendPing(final ByteBuffer message) {
     ++pings;
+    if (throwPing != null) {
+      throw throwPing;
+    }
+    if (deferPings) {
+      final var deferred = new CompletableFuture<WebSocket>();
+      deferredPings.add(deferred);
+      return deferred;
+    }
     return failPing == null
         ? CompletableFuture.completedFuture(this)
         : CompletableFuture.failedFuture(failPing);
@@ -85,5 +110,8 @@ final class RecordingWebSocket implements WebSocket {
   @Override
   public void abort() {
     aborted = true;
+    // The JDK reports isOutputClosed() == true after abort(); without this, a close() after an
+    // abort recorded a close frame on an aborted socket — a sequence the real JDK cannot produce.
+    outputClosed = true;
   }
 }

@@ -23,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.*;
 final class SolanaJsonRpcWebsocketTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");
-  // Large delays keep the background subscription/ping thread from interleaving writes with the test thread.
+  // Large delays keep the check cycle's resend/ping gates closed unless a test steps the
+  // clock deliberately; the RecordingExecutor never runs the loop, so no thread interleaves.
   private static final Timings TIMINGS = new Timings(60_000, 60_000, 60_000);
 
   private static SolanaJsonRpcWebsocket createWebsocket() {
@@ -102,12 +103,13 @@ final class SolanaJsonRpcWebsocketTests {
     }
   }
 
-  /// An inbound notification is a write opportunity: after dispatch,
-  /// `lockAndHandlePendingSubscriptions` must flush any subscribe frames queued
-  /// since the last write — with no background thread, inbound traffic is what
-  /// drives them out.
+  /// An inbound notification is NOT a write opportunity. Dispatch used to run a full write
+  /// cycle — lock, pending scan, ping gates — after every message, which on a high-frequency
+  /// subscription put a lock acquisition on the hot path to pay for work the check loop
+  /// already owns: subscribes and unsubscribes signal the loop, so their frames go out at the
+  /// signal, not at the next inbound frame. The notification must dispatch and do nothing else.
   @Test
-  void notificationDispatchFlushesPendingSubscriptions() {
+  void notificationDispatchDoesNotDriveWrites() {
     try (final var ws = createWebsocket()) {
       final var confirmed = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
       final var received = new ArrayList<AccountInfo<byte[]>>();
@@ -128,11 +130,16 @@ final class SolanaJsonRpcWebsocketTests {
       );
 
       assertEquals(1, received.size());
+      assertEquals(sentBefore, socket.sentText.size(),
+          "a notification must not run a write cycle: " + socket.sentText);
+
+      // the check cycle — which the subscribe signalled — is what sends it
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertTrue(
           socket.sentText.stream().skip(sentBefore)
               .anyMatch(m -> m.contains("\"method\":\"accountSubscribe\"")
                   && m.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")),
-          "pending subscribe frame not flushed by the notification: " + socket.sentText
+          "the signalled check cycle flushes the pending subscribe: " + socket.sentText
       );
     }
   }
@@ -626,7 +633,8 @@ final class SolanaJsonRpcWebsocketTests {
       final var roots = new ArrayList<Long>();
 
       assertTrue(ws.slotSubscribe(slots::add));
-      // A rejected duplicate still consumes a message id.
+      // A rejected duplicate no longer consumes a message id: occupancy is checked before the
+      // id is minted, so the sequence stays dense.
       assertFalse(ws.slotSubscribe(slots::add));
       assertTrue(ws.rootSubscribe(roots::add));
       assertFalse(ws.rootSubscribe(roots::add));
@@ -636,7 +644,7 @@ final class SolanaJsonRpcWebsocketTests {
 
       assertEquals(List.of("""
               {"jsonrpc":"2.0","id":2,"method":"slotSubscribe"}""", """
-              {"jsonrpc":"2.0","id":4,"method":"rootSubscribe"}"""
+              {"jsonrpc":"2.0","id":3,"method":"rootSubscribe"}"""
           ), socket.sentText
       );
 
@@ -644,7 +652,7 @@ final class SolanaJsonRpcWebsocketTests {
           {"jsonrpc":"2.0","result":0,"id":2}"""
       );
       feed(ws, socket, """
-          {"jsonrpc":"2.0","result":1,"id":4}"""
+          {"jsonrpc":"2.0","result":1,"id":3}"""
       );
 
       feed(ws, socket, """
@@ -703,14 +711,21 @@ final class SolanaJsonRpcWebsocketTests {
       assertTrue(ws.unsubscribe("voteNotification", "vote"));
       assertFalse(ws.unsubscribe("voteNotification", "vote"));
 
-      // The next notification for the forgotten subscription id flushes the queued un-subscription.
+      // The unsubscribe signalled the check cycle, and the cycle — not the next inbound
+      // notification — is what flushes the queued un-subscription: dispatch is a hot-path read
+      // and no longer runs write cycles.
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals("""
+          {"jsonrpc":"2.0","id":3,"method":"voteUnsubscribe","params":[99]}""", socket.sentText.getLast()
+      );
+
+      // a late notification for the fully retired method dispatches nowhere and writes nothing
+      final int sentAfterFlush = socket.sentText.size();
       feed(ws, socket, """
           {"jsonrpc":"2.0","method":"voteNotification","params":{"result":{"hash":"8Rshv2oMkPu5E4opXTRyuyBeZBqQ4S477VG26wUTFxUM","slots":[1236],"timestamp":null},"subscription":99}}"""
       );
       assertEquals(List.of(1234L), received);
-      assertEquals("""
-          {"jsonrpc":"2.0","id":3,"method":"voteUnsubscribe","params":[99]}""", socket.sentText.getLast()
-      );
+      assertEquals(sentAfterFlush, socket.sentText.size());
     }
   }
 
@@ -753,7 +768,9 @@ final class SolanaJsonRpcWebsocketTests {
       final var txResults = new ArrayList<TxResult>();
       final var votes = new ArrayList<Long>();
       assertTrue(ws.accountSubscribe(key, accounts::add));
-      assertTrue(ws.signatureSubscribe("sigF", txResults::add));
+      assertTrue(ws.signatureSubscribe(
+          "5Uf53Zoxj9qrhRxrSSzFeRxcrALLupEP686yE68fXQUR6HsM92hbhp9vSoFLRGhxb4tLNDKvqRVXSVeGn5K6nYYi",
+          txResults::add));
       assertTrue(ws.subscribe("voteSubscribe", "voteUnsubscribe", "voteNotification",
           "vote", "", ji -> ji.skipUntil("slots").openArray().readLong(), null, votes::add));
 
@@ -948,6 +965,37 @@ final class SolanaJsonRpcWebsocketTests {
       assertEquals("""
           {"jsonrpc":"2.0","id":3,"method":"accountUnsubscribe","params":[23784]}""", socket.sentText.getLast()
       );
+    }
+  }
+
+  /// Top-level member order carries no meaning in JSON-RPC, and some servers emit params before
+  /// method. The method scan has then already consumed params, so without the rewind the whole
+  /// notification was dropped — a healthy subscription starving silently while the liveness
+  /// stamp, fed by the very frames being dropped, reported the connection fine.
+  @Test
+  void topLevelMemberOrderDoesNotMatter() {
+    try (final var ws = createWebsocket()) {
+      final var slots = new ArrayList<ProcessedSlot>();
+      assertTrue(ws.slotSubscribe(slots::add));
+      final var votes = new ArrayList<Long>();
+      assertTrue(ws.subscribe("voteSubscribe", "voteUnsubscribe", "voteNotification",
+          "vote", "", ji -> ji.skipUntil("slots").openArray().readLong(), null, votes::add));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":10,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":11,"id":3}""");
+
+      // params before method, on both parse paths: the enum channel and the generic one
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","params":{"result":{"parent":78,"root":77,"slot":79},"subscription":10},"method":"slotNotification"}""");
+      assertEquals(1, slots.size(), "a reordered slot notification must still dispatch");
+      assertEquals(79L, slots.getFirst().slot());
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","params":{"result":{"slots":[55]},"subscription":11},"method":"voteNotification"}""");
+      assertEquals(java.util.List.of(55L), votes, "a reordered generic notification must still dispatch");
     }
   }
 }

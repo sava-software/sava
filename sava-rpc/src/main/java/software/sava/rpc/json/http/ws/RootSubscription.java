@@ -16,7 +16,7 @@ class RootSubscription<T> implements Subscription<T> {
   protected final String msg;
   protected final Consumer<T> consumer;
   protected final Consumer<Subscription<T>> onSub;
-  protected volatile long lastAttempt;
+  protected volatile long lastAttempt = NEVER;
   protected volatile BigInteger subId;
 
   RootSubscription(final Commitment commitment,

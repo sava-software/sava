@@ -10,10 +10,23 @@ import java.util.concurrent.atomic.AtomicReference;
 /// `connectResult`, `buildAsync` completes with it and records the URI, so
 /// `connect()` can be driven end to end; without one it fails, matching the
 /// builder tests that never connect.
+///
+/// Every `buildAsync` call captures its listener — the engine hands each attempt its own
+/// epoch-carrying listener, and adoption routing is only testable end to end by invoking the
+/// listener the BUILDER received rather than calling the engine's own callbacks directly. With
+/// `invokeOnOpen`, `buildAsync` delivers `onOpen(connectResult)` itself before completing, the
+/// way the JDK does; without it, a test invokes `listeners.get(i).onOpen(...)` deliberately —
+/// including late, after a newer attempt, which is the stale-adoption case.
 final class RecordingWebSocketBuilder implements WebSocket.Builder {
+
+  final java.util.List<WebSocket.Listener> listeners = new java.util.ArrayList<>();
+  boolean invokeOnOpen;
 
   private final AtomicReference<Duration> connectTimeout;
   final AtomicReference<URI> builtUri = new AtomicReference<>();
+  /// How many handshakes were initiated — the single-flight and closed-instance guards are
+  /// assertions about this count, not about the last URI.
+  int builds;
   private final WebSocket connectResult;
 
   RecordingWebSocketBuilder(final AtomicReference<Duration> connectTimeout) {
@@ -43,9 +56,15 @@ final class RecordingWebSocketBuilder implements WebSocket.Builder {
 
   @Override
   public CompletableFuture<WebSocket> buildAsync(final URI uri, final WebSocket.Listener listener) {
+    ++builds;
     builtUri.set(uri);
-    return connectResult == null
-        ? CompletableFuture.failedFuture(new UnsupportedOperationException("no connection in tests"))
-        : CompletableFuture.completedFuture(connectResult);
+    listeners.add(listener);
+    if (connectResult == null) {
+      return CompletableFuture.failedFuture(new UnsupportedOperationException("no connection in tests"));
+    }
+    if (invokeOnOpen) {
+      listener.onOpen(connectResult);
+    }
+    return CompletableFuture.completedFuture(connectResult);
   }
 }
