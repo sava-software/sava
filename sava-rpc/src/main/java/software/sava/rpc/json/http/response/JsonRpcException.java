@@ -34,6 +34,16 @@ public final class JsonRpcException extends RuntimeException {
   public static JsonRpcException parseException(final JsonIterator ji, final OptionalLong retryAfterSeconds) {
     final var parser = new Parser();
     ji.testObject(parser);
+    if (parser.dataMark >= 0) {
+      // Member order is free, and `data`'s interpretation depends on `code`: when data arrived
+      // first it was parsed against code 0 and valid structured details were misclassified.
+      // The mark defers it until the whole error object has been read — and the cursor is
+      // restored afterwards, so a caller parsing past the error object continues where the
+      // object ended rather than where the deferred data did.
+      final int endMark = ji.mark();
+      parser.customError = RpcCustomError.parseError(parser.code, ji.reset(parser.dataMark));
+      ji.reset(endMark);
+    }
     return parser.create(retryAfterSeconds);
   }
 
@@ -54,6 +64,8 @@ public final class JsonRpcException extends RuntimeException {
     private long code;
     private String message;
     private RpcCustomError customError;
+    private boolean codeSeen;
+    private int dataMark = -1;
 
     private Parser() {
     }
@@ -71,10 +83,16 @@ public final class JsonRpcException extends RuntimeException {
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("code", buf, offset, len)) {
         code = ji.readLong();
+        codeSeen = true;
       } else if (fieldEquals("message", buf, offset, len)) {
         message = ji.readString();
       } else if (fieldEquals("data", buf, offset, len)) {
-        customError = RpcCustomError.parseError(code, ji);
+        if (codeSeen) {
+          customError = RpcCustomError.parseError(code, ji);
+        } else {
+          dataMark = ji.mark();
+          ji.skip();
+        }
       } else {
         ji.skip();
       }

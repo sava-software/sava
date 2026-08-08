@@ -37,11 +37,10 @@ final class SubscriptionTests {
     assertEquals("rootSubscribe", Channel.root.subscribe());
     assertEquals("signatureSubscribe", Channel.signature.subscribe());
     assertEquals("slotSubscribe", Channel.slot.subscribe());
-    // every channel, so a new one cannot be added without its methods
-    for (final var channel : Channel.values()) {
-      assertEquals(channel.name() + "Subscribe", channel.subscribe(), channel.name());
-      assertEquals(channel.name() + "Unsubscribe", channel.unSubscribe(), channel.name());
-    }
+    // The literals above are the pins. A loop asserting name() + "Subscribe" recomputed the
+    // production expression and compared it to itself, so it could never fail; a new channel is
+    // instead caught by the count, which a new value moves.
+    assertEquals(6, Channel.values().length);
   }
 
   @Test
@@ -101,7 +100,9 @@ final class SubscriptionTests {
   void subIdAndLastAttemptAreMutable() {
     final var sub = subscription(Commitment.CONFIRMED, Channel.account, "abc", 1);
     assertNull(sub.subId());
-    assertEquals(0, sub.lastAttempt());
+    // NEVER, not 0: pacing time is monotonic and starts near zero, so a zero default would read
+    // as "attempted just now" and suppress the very first send for a whole resend window.
+    assertEquals(Subscription.NEVER, sub.lastAttempt());
 
     sub.setSubId(BigInteger.valueOf(42));
     assertEquals(BigInteger.valueOf(42), sub.subId());

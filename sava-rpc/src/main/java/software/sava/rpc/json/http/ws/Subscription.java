@@ -6,7 +6,21 @@ import software.sava.rpc.json.http.request.Commitment;
 import java.math.BigInteger;
 import java.util.function.Consumer;
 
+/// A live registration inside the websocket engine. Consumers receive one via the `onSub`
+/// callback, which fires after each successful request *send* — before confirmation, while
+/// [#subId()] is still null, and again on every re-send and reconnect replay. Treat it as a
+/// read-only handle: [#setSubId(BigInteger)] and [#setLastAttempt(long)] are the engine's own
+/// bookkeeping seams and calling them corrupts pacing and correlation. The engine retains
+/// registrations internally; holding this handle is not required to keep one alive.
 public interface Subscription<T> extends Consumer<T>, Runnable {
+
+  /// A [#lastAttempt()] stamp meaning "never": far enough in the past that every sane pacing
+  /// window — anything under ~34 years — has elapsed, without being so far that `now - NEVER`
+  /// could overflow. Pacing time is monotonic and starts near zero, so 0 cannot mean "never" —
+  /// it means "just now". A delay beyond 2^40 ms behaves as "disabled", exactly as it always
+  /// has: under the previous wall clock, `now` was ~1.7e12 and the comparison came out the
+  /// same way.
+  long NEVER = -(1L << 40);
 
   static <T> Subscription<T> createAccountSubscription(final Commitment commitment,
                                                        final Channel channel,

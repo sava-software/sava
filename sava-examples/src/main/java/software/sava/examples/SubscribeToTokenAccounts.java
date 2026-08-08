@@ -13,6 +13,20 @@ import java.util.List;
 
 public final class SubscribeToTokenAccounts {
 
+  /// See [SubscribeToLookupTables#connect]: the returned future is the only report of a failed
+  /// handshake, so a durable client watches it and retries; the reconnect throttle paces this.
+  private static void connect(final SolanaRpcWebsocket webSocket) {
+    final var attempt = webSocket.connect();
+    if (attempt != null) {
+      attempt.whenComplete((_, throwable) -> {
+        if (throwable != null) {
+          System.err.println("Connect failed, retrying: " + throwable);
+          connect(webSocket);
+        }
+      });
+    }
+  }
+
   static void main() throws InterruptedException {
     final var solanaAccounts = SolanaAccounts.MAIN_NET;
     final var tokenProgram = solanaAccounts.tokenProgram();
@@ -24,22 +38,19 @@ public final class SubscribeToTokenAccounts {
           .commitment(Commitment.CONFIRMED)
           .solanaAccounts(solanaAccounts)
           .onOpen(ws -> System.out.println("Websocket connected to " + ws.endpoint().getHost()))
+          // A server-side close or a transport error reconnects; wiring every callback to
+          // close() meant one transient ping failure permanently terminated the client. Send
+          // and ping failures are transient and only logged — the implementation retries them.
           .onClose((ws, statusCode, reason) -> {
-            ws.close();
-            System.out.format("%d: %s%n", statusCode, reason);
+            System.out.format("%d: %s — reconnecting%n", statusCode, reason);
+            connect(ws);
           })
           .onError((ws, throwable) -> {
-            ws.close();
             throwable.printStackTrace(System.err);
+            connect(ws);
           })
-          .onPingError((ws, throwable) -> {
-            ws.close();
-            throwable.printStackTrace(System.err);
-          })
-          .onSendTextError((ws, throwable) -> {
-            ws.close();
-            throwable.printStackTrace(System.err);
-          })
+          .onPingError((_, throwable) -> throwable.printStackTrace(System.err))
+          .onSendTextError((_, throwable) -> throwable.printStackTrace(System.err))
           .create();
 
       webSocket.programSubscribe(
@@ -54,9 +65,10 @@ public final class SubscribeToTokenAccounts {
           }
       );
 
-      webSocket.connect().join();
-
-      Thread.sleep(Integer.MAX_VALUE);
+      try (webSocket) {
+        connect(webSocket);
+        Thread.sleep(Integer.MAX_VALUE);
+      }
     }
   }
 }

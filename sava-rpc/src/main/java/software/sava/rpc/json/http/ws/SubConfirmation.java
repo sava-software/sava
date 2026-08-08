@@ -10,7 +10,9 @@ import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-record SubConfirmation(BigInteger subId, long msgId, JsonRpcException jsonRpcException) {
+/// `boolResult` carries an un-subscription acknowledgement — the server answers those with a
+/// bare boolean — which used to be skipped, leaving every unsubscribe outcome invisible.
+record SubConfirmation(BigInteger subId, long msgId, JsonRpcException jsonRpcException, Boolean boolResult) {
 
   public static SubConfirmation parse(final JsonIterator ji) {
     return ji.testObject(new Builder(), PARSER).create();
@@ -20,7 +22,7 @@ record SubConfirmation(BigInteger subId, long msgId, JsonRpcException jsonRpcExc
     if (fieldEquals("result", buf, offset, len)) {
       if (ji.whatIsNext() == ValueType.BOOLEAN) {
         builder.subId = null;
-        ji.skip();
+        builder.boolResult = ji.readBoolean();
       } else {
         builder.subId = ji.readBigInteger();
       }
@@ -39,12 +41,13 @@ record SubConfirmation(BigInteger subId, long msgId, JsonRpcException jsonRpcExc
     private BigInteger subId;
     private long msgId;
     private JsonRpcException jsonRpcException;
+    private Boolean boolResult;
 
     private Builder() {
     }
 
     SubConfirmation create() {
-      return new SubConfirmation(subId, msgId, jsonRpcException);
+      return new SubConfirmation(subId, msgId, jsonRpcException, boolResult);
     }
   }
 }
