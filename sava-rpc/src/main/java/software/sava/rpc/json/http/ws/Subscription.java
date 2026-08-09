@@ -46,6 +46,12 @@ public interface Subscription<T> extends Consumer<T>, Runnable {
 
   Channel channel();
 
+  /// The notification method this registration is served by — a built-in channel's derived
+  /// name, or the method a generic registration was created under. Part of identity: a generic
+  /// key is unique only within its notification method, so two registrations sharing a key
+  /// across methods are distinct, in a consumer's collections as much as in the engine's.
+  String notificationMethod();
+
   default String unSubscribeMethod() {
     return channel().unSubscribe();
   }

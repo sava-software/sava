@@ -87,6 +87,11 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// handshake. The socket being replaced is aborted; its late callbacks are ignored.
   CompletableFuture<?> connect();
 
+  /// Registers a consumer for engine-reported failures: correlated request rejections, terminal
+  /// registration collisions, and consumer bugs contained by the dispatch paths. Each subscriber
+  /// is contained — one subscriber throwing does not starve the rest. A no-op once
+  /// [closed][#close()]: close releases every consumer reference, and a late registration must
+  /// not re-pin its caller to a dead instance.
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);
 
   boolean accountSubscribe(final PublicKey key,
@@ -284,12 +289,20 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// Helius' transactionSubscribe. Subscriptions are replayed if the connection is re-connected.
   ///
   /// @param subscribeMethod    the subscription request method.
-  /// @param unSubscribeMethod  the corresponding un-subscription request method.
+  /// @param unSubscribeMethod  the corresponding un-subscription request method. Fixed by the
+  ///                           first registration under a notification method: later
+  ///                           registrations must agree, so unknown-id recovery never has to
+  ///                           pick among divergent methods.
   /// @param notificationMethod the method of the corresponding notification messages.
   /// @param key                unique key within this notification method, used for
   ///                           de-duplication and to unsubscribe.
-  /// @param paramsJson         placed within the request params array.
+  /// @param paramsJson         placed RAW within the request params array — validity and
+  ///                           escaping are the caller's responsibility.
   /// @param parser             applied positioned at the notification params result value.
+  /// @throws IllegalArgumentException if any method name could splice the frame, names a
+  ///                                  built-in channel's notification, subscribe, or
+  ///                                  unsubscribe method, or disagrees with the un-subscription
+  ///                                  method already bound to this notification method.
   default <T> boolean subscribe(final String subscribeMethod,
                                 final String unSubscribeMethod,
                                 final String notificationMethod,
@@ -376,8 +389,10 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     /// subscribe would create a second, orphaned server subscription. Only a send that failed
     /// outright retries, at this cadence; a request the server never answers at all escalates
     /// through the error seam by aborting the connection, so reconnect policy — not a duplicate
-    /// frame — resolves it. This delay also paces replay after a reconnect: a re-queued
-    /// subscription keeps its last attempt stamp.
+    /// frame — resolves it. This delay also paces replay after a reconnect — a re-queued
+    /// subscription keeps its last attempt stamp — and the retry of an un-subscription the
+    /// server refused transiently, so an immediately-refusing peer is not retried at wire
+    /// speed.
     ///
     /// @throws IllegalArgumentException if subscriptionResendDelay is not positive.
     Builder subscriptionResendDelay(final long subscriptionResendDelay);

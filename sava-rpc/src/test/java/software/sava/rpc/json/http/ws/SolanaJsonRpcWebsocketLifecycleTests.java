@@ -7,8 +7,11 @@ import systems.comodal.jsoniter.JsonIterator;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -21,6 +24,40 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");
   private static final Timings TIMINGS = new Timings(60_000, 60_000, 60_000);
+
+  /// Delivers the listener's open synchronously, but leaves the builder future unsettled. This
+  /// is the narrow window where a socket is current while close() still has an attempt to cancel,
+  /// so cancellation ordering is observable without a racing thread or a sleep.
+  private static final class SynchronousOpenPendingBuilder implements WebSocket.Builder {
+
+    private final RecordingWebSocket socket;
+    private final CompletableFuture<WebSocket> completion = new CompletableFuture<>();
+
+    private SynchronousOpenPendingBuilder(final RecordingWebSocket socket) {
+      this.socket = socket;
+    }
+
+    @Override
+    public WebSocket.Builder header(final String name, final String value) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder connectTimeout(final Duration timeout) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder subprotocols(final String mostPreferred, final String... lesserPreferred) {
+      return this;
+    }
+
+    @Override
+    public CompletableFuture<WebSocket> buildAsync(final URI uri, final WebSocket.Listener listener) {
+      listener.onOpen(socket);
+      return completion;
+    }
+  }
 
   private static SolanaJsonRpcWebsocket websocket(final TestClock clock,
                                                   final SolanaRpcWebsocket.OnClose onClose,
@@ -964,6 +1001,105 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertTrue(socket.sentText.stream().anyMatch(m -> m.contains("slotSubscribe")),
           "the adopted connection must carry traffic: " + socket.sentText);
     }
+  }
+
+  /// A completion action attached by the synchronous onOpen re-entry is allowed to reconnect too.
+  /// Completing the reserved bridge runs that action inline, before the outer connect() returns;
+  /// the attempt it installs must remain the single-flight authority rather than being overwritten
+  /// by the outer invocation's already-completed bridge.
+  @Test
+  void aSynchronousOnOpenCompletionReentryDoesNotLoseSingleFlightAuthority() {
+    final var clock = new TestClock();
+    final var socket = new RecordingWebSocket();
+    final var scheduler = new RecordingScheduler();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    webSocketBuilder.invokeOnOpen = true;
+    final var completionReentry = new AtomicReference<CompletableFuture<?>>();
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), scheduler,
+        w -> w.connect().whenComplete((_, _) -> completionReentry.set(w.connect())), (_, _, _) -> {
+        }, null, null, null)) {
+      final var outer = ws.connect();
+      assertNotNull(outer);
+      assertNotNull(completionReentry.get(), "the joined attempt's completion performs the reconnect");
+      assertEquals(1, scheduler.deferred.size(), "that reconnect creates the one deferred attempt");
+
+      final var observer = ws.connect();
+      assertNotNull(observer);
+      assertEquals(1, scheduler.deferred.size(),
+          "the observer must join the deferred attempt, not stack another after outer connect overwrites its authority");
+    }
+  }
+
+  /// buildAsync may complete before its listener executor delivers onOpen. Once the successful
+  /// socket exists, close() owns it even though no Connection has adopted it yet; otherwise its
+  /// bounded-abort guarantee depends on that delayed callback eventually running.
+  @Test
+  void closeAbortsASuccessfullyBuiltSocketAwaitingAdoption() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    final var scheduler = new RecordingScheduler();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null);
+    final var connected = ws.connect();
+    assertNotNull(connected);
+    assertSame(socket, connected.join(), "the build succeeded even though onOpen is still queued");
+
+    ws.close();
+
+    // A correct implementation may abort immediately or retain the socket for the same bounded
+    // polite-close watchdog used by an adopted connection. Drive any captured grace task rather
+    // than prescribing which release strategy it chooses.
+    scheduler.deferred.forEach(deferred -> deferred.task().run());
+    assertTrue(socket.aborted, "close must abort a successful socket which has not been adopted");
+  }
+
+  /// Cancelling the internal attempt completes every caller's defensive copy synchronously.
+  /// Local close state must already be committed when that caller code runs: otherwise a blocking
+  /// completion action can indefinitely postpone connection detachment, registry clearing, and
+  /// the check-loop signal while closed() already reports true.
+  @Test
+  void closeCommitsLocalTeardownBeforeConnectCancellationCallbacks() {
+    final var clock = new TestClock();
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new SynchronousOpenPendingBuilder(socket);
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null);
+    assertTrue(ws.slotSubscribe(_ -> {
+    }));
+    final var connected = ws.connect();
+    assertNotNull(connected);
+    ws.onText(socket, java.nio.CharBuffer.wrap("""
+        {"jsonrpc":"2.0","result":999,"id":999}"""), true);
+    assertNotEquals(0L, ws.lastMessageReceivedTimestamp());
+
+    final var retainedDuringCancellation = new AtomicReference<Integer>();
+    final var messageTimestampDuringCancellation = new AtomicReference<Long>();
+    connected.whenComplete((_, _) -> {
+      retainedDuringCancellation.set(ws.retainedRegistrations());
+      messageTimestampDuringCancellation.set(ws.lastMessageReceivedTimestamp());
+    });
+
+    ws.close();
+    webSocketBuilder.completion.cancel(false);
+
+    assertAll(
+        () -> assertEquals(0, retainedDuringCancellation.get(),
+            "registries must be cleared before cancellation invokes caller code"),
+        () -> assertEquals(0L, messageTimestampDuringCancellation.get(),
+            "the connection must be detached before cancellation invokes caller code")
+    );
   }
 
   /// F7: close() commits the local teardown before attempting transport politeness, so a

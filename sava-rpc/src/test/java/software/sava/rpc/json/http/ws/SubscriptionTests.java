@@ -13,9 +13,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /// Subscriptions are held in maps keyed by identity, and the websocket re-sends
-/// them on reconnect. Identity is `(commitment, channel, key)` and deliberately
-/// excludes the message id, so a resubscribe with a fresh id still matches the
-/// original.
+/// them on reconnect. Identity is `(commitment, channel, key, notificationMethod)`
+/// and deliberately excludes the message id, so a resubscribe with a fresh id
+/// still matches the original; the notification method is the key's namespace,
+/// which for channel subscriptions is derived from the channel.
 final class SubscriptionTests {
 
   private static final PublicKey KEY = PublicKey.createPubKey(new byte[32]);
@@ -74,6 +75,23 @@ final class SubscriptionTests {
     assertNotEquals(generic, subscription(Commitment.CONFIRMED, null, "key", 1));
     assertNotEquals(generic, subscription(null, Channel.slot, "key", 1));
     assertDoesNotThrow(generic::hashCode);
+  }
+
+  /// The public generic-subscribe API defines a key as unique only within its notification
+  /// method, so these are two simultaneously valid registrations. Their public handles must
+  /// preserve that namespace in identity or a caller's set/map silently merges them.
+  @Test
+  void genericIdentityIncludesTheNotificationMethodNamespace() {
+    final var first = new GenericSubscription<>(
+        "firstUnsubscribe", "firstNotification", JsonIterator::readString,
+        "shared-key", 1, "{}", null, _ -> {
+    });
+    final var second = new GenericSubscription<>(
+        "secondUnsubscribe", "secondNotification", JsonIterator::readString,
+        "shared-key", 2, "{}", null, _ -> {
+    });
+
+    assertNotEquals(first, second);
   }
 
   @Test
