@@ -5,6 +5,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.*;
+import systems.comodal.jsoniter.JsonIterator;
 
 import java.math.BigInteger;
 import java.net.URI;
@@ -751,6 +752,31 @@ final class SolanaJsonRpcWebsocketTests {
           {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid subscription id."},"id":6}"""
       );
       assertEquals(1, exceptions.size());
+    }
+  }
+
+  /// Message wording is only a fallback for an uncorrelated stale un-subscription error. When
+  /// the response id names a pending subscribe request, its rejection is consumer-visible even
+  /// if a custom method happens to describe its bad params as an "Invalid subscription id".
+  @Test
+  void aCorrelatedSubscribeRejectionIsNotHiddenByTheStaleUnsubscribeMessageHeuristic() {
+    try (final var ws = createWebsocket()) {
+      final var exceptions = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(exceptions::add);
+      assertTrue(ws.subscribe("watchSubscribe", "watchUnsubscribe", "watchNotification",
+          "bad-id", "999", JsonIterator::readLong, null, _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid subscription id: 999"},"id":2}""");
+
+      assertEquals(1, exceptions.size(), "a correlated request rejection must reach exception subscribers");
+      assertEquals("Invalid subscription id: 999", exceptions.getFirst().getMessage());
+      assertTrue(ws.subscribe("watchSubscribe", "watchUnsubscribe", "watchNotification",
+          "bad-id", "1000", JsonIterator::readLong, null, _ -> {
+          }), "the request-defect rejection is terminal and frees the key");
     }
   }
 

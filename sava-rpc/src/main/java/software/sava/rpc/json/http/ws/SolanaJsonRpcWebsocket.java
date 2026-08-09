@@ -72,7 +72,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Map<String, Map<Commitment, Subscription<TxResult>>> signatureSubs;
   private final Map<String, Map<Commitment, Subscription<AccountInfo<byte[]>>>> programSubs;
   private final Set<Consumer<RuntimeException>> exceptionSubs;
-  /// Volatile, not atomic, for the same split as [#webSocket]: every write holds [#lock] —
+  /// Volatile, not atomic, for the same split as [#connection]: every write holds [#lock] —
   /// subscribe, unsubscribe, the rejection release, onOpen's re-queue, close's teardown — so
   /// CAS added nothing but ceremony, while the dispatch path reads on listener threads without
   /// the lock and needs the visibility.
@@ -80,7 +80,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private volatile Subscription<Long> rootSub;
   private final Map<String, Map<String, Subscription<?>>> genericSubs;
 
-  private final ReentrantLock lock;
+  /// Package-private for tests, which assert lock-boundary contracts directly rather than
+  /// through reflection.
+  final ReentrantLock lock;
   private final Condition newSubscription;
   /// When a connection was last *attempted*, which is what [SolanaRpcWebsocket#connect()]'s
   /// throttle is specified against: "will delay the connection attempt if a previous attempt has
@@ -91,7 +93,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// The current connection, or null between [#connect()] and the next adoption and after
   /// [#close()]. Volatile: written under [#lock], resolved at every callback entry without it.
   private volatile Connection connection;
-  /// Guarded by [#lock] — plain on purpose, like [#outboundTail]: every read and write sits
+  /// Guarded by [#lock] — plain on purpose, like [Connection#outboundTail]: every read and write sits
   /// inside the lock since the throttle decision became decide-and-stamp atomic, and an atomic
   /// here would advertise lock-free access that does not exist.
   private long lastConnectAttempt;
@@ -102,6 +104,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// the older one completing last displaced the newer live connection, and the JDK's
   /// WebSocket.Builder is not specified safe for concurrent buildAsync calls.
   private CompletableFuture<WebSocket> inFlightConnect;
+  /// The future the BUILDER returned for the in-flight attempt — the operation that owns the
+  /// HTTP upgrade and its eventual socket, as opposed to the bridge above, which is only what
+  /// callers join. Guarded by [#lock]. close() cancels this one too, and a socket it produces
+  /// after this attempt is no longer authorized is aborted rather than left ownerless.
+  private CompletableFuture<WebSocket> inFlightBuild;
   /// The scheduled handle of a deferred attempt, when the scheduler provides one. Guarded by
   /// [#lock]; close() cancels it so a long deferral does not retain a dead client to expiry.
   private Future<?> scheduledConnect;
@@ -220,8 +227,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final var conn = this.connection;
     int retained = (conn == null ? 0
         : conn.pendingSubscriptions.size()
-            + conn.pendingUnSubscriptions.size()
-            + conn.subscriptionsBySubId.size())
+        + conn.pendingUnSubscriptions.size()
+        + conn.subscriptionsBySubId.size())
         + this.accountSubs.size()
         + this.txLogSubs.size()
         + this.signatureSubs.size()
@@ -260,7 +267,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// first notification, so the unconfirmed window legitimately sees none — but the dispatch
   /// sites DROP those frames rather than route them here: this method's false means deliver,
   /// and its true means auto-unsubscribe, and an early frame from a reordering peer deserves
-  /// neither. The caller checks [#retiredSubIds] first: a known-retired id is dropped regardless.
+  /// neither. The caller checks [Connection#retiredSubIds] first: a known-retired id is dropped regardless.
   private boolean staleSingletonId(final Connection conn, final Subscription<?> sub, final BigInteger subId) {
     if (conn.retiredSubIds.contains(subId)) {
       return true;
@@ -317,13 +324,22 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final Map<BigInteger, QueuedUnsub> pendingUnSubscriptions = new ConcurrentSkipListMap<>();
     final Map<BigInteger, Subscription<?>> subscriptionsBySubId = new ConcurrentSkipListMap<>();
     final Map<Long, Long> inFlightSends = new HashMap<>();
-    final Map<Long, String> cancelledRequests = new HashMap<>();
+    final Map<Long, CancelledRequest> cancelledRequests = new HashMap<>();
+    /// Wire order, assigned at chain admission under the lock — the chain is FIFO, so admission
+    /// order IS transmission order. JSON-RPC request ids are stable across retries and so
+    /// cannot carry wire order: a retried frame is a NEW position on the wire under an old id.
+    long nextWireSeq;
+    /// msgId -> the wire ordinal of that request's LATEST transmission attempt. Consulted by
+    /// every same-id adjudication; entries die with the registration or the connection.
+    final Map<Long, Long> attemptSeqs = new HashMap<>();
     final Map<Long, UnsubRequest> pendingUnsubAcks = new HashMap<>();
-    /// Ids the server has acknowledged CANCELLING while a subscribe that was ahead of the
-    /// cancellation on the wire is still unanswered. If that subscribe's grant resolves to the
-    /// recorded id, it arrives already dead and is replayed instead of installed. Lock-guarded;
-    /// entries are consumed by the matching confirmation or die with the connection.
-    final Map<BigInteger, UnsubRequest> killedSubIds = new HashMap<>();
+    /// id -> the wire ordinal of a cancellation the server acknowledged true while requests
+    /// transmitted ahead of it were still unanswered. A later grant of the id compares its own
+    /// attempt ordinal: below the kill it arrives already dead and is replayed — every
+    /// coalesced grant below it, not only the first — and at or above it the grant is fresh,
+    /// which also retires the entry. Lock-guarded; a sweep drops entries once nothing pending
+    /// could still resolve to them.
+    final Map<BigInteger, Long> killedSubIds = new HashMap<>();
     /// One wire cancellation per subscription id at a time. Without the gate, every repeated
     /// unknown-id notification minted another un-subscription frame and acknowledgement entry —
     /// 1:1 write amplification a peer could drive, with a map that only ever grew.
@@ -347,12 +363,20 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   /// An un-subscription on the wire, awaiting the server's boolean acknowledgement.
-  /// `subscribesAhead` records which admitted subscribe requests were ahead of this frame in
-  /// the outbound chain at mint time — the wire-order fact that decides, when a `true`
-  /// acknowledgement arrives, whether a same-id grant was cancelled by this request or
-  /// postdates it. JSON-RPC correlates responses by id but promises nothing about their order
-  /// across requests, so arrival order must never be the evidence.
-  private record UnsubRequest(BigInteger subId, String unSubscribeMethod, Set<Long> subscribesAhead) {
+  /// `wireSeq` is this frame's transmission ordinal — the wire-order fact that decides, when a
+  /// `true` acknowledgement arrives, whether a same-id grant was cancelled by this request
+  /// (its attempt ordinal is below) or postdates it. JSON-RPC correlates responses by id but
+  /// promises nothing about their order across requests, so arrival order must never be the
+  /// evidence — and request ids are stable across retries, so they cannot be either.
+  private record UnsubRequest(BigInteger subId, String unSubscribeMethod, long wireSeq) {
+  }
+
+  /// A cancelled request's tombstone, owed a confirmation. The fingerprint — everything after
+  /// the request id — is what lets the late grant be adjudicated: resolving onto a live owner
+  /// is benign coalescing only if the two requests were EQUIVALENT; a defective node assigning
+  /// one id to different requests is connection-fatal here exactly as it is for two live
+  /// registrations.
+  private record CancelledRequest(String unSubscribeMethod, String fingerprint) {
   }
 
   /// A cancellation waiting for the flush, with the earliest pacing time it may be re-sent —
@@ -382,15 +406,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return ((clock.nanoTime() - pacingOrigin) / 1_000_000L) + 1L;
   }
 
-  /// Whether a callback belongs to a socket this instance has already replaced.
-  ///
-  /// One listener serves every connection, but the state it writes — the liveness stamps, the
-  /// pending-subscription re-send — describes whichever connection is current. A displaced
-  /// socket acting on that state is not a stale no-op: it refills [#lastMessageReceived] after
-  /// the new connection cleared it, suppresses the live socket's liveness ping, and re-sends
-  /// the live connection's subscriptions down a socket nobody is reading.
-  ///
-
   /// The deferred half of an attempt: the closed() check and the buildAsync are one locked
   /// step, so a close() cannot slip between them and let a dead instance initiate a handshake.
   private CompletableFuture<WebSocket> deferredBuild(final long generation, final AttemptListener attemptListener) {
@@ -401,10 +416,36 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             new IllegalStateException("websocket closed or reconnected while a connect was deferred"));
       }
       this.lastConnectAttempt = pacingMillis();
-      return this.webSocketBuilder.buildAsync(this.endpoint, attemptListener);
+      final var built = this.webSocketBuilder.buildAsync(this.endpoint, attemptListener);
+      this.inFlightBuild = ownBuild(built, generation);
+      return built;
     } finally {
       lock.unlock();
     }
+  }
+
+  /// Attaches attempt ownership to the future the BUILDER returned. A socket it produces after
+  /// this attempt is no longer authorized — closed, or superseded by a newer generation — is
+  /// aborted here rather than left ownerless waiting on an onOpen that may never arrive; while
+  /// the attempt is still authorized, adoption (or its stale/closed refusal) owns the socket.
+  private CompletableFuture<WebSocket> ownBuild(final CompletableFuture<WebSocket> built, final long generation) {
+    built.whenComplete((webSocket, _) -> {
+      if (webSocket != null) {
+        final boolean stale;
+        final Connection conn;
+        lock.lock();
+        try {
+          stale = closed() || generation != this.connectGeneration;
+          conn = this.connection;
+        } finally {
+          lock.unlock();
+        }
+        if (stale && (conn == null || conn.socket != webSocket)) {
+          webSocket.abort();
+        }
+      }
+    });
+    return built;
   }
 
   /// Routes one attempt's callbacks, carrying the generation that authorizes adoption. Every
@@ -489,6 +530,22 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       if (replaced != null) {
         replaced.socket.abort();
       }
+      // The predecessor ATTEMPT is released with the connection it never became: a handshake
+      // still pending under the old generation is cancelled rather than left retaining its
+      // listener, and a socket it built that nothing ever adopted is aborted rather than left
+      // waiting on an onOpen that may never arrive.
+      final var priorBuild = this.inFlightBuild;
+      if (priorBuild != null) {
+        this.inFlightBuild = null;
+        if (!priorBuild.isDone()) {
+          priorBuild.cancel(true);
+        } else if (!priorBuild.isCompletedExceptionally()) {
+          final var unadopted = priorBuild.join();
+          if (replaced == null || replaced.socket != unadopted) {
+            unadopted.abort();
+          }
+        }
+      }
       // Decide-and-stamp atomically: read-compute-set let two callers inside the same window
       // both see a stale stamp, both pass, and both launch handshakes.
       final long delay;
@@ -519,29 +576,48 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           // The JDK delayer retains its task to expiry regardless of cancellation, so it is
           // handed only a tiny completion token; the build chain hangs off the token, and
           // close()'s cancel of scheduledConnect releases this instance immediately instead
-          // of holding it until the delay — arbitrarily large by contract — ran out.
+          // of holding it until the delay — arbitrarily large by contract — ran out. The
+          // bridge is the published authority BEFORE the token exists: a token completing
+          // early runs buildAsync synchronously on this thread, and a re-entrant connect must
+          // find the attempt in flight.
+          final var connected = new CompletableFuture<WebSocket>();
+          this.inFlightConnect = connected;
           final var token = new CompletableFuture<Void>();
           CompletableFuture.delayedExecutor(delay, MILLISECONDS).execute(() -> token.complete(null));
           this.scheduledConnect = token;
-          attempt = token.thenCompose(_ -> deferredBuild(generation, attemptListener));
-          this.inFlightConnect = attempt;
+          token.thenCompose(_ -> deferredBuild(generation, attemptListener))
+              .whenComplete((webSocket, ex) -> {
+                if (ex == null) {
+                  connected.complete(webSocket);
+                } else {
+                  connected.completeExceptionally(ex);
+                }
+              });
+          attempt = connected;
         } else {
           final var connected = new CompletableFuture<WebSocket>();
           this.inFlightConnect = connected;
-          this.scheduledConnect = this.scheduler.schedule(() -> {
-                try {
-                  deferredBuild(generation, attemptListener).whenComplete((webSocket, ex) -> {
-                    if (ex == null) {
-                      connected.complete(webSocket);
-                    } else {
-                      connected.completeExceptionally(ex);
-                    }
-                  });
-                } catch (final RuntimeException ex) {
-                  connected.completeExceptionally(ex);
-                }
-              }, delay, MILLISECONDS
-          );
+          try {
+            this.scheduledConnect = this.scheduler.schedule(() -> {
+                  try {
+                    deferredBuild(generation, attemptListener).whenComplete((webSocket, ex) -> {
+                      if (ex == null) {
+                        connected.complete(webSocket);
+                      } else {
+                        connected.completeExceptionally(ex);
+                      }
+                    });
+                  } catch (final RuntimeException ex) {
+                    connected.completeExceptionally(ex);
+                  }
+                }, delay, MILLISECONDS
+            );
+          } catch (final RuntimeException ex) {
+            // A rejected schedule is the same shape as a builder throwing: the attempt fails
+            // and releases the single-flight slot, rather than installing an authority
+            // nothing can ever settle — which poisoned every later connect into joining it.
+            connected.completeExceptionally(ex);
+          }
           attempt = connected;
         }
       } else {
@@ -558,6 +634,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         } catch (final RuntimeException ex) {
           built = CompletableFuture.failedFuture(ex);
         }
+        this.inFlightBuild = ownBuild(built, generation);
         built.whenComplete((webSocket, ex) -> {
           if (ex == null) {
             connected.complete(webSocket);
@@ -614,8 +691,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // condition's memory: a signal landing while this loop was mid-cycle used to be lost, and
       // the next await parked the full delay — after close(), with a large check delay, forever.
       // closed() is re-checked under the lock for the same reason: close() signals under it, so
-      // the check-then-park race is closed rather than narrowed.
+      // the check-then-park race is closed rather than narrowed. The await's return value —
+      // remaining time, which distinguishes timeout from signal and re-arms a partial wait —
+      // is deliberately ignored: every wake cause, spurious included, converges on the same
+      // pass below, whose delays are enforced by clock comparisons rather than by how long
+      // this await slept, and the signal/timeout split lives in the flag, not the return.
       if (!checkSignalled && !closed()) {
+        //noinspection ResultOfMethodCallIgnored
         newSubscription.awaitNanos(awaitNanos);
       }
       checkSignalled = false;
@@ -874,13 +956,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         || code == JsonRpcException.INVALID_PARAMS;
   }
 
-  /// Whether two subscriptions asked the server the same thing — everything after the request
-  /// id, method and params both. An id-reusing server coalesces exactly this; one id answering
-  /// two DIFFERENT requests is a server defect no local bookkeeping can adjudicate.
+  /// Everything after the request id — method and params both: what the server was actually
+  /// asked, with the correlation id stripped.
+  private static String requestFingerprint(final String msg) {
+    return msg.substring(msg.indexOf("\"method\""));
+  }
+
+  /// Whether two subscriptions asked the server the same thing. An id-reusing server coalesces
+  /// exactly this; one id answering two DIFFERENT requests is a server defect no local
+  /// bookkeeping can adjudicate.
   private static boolean equivalentRequests(final Subscription<?> a, final Subscription<?> b) {
-    final var aMsg = a.msg();
-    final var bMsg = b.msg();
-    return aMsg.substring(aMsg.indexOf("\"method\"")).equals(bMsg.substring(bMsg.indexOf("\"method\"")));
+    return requestFingerprint(a.msg()).equals(requestFingerprint(b.msg()));
   }
 
   /// Frees the registry slot a subscription occupies, so its key can be subscribed again.
@@ -949,6 +1035,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // onto one id — sending it would kill the owner's server subscription, so the removal
       // above stays the whole job.
       if (conn.subscriptionsBySubId.remove(subId, sub)) {
+        conn.attemptSeqs.remove(sub.msgId());
         // Retired, not merely removed: a late notification for this id must be dropped even
         // while a successor subscription is still unconfirmed.
         conn.retiredSubIds.add(subId);
@@ -963,8 +1050,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // The tombstone converts its eventual confirmation into an immediate server unsubscribe;
       // discarding the confirmation as unknown left a server subscription nothing could cancel.
       // A request never admitted needs no tombstone — no frame, no answer, so one could never
-      // be consumed and used to sit in the map for the connection's life.
-      conn.cancelledRequests.put(sub.msgId(), sub.unSubscribeMethod());
+      // be consumed and used to sit in the map for the connection's life. The fingerprint
+      // rides along so the late grant can be adjudicated against whatever owns its id by then.
+      conn.cancelledRequests.put(sub.msgId(),
+          new CancelledRequest(sub.unSubscribeMethod(), requestFingerprint(sub.msg()))
+      );
     }
   }
 
@@ -1117,7 +1207,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public boolean signatureUnsubscribe(final String b58TxSig) {
     return signatureUnsubscribe(this.defaultCommitment, b58TxSig);
   }
-
 
 
   @Override
@@ -1470,9 +1559,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     log.log(DEBUG, "Writing text {0}", msg);
     future.whenComplete((_, ex) -> {
       if (ex != null) {
-        if (conn != this.connection) {
-          // Every queued send on a displaced socket fails as its chain drains against the
-          // abort; reporting each one would storm the error handler with expected noise.
+        if (conn != this.connection || conn.escalated) {
+          // Every queued send on a displaced or escalation-aborted socket fails as its chain
+          // drains against the abort; reporting each one would storm the error handler with
+          // expected teardown noise — the escalation itself already reached the error seam.
           log.log(DEBUG, "Dropped text on a superseded socket: {0}", msg);
         } else if (onSendTextError == null) {
           log.log(WARNING, String.format("Failed to sendText '%s' to %s.", msg, this.endpoint.getHost()), ex);
@@ -1511,7 +1601,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                   final BigInteger subId) {
     lock.lock();
     try {
-      final var queued = conn.pendingUnSubscriptions.remove(subId);
+      final var queued = conn.pendingUnSubscriptions.get(subId);
+      if (queued != null && queued.notBefore() > pacingMillis()) {
+        // A paced retry stays paced: the orphan's continued notifications are not authority
+        // to erase the window a rejecting peer earned.
+        return;
+      }
+      conn.pendingUnSubscriptions.remove(subId);
       sendUnSubscriptionLockHeld(conn, queued == null ? unSubscribeMethod : queued.unSubscribeMethod(), subId);
     } finally {
       lock.unlock();
@@ -1534,16 +1630,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       return;
     }
     final long msgId = this.msgId.incrementAndGet();
-    // The admitted subscribes ahead of this frame in the chain: the server will process them
-    // before this cancellation, which is exactly what the acknowledgement handler needs to
-    // know when a shared id must be adjudicated.
-    final var subscribesAhead = new HashSet<Long>();
-    for (final var admitted : conn.inFlightSends.keySet()) {
-      if (conn.pendingSubscriptions.containsKey(admitted)) {
-        subscribesAhead.add(admitted);
-      }
-    }
-    conn.pendingUnsubAcks.put(msgId, new UnsubRequest(subId, unSubscribeMethod, subscribesAhead));
+    // This cancellation's wire ordinal: what the acknowledgement handler compares against a
+    // grant's attempt ordinal when a shared id must be adjudicated.
+    conn.pendingUnsubAcks.put(msgId, new UnsubRequest(subId, unSubscribeMethod, ++conn.nextWireSeq));
     conn.inFlightSends.put(msgId, pacingMillis());
     queueText(conn, createUnSubMsg(msgId, unSubscribeMethod, subId)).whenComplete((_, ex) -> {
       lock.lock();
@@ -1686,6 +1775,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             requestId = ji.readLong();
           }
           boolean dispatchException = true;
+          boolean correlated = false;
           ji.reset(offset).skipUntil("error");
           // The OptionalLong parameter is retry-after seconds — the HTTP client fills it from
           // the retry-after header — and this path has no such hint. The request id stays local:
@@ -1718,18 +1808,37 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                   if (isRequestDefect(exception.code())) {
                     if (exception.code() == JsonRpcException.METHOD_NOT_FOUND) {
                       log.log(WARNING, "Un-subscription {0} for {1} used method {2}, which {3} does not recognize.",
-                          requestId, rejectedUnsub.subId(), rejectedUnsub.unSubscribeMethod(), endpoint.getHost());
+                          requestId, rejectedUnsub.subId(), rejectedUnsub.unSubscribeMethod(), endpoint.getHost()
+                      );
                     } else {
+                      // Settled: the id was already gone server side, and ordered frames mean
+                      // nothing more can arrive for it — retirement is released with the
+                      // rejection rather than growing for the connection's life.
+                      conn.retiredSubIds.remove(rejectedUnsub.subId());
                       log.log(DEBUG, "Un-subscription {0} for {1} rejected by {2}; treating as settled.",
-                          requestId, rejectedUnsub.subId(), endpoint.getHost());
+                          requestId, rejectedUnsub.subId(), endpoint.getHost()
+                      );
                       dispatchException = false;
                     }
+                  } else if (conn.subscriptionsBySubId.containsKey(rejectedUnsub.subId())) {
+                    // Obsolete, not owed: a successor's grant now owns this id, and on a
+                    // no-reference-counting server that live mapping owns the ONE shared
+                    // server subscription — retrying the old cancellation would kill it.
+                    // Response order cannot change that ownership.
+                    log.log(DEBUG, "Un-subscription {0} for {1} is obsolete: a successor owns the id.",
+                        requestId, rejectedUnsub.subId()
+                    );
                   } else {
                     // Still owed, but on the retry cadence: an immediately-refusing peer
                     // must not be retried at wire speed, so the re-queue carries the same
-                    // window a failed subscribe waits out.
+                    // window a failed subscribe waits out — saturated, so the maximal
+                    // "disabled" window does not wrap into an immediate retry.
+                    final long window = timings.subscriptionResendDelay();
+                    final long now = pacingMillis();
+                    final long notBefore = window > Long.MAX_VALUE - now ? Long.MAX_VALUE : now + window;
                     conn.pendingUnSubscriptions.putIfAbsent(rejectedUnsub.subId(),
-                        new QueuedUnsub(rejectedUnsub.unSubscribeMethod(), pacingMillis() + timings.subscriptionResendDelay()));
+                        new QueuedUnsub(rejectedUnsub.unSubscribeMethod(), notBefore)
+                    );
                   }
                 }
                 // ANY correlated error is a response, and a response releases the send gate:
@@ -1737,11 +1846,16 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                 // classification below preserves. The tombstone releases on any answer too —
                 // a cancelled request is not pending, so nothing will re-send it, and a
                 // tombstone no confirmation can ever consume is a leak, not compensation.
-                conn.inFlightSends.remove(requestId);
-                conn.cancelledRequests.remove(requestId);
+                // "Correlated" here means the id matched a request THIS connection is
+                // tracking: only those bypass the stale-id wording heuristic below — a
+                // numeric id alone proves nothing, since the uncorrelatable stale case
+                // carries one too.
+                correlated = conn.inFlightSends.remove(requestId) != null | rejectedUnsub != null;
+                correlated |= conn.cancelledRequests.remove(requestId) != null;
                 if (isRequestDefect(exception.code())) {
                   final var rejected = conn.pendingSubscriptions.remove(requestId);
                   if (rejected != null) {
+                    conn.attemptSeqs.remove(requestId);
                     releaseChannelSlot(rejected);
                     log.log(WARNING, "Subscription request {0} rejected by {1}: released {2} {3}.",
                         requestId, endpoint.getHost(), rejected.channel(), rejected.key()
@@ -1755,8 +1869,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           }
           final var message = exception.getMessage();
           // The startsWith heuristic survives only as the fallback for UNCORRELATED stale-id
-          // errors; a correlated un-subscription rejection is recognized by its request id.
-          if (dispatchException && (message == null || !message.startsWith("Invalid subscription id"))) {
+          // errors — a correlated error's disposition was decided by classification above,
+          // and its wording must not overrule that: a subscribe rejection whose message
+          // happens to say "Invalid subscription id" is still consumer news.
+          if (dispatchException && (correlated || message == null || !message.startsWith("Invalid subscription id"))) {
             dispatchException(exception);
           }
         } else {
@@ -1775,36 +1891,47 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                 if (acked != null) {
                   conn.inFlightSends.remove(sub.msgId());
                   conn.inFlightUnsubs.remove(acked.subId());
+                  final boolean stillQueued = conn.pendingUnSubscriptions.containsKey(acked.subId());
+                  if (stillQueued) {
+                    // A later cancellation for this id waited out this one's single-flight
+                    // gate; the gate is free now, so the loop is woken to transmit it.
+                    checkSignalled = true;
+                    newSubscription.signal();
+                  }
                   if (sub.boolResult()) {
                     // TRUE is the contract's only removal evidence, and WIRE order — not
-                    // response arrival order, which JSON-RPC leaves free — decides what it
-                    // removed. A mapped grant whose request was ahead of this cancellation on
-                    // the wire was the thing the server cancelled: an id-reusing server
-                    // granted it the predecessor's id and this frame, minted too late to
-                    // recall, killed it. It is re-queued, not mourned — the durable
-                    // registration still expresses intent, so it re-sends and re-confirms
-                    // under a fresh grant. A mapped grant whose request FOLLOWED the
+                    // response arrival order, which JSON-RPC leaves free, and not request
+                    // ids, which are stable across retries — decides what it removed. A
+                    // mapped grant whose latest ATTEMPT preceded this cancellation on the
+                    // wire was the thing the server cancelled: it is re-queued, not mourned —
+                    // the durable registration still expresses intent, so it re-sends and
+                    // re-confirms under a fresh grant. A grant whose attempt followed the
                     // cancellation postdates the kill and is left alone.
                     final var casualty = conn.subscriptionsBySubId.get(acked.subId());
-                    if (casualty != null && acked.subscribesAhead().contains(casualty.msgId())) {
-                      conn.subscriptionsBySubId.remove(acked.subId());
-                      casualty.setSubId(null);
-                      casualty.setLastAttempt(Subscription.NEVER);
-                      conn.retiredSubIds.add(acked.subId());
-                      conn.pendingSubscriptions.put(casualty.msgId(), casualty);
-                      conn.inFlightSends.remove(casualty.msgId());
-                      checkSignalled = true;
-                      newSubscription.signal();
-                      log.log(WARNING, "Un-subscription {0} cancelled live subscription {1}; re-subscribing {2}.",
-                          sub.msgId(), acked.subId(), casualty.key());
-                    } else if (casualty == null
-                        && acked.subscribesAhead().stream().anyMatch(conn.pendingSubscriptions::containsKey)) {
-                      // A subscribe that was ahead of this cancellation is still unanswered:
-                      // if its grant resolves to this id it arrives already dead, so the kill
-                      // is recorded for the confirmation branch to consume — response order
-                      // must not change the outcome.
-                      conn.killedSubIds.put(acked.subId(), acked);
-                    } else if (casualty == null) {
+                    if (casualty != null) {
+                      final long casualtySeq = conn.attemptSeqs.getOrDefault(casualty.msgId(), Long.MAX_VALUE);
+                      if (casualtySeq < acked.wireSeq()) {
+                        conn.subscriptionsBySubId.remove(acked.subId());
+                        casualty.setSubId(null);
+                        casualty.setLastAttempt(Subscription.NEVER);
+                        conn.retiredSubIds.add(acked.subId());
+                        conn.pendingSubscriptions.put(casualty.msgId(), casualty);
+                        conn.inFlightSends.remove(casualty.msgId());
+                        checkSignalled = true;
+                        newSubscription.signal();
+                        log.log(WARNING, "Un-subscription {0} cancelled live subscription {1}; re-subscribing {2}.",
+                            sub.msgId(), acked.subId(), casualty.key()
+                        );
+                      }
+                    } else if (conn.pendingSubscriptions.keySet().stream()
+                        .anyMatch(m -> conn.attemptSeqs.getOrDefault(m, Long.MAX_VALUE) < acked.wireSeq())) {
+                      // An attempt transmitted ahead of this cancellation is still
+                      // unanswered: any grant it draws for this id arrives already dead, so
+                      // the kill ordinal is recorded for the confirmation branch — response
+                      // order must not change the outcome, and one kill covers EVERY
+                      // coalesced grant below it.
+                      conn.killedSubIds.merge(acked.subId(), acked.wireSeq(), Math::max);
+                    } else if (!stillQueued) {
                       // Nothing outstanding can resolve to this id, and frames are ordered,
                       // so no late notification for it can follow its own removal:
                       // retirement has done its job and is released rather than growing for
@@ -1816,9 +1943,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                     // answers -32602 here; Helius answers this quiet false, both measured
                     // 2026-08-09). It is no evidence that any live mapping was cancelled, so
                     // nothing is removed or replayed on its account.
-                    conn.retiredSubIds.remove(acked.subId());
+                    if (!stillQueued) {
+                      conn.retiredSubIds.remove(acked.subId());
+                    }
                     log.log(DEBUG, "Un-subscription {0} for {1} was already gone server side.",
-                        sub.msgId(), acked.subId());
+                        sub.msgId(), acked.subId()
+                    );
                   }
                 }
               }
@@ -1845,18 +1975,35 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                   // for the connection's life. Nothing is installed from it.
                   conn.inFlightUnsubs.remove(strayAck.subId());
                   log.log(WARNING, "Un-subscription {0} for {1} was answered with a numeric result; settling.",
-                      sub.msgId(), strayAck.subId());
+                      sub.msgId(), strayAck.subId()
+                  );
                 } else {
-                  final var cancelledUnSubMethod = conn.cancelledRequests.remove(sub.msgId());
-                  if (cancelledUnSubMethod != null) {
-                    if (conn.subscriptionsBySubId.containsKey(sub.subId())) {
-                      // The cancelled request's grant resolved to an id a LIVE registration
-                      // already owns: the server coalesced the two identical requests, so
-                      // there is no server-side subscription of the loser's to cancel — a
-                      // wire cancellation here would kill the owner's. The tombstone is
-                      // spent on nothing, deliberately.
-                      log.log(DEBUG, "Cancelled request {0} was coalesced onto live subscription {1}; nothing to cancel.",
-                          sub.msgId(), sub.subId());
+                  final var cancelled = conn.cancelledRequests.remove(sub.msgId());
+                  if (cancelled != null) {
+                    final var owner = conn.subscriptionsBySubId.get(sub.subId());
+                    if (owner != null) {
+                      if (cancelled.fingerprint().equals(requestFingerprint(owner.msg()))) {
+                        // The cancelled request's grant resolved to an id a LIVE registration
+                        // already owns, and the two requests were EQUIVALENT: the server
+                        // coalesced them, so there is no server-side subscription of the
+                        // loser's to cancel — a wire cancellation here would kill the
+                        // owner's. The tombstone is spent on nothing, deliberately.
+                        log.log(DEBUG, "Cancelled request {0} was coalesced onto live subscription {1}; nothing to cancel.",
+                            sub.msgId(), sub.subId()
+                        );
+                      } else {
+                        // One id for two DIFFERENT requests: cancelling the loser does not
+                        // make the ambiguity disappear — frames under this id can no longer
+                        // be attributed — so this takes the same connection-fatal path as a
+                        // collision between two live registrations.
+                        conn.escalated = true;
+                        conn.socket.abort();
+                        fatal = new IllegalStateException(
+                            "Subscription id " + sub.subId() + " from " + endpoint.getHost()
+                                + " was assigned to a cancelled request that is not equivalent to its live owner "
+                                + owner.key() + "; replacing the connection.");
+                        log.log(ERROR, fatal.getMessage());
+                      }
                     } else {
                       // Unsubscribed before this confirmation arrived: the local record is
                       // already gone, so the just-created server subscription has nothing
@@ -1865,26 +2012,36 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                       // unconfirmed, and the cancelled subscription's notifications must not
                       // reach it in that window.
                       conn.retiredSubIds.add(sub.subId());
-                      sendUnSubscription(conn, cancelledUnSubMethod, sub.subId());
+                      sendUnSubscription(conn, cancelled.unSubscribeMethod(), sub.subId());
                     }
                   } else {
                     final var pendingSub = conn.pendingSubscriptions.remove(sub.msgId());
                     if (pendingSub != null) {
-                      final var kill = conn.killedSubIds.remove(sub.subId());
-                      if (kill != null && kill.subscribesAhead().contains(sub.msgId())) {
-                        // This grant is already dead: its request was ahead of a cancellation
+                      final var kill = conn.killedSubIds.get(sub.subId());
+                      final long attemptSeq = conn.attemptSeqs.getOrDefault(sub.msgId(), Long.MAX_VALUE);
+                      if (kill != null && attemptSeq < kill) {
+                        // This grant is already dead: its attempt was ahead of a cancellation
                         // the server has since acknowledged true for this same id. Installing
                         // it would map a subscription the server no longer holds — the exact
                         // outcome the ack-time casualty replay prevents when the responses
-                        // arrive the other way around.
+                        // arrive the other way around. The kill evidence is NOT consumed: an
+                        // id-reusing server may have coalesced several grants below the same
+                        // cancellation, and each must be replayed. A retry re-sent after the
+                        // cancellation carries a higher attempt ordinal and installs below.
                         conn.retiredSubIds.add(sub.subId());
                         pendingSub.setLastAttempt(Subscription.NEVER);
                         conn.pendingSubscriptions.put(sub.msgId(), pendingSub);
                         checkSignalled = true;
                         newSubscription.signal();
                         log.log(WARNING, "Grant {0} for request {1} was already cancelled; re-subscribing {2}.",
-                            sub.subId(), sub.msgId(), pendingSub.key());
+                            sub.subId(), sub.msgId(), pendingSub.key()
+                        );
                       } else {
+                        if (kill != null) {
+                          // A grant whose attempt postdates the kill is fresh: the evidence
+                          // is obsolete for this id and released.
+                          conn.killedSubIds.remove(sub.subId());
+                        }
                         final var previous = conn.subscriptionsBySubId.putIfAbsent(sub.subId(), pendingSub);
                         if (previous == null || previous == pendingSub) {
                           pendingSub.setSubId(sub.subId());
@@ -1965,7 +2122,16 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             final var slotSub = this.slotSub;
             final int slotParamsMark = ji.mark();
             final var subId = readSubscriptionId(ji, slotParamsMark);
-            if (slotSub == null || staleSingletonId(conn, slotSub, subId)) {
+            final var registeredForSlotId = conn.subscriptionsBySubId.get(subId);
+            if (registeredForSlotId != null && registeredForSlotId.channel() != Channel.slot) {
+              // The same cross-channel guard the keyed channels apply: this id belongs to a
+              // LIVE registration of another channel, so a slotNotification naming it is
+              // malformed or hostile — and auto-unsubscribing it would cancel that healthy
+              // registration on a permissive server.
+              log.log(WARNING, "Dropping slot notification whose subscription {0} belongs to {1}.",
+                  subId, registeredForSlotId.channel()
+              );
+            } else if (slotSub == null || staleSingletonId(conn, slotSub, subId)) {
               // No singleton, or a notification for a predecessor's id after an
               // unsubscribe/resubscribe: either way it must not reach the current consumer.
               sendUnSubscription(conn, channel.unSubscribe(), subId);
@@ -1988,7 +2154,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             final var rootSub = this.rootSub;
             final int rootParamsMark = ji.mark();
             final var subId = readSubscriptionId(ji, rootParamsMark);
-            if (rootSub == null || staleSingletonId(conn, rootSub, subId)) {
+            final var registeredForRootId = conn.subscriptionsBySubId.get(subId);
+            if (registeredForRootId != null && registeredForRootId.channel() != Channel.root) {
+              // Same cross-channel guard as the slot path above.
+              log.log(WARNING, "Dropping root notification whose subscription {0} belongs to {1}.",
+                  subId, registeredForRootId.channel()
+              );
+            } else if (rootSub == null || staleSingletonId(conn, rootSub, subId)) {
               sendUnSubscription(conn, channel.unSubscribe(), subId);
             } else if (rootSub.subId() == null) {
               // Same pre-confirmation drop as the slot path above.
@@ -2040,7 +2212,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                     log.log(WARNING, "Dropping signature notification whose subscription {0} belongs to {1}.",
                         subId, registered.channel()
                     );
-                  } else if (registered != null) {
+                  } else {
                     @SuppressWarnings("unchecked") final var sub = (Subscription<TxResult>) registered;
                     // Detached before delivery: the server has already cancelled its side, so
                     // the terminal state must not depend on the consumer returning normally —
@@ -2172,6 +2344,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public CompletionStage<?> onBinary(final WebSocket webSocket, final ByteBuffer data, final boolean last) {
+    // The same identity fence as every other entry: a binary frame is a protocol violation
+    // only on the LIVE JSON transport. A displaced or closed socket's late callback throwing
+    // here would escape into the JDK for a connection already retired.
+    if (connectionFor(webSocket) == null) {
+      return null;
+    }
     throw new UnsupportedOperationException();
   }
 
@@ -2241,14 +2419,18 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// server has not been silent about a frame it only now received — while the admission stamp
   /// it replaces remains the watchdog for a chain that never drains at all.
   private void sendSubscription(final Connection conn, final Subscription<?> sub) {
-    final var next = conn.outboundTail
+    // This attempt's wire ordinal: admission order is transmission order (the chain is FIFO),
+    // and a RETRY is a new position on the wire under the same request id, so the latest
+    // attempt's ordinal — never the id — is what same-id adjudication compares.
+    conn.attemptSeqs.put(sub.msgId(), ++conn.nextWireSeq);
+    conn.outboundTail = conn.outboundTail
         .exceptionally(_ -> null)
         .thenCompose(_ -> {
           lock.lock();
           try {
             if (conn.cancelledRequests.remove(sub.msgId()) != null) {
               conn.inFlightSends.remove(sub.msgId());
-              return CompletableFuture.<WebSocket>completedFuture(null);
+              return CompletableFuture.completedFuture(null);
             }
           } finally {
             lock.unlock();
@@ -2288,7 +2470,6 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             }
           });
         });
-    conn.outboundTail = next;
   }
 
   /// The unanswered-request deadline. Send-once means a successfully transmitted request is
@@ -2365,10 +2546,15 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         if (throwable != null) {
           // Roll both back: a ping that never left is neither a write nor an ask, so the next
           // check retries instead of waiting out the delay. That is what lets a run of failures
-          // accumulate quickly enough to be worth acting on.
+          // accumulate quickly enough to be worth acting on. The rollback touches only this
+          // connection's own clocks, so it is safe stale; the REPORT is not — a displaced
+          // socket's ping failing against its own teardown abort is expected noise, not a
+          // failure of the successor.
           conn.lastOutboundFrame.compareAndSet(now, previousWrite);
           conn.lastPing.compareAndSet(now, previousPing);
-          if (this.onPingError == null) {
+          if (conn != this.connection || conn.escalated) {
+            log.log(DEBUG, "Dropped ping on a superseded socket.");
+          } else if (this.onPingError == null) {
             log.log(WARNING, String.format("Failed to ping %d to %s.", now, this.endpoint.getHost()), throwable);
           } else {
             this.onPingError.accept(this, throwable);
@@ -2392,6 +2578,14 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       if (entry.getValue().notBefore() > now) {
         // A rejected cancellation waits out its retry window here rather than being re-sent
         // by every pass — an immediately-refusing peer must not drive a wire-speed loop.
+        continue;
+      }
+      if (conn.inFlightUnsubs.contains(entry.getKey())) {
+        // Gate eligibility is decided BEFORE the queued intent is consumed: an earlier
+        // cancellation for this id is still unanswered, and it preceded whatever this entry
+        // was queued to cancel — discharging this obligation on ITS answer orphaned the
+        // successor server-side. The entry stays queued; the ack that frees the gate signals
+        // the loop.
         continue;
       }
       // Removed optimistically so a second flush inside the same window cannot double-send;
@@ -2442,69 +2636,62 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public CompletionStage<?> onClose(final WebSocket webSocket, final int statusCode, final String reason) {
-    // Decided AND acted on under the lock. An entry-only check is a TOCTOU: callbacks from
-    // different sockets sharing this listener may run concurrently, so an old socket's close
-    // could pass the check, pause, let onOpen install its successor, then resume and tear the
-    // successor down. onOpen displaces under this lock, so holding it across the action is
-    // what makes the check a guarantee. closed() joins it: after an explicit close(), the
-    // peer's reciprocal close frame is bookkeeping, not news.
+    // DECIDED under the lock — a displaced socket's close must not act for its successor;
+    // closed() joins the check because after an explicit close() the peer's reciprocal close
+    // frame is bookkeeping, not news. ACTED ON after it, default and custom alike: the
+    // default action is a full instance close whose attempt cancellation settles caller
+    // futures synchronously, and those completion actions must never run under this lock — a
+    // blocking one deadlocked against any thread entering subscribe/unsubscribe. The narrow
+    // window this opens — an adoption between decision and action is torn down by its
+    // predecessor's close frame — is the default policy's own semantic: the peer closing the
+    // current connection closes the instance.
     final boolean act;
     lock.lock();
     try {
       act = connectionFor(webSocket) != null;
-      if (act && onClose == null) {
-        // The default teardown stays under the lock: it is internal, and releasing first would
-        // reopen the takeover race for the automatic close.
-        return onCloseLocked(statusCode, reason);
-      }
     } finally {
       lock.unlock();
     }
     if (act) {
-      // The USER's handler runs off the lock: decided under it, delivered after it, so a
-      // handler that blocks — or calls back into subscribe from another thread it waits on —
-      // cannot deadlock the instance. What it does with the notice is its policy.
-      onClose.accept(this, statusCode, reason);
-    }
-    return null;
-  }
-
-  private CompletionStage<?> onCloseLocked(final int statusCode, final String reason) {
-    if (onClose == null) {
-      if (reason == null || reason.isBlank()) {
-        log.log(WARNING, "WebSocket connection to {0} closed with code {1,number,integer}.",
-            endpoint.getHost(), statusCode
-        );
+      if (onClose == null) {
+        if (reason == null || reason.isBlank()) {
+          log.log(WARNING, "WebSocket connection to {0} closed with code {1,number,integer}.",
+              endpoint.getHost(), statusCode
+          );
+        } else {
+          log.log(WARNING, "WebSocket connection to {0} closed with code {1,number,integer} because ''{2}''.",
+              endpoint.getHost(), statusCode, reason
+          );
+        }
+        this.close();
       } else {
-        log.log(WARNING, "WebSocket connection to {0} closed with code {1,number,integer} because ''{2}''.",
-            endpoint.getHost(), statusCode, reason
-        );
+        // The USER's handler runs off the lock: decided under it, delivered after it, so a
+        // handler that blocks — or calls back into subscribe from another thread it waits on —
+        // cannot deadlock the instance. What it does with the notice is its policy.
+        onClose.accept(this, statusCode, reason);
       }
-      this.close();
-    } else {
-      onClose.accept(this, statusCode, reason);
     }
     return null;
   }
 
   @Override
   public void onError(final WebSocket webSocket, final Throwable error) {
-    // Same discipline as onClose: the handler is told the instance failed, not which socket
-    // did, so the decision and the action share the lock.
+    // Same discipline as onClose: decided under the lock, acted on after it — the default
+    // close() settles caller futures whose completion actions must not run under this hold.
     final boolean act;
     lock.lock();
     try {
       act = connectionFor(webSocket) != null;
-      if (act && onError == null) {
-        log.log(ERROR, "Error on connection to " + endpoint.getHost(), error);
-        this.close();
-        return;
-      }
     } finally {
       lock.unlock();
     }
     if (act) {
-      onError.accept(this, error);
+      if (onError == null) {
+        log.log(ERROR, "Error on connection to " + endpoint.getHost(), error);
+        this.close();
+      } else {
+        onError.accept(this, error);
+      }
     }
   }
 
@@ -2516,11 +2703,18 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     this.msgId.set(Long.MIN_VALUE);
     final Connection conn;
     final CompletableFuture<WebSocket> inFlight;
+    final CompletableFuture<WebSocket> build;
     final Future<?> scheduled;
     lock.lock();
     try {
       inFlight = this.inFlightConnect;
+      build = this.inFlightBuild;
       scheduled = this.scheduledConnect;
+      // Nulled, not merely captured: a closed instance retains no completed transports or
+      // scheduling handles.
+      this.inFlightConnect = null;
+      this.inFlightBuild = null;
+      this.scheduledConnect = null;
       conn = this.connection;
       this.connection = null;
       this.accountSubs.clear();
@@ -2549,14 +2743,22 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     if (inFlight != null) {
       inFlight.cancel(true);
     }
+    if (build != null) {
+      // The bridge above is only what callers join; the BUILDER's future owns the upgrade,
+      // and a handshake that never settles would otherwise retain its listener — and this
+      // instance — indefinitely.
+      build.cancel(true);
+    }
     if (scheduled != null) {
       scheduled.cancel(false);
     }
     // A build that completed with a socket nobody adopted — onOpen delayed, or never delivered
     // by a wrapping builder — is otherwise unreleased: cancellation is a no-op on a completed
-    // future and the politeness below only knows the adopted connection.
-    if (inFlight != null && inFlight.isDone() && !inFlight.isCompletedExceptionally()) {
-      final var unadopted = inFlight.join();
+    // future and the politeness below only knows the adopted connection. A build completing
+    // AFTER these cancels is aborted by its attempt's ownership hook, which observes closed().
+    final var settled = build != null && build.isDone() ? build : inFlight;
+    if (settled != null && settled.isDone() && !settled.isCompletedExceptionally()) {
+      final var unadopted = settled.join();
       if (conn == null || conn.socket != unadopted) {
         unadopted.abort();
       }

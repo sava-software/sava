@@ -31,10 +31,17 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   private static final class SynchronousOpenPendingBuilder implements WebSocket.Builder {
 
     private final RecordingWebSocket socket;
-    private final CompletableFuture<WebSocket> completion = new CompletableFuture<>();
+    private final CompletableFuture<WebSocket> completion;
+    private boolean invokeOnOpen = true;
 
     private SynchronousOpenPendingBuilder(final RecordingWebSocket socket) {
+      this(socket, new CompletableFuture<>());
+    }
+
+    private SynchronousOpenPendingBuilder(final RecordingWebSocket socket,
+                                          final CompletableFuture<WebSocket> completion) {
       this.socket = socket;
+      this.completion = completion;
     }
 
     @Override
@@ -54,8 +61,20 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
 
     @Override
     public CompletableFuture<WebSocket> buildAsync(final URI uri, final WebSocket.Listener listener) {
-      listener.onOpen(socket);
+      if (invokeOnOpen) {
+        listener.onOpen(socket);
+      }
       return completion;
+    }
+  }
+
+  /// Models an upgrade which is already past its cancellable phase. close() still calls cancel,
+  /// but ownership of a later successful socket remains the listener's obligation.
+  private static final class UncancellableWebSocketFuture extends CompletableFuture<WebSocket> {
+
+    @Override
+    public boolean cancel(final boolean mayInterruptIfRunning) {
+      return false;
     }
   }
 
@@ -80,6 +99,11 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         onSendTextError,
         onPingError
     );
+  }
+
+  private static boolean lifecycleLockHeldByCurrentThread(final SolanaJsonRpcWebsocket ws) {
+    // Package-private access, per house rule: widen visibility rather than setAccessible.
+    return ws.lock.isHeldByCurrentThread();
   }
 
   @Test
@@ -399,6 +423,30 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     }
   }
 
+  /// The default listener action is close(), but invoking it re-entrantly from the listener's
+  /// locked decision must not undo close()'s callback boundary. Cancelling the attempt settles
+  /// caller copies synchronously; a callback running under this lock can deadlock by waiting for
+  /// another user thread which is entering any subscribe/unsubscribe operation.
+  @Test
+  void defaultOnCloseSettlesConnectCopiesAfterReleasingTheLifecycleLock() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new SynchronousOpenPendingBuilder(socket);
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), new RecordingScheduler(), null, null, null, null, null);
+    final var connected = ws.connect();
+    assertNotNull(connected);
+    final var callbackHeldLock = new AtomicReference<Boolean>();
+    connected.whenComplete((_, _) -> callbackHeldLock.set(lifecycleLockHeldByCurrentThread(ws)));
+
+    ws.onClose(socket, WebSocket.NORMAL_CLOSURE, "peer close");
+
+    assertEquals(Boolean.FALSE, callbackHeldLock.get(),
+        "connect completion callbacks must run after the final listener lock hold is released");
+  }
+
   @Test
   void onCloseAndThenComposesInOrder() {
     final var calls = new ArrayList<String>();
@@ -477,6 +525,61 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       // of failures accumulate quickly enough for a caller to act on.
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(2, socket.pings, "a failed ping must not count as an ask");
+    }
+  }
+
+  /// A ping failure caused by this engine aborting a superseded socket is expected transport
+  /// teardown, not a failure of the replacement connection. The completion runs after takeover,
+  /// so it must re-check the connection it belongs to before invoking the instance-wide handler.
+  @Test
+  void aSupersededConnectionsLatePingFailureIsNotReportedForItsSuccessor() throws InterruptedException {
+    final var errors = new ArrayList<Throwable>();
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock, (_, _, _) -> {
+    }, null, (_, error) -> errors.add(error))) {
+      final var first = new RecordingWebSocket();
+      first.deferPings = true;
+      ws.onOpen(first);
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      ws.checkCycle(0L);
+      assertEquals(1, first.deferredPings.size());
+
+      final var second = new RecordingWebSocket();
+      ws.onOpen(second);
+      assertTrue(first.aborted, "takeover retires the first transport");
+
+      first.deferredPings.getFirst().completeExceptionally(new IOException("aborted ping"));
+
+      assertTrue(errors.isEmpty(),
+          "an expected failure from the superseded transport must not be attributed to its successor");
+    }
+  }
+
+  /// Unanswered-request escalation aborts the current socket while its text future is still
+  /// pending. Its ensuing failure is caused by that deliberate abort, so it is not a second,
+  /// transient send failure for the instance-wide handler to act on.
+  @Test
+  void anEscalatedConnectionsDeferredSendFailureIsNotReportedAgain() throws InterruptedException {
+    final var sendErrors = new ArrayList<Throwable>();
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock, (_, _, _) -> {
+    }, (_, error) -> sendErrors.add(error), null)) {
+      assertTrue(ws.rootSubscribe(_ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      socket.deferTexts = true;
+      ws.onOpen(socket);
+      assertEquals(1, socket.deferredTexts.size());
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay()
+          * SolanaJsonRpcWebsocket.UNANSWERED_ESCALATION_FACTOR + 1);
+      ws.checkCycle(0L);
+      assertTrue(socket.aborted, "the unanswered request retires the transport");
+
+      socket.deferredTexts.getFirst().completeExceptionally(new IOException("aborted send"));
+
+      assertTrue(sendErrors.isEmpty(),
+          "the engine-triggered abort must not surface again as a transient send failure");
     }
   }
 
@@ -1100,6 +1203,203 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         () -> assertEquals(0L, messageTimestampDuringCancellation.get(),
             "the connection must be detached before cancellation invokes caller code")
     );
+  }
+
+  /// The injected scheduler is part of initiating a deferred attempt, so rejecting the schedule
+  /// is the same shape as a builder throwing: the returned attempt fails and releases the
+  /// single-flight slot. Installing an incomplete bridge before schedule() and then letting the
+  /// throw escape leaves every later caller joined to a future nothing can ever settle.
+  @Test
+  void aRejectedDeferredScheduleDoesNotPoisonSingleFlightAuthority() {
+    final var scheduler = new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+    scheduler.shutdown();
+    final var socket = new RecordingWebSocket();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        new RecordingWebSocketBuilder(new AtomicReference<>(), new RecordingWebSocket())
+            .connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null);
+    try {
+      ws.onOpen(socket); // stamps the reconnect throttle, so connect() must schedule
+
+      final var first = assertDoesNotThrow(ws::connect,
+          "schedule rejection is contained into the attempt like a synchronous builder throw");
+      assertNotNull(first);
+      assertTrue(first.isCompletedExceptionally(), "the rejected attempt must settle");
+
+      final var retry = assertDoesNotThrow(ws::connect,
+          "a settled rejection releases the single-flight slot for a real retry");
+      assertNotNull(retry);
+      assertTrue(retry.isCompletedExceptionally(), "the still-rejected retry settles independently");
+      assertNotSame(first, retry, "the retry must not join the poisoned first bridge");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// The bridge exposed to callers is not the operation that owns the HTTP upgrade. close() must
+  /// cancel the actual future returned by buildAsync as well, otherwise a handshake which never
+  /// settles keeps its AttemptListener and this websocket retained indefinitely.
+  @Test
+  void closeCancelsTheActualImmediateBuilderFuture() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new SynchronousOpenPendingBuilder(socket);
+    webSocketBuilder.invokeOnOpen = false;
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null);
+    assertNotNull(ws.connect());
+
+    ws.close();
+
+    assertTrue(webSocketBuilder.completion.isCancelled(),
+        "close must cancel the builder-owned handshake, not only its internal bridge");
+  }
+
+  /// Once a deferred task has entered buildAsync, its builder future is the same owned handshake
+  /// as an immediate attempt. Cancelling only the outer future returned to connect() leaves that
+  /// inner operation retaining the per-attempt listener.
+  @Test
+  void closeCancelsTheActualInjectedDeferredBuilderFuture() {
+    final var first = new RecordingWebSocket();
+    final var built = new RecordingWebSocket();
+    final var webSocketBuilder = new SynchronousOpenPendingBuilder(built);
+    webSocketBuilder.invokeOnOpen = false;
+    final var scheduler = new RecordingScheduler();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null);
+    ws.onOpen(first);
+    assertNotNull(ws.connect());
+    scheduler.deferred.getFirst().task().run();
+
+    ws.close();
+
+    assertTrue(webSocketBuilder.completion.isCancelled(),
+        "close must cancel a handshake after its deferred build task has started");
+  }
+
+  /// A normally completed builder future does not imply listener adoption has happened. Starting
+  /// the next generation must release that successful but still-unadopted predecessor; relying on
+  /// a late onOpen to abort it makes transport release depend on a callback that may never arrive.
+  @Test
+  void aSupersedingAttemptAbortsTheSuccessfulSocketStillAwaitingAdoption() {
+    final var first = new RecordingWebSocket();
+    final var scheduler = new RecordingScheduler();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), first);
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null);
+    try {
+      final var completed = ws.connect();
+      assertNotNull(completed);
+      assertSame(first, completed.join(), "the first handshake has produced a socket");
+
+      assertNotNull(ws.connect());
+
+      assertTrue(first.aborted,
+          "starting its successor must release a successful socket still awaiting onOpen");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// close() may win before buildAsync produces its socket. Cancelling the bridge prevents that
+  /// later result from becoming its value, but it must not make the socket ownerless: a successful
+  /// result delivered after close is aborted even when onOpen remains queued forever.
+  @Test
+  void anImmediateBuildCompletingAfterCloseAbortsItsUnadoptedSocket() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new SynchronousOpenPendingBuilder(socket, new UncancellableWebSocketFuture());
+    webSocketBuilder.invokeOnOpen = false;
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null);
+    assertNotNull(ws.connect());
+
+    ws.close();
+    assertTrue(webSocketBuilder.completion.complete(socket));
+
+    assertTrue(socket.aborted,
+        "a socket produced after its cancelled bridge must be aborted without waiting for onOpen");
+  }
+
+  /// The same ownership rule applies after a deferred task has started buildAsync. Cancelling the
+  /// outer connected future does not cancel the builder future it is bridging, so a later success
+  /// must be observed and aborted rather than silently discarded.
+  @Test
+  void anInjectedDeferredBuildCompletingAfterCloseAbortsItsUnadoptedSocket() {
+    final var first = new RecordingWebSocket();
+    final var built = new RecordingWebSocket();
+    final var webSocketBuilder = new SynchronousOpenPendingBuilder(built, new UncancellableWebSocketFuture());
+    webSocketBuilder.invokeOnOpen = false;
+    final var scheduler = new RecordingScheduler();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null);
+    ws.onOpen(first); // stamps the reconnect throttle
+    assertNotNull(ws.connect());
+    assertEquals(1, scheduler.deferred.size());
+    scheduler.deferred.getFirst().task().run(); // buildAsync has started and remains pending
+
+    ws.close();
+    assertTrue(webSocketBuilder.completion.complete(built));
+
+    assertTrue(built.aborted,
+        "a deferred builder success after close must be aborted without waiting for onOpen");
+  }
+
+  /// Binary frames are rejected only while their socket is current. The attempt listener must
+  /// apply the same stale/closed fence as every other entry before delegating to that rejection;
+  /// otherwise an old socket can still throw into the JDK after takeover or explicit close.
+  @Test
+  void binaryRejectionIsFencedForStaleAndClosedAttemptListeners() {
+    final var first = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), first);
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null);
+    try {
+      assertNotNull(ws.connect());
+      final var listener = webSocketBuilder.listeners.getFirst();
+      listener.onOpen(first);
+      assertThrows(UnsupportedOperationException.class,
+          () -> listener.onBinary(first, ByteBuffer.wrap(new byte[]{1}), true),
+          "a binary frame on the live JSON transport remains a protocol violation");
+
+      final var second = new RecordingWebSocket();
+      ws.onOpen(second);
+      assertNull(assertDoesNotThrow(
+          () -> listener.onBinary(first, ByteBuffer.wrap(new byte[]{2}), true),
+          "the displaced attempt's late binary callback is ignored"));
+
+      ws.close();
+      assertNull(assertDoesNotThrow(
+          () -> ws.onBinary(second, ByteBuffer.wrap(new byte[]{3}), true),
+          "a reciprocal callback after explicit close is ignored"));
+    } finally {
+      ws.close();
+    }
   }
 
   /// F7: close() commits the local teardown before attempting transport politeness, so a
