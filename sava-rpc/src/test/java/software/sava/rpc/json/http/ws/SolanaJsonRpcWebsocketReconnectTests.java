@@ -2536,4 +2536,281 @@ final class SolanaJsonRpcWebsocketReconnectTests {
     }
   }
 
+  /// Every outcome that releases the per-id cancellation gate must wake a later cancellation
+  /// already queued behind it. The pre-interrupted cycle is a deterministic condition-memory
+  /// oracle: a remembered signal skips the await and flushes U2; a missing signal enters the
+  /// await, throws immediately, and proves that a real loop could park for its whole check delay.
+  @Test
+  void everyGateReleaseWakesTheQueuedLaterCancellation() {
+    assertAll(
+        () -> assertQueuedCancellationWakes("true acknowledgement", """
+            {"jsonrpc":"2.0","result":true,"id":3}"""),
+        () -> assertQueuedCancellationWakes("false acknowledgement", """
+            {"jsonrpc":"2.0","result":false,"id":3}"""),
+        () -> assertQueuedCancellationWakes("request-defect rejection", """
+            {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid subscription id."},"id":3}"""),
+        () -> assertQueuedCancellationWakes("transient rejection", """
+            {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":3}"""),
+        () -> assertQueuedCancellationWakes("numeric malformed acknowledgement", """
+            {"jsonrpc":"2.0","result":999,"id":3}"""),
+        SolanaJsonRpcWebsocketReconnectTests::assertFailedCancellationWakesItsRetry
+    );
+  }
+
+  private static void assertQueuedCancellationWakes(final String outcome,
+                                                    final String response) throws InterruptedException {
+    final var clock = new TestClock();
+    final var maximalCheck = new Timings(60_000L, 60_000L, Long.MAX_VALUE, 120_000L, 60_000L);
+    try (final var ws = websocket(maximalCheck, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // U1 id 3
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // successor id 4 follows U1
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":4}"""), true);
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // U2 stays queued behind U1; its enqueue signal is now consumed
+
+      ws.onText(socket, CharBuffer.wrap(response), true);
+      boolean woke;
+      Thread.currentThread().interrupt();
+      try {
+        ws.checkCycle(Long.MAX_VALUE);
+        woke = true;
+      } catch (final InterruptedException _) {
+        woke = false;
+      } finally {
+        // A signalled cycle deliberately never entered the interruptible await.
+        Thread.interrupted();
+      }
+
+      assertTrue(socket.aborted || woke,
+          outcome + " released the gate without waking its queued successor or replacing the connection");
+      if (!socket.aborted) {
+        assertEquals(2, socket.sentText.stream()
+                .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+                .count(),
+            outcome + " must flush U2 as soon as it releases U1: " + socket.sentText);
+      }
+    }
+  }
+
+  private static void assertFailedCancellationWakesItsRetry() throws InterruptedException {
+    final var clock = new TestClock();
+    final var maximalCheck = new Timings(60_000L, 60_000L, Long.MAX_VALUE, 120_000L, 60_000L);
+    try (final var ws = websocket(maximalCheck, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      socket.deferTexts = true;
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // U1 id 3 is pending; its enqueue signal is consumed
+      socket.deferTexts = false;
+      socket.deferredTexts.getFirst().completeExceptionally(new IOException("U1 never left"));
+
+      boolean woke;
+      Thread.currentThread().interrupt();
+      try {
+        ws.checkCycle(Long.MAX_VALUE);
+        woke = true;
+      } catch (final InterruptedException _) {
+        woke = false;
+      } finally {
+        Thread.interrupted();
+      }
+
+      assertTrue(socket.aborted || woke,
+          "send failure released the gate and requeued U1 without waking its retry or replacing the connection");
+      if (!socket.aborted) {
+        assertEquals(2, socket.sentText.stream()
+                .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+                .count(),
+            "the failed cancellation must retry as soon as its failed send releases the gate: " + socket.sentText);
+      }
+    }
+  }
+
+  /// The maintenance flush checks the per-id gate before consuming U2. The direct path used by
+  /// an unknown notification must preserve the same ordering: that peer frame is not authority
+  /// to remove U2 while U1 is still unanswered, because U1 preceded the successor and cannot
+  /// cancel the successor's postdating server subscription.
+  @Test
+  void anUnknownNotificationCannotConsumeACancellationQueuedBehindTheIdGate() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // U1 id 3
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // successor id 4 follows U1
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":4}"""), true);
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // U2 is queued behind the gate
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":3},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":700}}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":3}"""), true);
+      ws.checkCycle(0L);
+
+      final long cancellations = socket.sentText.stream()
+          .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+          .count();
+      assertTrue(socket.aborted || cancellations == 2,
+          "the unknown notification must not spend U2 against U1's occupied gate: " + socket.sentText);
+    }
+  }
+
+  /// A tombstoned successor's late confirmation discovers U2 only after its server id is known.
+  /// If U1 for the predecessor still owns the id gate, that discovery must queue U2 behind it:
+  /// returning from the direct-send helper without recording the obligation loses the only frame
+  /// that can cancel the successor, because U1 preceded S4 on the wire.
+  @Test
+  void aTombstonedPostdatingGrantQueuesItsCancellationBehindTheIdGate() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // predecessor U1 id 3
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // successor S4 follows U1
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A), "the unanswered successor is tombstoned");
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":4}"""), true); // discovers U2 while U1 owns the gate
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":3}"""), true);
+      ws.checkCycle(0L);
+
+      final long cancellations = socket.sentText.stream()
+          .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+          .count();
+      assertTrue(socket.aborted || cancellations == 2,
+          "U1 preceded S4, so the tombstone confirmation must preserve a later U2: " + socket.sentText);
+    }
+  }
+
+  /// A transient U1 failure says the predecessor still exists server-side. A postdating live
+  /// owner makes U1 obsolete only when it asked for the same subscription; if the two requests
+  /// are non-equivalent, one id now names two streams and notifications cannot be attributed.
+  /// This is the same connection-fatal ambiguity as a simultaneous non-equivalent collision.
+  @Test
+  void aFailedCancellationCannotTrustANonEquivalentSameIdSuccessor() throws InterruptedException {
+    final var clock = new TestClock();
+    final var errors = new java.util.ArrayList<Throwable>();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock, null, (_, ex) -> errors.add(ex))) {
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "predecessor", "\"p\"", JsonIterator::readLong, null, _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":2}"""), true);
+
+      assertTrue(ws.unsubscribe("fooNotification", "predecessor"));
+      ws.checkCycle(0L); // U1 id 3
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "successor", "\"q\"", JsonIterator::readLong, null, _ -> {
+          }));
+      ws.checkCycle(0L); // non-equivalent S4 follows U1
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":4}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":3}"""), true);
+
+      assertTrue(socket.aborted,
+          "failed U1 leaves the non-equivalent predecessor and successor sharing id 55");
+      assertEquals(1, errors.size());
+      assertInstanceOf(IllegalStateException.class, errors.getFirst());
+    }
+  }
+
+
+  /// Same-id adjudication bookkeeping — attempt ordinals and recorded kills — dies with its
+  /// registrations and adjudications, not with the connection: a long-lived signature client
+  /// otherwise retained one ordinal per completed operation, and a kill whose "ahead" request
+  /// drew a different id was retained until reconnect.
+  @Test
+  void adjudicationBookkeepingDiesWithItsRegistrations() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      // a completed signature releases its ordinal with its registration
+      final var sig = "2EBVM6cB8vAAD93Ktr6Vd8p67XPbQzCJX47MpReuiCXJAtcjaxpvWpcg9Ege1Nr5Tk3a2GFrByT7WPBjdsTycY9b";
+      assertTrue(ws.signatureSubscribe(sig, _ -> {
+      }));
+      ws.checkCycle(0L); // request id 2
+      assertEquals(1, ws.retainedOrdinalEntries());
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":900,"id":2}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"signatureNotification","params":{"result":{"context":{"slot":3},"value":{"err":null}},"subscription":900}}"""), true);
+      assertEquals(0, ws.retainedOrdinalEntries(), "the terminal signature releases its ordinal");
+
+      // a recalled queued send releases its ordinal with its tombstone
+      socket.deferTexts = true;
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // id 3 dispatched, held open by the fixture
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      }));
+      ws.checkCycle(0L); // id 4 queued behind the open send
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_B));
+      socket.deferredTexts.getFirst().complete(socket);
+      socket.deferTexts = false;
+      assertEquals(1, ws.retainedOrdinalEntries(), "the recall releases its ordinal; the pending subscribe keeps its");
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":3}"""), true); // A live at 700: its ordinal is retained while mapped
+
+      // a kill whose ahead request resolves to a DIFFERENT id is swept once nothing pends
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      }));
+      ws.checkCycle(0L); // id 5 transmitted
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_B), "the unanswered request is tombstoned");
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      }));
+      ws.checkCycle(0L); // successor id 6 transmitted
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":800,"id":5}"""), true); // tombstone converts: compensation id 7 follows id 6
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":7}"""), true); // kill recorded: id 6 was ahead and pends
+      assertEquals(3, ws.retainedOrdinalEntries(), "A's and the successor's ordinals plus the recorded kill");
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":801,"id":6}"""), true); // the ahead request resolves to a DIFFERENT id
+      ws.checkCycle(0L); // the sweep runs with nothing pending
+      assertEquals(2, ws.retainedOrdinalEntries(), "only the two live ordinals remain: the kill is swept");
+    }
+  }
 }
