@@ -292,7 +292,12 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// @param unSubscribeMethod  the corresponding un-subscription request method. Fixed by the
   ///                           first registration under a notification method: later
   ///                           registrations must agree, so unknown-id recovery never has to
-  ///                           pick among divergent methods.
+  ///                           pick among divergent methods. The binding lives only as long as
+  ///                           some registration under the method remains — releasing the last
+  ///                           key releases the binding, and a re-registration may then bind a
+  ///                           different method while an older cancellation is still
+  ///                           outstanding; its wrong-method rejection is reported, not
+  ///                           retried.
   /// @param notificationMethod the method of the corresponding notification messages.
   /// @param key                unique key within this notification method, used for
   ///                           de-duplication and to unsubscribe.

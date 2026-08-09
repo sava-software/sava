@@ -2257,4 +2257,283 @@ final class SolanaJsonRpcWebsocketReconnectTests {
           "a transient rejection of a cancelled request leaves nothing to compensate");
     }
   }
+
+  /// A transient rejection says U1 removed nothing. If its postdating successor has already
+  /// confirmed onto the same id, measured Agave no-reference-counting means that live mapping
+  /// now owns the one shared server subscription; retrying the old cancellation would kill it.
+  /// Response order cannot change that ownership, so a late U1 error must not re-arm U700 after
+  /// the same-id confirmation has made the old cancellation obsolete.
+  @Test
+  void aTransientCancellationErrorDoesNotRequeuePastItsSameIdSuccessor() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // U700 id 3
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // successor id 4 follows U700
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":4}"""), true); // successor now owns the shared id
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":3}"""), true);
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay() + 1);
+      ws.checkCycle(0L);
+      assertEquals(1, socket.sentText.stream()
+              .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+              .count(),
+          "the rejected cancellation is obsolete once its postdating same-id successor is live: "
+              + socket.sentText);
+    }
+  }
+
+  /// `Long.MAX_VALUE` is the documented disabled retry window. Computing an absolute
+  /// `notBefore` must saturate rather than wrap negative: one immediate -32603 response must not
+  /// turn the maximal delay into an immediate second cancellation.
+  @Test
+  void aMaximalUnsubscribeRetryDelayDoesNotWrapToImmediate() {
+    final var clock = new TestClock();
+    final var maximal = new Timings(60_000L, 60_000L, 60_000L, 120_000L, Long.MAX_VALUE);
+    try (final var ws = websocket(maximal, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      assertDoesNotThrow(() -> ws.checkCycle(0L)); // U700 id 3
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":3}"""), true);
+      assertDoesNotThrow(() -> ws.checkCycle(0L)); // the overflowed retry must still remain disabled
+      assertEquals(1, socket.sentText.stream()
+              .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+              .count(),
+          "the maximal retry window must not overflow into an immediate retry: " + socket.sentText);
+    }
+  }
+
+  /// One true cancellation applies to every coalesced grant that preceded it on the wire, not
+  /// merely the first confirmation that happens to arrive afterward. Agave gives byte-identical
+  /// subscriptions one shared id with no reference count, so the predecessor's compensation
+  /// below cancels both successors; response reordering must not let the second confirmation
+  /// consume that dead id as a live mapping.
+  @Test
+  void aTrueCompensationAckRetiresEveryCoalescedGrantAheadOfIt() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "predecessor", "\"p\"", JsonIterator::readLong, null, _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // predecessor request id 2 is on the wire
+      assertTrue(ws.unsubscribe("fooNotification", "predecessor"));
+
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "first", "\"p\"", JsonIterator::readLong, null, _ -> {
+          }));
+      final var secondHandle = new AtomicReference<Subscription<Long>>();
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "second", "\"p\"", JsonIterator::readLong, secondHandle::set, _ -> {
+          }));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // successor requests 3 and 4 precede the compensation
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":2}"""), true); // mints U55, id 5
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":5}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":3}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":4}"""), true);
+
+      assertNotNull(secondHandle.get(), "the second successor request was transmitted");
+      assertTrue(socket.aborted || secondHandle.get().subId() == null,
+          "U55 cancelled every coalesced grant ahead of it; the second must not install dead id 55");
+    }
+  }
+
+  /// A tombstone is benign only when its late grant is wire-equivalent to the live owner. If a
+  /// server assigns one id to different requests, cancelling the pending loser does not make the
+  /// ambiguity disappear: notifications under that id can no longer be attributed safely, so
+  /// this must take the same connection-fatal path as a non-cancelled collision.
+  @Test
+  void aTombstonedNonEquivalentIdCollisionReplacesTheConnection() {
+    final var clock = new TestClock();
+    final var errors = new java.util.ArrayList<Throwable>();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null,
+        (_, ex) -> errors.add(ex))) {
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "owner", "\"p\"", JsonIterator::readLong, null, _ -> {
+          }));
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "loser", "\"q\"", JsonIterator::readLong, null, _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":2}"""), true);
+      assertTrue(ws.unsubscribe("fooNotification", "loser"));
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":3}"""), true);
+
+      assertTrue(socket.aborted, "one id for non-equivalent requests remains fatal after the loser is cancelled");
+      assertEquals(1, errors.size());
+      assertInstanceOf(IllegalStateException.class, errors.getFirst());
+    }
+  }
+
+  /// `msgId` is stable across retries, but wire order is not. Here the first successor attempt
+  /// precedes U700 and receives a transient rejection, proving it created no grant; its retry is
+  /// sent after U700. The earlier attempt's `subscribesAhead` evidence must not mark that later
+  /// grant dead merely because both attempts share the same request id.
+  @Test
+  void aRetriedSubscribeDoesNotInheritAnEarlierAttemptsWireOrder() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // predecessor id 2
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // successor id 3
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true); // U700 id 4 follows successor attempt 1
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Subscription refused"},"id":3}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":4}"""), true);
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay() + 1);
+      ws.checkCycle(0L); // successor attempt 2 is after U700
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":3}"""), true);
+      ws.checkCycle(0L); // a live confirmation must not arm attempt 3
+
+      final long successorSends = socket.sentText.stream()
+          .filter(m -> m.contains("accountSubscribe") && m.contains("\"id\":3,"))
+          .count();
+      assertTrue(socket.aborted || successorSends == 2,
+          "the post-cancellation retry grant must remain live or replace the connection; stale wire-order "
+              + "evidence must not replay it: " + socket.sentText);
+    }
+  }
+
+  /// U1 precedes the successor on the wire and therefore cannot cancel that later grant. If the
+  /// user cancels the successor before U1's delayed acknowledgement, U2 is a distinct obligation:
+  /// the per-id single-flight gate may defer it, but must not discard it while removing the queue
+  /// entry. Otherwise U1 settles and the successor remains orphaned server-side forever.
+  @Test
+  void aPostdatingGrantKeepsItsCancellationBehindAnEarlierInFlightUnsubscribe() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // U1 id 3
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // successor id 4 follows U1
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":4}"""), true);
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // U2 is owed but gated behind unanswered U1
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":3}"""), true);
+      ws.checkCycle(0L);
+      final long cancellations = socket.sentText.stream()
+          .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+          .count();
+      assertTrue(socket.aborted || cancellations == 2,
+          "U1 preceded the successor, so its acknowledgement cannot discharge the successor's U2: "
+              + socket.sentText);
+    }
+  }
+
+  /// A transient rejection re-queues an unknown-id cancellation on the retry cadence. The
+  /// orphan may keep notifying while that window runs; those frames are not authority to erase
+  /// `notBefore` and retry immediately, or a refusing peer can still drive the wire-speed loop
+  /// that the paced queue exists to prevent.
+  @Test
+  void anUnknownNotificationCannotBypassItsCancellationRetryCadence() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      final var unknown = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":3},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":999}}""";
+      ws.onText(socket, CharBuffer.wrap(unknown), true); // U999 id 2
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":2}"""), true);
+
+      ws.onText(socket, CharBuffer.wrap(unknown), true); // same pacing instant
+      final long cancellations = socket.sentText.stream()
+          .filter(m -> m.contains("accountUnsubscribe") && m.contains("[999]"))
+          .count();
+      assertTrue(socket.aborted || cancellations == 1,
+          "continued notifications must not bypass the cancellation retry window: " + socket.sentText);
+    }
+  }
+
+  /// A failed compensation remains owed, but retrying it mints a new frame later on the wire.
+  /// Here S3 preceded the failed U4 and confirms before U4's asynchronous failure is observed;
+  /// U5 therefore still cancels S3 even though S3 is no longer in the pending-send map from
+  /// which `subscribesAhead` is reconstructed. A true U5 acknowledgement must replay that live
+  /// registration (or replace the connection), not leave its locally mapped id dead server-side.
+  @Test
+  void anAsynchronouslyFailedCompensationRetainsTheGrantItWillCancel() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // predecessor id 2
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A), "the predecessor is tombstoned");
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // successor id 3 precedes compensation U4
+
+      socket.deferTexts = true;
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true); // U4 is now pending
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":3}"""), true); // S3 owns 700 before U4 fails
+      socket.deferTexts = false;
+      socket.deferredTexts.getFirst().completeExceptionally(new java.io.IOException("U4 never left"));
+
+      ws.checkCycle(0L); // retry U5 follows S3 and therefore cancels it
+      assertEquals(2, socket.sentText.stream()
+              .filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]"))
+              .count(),
+          "the failed compensation remains owed: " + socket.sentText);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":5}"""), true);
+      ws.checkCycle(0L);
+
+      final long subscribes = socket.sentText.stream()
+          .filter(m -> m.contains("accountSubscribe"))
+          .count();
+      assertTrue(socket.aborted || subscribes == 3,
+          "U5 followed and cancelled S3, so its acknowledgement must replay S3: " + socket.sentText);
+    }
+  }
+
 }

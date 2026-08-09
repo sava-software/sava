@@ -83,7 +83,9 @@ public final class SolanaJsonRpcWebsocketFuzz {
         SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
         new TestClock(),
         new RecordingExecutor(),
-        null,
+        // A recording scheduler, not null: every input closes its websocket, and the default
+        // path would queue an eight-second abort watchdog on the shared JDK delayer per input.
+        new RecordingScheduler(),
         _ -> {
         },
         (_, _, _) -> {
