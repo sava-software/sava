@@ -353,6 +353,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     /// unknown-id notification minted another un-subscription frame and acknowledgement entry —
     /// 1:1 write amplification a peer could drive, with a map that only ever grew.
     final Set<BigInteger> inFlightUnsubs = ConcurrentHashMap.newKeySet();
+    /// Released with the cancellation, kill, or rejection that implied each retirement.
+    /// Accepted residue: a replayed casualty cancelled before its re-send leaves its
+    /// predecessor's retired id unassociated — the replay nulled the subId — so that one id
+    /// is retained until reconnect. Bounded retention on a rare path, not correlation
+    /// corruption.
     final Set<BigInteger> retiredSubIds = ConcurrentHashMap.newKeySet();
     /// Accepted, recorded risk: a peer replaying DISTINCT unknown ids allocates one
     /// acknowledgement record, gate entry, and outbound frame per id. The unanswered-request
@@ -1074,6 +1079,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       conn.cancelledRequests.put(sub.msgId(),
           new CancelledRequest(sub.unSubscribeMethod(), requestFingerprint(sub.msg()))
       );
+    } else {
+      // Never admitted, or answered transiently and cancelled before the retry: no later
+      // answer or retry exists, so removing the registration is the terminal transition for
+      // its attempt ordinal too.
+      conn.attemptSeqs.remove(sub.msgId());
     }
   }
 
@@ -1913,7 +1923,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                 // numeric id alone proves nothing, since the uncorrelatable stale case
                 // carries one too.
                 correlated = conn.inFlightSends.remove(requestId) != null | rejectedUnsub != null;
-                correlated |= conn.cancelledRequests.remove(requestId) != null;
+                if (conn.cancelledRequests.remove(requestId) != null) {
+                  // An error is a cancelled request's terminal answer: nothing re-sends it,
+                  // so its attempt ordinal dies with the consumed tombstone.
+                  conn.attemptSeqs.remove(requestId);
+                  correlated = true;
+                }
                 if (isRequestDefect(exception.code())) {
                   final var rejected = conn.pendingSubscriptions.remove(requestId);
                   if (rejected != null) {
@@ -2057,7 +2072,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                         // already owns, and the two requests were EQUIVALENT: the server
                         // coalesced them, so there is no server-side subscription of the
                         // loser's to cancel — a wire cancellation here would kill the
-                        // owner's. The tombstone is spent on nothing, deliberately.
+                        // owner's. The tombstone is spent on nothing, deliberately — and the
+                        // ordinal dies with it.
+                        conn.attemptSeqs.remove(sub.msgId());
                         log.log(DEBUG, "Cancelled request {0} was coalesced onto live subscription {1}; nothing to cancel.",
                             sub.msgId(), sub.subId()
                         );
@@ -2453,11 +2470,26 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       return null;
     }
     final long now = pacingMillis();
-    if (!conn.killedSubIds.isEmpty() && conn.pendingSubscriptions.isEmpty()) {
-      // The promised sweep: with nothing pending, no grant can still resolve to a recorded
-      // kill — evidence whose "ahead" request drew a different id dies here instead of with
-      // the connection.
-      conn.killedSubIds.clear();
+    if (!conn.killedSubIds.isEmpty()) {
+      // The sweep is CAUSAL, per entry: a kill is evidence only against requests transmitted
+      // before it, so once no pending attempt predates it the entry dies — a request
+      // transmitted AFTER the kill must not keep it alive merely by pending, or subscription
+      // churn turns temporal bookkeeping into connection-lifetime retention. A swept kill
+      // also releases the retirement it implied, unless a queued or in-flight cancellation
+      // still owns that id.
+      conn.killedSubIds.entrySet().removeIf(kill -> {
+        final long killSeq = kill.getValue();
+        for (final var pending : conn.pendingSubscriptions.keySet()) {
+          if (conn.attemptSeqs.getOrDefault(pending, Long.MAX_VALUE) < killSeq) {
+            return false;
+          }
+        }
+        final var subId = kill.getKey();
+        if (!conn.pendingUnSubscriptions.containsKey(subId) && !conn.inFlightUnsubs.contains(subId)) {
+          conn.retiredSubIds.remove(subId);
+        }
+        return true;
+      });
     }
     // Cancellations flush FIRST, so the wire order matches intent order. The registries force
     // unsubscribe-before-resubscribe locally, but this pass used to send the subscribes first
@@ -2529,7 +2561,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
               lock.lock();
               try {
                 conn.inFlightSends.remove(sub.msgId());
-                conn.cancelledRequests.remove(sub.msgId());
+                if (conn.cancelledRequests.remove(sub.msgId()) != null) {
+                  // Cancelled and never transmitted: the failed send is this attempt's
+                  // terminal event, so the ordinal dies with the tombstone.
+                  conn.attemptSeqs.remove(sub.msgId());
+                }
               } finally {
                 lock.unlock();
               }
