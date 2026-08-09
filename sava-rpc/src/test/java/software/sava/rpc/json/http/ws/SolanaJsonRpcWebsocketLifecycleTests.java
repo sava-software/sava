@@ -1205,6 +1205,41 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     );
   }
 
+  /// Local state is committed before caller notification, but transport release must be
+  /// committed too. Cancelling the bridge settles every defensive copy synchronously; if one
+  /// caller blocks there, close() must already have cancelled the builder-owned HTTP upgrade
+  /// and armed the adopted socket's abort watchdog rather than leaving either behind that code.
+  @Test
+  void closeArmsOwnedTransportReleaseBeforeNotifyingConnectWaiters() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new SynchronousOpenPendingBuilder(socket);
+    final var scheduler = new RecordingScheduler();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null);
+    final var connected = ws.connect();
+    assertNotNull(connected);
+    final var buildCancelledWhenNotified = new AtomicReference<Boolean>();
+    final var watchdogArmedWhenNotified = new AtomicReference<Boolean>();
+    connected.whenComplete((_, _) -> {
+      buildCancelledWhenNotified.set(webSocketBuilder.completion.isCancelled());
+      watchdogArmedWhenNotified.set(scheduler.deferred.stream()
+          .anyMatch(deferred -> deferred.delay() == SolanaJsonRpcWebsocket.CLOSE_GRACE_MILLIS));
+    });
+
+    ws.close();
+
+    assertAll(
+        () -> assertEquals(Boolean.TRUE, buildCancelledWhenNotified.get(),
+            "the owned handshake must be cancelled before close invokes caller completion code"),
+        () -> assertEquals(Boolean.TRUE, watchdogArmedWhenNotified.get(),
+            "the adopted transport's bounded abort must be armed before caller code can block close")
+    );
+  }
+
   /// The injected scheduler is part of initiating a deferred attempt, so rejecting the schedule
   /// is the same shape as a builder throwing: the returned attempt fails and releases the
   /// single-flight slot. Installing an incomplete bridge before schedule() and then letting the
