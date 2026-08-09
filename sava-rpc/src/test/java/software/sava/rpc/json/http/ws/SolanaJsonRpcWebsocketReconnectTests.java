@@ -1465,31 +1465,137 @@ final class SolanaJsonRpcWebsocketReconnectTests {
     }
   }
 
-  /// F4, defensively: a server may grant the SAME id to an identical re-subscription
-  /// (solana-labs#18943 — unverified against current Agave, guarded regardless). The queued
-  /// un-subscription for that id would cancel the subscription just granted, so the
-  /// confirmation cancels the cancellation, and the id comes out of retirement.
+  /// F4, measured live (api.mainnet-beta.solana.com, 2026-08-09): an identical subscribe
+  /// returned the SAME subscription id for both requests, and one unsubscribe cancelled it for
+  /// both — no reference counting. Against such a server the frames' WIRE order decides who
+  /// dies, so the check pass flushes cancellations before subscribes: unsubscribe-then-
+  /// resubscribe of one key reaches the server in intent order, the predecessor is cancelled
+  /// first, and the successor's grant has no cancellation in flight. Reversed — the order this
+  /// pass used to produce — the server granted the successor the predecessor's id and then
+  /// killed it with the reordered un-subscription, permanently and silently.
   @Test
-  void aReusedSubscriptionIdCancelsItsQueuedCancellation() {
+  void theQueuedCancellationPrecedesTheResubscribeOnTheWire() {
     final var clock = new TestClock();
     try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
       final var received = new java.util.ArrayList<software.sava.rpc.json.http.response.AccountInfo<byte[]>>();
-      assertTrue(ws.accountSubscribe(ACCOUNT_A, received::add));
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
       ws.onText(socket, CharBuffer.wrap("""
           {"jsonrpc":"2.0","result":700,"id":2}"""), true);
       assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
-
-      // re-subscribe before the queued un-subscription flushes; the server grants the SAME id
       assertTrue(ws.accountSubscribe(ACCOUNT_A, received::add));
+
+      // one pass transmits both; the cancellation must lead
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+      final int unsubIndex = indexOfSent(socket, m -> m.contains("accountUnsubscribe") && m.contains("[700]"));
+      final int resubIndex = indexOfSent(socket, m -> m.contains("accountSubscribe") && m.contains("\"id\":3,"));
+      assertTrue(unsubIndex >= 0 && resubIndex > unsubIndex,
+          "the cancellation must precede the resubscribe on the wire: " + socket.sentText);
+
+      // the server answers in wire order: predecessor cancelled, successor granted fresh
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":4}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":701,"id":3}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":3},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":701}}"""), true);
+      assertEquals(1, received.size(), "the successor lives under its fresh grant");
+    }
+  }
+
+  private static int indexOfSent(final RecordingWebSocket socket, final java.util.function.Predicate<String> match) {
+    for (int i = 0; i < socket.sentText.size(); ++i) {
+      if (match.test(socket.sentText.get(i))) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /// The order-independent half of the same-id-reuse defense. A subscription cancelled before
+  /// its confirmation converts through its tombstone into a COMPENSATING un-subscription — but
+  /// that compensation is minted a full round trip after the successor's subscribe went out, so
+  /// no wire ordering can save the successor when an id-reusing server grants both the same id:
+  /// the compensation kills it. The acknowledgement is where the client finds out — a `true`
+  /// ack whose id still maps to a live subscription means the server just cancelled something
+  /// the client holds — and the casualty is re-queued, re-sent, and re-confirmed.
+  @Test
+  void aCompensatingCancellationsAcknowledgementRevivesTheSuccessorItKilled() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var received = new java.util.ArrayList<software.sava.rpc.json.http.response.AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      // cancelled before confirmation: tombstoned, not queued
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, received::add));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // transmits the successor's subscribe, id 3
+
+      // the tombstoned request's late grant converts into a compensating un-subscription
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+      assertSent(socket, "accountUnsubscribe", "[700]");
+      // the id-reusing server grants the successor the SAME id...
       ws.onText(socket, CharBuffer.wrap("""
           {"jsonrpc":"2.0","result":700,"id":3}"""), true);
+      // ...and then acknowledges the compensation that killed it
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":4}"""), true);
 
-      // the queued cancellation must be gone: a flush sends nothing that would kill id 700
+      // the ack revived the successor: it re-sends and re-confirms under a fresh grant
       ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
-      assertTrue(socket.sentText.stream().noneMatch(m -> m.contains("accountUnsubscribe") && m.contains("[700]")),
-          "the queued cancellation would cancel the successor: " + socket.sentText);
+      assertEquals(2, socket.sentText.stream().filter(m -> m.contains("accountSubscribe") && m.contains("\"id\":3,")).count(),
+          "the revived successor re-sends its subscribe: " + socket.sentText);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":701,"id":3}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":3},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":701}}"""), true);
+      assertEquals(1, received.size(), "the revived successor is served under the fresh grant");
+      // the killed id stays retired: its late notifications feed nobody
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":4},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":700}}"""), true);
+      assertEquals(1, received.size(), "the cancelled id must not feed the successor");
+    }
+  }
+
+  /// The confirmation-time guard, pinned on its one genuinely reachable order: the compensating
+  /// un-subscription's SEND fails, so the frame never left and its method is re-queued — and
+  /// the confirmation that then grants the same id must cancel that re-queued cancellation
+  /// rather than let a frame that never left kill the grant. (The order this test used to pin —
+  /// confirmation arriving before any flush had transmitted anything — cannot occur against a
+  /// real server: every transmission path flushes the queued un-subscription in the same lock
+  /// hold that sends the subscribe.)
+  @Test
+  void aReusedSubscriptionIdCancelsItsReQueuedCancellation() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var received = new java.util.ArrayList<software.sava.rpc.json.http.response.AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      socket.deferTexts = true;
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, received::add));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // dispatches the un-subscription, id 4; chains the subscribe
+      // the un-subscription's send FAILS: the frame never left, and the method is re-queued
+      socket.deferredTexts.get(0).completeExceptionally(new IOException("send failed"));
+      // the chained subscribe goes out
+      socket.deferredTexts.get(1).complete(socket);
+
+      // the grant reuses the id the re-queued cancellation names; the guard must consume it
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":3}"""), true);
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+      assertEquals(1, socket.sentText.stream().filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]")).count(),
+          "the re-queued cancellation would kill the reused grant: " + socket.sentText);
 
       // and the id is live again, out of retirement
       ws.onText(socket, CharBuffer.wrap("""
@@ -1571,6 +1677,353 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       ws.onText(socket, CharBuffer.wrap("""
           {"jsonrpc":"2.0","error":{"code":-32602,"message":"some novel wording"},"id":7}"""), true);
       assertTrue(errors.isEmpty(), "a correlated un-subscription rejection is a settled double-cancel");
+    }
+  }
+
+  /// F3: an id-reusing server coalesces two generic registrations with byte-identical params
+  /// onto ONE server id. Displacing the first owner starved it silently, and either key's
+  /// unsubscribe then killed the shared server subscription for both. The owner keeps the
+  /// mapping; the loser is released and reported; and no wire cancellation is sent for a
+  /// subscription that is the owner's.
+  @Test
+  void aCoalescedGrantRejectsTheSecondRegistrationLoudly() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var errors = new java.util.ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(errors::add);
+      final var first = new java.util.ArrayList<Long>();
+      final var second = new java.util.ArrayList<Long>();
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "K1", "\"p\"", JsonIterator::readLong, null, first::add));
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "K2", "\"p\"", JsonIterator::readLong, null, second::add));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":2}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":55,"id":3}"""), true);
+
+      assertEquals(1, errors.size(), "the coalesced grant is consumer news");
+      assertInstanceOf(IllegalStateException.class, errors.getFirst());
+      assertTrue(socket.sentText.stream().noneMatch(m -> m.contains("fooUnsubscribe")),
+          "no cancellation may be sent for the owner's subscription: " + socket.sentText);
+
+      // the owner keeps flowing; the loser was released, so its unsubscribe is a no-op
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"fooNotification","params":{"result":7,"subscription":55}}"""), true);
+      assertEquals(java.util.List.of(7L), first);
+      assertTrue(second.isEmpty(), "the loser must not receive the owner's stream");
+      assertFalse(ws.unsubscribe("fooNotification", "K2"), "the loser's registration was released");
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"fooNotification","params":{"result":8,"subscription":55}}"""), true);
+      assertEquals(java.util.List.of(7L, 8L), first, "the owner survives the loser's teardown");
+      // and the loser's key is free for a corrected registration
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "K2", "\"q\"", JsonIterator::readLong, null, second::add));
+    }
+  }
+
+  /// F4: the unanswered deadline restarts at transmission. A frame that waited out a slow
+  /// chain gets its full four windows from the moment it was actually sent, while a frame the
+  /// chain never delivers still escalates on its admission stamp — the jam watchdog.
+  @Test
+  void theAnswerDeadlineStartsAtTransmissionNotAdmission() throws InterruptedException {
+    final var clock = new TestClock();
+    final var errors = new java.util.ArrayList<Throwable>();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null,
+        (_, ex) -> errors.add(ex))) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      socket.deferTexts = true;
+      ws.onOpen(socket); // admits the subscribe; the chain holds it un-transmitted
+
+      clock.advanceMillis(239_000); // just inside the 240s admission deadline
+      ws.checkCycle(0L);
+      assertTrue(errors.isEmpty());
+      socket.deferredTexts.getFirst().complete(socket); // transmission: the clock restarts here
+
+      clock.advanceMillis(120_000); // past the admission deadline, inside the transmission one
+      ws.checkCycle(0L);
+      assertTrue(errors.isEmpty(), "the deadline must judge the server's silence, not the chain's: " + errors);
+      assertFalse(socket.aborted);
+
+      clock.advanceMillis(200_000); // past the transmission deadline
+      ws.checkCycle(0L);
+      assertEquals(1, errors.size(), "a transmitted request the server never answers escalates");
+      assertTrue(socket.aborted);
+    }
+  }
+
+  /// F4: an escalated connection is aborted and owed nothing further — flushing and pinging it
+  /// was one more frame per cycle down a socket nobody reads.
+  @Test
+  void anEscalatedConnectionIsOwedNothingFurther() throws InterruptedException {
+    final var clock = new TestClock();
+    final var errors = new java.util.ArrayList<Throwable>();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null,
+        (_, ex) -> errors.add(ex))) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":800,"id":3}"""), true); // B confirmed; A never answered
+
+      clock.advanceMillis(241_000);
+      ws.checkCycle(0L);
+      assertEquals(1, errors.size());
+      assertTrue(socket.aborted);
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_B)); // queues a cancellation nobody should transmit
+      final int frames = socket.sentText.size();
+      final int pings = socket.pings;
+      clock.advanceMillis(61_000);
+      ws.checkCycle(0L);
+      assertEquals(frames, socket.sentText.size(), "no flush after escalation: " + socket.sentText);
+      assertEquals(pings, socket.pings, "no ping after escalation");
+    }
+  }
+
+  /// F5: one wire cancellation per unknown id at a time. Every repeated unknown-id
+  /// notification used to mint another un-subscription frame and acknowledgement entry —
+  /// unbounded growth a peer could drive one frame at a time.
+  @Test
+  void repeatedUnknownIdNotificationsMintOneCancellation() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      final var unknown = """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":3},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":999}}""";
+      ws.onText(socket, CharBuffer.wrap(unknown), true);
+      ws.onText(socket, CharBuffer.wrap(unknown), true);
+      ws.onText(socket, CharBuffer.wrap(unknown), true);
+      assertEquals(1, socket.sentText.stream().filter(m -> m.contains("accountUnsubscribe") && m.contains("[999]")).count(),
+          "one in-flight cancellation per id: " + socket.sentText);
+
+      // the acknowledgement re-arms the gate
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":2}"""), true);
+      ws.onText(socket, CharBuffer.wrap(unknown), true);
+      assertEquals(2, socket.sentText.stream().filter(m -> m.contains("accountUnsubscribe") && m.contains("[999]")).count());
+    }
+  }
+
+  /// F5: a server-condition rejection (-32603 and kin) means the cancellation did NOT run and
+  /// is still owed — re-queued for the next flush, and reported.
+  @Test
+  void aTransientUnsubRejectionKeepsTheCancellationOwed() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var errors = new java.util.ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(errors::add);
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // transmits the cancellation, id 3
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":3}"""), true);
+      assertEquals(1, errors.size(), "a cancellation the server failed to run is consumer news");
+
+      ws.checkCycle(0L);
+      assertEquals(2, socket.sentText.stream().filter(m -> m.contains("accountUnsubscribe") && m.contains("[700]")).count(),
+          "the failed cancellation is still owed: " + socket.sentText);
+    }
+  }
+
+  /// F5: -32601 means the minted method named no cancellation the server recognizes — settled,
+  /// because retrying the same wrong method can only collect the same answer, but reported,
+  /// because the orphan it compensated is uncancellable by it.
+  @Test
+  void anUnrecognizedCancellationMethodIsReportedNotRetried() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var errors = new java.util.ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(errors::add);
+      assertTrue(ws.subscribe("barSubscribe", "barUnsubscribe", "barNotification",
+          "K", "\"p\"", JsonIterator::readLong, null, _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":77,"id":2}"""), true);
+      assertTrue(ws.unsubscribe("barNotification", "K"));
+      ws.checkCycle(0L); // transmits barUnsubscribe, id 3
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":3}"""), true);
+      assertEquals(1, errors.size(), "an uncancellable orphan is consumer news");
+
+      ws.checkCycle(0L);
+      assertEquals(1, socket.sentText.stream().filter(m -> m.contains("barUnsubscribe")).count(),
+          "retrying the same unrecognized method is pointless: " + socket.sentText);
+    }
+  }
+
+  /// F8: a subscription cancelled before its frame was ever admitted to a send retains
+  /// nothing — no frame, no answer, so a tombstone could never be consumed and used to sit in
+  /// the map for the connection's life. One cancelled after admission is owed its tombstone.
+  @Test
+  void aCancellationBeforeAnySendRetainsNothing() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      assertEquals(0, ws.retainedCancellationTombstones(), "no frame, no answer, no tombstone");
+      ws.checkCycle(0L);
+      assertTrue(socket.sentText.isEmpty(), "nothing was owed the wire: " + socket.sentText);
+
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // admitted and transmitted
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      assertEquals(1, ws.retainedCancellationTombstones(), "an admitted request converts through its tombstone");
+    }
+  }
+
+  /// F8: a cancelled subscribe still waiting in the chain is recalled at dispatch — the frame
+  /// never reaches the wire, its onSub never fires, and the tombstone is consumed by the skip
+  /// instead of by a wasted subscribe/unsubscribe round trip.
+  @Test
+  void aCancelledQueuedFrameIsRecalledAtDispatch() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      socket.deferTexts = true;
+      ws.onOpen(socket); // A's subscribe dispatched, held open by the fixture
+      final var onSubCalls = new java.util.ArrayList<Subscription<software.sava.rpc.json.http.response.AccountInfo<byte[]>>>();
+      assertTrue(ws.accountSubscribe(Commitment.CONFIRMED, ACCOUNT_B, onSubCalls::add, _ -> {
+      }));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // B admitted, queued behind A's open send
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_B));
+      assertEquals(1, ws.retainedCancellationTombstones());
+
+      socket.deferredTexts.getFirst().complete(socket); // A drains; B's dispatch must recall
+      assertTrue(socket.sentText.stream().noneMatch(m -> m.contains(ACCOUNT_B.toBase58())),
+          "the recalled frame must never reach the wire: " + socket.sentText);
+      assertTrue(onSubCalls.isEmpty(), "onSub must not fire for a request that was never sent");
+      assertEquals(0, ws.retainedCancellationTombstones(), "the recall consumes the tombstone");
+    }
+  }
+
+  /// F9: ordered frames put a confirmation before its first notification, so an unconfirmed
+  /// singleton legitimately sees nothing — an early frame from a reordering or hostile peer is
+  /// dropped, not delivered, and NOT answered with an unsubscribe that could cancel the very
+  /// grant in flight.
+  @Test
+  void aPreConfirmationSingletonNotificationIsDroppedNotUnsubscribed() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var slots = new java.util.ArrayList<software.sava.rpc.json.http.response.ProcessedSlot>();
+      final var roots = new java.util.ArrayList<Long>();
+      assertTrue(ws.slotSubscribe(slots::add));
+      assertTrue(ws.rootSubscribe(roots::add));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":2,"slot":3},"subscription":999}}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"rootNotification","params":{"result":42,"subscription":888}}"""), true);
+      assertTrue(slots.isEmpty(), "an unconfirmed singleton correlates with nothing");
+      assertTrue(roots.isEmpty());
+      assertTrue(socket.sentText.stream().noneMatch(m -> m.contains("slotUnsubscribe") || m.contains("rootUnsubscribe")),
+          "the grant in flight must not be cancelled: " + socket.sentText);
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":129,"id":2}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":130,"id":3}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":2,"slot":3},"subscription":129}}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"rootNotification","params":{"result":42,"subscription":130}}"""), true);
+      assertEquals(1, slots.size(), "the confirmed id is served");
+      assertEquals(java.util.List.of(42L), roots);
+    }
+  }
+
+  /// F10: the built-in guard runs in both directions — a generic registration under a built-in
+  /// REQUEST method confirms into an id the built-in router then refuses to serve.
+  @Test
+  void genericRegistrationRejectsBuiltInRequestMethods() {
+    try (final var ws = websocket(TIMINGS)) {
+      assertThrows(IllegalArgumentException.class, () -> ws.subscribe(
+          "accountSubscribe", "fooUnsubscribe", "fooNotification", "k", "\"p\"",
+          JsonIterator::readLong, null, _ -> {
+          }));
+      assertThrows(IllegalArgumentException.class, () -> ws.subscribe(
+          "fooSubscribe", "accountUnsubscribe", "fooNotification", "k", "\"p\"",
+          JsonIterator::readLong, null, _ -> {
+          }));
+    }
+  }
+
+  /// F10: one cancellation method per notification method, fixed by the first registration, so
+  /// unknown-id recovery never has to pick among divergent methods.
+  @Test
+  void theCancellationMethodIsBoundPerNotificationMethod() {
+    try (final var ws = websocket(TIMINGS)) {
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "k1", "\"p\"", JsonIterator::readLong, null, _ -> {
+          }));
+      assertThrows(IllegalArgumentException.class, () -> ws.subscribe(
+          "fooSubscribe", "fooUnsubscribeV2", "fooNotification", "k2", "\"p\"",
+          JsonIterator::readLong, null, _ -> {
+          }));
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
+          "k2", "\"p\"", JsonIterator::readLong, null, _ -> {
+          }), "the bound method still admits new keys");
+    }
+  }
+
+  /// F11: exception subscribers are each contained. One subscriber's throw must not starve the
+  /// rest — and must never escape into the JDK, which treats a listener throw as terminal and
+  /// would kill the whole connection over one buggy callback.
+  @Test
+  void aThrowingExceptionSubscriberDoesNotStarveTheRestOrKillTheConnection() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      final var buggyCalls = new AtomicInteger();
+      final var seen = new java.util.ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(_ -> {
+        buggyCalls.incrementAndGet();
+        throw new IllegalStateException("subscriber bug");
+      });
+      ws.exceptionSubscribe(seen::add);
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid Request: Invalid pubkey provided"},"id":2}"""), true);
+      assertEquals(1, buggyCalls.get(), "the buggy subscriber runs once, not again via the outer catch");
+      assertEquals(1, seen.size(), "the throw must not starve later subscribers");
+      assertEquals("Invalid Request: Invalid pubkey provided", seen.getFirst().getMessage());
+
+      // nothing escaped: the connection still parses and serves
+      final var received = new java.util.ArrayList<software.sava.rpc.json.http.response.AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, received::add));
+      ws.checkCycle(0L);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":3}"""), true);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":3},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":700}}"""), true);
+      assertEquals(1, received.size(), "the connection survives a subscriber bug");
     }
   }
 }

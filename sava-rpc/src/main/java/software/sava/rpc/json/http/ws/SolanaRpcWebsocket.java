@@ -82,8 +82,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// This may be used to re-connect the underlying WebSocket if this has not been [closed][#close()].
   /// [Timings#reConnectDelay()] (milliseconds, like every delay here) will delay the connection
   /// attempt if a previous attempt has already been made. Attempts are single-flight: while one
-  /// is unsettled, every caller receives the same future rather than starting another handshake.
-  /// The socket being replaced is aborted; its late callbacks are ignored.
+  /// is unsettled, every caller receives a future that settles with that attempt — a private
+  /// copy, so cancelling it abandons only that caller's view — rather than starting another
+  /// handshake. The socket being replaced is aborted; its late callbacks are ignored.
   CompletableFuture<?> connect();
 
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);

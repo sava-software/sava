@@ -930,4 +930,102 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       }
     }
   }
+
+  /// F6: the attempt is reserved before the builder runs, so an onOpen handler delivered
+  /// synchronously by a wrapping builder can re-enter connect() and JOIN the in-flight attempt
+  /// — unreserved, the reentry found nothing in flight, aborted the socket it was being told
+  /// about, and started a second handshake whose authority the outer return then overwrote.
+  @Test
+  void aSynchronousOnOpenReentrantConnectJoinsTheAttempt() {
+    final var clock = new TestClock();
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    webSocketBuilder.invokeOnOpen = true;
+    final var reentrant = new AtomicReference<java.util.concurrent.CompletableFuture<?>>();
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(java.time.Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), new RecordingScheduler(),
+        w -> reentrant.set(w.connect()), (_, _, _) -> {
+        }, null, null, null)) {
+      final var outer = ws.connect();
+      assertNotNull(outer);
+      assertEquals(1, webSocketBuilder.builds, "the re-entrant connect must join, not stack a second handshake");
+      assertNotNull(reentrant.get(), "the re-entrant caller receives the in-flight attempt");
+      assertFalse(socket.aborted, "the socket being adopted must not be aborted by its own onOpen");
+      assertTrue(outer.toCompletableFuture().isDone());
+      assertTrue(reentrant.get().isDone());
+
+      // the adopted connection serves
+      assertTrue(ws.slotSubscribe(_ -> {
+      }));
+      ws.onPong(socket, java.nio.ByteBuffer.wrap(new byte[0]));
+      assertTrue(socket.sentText.stream().anyMatch(m -> m.contains("slotSubscribe")),
+          "the adopted connection must carry traffic: " + socket.sentText);
+    }
+  }
+
+  /// F7: close() commits the local teardown before attempting transport politeness, so a
+  /// watchdog schedule rejected by an already-shut-down injected scheduler degrades to an
+  /// immediate abort instead of skipping the registry clears and the loop signal.
+  @Test
+  void closeCommitsLocalTeardownWhenThePoliteWorkFails() {
+    final var deadScheduler = new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+    deadScheduler.shutdown();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), deadScheduler, null, (_, _, _) -> {
+        }, null, null, null);
+    assertTrue(ws.slotSubscribe(_ -> {
+    }));
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+    assertDoesNotThrow(ws::close);
+    assertTrue(ws.closed());
+    assertEquals(0, ws.retainedRegistrations(), "teardown must be committed despite the rejected watchdog");
+    assertTrue(socket.aborted, "politeness failing degrades to an immediate abort");
+  }
+
+  /// F7: the default (no-scheduler) deferred connect fires through its cancellable token — the
+  /// JDK delayer is handed only the token, and the build chain hangs off it.
+  @Test
+  void aDefaultDeferredConnectFiresThroughItsToken() {
+    final var clock = new TestClock();
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    final var quick = new Timings(25, 60_000, 60_000);
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(java.time.Duration.ofMillis(1_000)),
+        quick, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), null, null, (_, _, _) -> {
+        }, null, null, null)) {
+      assertNotNull(ws.connect());
+      assertEquals(1, webSocketBuilder.builds);
+      final var deferred = ws.connect(); // inside the throttle window: deferred on the real delayer
+      assertNotNull(deferred);
+      assertDoesNotThrow(() -> deferred.toCompletableFuture()
+          .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS).join());
+      assertEquals(2, webSocketBuilder.builds, "the deferred attempt fires when the token completes");
+    }
+  }
+
+  /// F12: a socket that throws synchronously from sendText — permitted of a wrapping builder's
+  /// socket, though the JDK fails the future instead — is routed into the same failure seam, so
+  /// onSendTextError fires rather than the failure being contained silently by the chain.
+  @Test
+  void aSynchronousSendTextThrowReachesOnSendTextError() {
+    final var sendErrors = new ArrayList<Throwable>();
+    try (final var ws = websocket(new TestClock(), null, (_, ex) -> sendErrors.add(ex), null)) {
+      assertTrue(ws.slotSubscribe(_ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      socket.throwText = new IllegalStateException("sync throw");
+      ws.onOpen(socket);
+      assertEquals(1, sendErrors.size(), "a thrown send is a failed send, and failed sends are reported");
+      assertEquals("sync throw", sendErrors.getFirst().getMessage());
+    }
+  }
 }

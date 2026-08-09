@@ -37,7 +37,10 @@ public final class SubscribeToLookupTables {
           // long-lived consumer needs: a server-side close or a transport error reconnects —
           // logging alone would leave the check loop pinging a dead socket forever — while
           // send and ping failures are transient and only logged; the implementation retries
-          // them on its own.
+          // them on its own. One failure this wiring cannot cover: if the internal check loop
+          // itself dies, the instance invokes onError and then closes itself — the reconnect
+          // started here is cancelled and connect() returns null from then on — so a
+          // supervisor that must survive even that builds a replacement instance.
           .onClose((ws, statusCode, reason) -> {
             System.out.format("%d: %s — reconnecting%n", statusCode, reason);
             connect(ws);

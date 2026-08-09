@@ -1,7 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 /// Clock seam for time-dependent code, so tests advance time instead of waiting.
-/// [SolanaRpcWebsocket.Builder#clock(NanoClock)] injects it; production code uses
+/// Injected through the package-private builder seam; production code uses
 /// [#SYSTEM]. Mirrors ravina's `software.sava.services.core.NanoClock`.
 public interface NanoClock {
 
