@@ -32,18 +32,22 @@ package software.sava.rpc.json.http.ws;
 ///                                       raised the delay to send fewer — but it does mean a
 ///                                       caller with a real outbound bound should state this
 ///                                       explicitly rather than inherit it.
-/// @param subscriptionResendDelay        how long an unconfirmed subscription waits before it is
-///                                       re-sent. Formerly [#reConnectDelay()] did double duty
+/// @param subscriptionResendDelay        how long a subscription send that FAILED waits before
+///                                       it is retried — a successfully sent request is never
+///                                       re-sent on its own connection; the server's answer is
+///                                       what releases it, and four of these windows with no
+///                                       answer replace the connection through the error seam
+///                                       instead. Formerly [#reConnectDelay()] did double duty
 ///                                       here, which made one number answer two questions that
 ///                                       disagree about their edge cases: zero is a coherent
 ///                                       reconnect throttle meaning "do not throttle", but as a
-///                                       re-send deadline it means "re-send whenever a millisecond
-///                                       has passed" — and because the re-send is driven from
-///                                       every inbound frame and not only the check cycle, that
-///                                       is a re-send per frame for as long as anything stays
-///                                       unconfirmed. A subscription the server rejected stays
-///                                       unconfirmed forever, so the two readings were furthest
-///                                       apart exactly where it mattered.
+///                                       retry deadline it means "retry whenever a millisecond
+///                                       has passed" — a hot loop for as long as a failing
+///                                       socket keeps failing. A subscription the server
+///                                       rejected as a request defect is released, while one it
+///                                       refused transiently stays pending for this window, so
+///                                       the two readings were furthest apart exactly where it
+///                                       mattered.
 public record Timings(long reConnectDelay,
                       long pingDelay,
                       long subscriptionAndPingCheckDelay,

@@ -41,6 +41,9 @@ public final class SubscribeToTokenAccounts {
           // A server-side close or a transport error reconnects; wiring every callback to
           // close() meant one transient ping failure permanently terminated the client. Send
           // and ping failures are transient and only logged — the implementation retries them.
+          // If the internal check loop itself dies, the instance invokes onError and then
+          // closes itself — this reconnect is cancelled and connect() returns null from then
+          // on — so a supervisor that must survive even that builds a replacement instance.
           .onClose((ws, statusCode, reason) -> {
             System.out.format("%d: %s — reconnecting%n", statusCode, reason);
             connect(ws);

@@ -10,8 +10,8 @@ import java.util.concurrent.CompletableFuture;
 /// network. `outputClosed` is settable because `close()` only sends a close frame
 /// when the output is still open. `failText` / `failPing` make the returned
 /// futures fail, driving the error-callback paths; `throwText` instead throws
-/// synchronously from `sendText`, driving the check loop's unhandled-exception
-/// funnel. The attempt is still recorded in every case.
+/// synchronously from `sendText`, which the engine contains into the same failed
+/// future the JDK would have returned. The attempt is still recorded in every case.
 ///
 /// `deferPings` holds each ping's future open instead of settling it, so a test can choose when
 /// a ping resolves relative to later cycles. The rollback on ping failure runs on whichever
