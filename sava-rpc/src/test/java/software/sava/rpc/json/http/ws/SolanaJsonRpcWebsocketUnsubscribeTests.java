@@ -388,6 +388,8 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
 
       assertEquals(0, ws.retainedCancellationTombstones(),
           "a failed send can neither grant a subscription nor answer its tombstone");
+      assertEquals(0, ws.retainedOrdinalEntries(),
+          "the cancelled registration's attempt ordinal dies when its send fails");
     }
   }
 }

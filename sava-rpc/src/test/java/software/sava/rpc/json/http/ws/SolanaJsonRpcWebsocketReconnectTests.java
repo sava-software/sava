@@ -765,6 +765,28 @@ final class SolanaJsonRpcWebsocketReconnectTests {
     }
   }
 
+  /// A transient refusal keeps the registration pending, but its completed attempt is no longer
+  /// in flight. If the caller cancels before the retry window, removing that registration is the
+  /// terminal transition for its attempt ordinal too; no later answer or retry exists to reap it.
+  @Test
+  void cancellingATransientlyRejectedSubscribeReleasesItsAttemptOrdinal() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Subscription refused. Node subscription limit reached"},"id":2}"""), true);
+      assertEquals(1, ws.retainedOrdinalEntries(), "the pending retry still owns its latest attempt ordinal");
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+
+      assertEquals(0, ws.retainedOrdinalEntries(),
+          "cancelling before retry must release the removed registration's attempt ordinal");
+    }
+  }
+
   /// JSON-RPC 2.0 mandates "id":null when the server could not read the request at all — the
   /// parse-error class. Reading that as a number would throw, and the throw would abandon the
   /// whole error branch: no dispatch of the server's actual error, and for a correlatable
@@ -1673,6 +1695,8 @@ final class SolanaJsonRpcWebsocketReconnectTests {
         ws.onText(socket, CharBuffer.wrap("""
             {"jsonrpc":"2.0","method":"fooNotification","params":{"result":7,"subscription":55}}"""), true);
         assertEquals(java.util.List.of(7L), first, "the owner remains served by the shared id");
+        assertEquals(1, ws.retainedOrdinalEntries(),
+            "the cancelled coalesced loser's ordinal dies with its consumed tombstone");
       }
     }
   }
@@ -2255,6 +2279,8 @@ final class SolanaJsonRpcWebsocketReconnectTests {
           {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":2}"""), true);
       assertEquals(0, ws.retainedCancellationTombstones(),
           "a transient rejection of a cancelled request leaves nothing to compensate");
+      assertEquals(0, ws.retainedOrdinalEntries(),
+          "the rejected cancelled registration's attempt ordinal dies with its tombstone");
     }
   }
 
@@ -2752,6 +2778,40 @@ final class SolanaJsonRpcWebsocketReconnectTests {
           "failed U1 leaves the non-equivalent predecessor and successor sharing id 55");
       assertEquals(1, errors.size());
       assertInstanceOf(IllegalStateException.class, errors.getFirst());
+    }
+  }
+
+  /// A kill ordinal is evidence only against requests transmitted before it. Once the last such
+  /// request resolves to a different id, an unrelated request transmitted after the kill cannot
+  /// keep that evidence alive merely by remaining pending; continuous subscription churn must
+  /// not turn the sweep's temporal bookkeeping into connection-lifetime retention.
+  @Test
+  void aKilledIdIsSweptWhenOnlyPostdatingRequestsRemainPending() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // predecessor request 2
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A), "the predecessor is tombstoned");
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // pre-kill successor request 3
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":800,"id":2}"""), true); // compensation request 4 follows request 3
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":4}"""), true); // records kill 800 against request 3
+
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      }));
+      ws.checkCycle(0L); // unrelated request 5 postdates the kill and remains pending
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":801,"id":3}"""), true); // the sole pre-kill request resolves elsewhere
+      ws.checkCycle(0L);
+
+      assertEquals(2, ws.retainedOrdinalEntries(),
+          "only the live request 3 and pending post-kill request 5 retain ordinals; kill 800 is obsolete");
     }
   }
 
