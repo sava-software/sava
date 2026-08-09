@@ -339,7 +339,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     /// cannot carry wire order: a retried frame is a NEW position on the wire under an old id.
     long nextWireSeq;
     /// msgId -> the wire ordinal of that request's LATEST transmission attempt. Consulted by
-    /// every same-id adjudication; entries die with the registration or the connection.
+    /// every same-id adjudication. Retained while a transmitted attempt can still grant, or
+    /// while its confirmed grant remains mapped; a concluded ungranted attempt is removed,
+    /// and a retry installs a fresh ordinal.
     final Map<Long, Long> attemptSeqs = new HashMap<>();
     final Map<Long, UnsubRequest> pendingUnsubAcks = new HashMap<>();
     /// id -> the wire ordinal of a cancellation the server acknowledged true while requests
