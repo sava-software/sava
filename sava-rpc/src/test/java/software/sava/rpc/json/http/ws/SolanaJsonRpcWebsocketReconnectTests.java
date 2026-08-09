@@ -778,7 +778,8 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       ws.onOpen(socket);
       ws.onText(socket, CharBuffer.wrap("""
           {"jsonrpc":"2.0","error":{"code":-32603,"message":"Subscription refused. Node subscription limit reached"},"id":2}"""), true);
-      assertEquals(1, ws.retainedOrdinalEntries(), "the pending retry still owns its latest attempt ordinal");
+      assertEquals(0, ws.retainedOrdinalEntries(),
+          "the transient answer concludes the attempt: its ordinal dies with it, and the retry takes a fresh one");
 
       assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
 
@@ -2812,6 +2813,70 @@ final class SolanaJsonRpcWebsocketReconnectTests {
 
       assertEquals(2, ws.retainedOrdinalEntries(),
           "only the live request 3 and pending post-kill request 5 retain ordinals; kill 800 is obsolete");
+    }
+  }
+
+  /// A transient rejection completes one subscription ATTEMPT even though the durable
+  /// registration stays pending for a later retry. If that attempt predated a recorded kill,
+  /// it can no longer resolve to the killed id after its error answer; a disabled retry must
+  /// not turn the obsolete kill into connection-lifetime retention merely because the
+  /// registration itself remains pending.
+  @Test
+  void aRejectedPredatingAttemptCannotRetainAKill() throws InterruptedException {
+    final var clock = new TestClock();
+    final var noRetry = new Timings(60_000L, 60_000L, 60_000L, 120_000L, Long.MAX_VALUE);
+    try (final var ws = websocket(noRetry, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // predecessor request 2
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A), "the predecessor is tombstoned");
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.checkCycle(0L); // successor request 3 predates the compensation
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":800,"id":2}"""), true); // compensation request 4
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":4}"""), true); // records kill 800 against request 3
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Subscription refused. Node subscription limit reached"},"id":3}"""), true);
+      ws.checkCycle(0L);
+
+      assertEquals(0, ws.retainedOrdinalEntries(),
+          "the answered attempt and the kill it can no longer satisfy must both be released");
+    }
+  }
+
+  /// A failed send is the same completed-attempt boundary: by the transport contract used by
+  /// the retry path, the frame never left and cannot produce a grant. Its stale ordinal must
+  /// therefore not make a later true cancellation record evidence against that unsent attempt,
+  /// especially when the documented disabled retry leaves the registration pending forever.
+  @Test
+  void aFailedPredatingAttemptCannotRetainAKill() throws InterruptedException {
+    final var clock = new TestClock();
+    final var noRetry = new Timings(60_000L, 60_000L, 60_000L, 120_000L, Long.MAX_VALUE);
+    try (final var ws = websocket(noRetry, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // predecessor request 2 reaches the wire
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A), "the predecessor is tombstoned");
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+
+      socket.failText = new java.io.IOException("successor request 3 never left");
+      ws.checkCycle(0L);
+      socket.failText = null;
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":800,"id":2}"""), true); // compensation request 4
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":true,"id":4}"""), true);
+      ws.checkCycle(0L);
+
+      assertEquals(0, ws.retainedOrdinalEntries(),
+          "the unsent attempt cannot justify either its ordinal or a kill against id 800");
     }
   }
 

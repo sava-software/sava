@@ -355,9 +355,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final Set<BigInteger> inFlightUnsubs = ConcurrentHashMap.newKeySet();
     /// Released with the cancellation, kill, or rejection that implied each retirement.
     /// Accepted residue: a replayed casualty cancelled before its re-send leaves its
-    /// predecessor's retired id unassociated — the replay nulled the subId — so that one id
-    /// is retained until reconnect. Bounded retention on a rare path, not correlation
-    /// corruption.
+    /// predecessor's retired id unassociated — the replay nulled the subId — retained until
+    /// reconnect, ONE ID PER OCCURRENCE: repeating the coalescing sequence accumulates.
+    /// Retention, not correlation corruption.
     final Set<BigInteger> retiredSubIds = ConcurrentHashMap.newKeySet();
     /// Accepted, recorded risk: a peer replaying DISTINCT unknown ids allocates one
     /// acknowledgement record, gate entry, and outbound frame per id. The unanswered-request
@@ -1922,17 +1922,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                 // tracking: only those bypass the stale-id wording heuristic below — a
                 // numeric id alone proves nothing, since the uncorrelatable stale case
                 // carries one too.
+                // A correlated error concludes the transmitted attempt whatever its
+                // classification: the attempt produced no grant, so its wire ordinal is dead
+                // evidence — kept, a stale ordinal below a kill pinned that kill (and its
+                // retirement) until reconnect. A retry is a NEW wire position with a fresh
+                // ordinal; retry pacing lives in lastAttempt and the send gate, never here.
+                conn.attemptSeqs.remove(requestId);
                 correlated = conn.inFlightSends.remove(requestId) != null | rejectedUnsub != null;
-                if (conn.cancelledRequests.remove(requestId) != null) {
-                  // An error is a cancelled request's terminal answer: nothing re-sends it,
-                  // so its attempt ordinal dies with the consumed tombstone.
-                  conn.attemptSeqs.remove(requestId);
-                  correlated = true;
-                }
+                correlated |= conn.cancelledRequests.remove(requestId) != null;
                 if (isRequestDefect(exception.code())) {
                   final var rejected = conn.pendingSubscriptions.remove(requestId);
                   if (rejected != null) {
-                    conn.attemptSeqs.remove(requestId);
                     releaseChannelSlot(rejected);
                     log.log(WARNING, "Subscription request {0} rejected by {1}: released {2} {3}.",
                         requestId, endpoint.getHost(), rejected.channel(), rejected.key()
@@ -2553,19 +2553,18 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
               // Only a FAILED send re-arms the retry: the frame never left, so re-sending is
               // safe. A successful send stays gated until the server answers — its response
               // is what removes the gate — because a duplicate of a merely slow request
-              // creates a second, orphaned server subscription. The attempt stamp is kept, so
-              // a failing socket retries once per resend window rather than hot-looping a
-              // growing chain of doomed frames on every cycle and inbound frame. A
-              // cancellation tombstone releases with the gate: the frame never left, so no
+              // creates a second, orphaned server subscription. The LAST-ATTEMPT pacing
+              // stamp is kept, so a failing socket retries once per resend window rather
+              // than hot-looping a growing chain of doomed frames on every cycle and inbound
+              // frame; the wire ordinal is NOT — the frame never transmitted, so the ordinal
+              // is dead evidence a stale entry would let pin obsolete kills, and the retry
+              // takes a fresh one. A cancellation tombstone releases with the gate: no
               // confirmation can ever exist to consume it.
               lock.lock();
               try {
                 conn.inFlightSends.remove(sub.msgId());
-                if (conn.cancelledRequests.remove(sub.msgId()) != null) {
-                  // Cancelled and never transmitted: the failed send is this attempt's
-                  // terminal event, so the ordinal dies with the tombstone.
-                  conn.attemptSeqs.remove(sub.msgId());
-                }
+                conn.attemptSeqs.remove(sub.msgId());
+                conn.cancelledRequests.remove(sub.msgId());
               } finally {
                 lock.unlock();
               }
