@@ -6,6 +6,7 @@ import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.AccountInfo;
 
+import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -293,6 +294,100 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
           "lowest subId flushes first: " + socket.sentText);
       assertTrue(socket.sentText.get(before + 1).contains("[17]"),
           "highest subId flushes last: " + socket.sentText);
+    }
+  }
+
+  /// A server-condition rejection says the cancellation is still owed, but it does not make
+  /// the retry cadence disappear. `subscriptionResendDelay` is the engine's retry window; an
+  /// immediate -32603/retry exchange must not turn one overloaded peer into a wire-speed loop.
+  @Test
+  void aTransientUnsubscribeRejectionObservesTheRetryCadence() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock)) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":700,"id":2}""");
+      assertTrue(ws.accountUnsubscribe(KEY));
+      ws.checkCycle(0L); // cancellation id 3
+      assertEquals(1, socket.sentText.stream().filter(m -> m.contains("accountUnsubscribe")).count());
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":3}""");
+      ws.checkCycle(0L);
+      final long immediateRetries = socket.sentText.stream().filter(m -> m.contains("accountUnsubscribe")).count();
+      assertTrue(socket.aborted || immediateRetries == 1,
+          "a transient rejection must be paced or replace the connection, not retry at an "
+              + "unchanged pacing time: " + socket.sentText);
+
+      if (!socket.aborted) {
+        clock.advanceMillis(TIMINGS.subscriptionResendDelay() + 1);
+        ws.checkCycle(0L);
+        assertEquals(2, socket.sentText.stream().filter(m -> m.contains("accountUnsubscribe")).count(),
+            "the still-owed cancellation retries once its window has elapsed");
+      }
+    }
+  }
+
+  /// The unanswered deadline measures peer silence after transmission. An un-subscription can
+  /// sit behind another outstanding text send; time spent in that local chain is not time the
+  /// peer has had to answer it, so successful transmission must restart its deadline just as a
+  /// subscription send does.
+  @Test
+  void anUnsubscribeAnswerDeadlineStartsAtTransmission() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock)) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":700,"id":2}""");
+
+      socket.deferTexts = true;
+      assertTrue(ws.rootSubscribe(_ -> {
+      }));
+      ws.checkCycle(0L); // rootSubscribe is now the pending head send
+      assertEquals(1, socket.deferredTexts.size());
+      assertTrue(ws.accountUnsubscribe(KEY));
+      ws.checkCycle(0L); // accountUnsubscribe is admitted behind that head
+
+      clock.advanceMillis(239_000L); // just inside the four-window deadline
+      ws.checkCycle(0L);
+      assertFalse(socket.aborted);
+      socket.deferredTexts.get(0).complete(socket); // root sent; dispatches the queued unsubscribe
+      assertEquals(2, socket.deferredTexts.size());
+      socket.deferredTexts.get(1).complete(socket); // unsubscribe actually transmitted now
+
+      clock.advanceMillis(2_000L); // past admission deadline, only 2s after transmission
+      ws.checkCycle(0L);
+      assertFalse(socket.aborted,
+          "the peer must receive its full answer window after the unsubscribe reaches the wire");
+    }
+  }
+
+  /// Once an admitted subscribe send fails, no confirmation can exist. A cancellation
+  /// tombstone for that request has no event left that could consume it, so retaining it for
+  /// the connection's lifetime is a leak rather than compensation state.
+  @Test
+  void aFailedCancelledSubscribeDoesNotRetainAnUnanswerableTombstone() {
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock)) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      socket.deferTexts = true;
+      ws.onOpen(socket);
+      assertEquals(1, socket.deferredTexts.size(), "the subscribe is admitted and dispatched");
+
+      assertTrue(ws.accountUnsubscribe(KEY));
+      assertEquals(1, ws.retainedCancellationTombstones());
+      socket.deferredTexts.getFirst().completeExceptionally(new IOException("request never left"));
+
+      assertEquals(0, ws.retainedCancellationTombstones(),
+          "a failed send can neither grant a subscription nor answer its tombstone");
     }
   }
 }

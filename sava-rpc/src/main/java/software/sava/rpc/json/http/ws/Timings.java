@@ -1,5 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
+/// Every delay is in MILLISECONDS.
+///
 /// @param reConnectDelay                 how long to wait before re-attempting a connection.
 /// @param pingDelay                      how long the peer may be silent before it is asked
 ///                                       whether it is still there, and the minimum spacing
@@ -37,7 +39,9 @@ package software.sava.rpc.json.http.ws;
 ///                                       re-sent on its own connection; the server's answer is
 ///                                       what releases it, and four of these windows with no
 ///                                       answer replace the connection through the error seam
-///                                       instead. Formerly [#reConnectDelay()] did double duty
+///                                       instead. The same window paces the retry of an
+///                                       un-subscription the server refused transiently.
+///                                       Formerly [#reConnectDelay()] did double duty
 ///                                       here, which made one number answer two questions that
 ///                                       disagree about their edge cases: zero is a coherent
 ///                                       reconnect throttle meaning "do not throttle", but as a
@@ -95,7 +99,7 @@ public record Timings(long reConnectDelay,
   /// says "do not ping" — [Long#MAX_VALUE] being the idiomatic form — and an overflow there
   /// would land on a negative delay, which every comparison reads as long overdue: the one
   /// setting that means *never* would become a ping on every check cycle and every inbound
-  /// frame. Saturating keeps "never ping" meaning "never poke either".
+  /// ping or pong. Saturating keeps "never ping" meaning "never poke either".
   public Timings(final long reConnectDelay,
                  final long pingDelay,
                  final long subscriptionAndPingCheckDelay) {

@@ -42,6 +42,11 @@ class RootSubscription<T> implements Subscription<T> {
   }
 
   @Override
+  public String notificationMethod() {
+    return channel == null ? null : channel.name() + "Notification";
+  }
+
+  @Override
   public final Commitment commitment() {
     return commitment;
   }
@@ -101,9 +106,14 @@ class RootSubscription<T> implements Subscription<T> {
   @Override
   public final boolean equals(final Object o) {
     if (o instanceof Subscription<?> subscription) {
+      // The notification method is the key's namespace: a generic key is unique only within
+      // its method, so equality without it silently merged two valid registrations in any
+      // consumer-held set or map. For channel subscriptions it is derived from the channel
+      // and changes nothing.
       return Objects.equals(commitment, subscription.commitment())
           && Objects.equals(channel, subscription.channel())
-          && key.equals(subscription.key());
+          && key.equals(subscription.key())
+          && Objects.equals(notificationMethod(), subscription.notificationMethod());
     } else {
       return false;
     }

@@ -148,21 +148,22 @@ public final class SolanaJsonRpcWebsocketFuzz {
         ws.onText(socket, CharBuffer.wrap(""), true);
       }
 
-      // whatever the frames did, the state machine must have recovered: a canonical
-      // notification either dispatches, or the fuzzed frames legitimately unsubscribed
-      // subscription 11 themselves and the unknown-id auto-unsubscribe answers instead —
-      // exactly one of the two, and never a throw. A fuzzed signatureNotification naming
-      // subscription 11 no longer removes it: dispatch is channel-correlated, so one
-      // channel's frame cannot terminally remove another channel's registration
+      // whatever the frames did, the state machine must have recovered — and the canonical
+      // registration must have SURVIVED: no inbound frame sequence is a legitimate removal of
+      // subscription 11. Confirmation collisions no longer displace, dispatch is
+      // channel-correlated, cancellation acknowledgements adjudicate by wire order, and no
+      // un-subscription for id 11 is ever minted here — so a liveness notification that fails
+      // to dispatch is registry corruption, which the old either-or postcondition (tolerating
+      // an auto-unsubscribe answer as "legitimately unsubscribed") was masking.
       final int before = received.size();
       final int sentBefore = socket.sentText.size();
       ws.onText(socket, CharBuffer.wrap(LIVENESS_NOTIFICATION), true);
       final boolean dispatched = received.size() > before;
-      final boolean unsubscribed = socket.sentText.size() > sentBefore
-          && socket.sentText.getLast().contains("accountUnsubscribe");
-      if (dispatched == unsubscribed) {
-        throw new AssertionError(dispatched
-            ? "liveness notification both dispatched and un-subscribed"
+      if (!dispatched) {
+        final boolean unsubscribed = socket.sentText.size() > sentBefore
+            && socket.sentText.getLast().contains("accountUnsubscribe");
+        throw new AssertionError(unsubscribed
+            ? "the canonical registration was removed by fuzzed frames and auto-unsubscribed as unknown"
             : "liveness notification neither dispatched nor un-subscribed");
       }
       if (received.size() > before + 1) {
