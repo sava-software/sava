@@ -1,10 +1,23 @@
 # Audited timed-out mutants (class,method,mutator — line-less; the verify warns on
 # timeouts missing from this set). Structural causes: README.md "Timed-out mutants
-# (audited set)".
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,run,RemoveConditionalMutator_EQUAL_IF # line 208
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,checkCycle,VoidMethodCallMutator
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,run,VoidMethodCallMutator # line 209
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,VoidMethodCallMutator # line 1113
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$connect$2,RemoveConditionalMutator_EQUAL_ELSE # line 183
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$connect$1,NakedReceiverMutator
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,closed,RemoveConditionalMutator_ORDER_ELSE
+# (audited set)". Every member carries a cause: liveness (no path-owned finite
+# completion once the mutation lands), resource (a contract a test asserts, or a
+# stable SURVIVED equivalence, whose degraded flavour reads as slow under load),
+# harness (a reviewed finite covering-path/watchdog race, under repair). Only
+# liveness certifies. A mutant that TERMINATES therefore never belongs here for
+# long: it owes a deterministic disposition — a contract test or a baselined
+# equivalence. The three tagged harness below terminate and still read TIMED_OUT
+# under load, so they are recorded honestly as races under repair rather than
+# mislabelled liveness: harness does not certify, and the suite should not
+# certify while they are outstanding. See the README's "under repair" note.
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,run,RemoveConditionalMutator_EQUAL_IF # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,run,VoidMethodCallMutator # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,VoidMethodCallMutator # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,closed,RemoveConditionalMutator_ORDER_ELSE # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,RemoveConditionalMutator_EQUAL_IF # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$connect$2,RemoveConditionalMutator_EQUAL_ELSE # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,lambda$connect$5,RemoveConditionalMutator_EQUAL_ELSE # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,connect,NakedReceiverMutator # cause:liveness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,checkCycle,VoidMethodCallMutator # cause:harness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,checkCycle,RemoveConditionalMutator_EQUAL_ELSE # cause:harness
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,MathMutator # cause:harness
