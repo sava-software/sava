@@ -1479,8 +1479,12 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertEquals(1, webSocketBuilder.builds);
       final var deferred = ws.connect(); // inside the throttle window: deferred on the real delayer
       assertNotNull(deferred);
+      // 500ms, not 5s: the real path completes in ~25ms, while a stranded token never
+      // completes at all. PIT's watchdog fires at roughly timeoutFactor x normal +
+      // timeoutConst (~1.6s here), so a budget above it hands the mutant a TIMED_OUT — a
+      // detection that reads as load-dependent noise — instead of a failed assertion.
       assertDoesNotThrow(() -> deferred.toCompletableFuture()
-          .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS).join());
+          .orTimeout(500, java.util.concurrent.TimeUnit.MILLISECONDS).join());
       assertEquals(2, webSocketBuilder.builds, "the deferred attempt fires when the token completes");
     }
   }
@@ -1499,6 +1503,61 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       ws.onOpen(socket);
       assertEquals(1, sendErrors.size(), "a thrown send is a failed send, and failed sends are reported");
       assertEquals("sync throw", sendErrors.getFirst().getMessage());
+    }
+  }
+
+  /// Every attempt's listener delegates to the engine, and onError is the one delegation whose
+  /// removal is silent: the transport dies, nothing reaches the consumer's seam, and the
+  /// instance sits believing it is connected. Driving the BUILDER's listener rather than the
+  /// engine's own callback is what exercises the delegation instead of bypassing it.
+  @Test
+  void theAttemptListenerRoutesTransportErrorsThroughTheEngine() {
+    final var errors = new ArrayList<Throwable>();
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, (_, error) -> errors.add(error), null, null)) {
+      assertNotNull(ws.connect());
+      final var listener = webSocketBuilder.listeners.getFirst();
+      listener.onOpen(socket);
+
+      listener.onError(socket, new IllegalStateException("transport died"));
+
+      assertEquals(1, errors.size(), "the attempt listener must route transport errors to the engine");
+      assertEquals("transport died", errors.getFirst().getMessage());
+    }
+  }
+
+  /// Escalation can fire from any pass, including one an inbound pong drives — and that pass
+  /// owns the same obligation as the check cycle: deliver the escalation to the error seam
+  /// after releasing the lock. Dropping the delivery leaves the connection aborted with the
+  /// consumer never told, which is the silent-death case the deadline exists to prevent.
+  @Test
+  void aPongDrivenPassDeliversItsEscalation() {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), null, null, (_, _, _) -> {
+        }, (_, error) -> errors.add(error), null, null)) {
+      assertTrue(ws.accountSubscribe(
+          software.sava.core.accounts.PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112"),
+          _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // the subscribe transmits; its answer deadline starts here
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay()
+          * SolanaJsonRpcWebsocket.UNANSWERED_ESCALATION_FACTOR + 1);
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+
+      assertTrue(socket.aborted, "the unanswered request retires the transport");
+      assertEquals(1, errors.size(), "the pong-driven pass must deliver its escalation");
     }
   }
 }

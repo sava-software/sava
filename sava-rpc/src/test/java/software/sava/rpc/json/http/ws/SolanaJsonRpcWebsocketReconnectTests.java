@@ -932,6 +932,12 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       assertEquals(1, scheduler.deferred.size(), "no second handshake is scheduled");
 
       scheduler.deferred.getFirst().task().run();
+      // Everything on this path is synchronous under the recording seams, so the attempt must
+      // be settled the moment its task returns. Asserting that BEFORE joining is what makes a
+      // dropped completion bridge fail outright instead of parking until PIT's watchdog calls
+      // the wedge a timeout.
+      assertTrue(first.toCompletableFuture().isDone(),
+          "the scheduled build's completion bridge must settle the attempt");
       assertSame(socket, first.toCompletableFuture().join(), "both views settle with the one attempt");
       assertSame(socket, second.toCompletableFuture().join());
       assertEquals(1, webSocketBuilder.builds);

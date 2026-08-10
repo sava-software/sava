@@ -411,4 +411,54 @@ final class WsDiagnosticLogTests {
           () -> "the cross-channel signature drop is unrecorded: " + signature);
     }
   }
+
+  /// Both keyed publish overloads and the generic path each refuse a notification whose id
+  /// belongs to someone else, and each refusal is silent apart from its record. Dropping is
+  /// indistinguishable from a frame that never arrived unless the log says otherwise.
+  @Test
+  void everyDispatchPathRecordsItsCrossChannelDrop() {
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}"""); // the account channel owns 23784
+
+      final var logs = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"logsNotification","params":{"result":{"context":{"slot":1},"value":{"signature":"sig","err":null,"logs":["l"]}},"subscription":23784}}""")));
+      assertTrue(logs.contains("belongs to") && logs.contains("account"),
+          () -> "the logs-over-account drop is unrecorded: " + logs);
+    }
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.logsSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":24040,"id":2}"""); // the logs channel owns 24040
+
+      final var account = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":1},"value":{"data":["","base64"],"executable":false,"lamports":1,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":0}},"subscription":24040}}""")));
+      assertTrue(account.contains("belongs to") && account.contains("logs"),
+          () -> "the account-over-logs drop is unrecorded: " + account);
+    }
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification", "k", "\"p\"",
+          systems.comodal.jsoniter.JsonIterator::readLong, null, _ -> {
+          }));
+      assertTrue(ws.subscribe("barSubscribe", "barUnsubscribe", "barNotification", "k", "\"p\"",
+          systems.comodal.jsoniter.JsonIterator::readLong, null, _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":40,"id":2}"""); // fooNotification owns 40
+
+      final var generic = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"barNotification","params":{"result":7,"subscription":40}}""")));
+      assertTrue(generic.contains("does not match"),
+          () -> "the generic cross-method drop is unrecorded: " + generic);
+    }
+  }
 }
