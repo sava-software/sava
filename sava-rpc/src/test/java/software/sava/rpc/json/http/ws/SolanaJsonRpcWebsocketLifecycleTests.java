@@ -1593,4 +1593,50 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertSame(socket, attempt.toCompletableFuture().join());
     }
   }
+
+  /// Every callback the JDK delivers arrives at the attempt's own listener, not at the engine
+  /// directly — and each one is a delegation that can be deleted without any other test
+  /// noticing, because every other test calls the engine's methods itself. Driving the
+  /// BUILDER's listener is what exercises the wiring the JDK will actually use: a dropped
+  /// delegation means frames, control frames, or the peer's close never reach the engine at
+  /// all, and the instance sits healthy-looking and deaf.
+  @Test
+  void theAttemptListenerDelegatesEveryCallbackToTheEngine() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    final var closes = new ArrayList<String>();
+    final var clock = new TestClock();
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), new RecordingScheduler(), null,
+        (_, statusCode, reason) -> closes.add(statusCode + ":" + reason), null, null, null)) {
+      final var slots = new ArrayList<software.sava.rpc.json.http.response.ProcessedSlot>();
+      assertTrue(ws.slotSubscribe(slots::add));
+      assertNotNull(ws.connect());
+      final var listener = webSocketBuilder.listeners.getFirst();
+      listener.onOpen(socket); // adoption through the listener, not the engine
+
+      // onText: the confirmation and a notification must reach the dispatch path
+      listener.onText(socket, java.nio.CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":31,"id":2}"""), true);
+      listener.onText(socket, java.nio.CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":1,"slot":7},"subscription":31}}"""), true);
+      assertEquals(1, slots.size(), "onText must reach the engine's dispatch");
+
+      // onPing: the engine answers a peer ping by stamping liveness and driving a pass
+      final long beforePing = ws.lastMessageReceivedTimestamp();
+      listener.onPing(socket, ByteBuffer.wrap("p".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)));
+      // onPong: same, and neither counts as a message — the stamp is the text path's alone
+      listener.onPong(socket, ByteBuffer.wrap(new byte[0]));
+      assertEquals(beforePing, ws.lastMessageReceivedTimestamp(),
+          "control frames are peer contact, never messages");
+
+      // onClose: the peer's close must reach the handler that decides policy
+      listener.onClose(socket, java.net.http.WebSocket.NORMAL_CLOSURE, "peer close");
+      assertEquals(1, closes.size(), "onClose must reach the engine's close handling");
+      assertEquals("1000:peer close", closes.getFirst());
+    }
+  }
 }

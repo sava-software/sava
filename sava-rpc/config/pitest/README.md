@@ -488,6 +488,38 @@ include real coverage debt, so the module-wide claim no longer holds. The
 Shrinking the baseline is always an improvement; growing it requires a
 reason here.
 
+## Triaged mutants — ws suite, 2026-08-10 re-measure
+
+The post-review engine is a different program from the one the 2026-07 baseline
+described: the Connection refactor, wire-attempt ordinals, and the connect and
+close ownership rules all landed since. Re-measured fresh (`-PnoMutationHistory`)
+the suite reads 920/1163 detected (79%), up from 865 (74%) at the start of this
+pass, with no-coverage rows down 40 -> 24 and timeouts 19 -> 9.
+
+Fifty-five mutants were killed rather than argued, in priority order: the
+lock-release contract on every entry point that takes the lifecycle lock; the
+diagnostics that are the sole record of a settlement classification; a throwing
+consumer on every channel plus the onSub callback; the orphan and retired-id
+compensation rules; the escalation deadline's exclusivity and the age it
+reports; and the validation of all three generic method names. Each is a place
+where a regression could have shipped unseen.
+
+**Reachability defended by single-flight** — `ownBuild`'s stale check
+(`SolanaJsonRpcWebsocket.lambda$ownBuild$0`, both `RemoveConditionalMutator`
+directions at the `generation != connectGeneration` operand). The hook releases
+a socket produced by an attempt that has lost authority, and authority is lost
+two ways: the instance closed, or the generation moved. Only the first is
+reachable while a build is pending, and it is pinned by
+`anImmediateBuildCompletingAfterCloseAbortsItsUnadoptedSocket`. The second is
+not: a `connect()` arriving while an attempt is unsettled returns a copy of that
+attempt without building, so the generation cannot move underneath a pending
+build — and once a build settles, `connect()`'s own replacement path joins it and
+aborts the unadopted socket before any successor is created. The operand is
+belt-and-braces against a future where single-flight is relaxed, which is
+exactly when someone will need it. *Attempted and withdrawn 2026-08-10: a test
+driving two connects finds one handshake, not two — the single-flight gate is
+the proof.*
+
 ## Timed-out mutants (audited set)
 
 `TIMED_OUT` is detected — never baselined — but the watchdog observed
