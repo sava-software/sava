@@ -394,4 +394,29 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
           "the cancelled registration's attempt ordinal dies when its send fails");
     }
   }
+
+  /// A retired id's late notification is dropped, not answered. The distinction matters
+  /// because answering would mint a second cancellation for an id whose first one is still
+  /// queued — spending a frame, and on an id-reusing server risking the successor.
+  @Test
+  void aRetiredIdsLateNotificationIsDroppedRatherThanAnswered() {
+    final var sig = "2EBVM6cB8vAAD93Ktr6Vd8p67XPbQzCJX47MpReuiCXJAtcjaxpvWpcg9Ege1Nr5Tk3a2GFrByT7WPBjdsTycY9b";
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock)) {
+      assertTrue(ws.signatureSubscribe(sig, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":777,"id":2}""");
+      assertTrue(ws.signatureUnsubscribe(sig)); // 777 retired, its cancellation queued unflushed
+
+      final int before = socket.sentText.size();
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"signatureNotification","params":{"result":{"context":{"slot":1},"value":{"err":null}},"subscription":777}}""");
+
+      assertEquals(before, socket.sentText.size(),
+          () -> "a retired id's late notification must be dropped, not answered: " + socket.sentText);
+    }
+  }
 }

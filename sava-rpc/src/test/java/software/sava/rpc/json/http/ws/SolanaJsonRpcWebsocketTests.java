@@ -1026,4 +1026,151 @@ final class SolanaJsonRpcWebsocketTests {
       assertEquals(java.util.List.of(55L), votes, "a reordered generic notification must still dispatch");
     }
   }
+
+  private static final PublicKey CONSUMER_KEY =
+      PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+
+  /// A consumer that throws is the caller's bug, not a protocol failure, and the engine's
+  /// contract is that it reaches the exception subscribers instead of aborting the message.
+  /// Every channel routes through its own catch, so each needs its own witness: with the
+  /// dispatch removed the frame still parses and the subscriber list stays empty.
+  @Test
+  void aThrowingConsumerReachesTheExceptionSubscribersOnEveryChannel() {
+    final var boom = new IllegalStateException("consumer boom");
+
+    try (final var ws = createWebsocket()) {
+      final var caught = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(caught::add);
+      assertTrue(ws.accountSubscribe(CONSUMER_KEY, _ -> {
+        throw boom;
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":23784,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":1},"value":{"data":["","base64"],"executable":false,"lamports":1,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":0}},"subscription":23784}}""");
+      assertEquals(1, caught.size(), "the account consumer's throw must reach the subscribers");
+      assertSame(boom, caught.getFirst());
+    }
+
+    try (final var ws = createWebsocket()) {
+      final var caught = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(caught::add);
+      assertTrue(ws.logsSubscribe(CONSUMER_KEY, _ -> {
+        throw boom;
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":24040,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"logsNotification","params":{"result":{"context":{"slot":1},"value":{"signature":"sig","err":null,"logs":["l"]}},"subscription":24040}}""");
+      assertEquals(1, caught.size(), "the logs consumer's throw must reach the subscribers");
+      assertSame(boom, caught.getFirst());
+    }
+
+    try (final var ws = createWebsocket()) {
+      final var caught = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(caught::add);
+      assertTrue(ws.slotSubscribe(_ -> {
+        throw boom;
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":10,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":1,"slot":9},"subscription":10}}""");
+      assertEquals(1, caught.size(), "the slot consumer's throw must reach the subscribers");
+    }
+
+    try (final var ws = createWebsocket()) {
+      final var caught = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(caught::add);
+      assertTrue(ws.rootSubscribe(_ -> {
+        throw boom;
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":11,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"rootNotification","params":{"result":42,"subscription":11}}""");
+      assertEquals(1, caught.size(), "the root consumer's throw must reach the subscribers");
+    }
+
+    try (final var ws = createWebsocket()) {
+      final var caught = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(caught::add);
+      assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification", "k", "\"p\"",
+          _ -> {
+            throw boom;
+          }, null, _ -> {
+          }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":99,"id":2}""");
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"fooNotification","params":{"result":{"slots":[1]},"subscription":99}}""");
+      assertEquals(1, caught.size(), "the generic parser's throw must reach the subscribers");
+      assertSame(boom, caught.getFirst());
+    }
+  }
+
+  /// An onSub callback runs after the request is actually written, on whatever thread settled
+  /// the send — so its throw has to be contained there too, or a caller's bug in a callback
+  /// escapes into the outbound chain.
+  @Test
+  void aThrowingOnSubCallbackReachesTheExceptionSubscribers() {
+    try (final var ws = createWebsocket()) {
+      final var caught = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(caught::add);
+      assertTrue(ws.accountSubscribe(Commitment.CONFIRMED, CONSUMER_KEY, _ -> {
+        throw new IllegalStateException("onSub boom");
+      }, _ -> {
+      }));
+
+      ws.onOpen(new RecordingWebSocket()); // the send settles synchronously and runs onSub
+
+      assertEquals(1, caught.size(), "the onSub callback's throw must reach the subscribers");
+      assertEquals("onSub boom", caught.getFirst().getMessage());
+    }
+  }
+
+  /// A response carrying neither result, error, nor method settles silently: every arm of the
+  /// confirmation branch finds null. Forcing the exception arm alive dereferences that null and
+  /// turns a harmless frame into a dispatched NPE, which is what this pins.
+  @Test
+  void aBareResponseFrameSettlesWithoutDispatchingAnything() {
+    try (final var ws = createWebsocket()) {
+      final var caught = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(caught::add);
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","id":99}""");
+
+      assertTrue(caught.isEmpty(), () -> "a bare response frame is not consumer news: " + caught);
+    }
+  }
+
+  /// An unknown subscription id streaming at us is an orphan on the server: nothing local can
+  /// cancel it, so the engine answers with the compensating un-subscription the moment it sees
+  /// one. The signature channel scans for its id inline, so it needs its own witness.
+  @Test
+  void anUnknownSignatureNotificationMintsItsCancellation() {
+    try (final var ws = createWebsocket()) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"signatureNotification","params":{"result":{"context":{"slot":1},"value":{"err":null}},"subscription":777}}""");
+
+      assertTrue(socket.sentText.stream().anyMatch(m -> m.contains("signatureUnsubscribe") && m.contains("[777]")),
+          () -> "the orphaned signature subscription drew no compensation: " + socket.sentText);
+    }
+  }
 }
