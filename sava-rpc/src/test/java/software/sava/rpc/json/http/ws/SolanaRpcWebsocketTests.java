@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import systems.comodal.jsoniter.JsonIterator;
 
@@ -10,6 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@ExtendWith(QuietWsLogging.class)
 final class SolanaRpcWebsocketTests {
 
   private static SolanaRpcWebsocket createWebsocket(final HttpClient httpClient) {

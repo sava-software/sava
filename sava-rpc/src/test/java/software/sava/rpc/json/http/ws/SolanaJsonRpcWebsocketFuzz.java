@@ -49,6 +49,15 @@ import java.util.Arrays;
 /// Run with `./gradlew :sava-rpc:fuzzWs [-PmaxFuzzTime=<seconds>]`.
 public final class SolanaJsonRpcWebsocketFuzz {
 
+  static {
+    // Feeding the parser garbage is the entire point here, and the engine answers each
+    // malformed frame with a logged JsonException. Left on the console, one seed-corpus replay
+    // buries the run in stack traces that every reader has to rule out as failures. Nothing
+    // asserts on the console — the postcondition below reads dispatch state — so the records
+    // are silenced at the source rather than at each caller.
+    java.util.logging.Logger.getLogger(SolanaJsonRpcWebsocket.class.getName()).setUseParentHandlers(false);
+  }
+
   private static final int HEADER_LENGTH = 12;
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");

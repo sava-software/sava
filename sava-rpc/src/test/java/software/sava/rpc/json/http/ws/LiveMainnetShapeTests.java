@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// plausible-looking fixture never picks, like the clock sysvar's rentEpoch of 2^64-1. Request
 /// ids are remapped to the client's own msgId sequence where correlation requires it;
 /// everything else is untouched.
+@ExtendWith(QuietWsLogging.class)
 final class LiveMainnetShapeTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");

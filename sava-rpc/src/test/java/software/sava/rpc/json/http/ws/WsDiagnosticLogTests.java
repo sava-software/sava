@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
 
@@ -27,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// the event leaves no trace at all. The lazy `() -> new String(...)` suppliers
 /// only run when DEBUG is enabled, so a suite that never enables it reads them as
 /// uncovered; enabling it is what makes them ordinary kills.
+@ExtendWith(QuietWsLogging.class)
 final class WsDiagnosticLogTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");
@@ -241,6 +243,172 @@ final class WsDiagnosticLogTests {
       final var logged = messages(records);
       assertTrue(logged.contains("Failed to ping"), () -> "ping failure not logged: " + logged);
       assertTrue(logged.contains(ENDPOINT.getHost()), () -> "ping failure lost its endpoint: " + logged);
+    }
+  }
+
+  private static final software.sava.core.accounts.PublicKey KEY =
+      software.sava.core.accounts.PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112");
+
+  private static final String UNKNOWN_ACCOUNT_NOTIFICATION = """
+      {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":3},"value":{"lamports":1,"data":["","base64"],"owner":"11111111111111111111111111111111","executable":false,"rentEpoch":0,"space":0}},"subscription":555}}""";
+
+  private static void feed(final SolanaJsonRpcWebsocket ws, final RecordingWebSocket socket, final String json) {
+    ws.onText(socket, java.nio.CharBuffer.wrap(json), true);
+  }
+
+  /// How an un-subscription rejection was CLASSIFIED exists nowhere but its log line: settled
+  /// quietly, reported as an unrecognized method, or re-queued as still owed. Each branch
+  /// takes the same visible action otherwise — the gates release either way — so the record is
+  /// the only evidence the engine chose the right one.
+  @Test
+  void unsubscribeRejectionClassificationsAreRecorded() {
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // subscribe id 2
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":555,"id":2}""");
+      assertTrue(ws.accountUnsubscribe(KEY));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // cancellation id 3
+
+      final var unrecognized = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":3}""")));
+      assertTrue(unrecognized.contains("does not recognize"),
+          () -> "the unrecognized-method classification is unrecorded: " + unrecognized);
+    }
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":555,"id":2}""");
+      assertTrue(ws.accountUnsubscribe(KEY));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+
+      final var settled = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid subscription id."},"id":3}""")));
+      assertTrue(settled.contains("treating as settled"),
+          () -> "the already-absent settlement is unrecorded: " + settled);
+    }
+  }
+
+  /// A quiet Helius `result:false` deliberately removes and replays nothing, so the DEBUG line
+  /// is the entire trace that the acknowledgement arrived and was understood as already-gone.
+  @Test
+  void aFalseAcknowledgementRecordsThatTheIdWasAlreadyGone() {
+    final var sig = "2EBVM6cB8vAAD93Ktr6Vd8p67XPbQzCJX47MpReuiCXJAtcjaxpvWpcg9Ege1Nr5Tk3a2GFrByT7WPBjdsTycY9b";
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.signatureSubscribe(sig, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":777,"id":2}""");
+      assertTrue(ws.signatureUnsubscribe(sig));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // cancellation id 3
+
+      final var logged = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":false,"id":3}""")));
+      assertTrue(logged.contains("already gone server side"),
+          () -> "the false acknowledgement left no record: " + logged);
+    }
+  }
+
+  /// A subscribe the server rejects as a request defect is retired and its registry slot freed.
+  /// The consumer sees the exception either way; only the WARNING says the slot was released
+  /// and for which channel and key.
+  @Test
+  void aRequestDefectRejectionRecordsTheReleasedRegistration() {
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // subscribe id 2, unconfirmed
+
+      final var logged = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":2}""")));
+      assertTrue(logged.contains("rejected by") && logged.contains(KEY.toBase58()),
+          () -> "the released registration is unrecorded: " + logged);
+    }
+  }
+
+  /// The wire-order adjudications - a cancellation made obsolete by a successor that owns its
+  /// id, and a live subscription the server cancelled and the engine replayed - change engine
+  /// state silently. Their records are what a reader has to reconstruct which rule fired.
+  @Test
+  void wireOrderAdjudicationsAreRecorded() {
+    try (final var ws = createWebsocket()) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // subscribe id 2, wire 1
+      feed(ws, socket, UNKNOWN_ACCOUNT_NOTIFICATION); // auto-cancellation id 3, wire 2
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":555,"id":2}"""); // the grant installs at 555, ordinal 1
+
+      final var replay = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":true,"id":3}""")));
+      assertTrue(replay.contains("cancelled live subscription") && replay.contains("re-subscribing"),
+          () -> "the casualty replay is unrecorded: " + replay);
+    }
+    try (final var ws = createWebsocket()) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+      feed(ws, socket, UNKNOWN_ACCOUNT_NOTIFICATION); // auto-cancellation id 3, fingerprint null
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":555,"id":2}"""); // a live owner now holds 555
+
+      final var obsolete = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Subscription refused"},"id":3}""")));
+      assertTrue(obsolete.contains("is obsolete: a successor owns the id"),
+          () -> "the obsolete cancellation is unrecorded: " + obsolete);
+    }
+  }
+
+  /// A numeric answer to an un-subscription is a server defect the engine settles rather than
+  /// wedges. Nothing is installed from it, so the WARNING is its only trace.
+  @Test
+  void aNumericAnswerToACancellationIsRecorded() {
+    try (final var ws = createWebsocket()) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, UNKNOWN_ACCOUNT_NOTIFICATION); // mints cancellation id 2
+
+      final var logged = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":42,"id":2}""")));
+      assertTrue(logged.contains("numeric result"),
+          () -> "the defective numeric acknowledgement is unrecorded: " + logged);
+    }
+  }
+
+  /// A notification whose subscription id belongs to another channel is dropped, and dropping is
+  /// silent by nature: the WARNING is the only difference between a hostile frame refused and a
+  /// frame that never arrived.
+  @Test
+  void crossChannelNotificationDropsAreRecorded() {
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":700,"id":2}"""); // account owns 700
+
+      final var slot = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":1,"slot":2},"subscription":700}}""")));
+      assertTrue(slot.contains("belongs to"),
+          () -> "the cross-channel slot drop is unrecorded: " + slot);
+
+      final var signature = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"signatureNotification","params":{"result":{"context":{"slot":3},"value":{"err":null}},"subscription":700}}""")));
+      assertTrue(signature.contains("belongs to"),
+          () -> "the cross-channel signature drop is unrecorded: " + signature);
     }
   }
 }
