@@ -1069,6 +1069,13 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         assertThrows(IllegalArgumentException.class, () -> ws.subscribe(bad, "voteUnsubscribe",
             "voteNotification", "vote", "", JsonIterator::readString, null, _ -> {
             }), String.valueOf(bad));
+        // all three names are interpolated into frames, so all three are validated
+        assertThrows(IllegalArgumentException.class, () -> ws.subscribe("voteSubscribe", bad,
+            "voteNotification", "vote", "", JsonIterator::readString, null, _ -> {
+            }), "unSubscribeMethod " + bad);
+        assertThrows(IllegalArgumentException.class, () -> ws.subscribe("voteSubscribe",
+            "voteUnsubscribe", bad, "vote", "", JsonIterator::readString, null, _ -> {
+            }), "notificationMethod " + bad);
       }
     }
   }

@@ -1123,6 +1123,11 @@ final class SolanaJsonRpcWebsocketReconnectTests {
           {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":1,"slot":2},"subscription":10}}"""), true);
       assertTrue(successorSlots.isEmpty(),
           "the predecessor's stream must not reach the successor's consumer");
+      // Dropped is not the whole contract: a retired id is KNOWN dead, so the frame is
+      // answered with the cancellation its queued obligation already owes. Treating it as
+      // merely unconfirmed would warn-and-drop instead, leaving the server subscription live.
+      assertTrue(socket.sentText.stream().anyMatch(m -> m.contains("slotUnsubscribe") && m.contains("[10]")),
+          () -> "the retired id must draw its cancellation: " + socket.sentText);
     }
   }
 
@@ -2122,6 +2127,12 @@ final class SolanaJsonRpcWebsocketReconnectTests {
           "fooSubscribe", "accountUnsubscribe", "fooNotification", "k", "\"p\"",
           JsonIterator::readLong, null, _ -> {
           }));
+      // the notification direction: built-in routing owns the name, so a generic registration
+      // under it would confirm and then never receive anything
+      assertThrows(IllegalArgumentException.class, () -> ws.subscribe(
+          "fooSubscribe", "fooUnsubscribe", "accountNotification", "k", "\"p\"",
+          JsonIterator::readLong, null, _ -> {
+          }));
     }
   }
 
@@ -2944,6 +2955,59 @@ final class SolanaJsonRpcWebsocketReconnectTests {
           {"jsonrpc":"2.0","result":801,"id":6}"""), true); // the ahead request resolves to a DIFFERENT id
       ws.checkCycle(0L); // the sweep runs with nothing pending
       assertEquals(2, ws.retainedOrdinalEntries(), "only the two live ordinals remain: the kill is swept");
+    }
+  }
+
+  /// The deadline is a strictly-greater-than bound, and the difference in the message is the
+  /// age of the request. Both are one character wide and both matter: an age EQUAL to the
+  /// deadline has not exceeded it, and a message that reports the wrong number sends whoever
+  /// reads it hunting the wrong request.
+  @Test
+  void theEscalationDeadlineIsExclusiveAndReportsTheTrueAge() throws InterruptedException {
+    final var clock = new TestClock();
+    final var errors = new java.util.ArrayList<Throwable>();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null,
+        (_, ex) -> errors.add(ex))) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // transmission stamps the answer clock
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay()
+          * SolanaJsonRpcWebsocket.UNANSWERED_ESCALATION_FACTOR); // exactly the deadline
+      ws.checkCycle(0L);
+      assertTrue(errors.isEmpty(), "an age equal to the deadline has not exceeded it");
+      assertFalse(socket.aborted);
+
+      clock.advanceMillis(1);
+      ws.checkCycle(0L);
+      assertEquals(1, errors.size(), "one millisecond past the deadline escalates");
+    }
+  }
+
+  /// The reported age is `now - stamp`. A stamp near zero hides the difference between that
+  /// and `now + stamp`, so the connection is opened after the clock has already moved: only
+  /// then does the arithmetic have a wrong answer to give.
+  @Test
+  void theEscalationMessageReportsTheAgeNotTheSum() throws InterruptedException {
+    final var clock = new TestClock();
+    final var errors = new java.util.ArrayList<Throwable>();
+    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null,
+        (_, ex) -> errors.add(ex))) {
+      clock.advanceMillis(5_000); // the transmission stamp is now far from zero
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      final long overdue = TIMINGS.subscriptionResendDelay()
+          * SolanaJsonRpcWebsocket.UNANSWERED_ESCALATION_FACTOR + 1;
+      clock.advanceMillis(overdue);
+      ws.checkCycle(0L);
+
+      assertEquals(1, errors.size());
+      assertTrue(errors.getFirst().getMessage().contains(overdue + "ms"),
+          () -> "the message must report the request's age: " + errors.getFirst().getMessage());
     }
   }
 }

@@ -461,4 +461,47 @@ final class WsDiagnosticLogTests {
           () -> "the generic cross-method drop is unrecorded: " + generic);
     }
   }
+
+  /// An unconfirmed singleton correlates with nothing, so a notification arriving before its
+  /// confirmation is dropped — and dropping is silent. The record is the only thing separating
+  /// "refused an early frame" from "the frame never came", and the only evidence the engine
+  /// did NOT answer it with a cancellation that would kill the grant still in flight.
+  @Test
+  void aPreConfirmationSingletonDropIsRecorded() {
+    try (final var ws = createWebsocket()) {
+      final var slots = new ArrayList<software.sava.rpc.json.http.response.ProcessedSlot>();
+      assertTrue(ws.slotSubscribe(slots::add));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // deliberately unconfirmed
+
+      final var logged = messages(capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":1,"slot":2},"subscription":9}}""")));
+
+      assertTrue(slots.isEmpty(), "an unconfirmed singleton correlates with nothing");
+      assertTrue(logged.contains("before the subscription was confirmed"),
+          () -> "the pre-confirmation drop is unrecorded: " + logged);
+      assertTrue(socket.sentText.stream().noneMatch(m -> m.contains("slotUnsubscribe")),
+          () -> "the grant in flight must not be cancelled: " + socket.sentText);
+    }
+  }
+
+  /// Escalation replaces the connection and hands the consumer an exception; the WARNING is
+  /// the engine's own record that it did so, and the only one a log-only deployment keeps.
+  @Test
+  void anEscalationRecordsWhichRequestWentUnanswered() {
+    final var clock = new TestClock();
+    try (final var ws = createWebsocket(clock)) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay()
+          * SolanaJsonRpcWebsocket.UNANSWERED_ESCALATION_FACTOR + 1);
+
+      final var logged = messages(capture(Level.ALL, () -> assertDoesNotThrow(() -> ws.checkCycle(0L))));
+
+      assertTrue(logged.contains("has gone unanswered"),
+          () -> "the escalation left no record: " + logged);
+    }
+  }
 }
