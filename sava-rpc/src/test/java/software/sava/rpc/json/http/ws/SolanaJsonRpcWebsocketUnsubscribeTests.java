@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// (nothing to send), and lookups that must miss — wrong commitment, wrong
 /// channel, wrong key. The account channel's flow is pinned in
 /// [SolanaJsonRpcWebsocketTests]; these cover the rest.
+@ExtendWith(QuietWsLogging.class)
 final class SolanaJsonRpcWebsocketUnsubscribeTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");

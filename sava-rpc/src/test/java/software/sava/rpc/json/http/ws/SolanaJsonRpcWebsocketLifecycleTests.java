@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
 import systems.comodal.jsoniter.JsonIterator;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// Connection lifecycle beyond reconnects: accessors, the close frame and its
 /// bookkeeping, the onClose/onError delegation split, pong-driven write cycles,
 /// and the sendText/sendPing failure callbacks.
+@ExtendWith(QuietWsLogging.class)
 final class SolanaJsonRpcWebsocketLifecycleTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");

@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /// Defensive protocol-correlation regressions: an untrusted notification must never make the
 /// client cancel a live subscription owned by a different channel merely because it reuses that
 /// channel's numeric subscription id.
+@ExtendWith(QuietWsLogging.class)
 final class SolanaJsonRpcWebsocketSingletonCorrelationReviewTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");

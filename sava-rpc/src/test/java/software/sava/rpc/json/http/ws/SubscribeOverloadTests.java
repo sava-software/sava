@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.rpc.Filter;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// observable proof. `signatureSubscribe`'s commitment-based default —
 /// received notifications only make sense when watching PROCESSED — is the
 /// branchy one.
+@ExtendWith(QuietWsLogging.class)
 final class SubscribeOverloadTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");
