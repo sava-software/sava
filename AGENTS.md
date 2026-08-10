@@ -82,13 +82,16 @@ Everything sava-specific — which suites exist, what has been measured here, wh
 mutants are accepted and why — lives under "sava-specific hardening facts" after the
 template, and in the documents that section points to.
 
-<!-- hardening-template sha256:d128cb8208fa -->
+<!-- hardening-template sha256:46f7174e51fb -->
 
 > - **Scale verification to the change.** Iterate with the module's `test`
 >   task; before handing off, run only the `pitest<Suite>`(s) whose mutated
 >   code the change can reach — including suites in dependent modules that
 >   call a changed API, and the owning suite for test-only edits (a weakened
->   test is exactly what the ratchet catches). The full `hardeningCertify` — every
+>   test is exactly what the ratchet catches). When the production-class inventory
+>   changes (add/remove/rename/move), or mutation target/exclusion rules change,
+>   also run the cheap whole-population
+>   `mutationOwnershipAudit` before handoff. The full `hardeningCertify` — every
 >   suite freshly observed, serialized, provenance-bound, diffed against
 >   `config/pitest/`, with strict timeout and ownership audits — is the pre-release
 >   check, owned by CI or by the release checklist (this repo records which); it is
@@ -122,19 +125,31 @@ template, and in the documents that section points to.
 >   ArcMutate-base, or certificate change uses `pitest<Suite>BaselineRebase`: it
 >   preserves every old row, seeds new rows `# untriaged`, and stamps the reviewed
 >   toolchain only after a successful fresh observation. Perform a schema
->   migration/rollback only with a fleet pin plan.
+>   migration/rollback only with a fleet pin plan. A `[history]` report may check
+>   the ratchet but cannot support adding, removing, or relabelling
+>   accepted/timeout records; run `pitest<Suite> -PnoMutationHistory` first.
 > - Consumer hardening notes contain only local ownership, measurements, acceptance
 >   reasons, and provenance. `AGENTS.md` may carry this exact generated,
 >   digest-pinned template plus those local facts, but no independently maintained
 >   copy of plugin task semantics; use `hardeningHelp` and
 >   `hardeningAgentTemplate` as the installed-version authorities.
 > - **Iterate with `-PmutateOnly=<class-glob>`** while killing a cluster —
->   seconds instead of the full suite — then re-run unscoped before any
->   refresh; the tooling refuses to let a scoped report touch the baseline.
+>   seconds instead of the full suite — then re-run unscoped with
+>   `-PnoMutationHistory` before any record decision; the tooling refuses to let
+>   a scoped report touch the baseline.
 > - Identical baseline rows are sibling mutants of one compound condition and
 >   the comparison is a multiset: never hand-dedupe. When one sibling
 >   survives, the verify names the killed sibling's test — the survivor is
 >   the opposite branch direction; triage it as its own mutant.
+> - **A survivor contradicted by an existing oracle may be contaminated evidence.**
+>   Open PIT's HTML **Covering tests** list, then compare the same scoped,
+>   history-free population with and without isolation:
+>   `-PmutateOnly=<class> -PnoMutationHistory`, then
+>   `-PmutateOnly=<class> -PisolateMutants`. An isolation-only kill points
+>   to state leaked between mutants — commonly a thread, executor, handler, or
+>   static fixture whose cleanup an earlier assertion failure skipped. Put
+>   teardown in `finally`/`try`-with-resources and rerun normally, history-free;
+>   isolated execution is diagnostic evidence, never a baseline decision.
 > - **Stubs and fixtures return distinguishable, non-default values.** A stub
 >   returning null/0/""/true/empty makes the matching return-value mutant
 >   equivalent by accident of the fixture — the clock non-zero-origin rule
@@ -156,13 +171,58 @@ template, and in the documents that section points to.
 >   assertion — a timeout keeps "detecting" whatever the test asserts — so
 >   each suite's timeouts are an audited set, not a count:
 >   `config/pitest/<suite>-timeouts.csv` holds line-less `class,method,mutator`
->   keys, and `config/pitest/README.md` the structural cause per member (the
->   removed loop exit, the reversed cursor, the leaked unlock). The verify
->   warns on any timeout outside the set — paste the printed row, then write
->   the cause — and on members matching no mutant; admit a newcomer only with
->   its cause written. The key is the check's resolution: a new timed-out
->   mutant in an already-audited method+mutator draws no warning, so name the
->   line in the README cause and re-read it when that code changes.
+>   keys plus a comment category; `# line` tags are diagnostic metadata only. Only
+>   `cause:liveness` is admissible watchdog detection after deterministic
+>   seams/budgets are exhausted: the mutated path has no path-owned finite
+>   completion guarantee. A fixture's emergency exit does not demote that
+>   liveness loss to resource work; record the fixture bound in the README. If that
+>   bound is the claimed deterministic oracle, compare it with PIT's
+>   `duration × timeoutFactor + timeoutConst`: a bound that cannot fail first
+>   contributes no cause evidence, so shorten it and re-observe history-free. A
+>   later emergency ceiling may coexist with production liveness but cannot prove it.
+>   A straight-line path with no loop, retry, lock, wait, blocking
+>   call, or external completion dependency is not credible liveness evidence.
+>   Before
+>   admitting liveness, prove the mutated path receives the clock/budget the test
+>   observes, and check for a synchronous state reader that can expose the defect
+>   without waiting. A `TestClock` on a collaborator cannot observe a subject using
+>   the system clock. Seeded
+>   `cause:untriaged`, missing/unknown categories, finite `cause:resource`, and
+>   `cause:harness` work are reviewer-stops. `cause:harness` is the explicit
+>   non-certifying holding state for a demonstrated finite covering-path/watchdog
+>   race; it never makes the timeout admissible. Resource behavior gets a
+>   deterministic contract test/fix when promised, otherwise a stable `SURVIVED`
+>   equivalence argument —
+>   never silent timeout membership. Liveness authorizes valid `TIMED_OUT`
+>   evidence only, never `MEMORY_ERROR`: if a non-advancing loop races the heap
+>   against the watchdog, make every covering path fail deterministically without
+>   relying on PIT test order, or refactor the manual progress mutation site out
+>   while preserving the tested contract.
+>   `config/pitest/README.md` still holds the
+>   full structural cause per member. The verify warns on any timeout outside
+>   the set — paste the printed row, classify it, then write the cause — and on
+>   members matching no mutant. Membership and cause are key-level, so a liveness
+>   token claims every sibling under that key. A key proven to mix liveness and
+>   finite causes is not representable as an honest certifying row: split/refactor
+>   it into distinct method keys or eliminate the ambiguous site, then re-observe
+>   history-free. A source-line qualifier cannot fix the identity without making
+>   formatting a release gate. Positive multiplicity drift prints all current
+>   line-full candidates for review;
+>   source-line movement itself never warns, fails, or requires re-anchoring. Adding
+>   a method, moving imports, or reflowing an expression is not a hardening record
+>   change. Strict workflows run the
+>   committed-file half before PIT; use `pitest<Suite>Debt` for the same quick
+>   manual preview. `TimeoutAuditInit` deliberately seeds an uncertifiable file —
+>   classify every row before certification. For an otherwise admissible liveness
+>   member, do not retire it until the tool emits its 3+ distinct fresh full-run quiet
+>   notice over identical evidence inputs and the absence is confirmed under the
+>   relevant solo/gate load. A finite KILLED↔TIMED_OUT race is benign only to baseline
+>   arithmetic, never certifying evidence; repair/retime its covering path instead of
+>   admitting it or waiting on the liveness-retirement rule. The quiet stash
+>   is a machine-local nomination: never copy or merge it, and retain the row when a
+>   same-input gate confirmation is unavailable. Assisted reports are
+>   previews and do not
+>   advance timeout status or quiet-run evidence.
 > - **A flaky harness is worse than recorded debt.** If an interleaving or a
 >   boundary cannot be made deterministic, accept the mutant with a written
 >   reason rather than chasing it with sleeps or spin-waits.
@@ -170,10 +230,13 @@ template, and in the documents that section points to.
 >   reason is finished work, not debt. Before trying to raise a number, check
 >   whether the remainder is `NO_COVERAGE` (real work) or documented
 >   equivalents (already closed).
-> - **Allocation and timing harnesses are a last resort**, reserved for
->   properties that are a stated design goal. They re-run once per mutant, need
->   a `volatile` sink so escape analysis cannot delete what they measure, and
->   flap when the margin is thin.
+> - **Allocation and timing harnesses are a last resort for thin constant-factor
+>   differences**, reserved for properties that are a stated design goal. A
+>   removed growth/capacity/amortisation guard that changes complexity class is
+>   not “allocation-size only”: use a small input with an orders-of-magnitude
+>   margin and the correct path through the mutated code. Harnesses re-run once
+>   per mutant, need a `volatile` sink so escape analysis cannot delete what they
+>   measure, and flap when the margin is thin.
 > - When a test you believe in will not go green, **suspect the code before you
 >   soften the assertion** — that is where this process finds real bugs.
 > - **A wandering unkilled count is a defect, not noise** — chase it before
@@ -222,14 +285,19 @@ template, and in the documents that section points to.
 >   one usually means the run did less than you think. Read the task's evidence
 >   markers and scope; only a fresh full certification may support a release.
 >   The process itself needs no ArcMutate licence and applies to any Java package.
-> - **Transient infra failures are not results.** PIT `MINION_DIED` fails
+> - **Invalid execution outcomes are not results.** PIT `MINION_DIED` fails
 >   before writing a report, so it cannot corrupt one — re-run the suite; a
 >   Gradle-worker `EOFException` death is the same shape, and a per-mutant
->   `RUN_ERROR` under load is the same shape smaller (the hardening parser refuses
+>   `RUN_ERROR` often first observed in a multi-suite run is the same
+>   shape smaller (load average itself proves nothing; the hardening parser refuses
 >   the report rather than certifying PIT's detected score). The refusal and
 >   `pitest<Suite>Debt` name every offending row; retain the coordinate before a
->   quiet re-run replaces the report, because the same coordinate twice is a defect,
->   not load. The daemon log
+>   quiet re-run replaces the report. `RUN_ERROR` alone diagnoses neither load nor
+>   memory and never justifies changing threads or heap; record load/RSS as context,
+>   retry once quietly, and tune only when PIT explicitly diagnoses a process-resource
+>   failure. A repeat at the same coordinate is not evidence
+>   of load: investigate the mutated bytecode, its covering tests, and the tool failure.
+>   The daemon log
 >   (`~/.gradle/daemon/<version>/daemon-<pid>.out.log`) keeps a failed build's
 >   full output even when the shell discarded it — read it before calling a
 >   failure unexplained.
@@ -295,12 +363,16 @@ deliberately, and it is exploration, never release evidence.
 certificate scoped to `software.sava.*`, expiring 15/08/2027; it is committed on purpose
 (with a `.gitignore` allow-rule) because it is a certificate, not a secret, and carries
 no subscription URL. It selects the PIT **toolchain**, and therefore the mutant
-population: measured 2026-08-04 on identical source, `pitestWs` generates **605 mutants
-unlicensed and 573 licensed**. Freshness controls do not change that — ordinary,
-`-PnoMutationHistory` and `hardeningCertify` runs all report 573, because they disable
-reuse only and keep `com.arcmutate:base` on the tool classpath. Consequences recorded in
-`HARDENING_NOTES.md`: sava's baselines were all first written unlicensed, so a handful of
-accepted rows have no licensed counterpart and are reported unmatched every run. **A row
+population: measured 2026-08-04 on the source of that date, `pitestWs` generated **605
+mutants unlicensed and 573 licensed**. Freshness controls do not change that — ordinary,
+`-PnoMutationHistory` and `hardeningCertify` runs all report the licensed count, because
+they disable reuse only and keep `com.arcmutate:base` on the tool classpath. The absolute
+numbers move with the source: after the 2026-08-08 websocket liveness work the licensed
+`pitestWs` population is **580**. The unlicensed count has not been re-measured since, so
+treat the 605/573 pair as a ratio observed once rather than a current figure.
+Consequences recorded in `HARDENING_NOTES.md`: sava's baselines were all first written
+unlicensed, so a handful of accepted rows have no licensed counterpart and are reported
+unmatched every run. **A row
 leaves a baseline only when the same licensed mutant is observed and killed** — absence
 under one toolchain is not evidence of a kill, and the nine such `ws` rows are itemised
 in `sava-rpc/config/pitest/README.md`.

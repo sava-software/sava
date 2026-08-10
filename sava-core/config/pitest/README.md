@@ -378,10 +378,23 @@ Membership is machine-checked: `<suite>-timeouts.csv` holds the line-less
 Per-run counts sit at or below the set size — a dead mutant's covering test
 racing the watchdog can land either detected flavour.
 
-As of 2026-08-05 — 14 members across four suites (`ed25519` 4, `encoding` 1,
-`tx` 1, `vanity` 8). The set grew when `vanity` widened to its whole package and
-shrank when `Base58.limbsLength` became killable; both movements are recorded
-with their suites below.
+As of 2026-08-10 — 11 members across four suites (`ed25519` 4, `encoding` 1,
+`tx` 1, `vanity` 5), each carrying a `cause:liveness` token in its suite's
+`-timeouts.csv`. The set grew when `vanity` widened to its whole package, shrank
+when `Base58.limbsLength` became killable, and halved again when four of
+`vanity`'s members turned out to be bounded by a seam no test was using; every
+movement is recorded with its suite below.
+
+Two rows came BACK on 2026-08-10 — `ed25519`'s `pack25519` and `vanity`'s
+`SubsequenceRecord.formatCharOptions`, both `ORDER_IF`. They were removed on
+2026-08-08 on the argument that the mutator set no longer generates them, which
+may well be right; what it was not is *measured* under the retirement protocol
+the current plugin enforces, which asks for three consecutive quiet runs before
+a member leaves. A single run that does not produce a mutant looks exactly like
+a run that was lucky. Restoring them costs one line each and one quiet-member
+advisory per run until the protocol is satisfied — cheap against the failure it
+prevents, which is a timeout reappearing at a site whose note says it was
+expected to be gone.
 
 **A timeout is not one thing, and the difference decides whether a member
 belongs here at all.** Splitting these by their written cause gives two classes.
@@ -399,11 +412,19 @@ package-private visibility and an exact `BigInteger` oracle, which cannot flap,
 needs no warm-up, and killed one more mutant than a measured allocation bound
 did. The harness stays what `AGENTS.md` calls it: a last resort.
 
-**ed25519** (4, all `Ed25519Util`; read `TIMED_OUT` identically solo and under
+**ed25519** (3, all `Ed25519Util`; read `TIMED_OUT` identically solo and under
 gate load in the 2026-07-22 mode comparison)
 - `pack25519:385` (`RemoveConditionalMutator_ORDER_IF` on the `j < 2`
-  reduction-pass loop): the canonical-reduction pass loses its only exit and
-  repeats forever.
+  reduction-pass loop) — **restored 2026-08-10, retirement pending.** The
+  2026-08-08 reading was that the mutant is no longer generated at all: `pack25519` now yields only `ORDER_ELSE`
+  (`KILLED`) and `ConditionalsBoundary` at line 385, and exactly one `ORDER_IF`
+  remains in the whole ed25519 population (`pow2523:420`). `vanity`'s
+  `SubsequenceRecord.formatCharOptions:148` went stale the same way in the same
+  pass — two `ORDER_IF` rows whose branches now produce only `ORDER_ELSE` —
+  which reads as a mutator-set change rather than two coincidences. That reading
+  now has to earn its retirement the same way every other member does: three
+  consecutive runs with no such mutant. Until then both rows stay listed, and the
+  verify's quiet-member advisory is the countdown.
 - `pow2523:420` (`ORDER_IF` on `a >= 0`): the 2^252−3 exponentiation ladder
   loses its countdown exit.
 - `scalarMultBase:938` (`IncrementsMutator`, `var6 -= 4` → `+= 4`): the
@@ -412,7 +433,7 @@ gate load in the 2026-07-22 mode comparison)
 - `scalarMultBase:939` (`ORDER_ELSE` on `var6 < 0`): the ladder loop's only
   `return` is forced unreachable.
 
-**encoding** (2)
+**encoding** (1)
 - `Jex.isValid:571` (`IncrementsMutator`, second `index++` → `index--`): the
   do-while cursor oscillates over the same valid digit pair and never reaches
   `len`.
@@ -431,40 +452,54 @@ gate load in the 2026-07-22 mode comparison)
   `i -> i + PUBLIC_KEY_LENGTH` → `0`): the offset cursor collapses to 0,
   stays below `to` forever, and the join accumulates keys until the watchdog.
 
-**vanity** (8, grown from 1 when the suite widened from the `Subsequence*`
-allowlist to the whole package on 2026-08-04)
-- `SubsequenceRecord.formatCharOptions:148` (`ORDER_IF` on
-  `level < Subsequence.MAX_OPTIONS`): the row loop loses its exit and appends
-  rows until the watchdog — the growing `StringBuilder` races it, so this
-  member flips `KILLED`↔`TIMED_OUT` between runs (the known flapper in the
-  `HARDENING_NOTES.md` mode comparisons).
+**vanity** (4, cut from 8 on 2026-08-08 — see "the deterministic seam" below)
 
-The remaining seven are one family with one structural cause, and it is worth
-stating once: every mask worker's search is a `for (;;)` with exactly **two**
-exits — "found enough" (`foundHitLimitOrInterrupted` / `foundLimitOrInterrupted`)
-and "cap reached" (`searchExhausted(attempts)`, the bounded-attempts seam whose
-javadoc names tests as its reason for existing). A test asks for a subsequence
-the encoder will not produce quickly, so the found-exit never fires and the cap
-is the only one left. Each of these mutants disables that cap — by breaking the
-counter that feeds it or the branch that consumes it — and the loop then has no
-exit at all.
+Every mask worker's search is a `for (;;)` with exactly **two** exits: "found
+enough" (`foundHitLimitOrInterrupted` / `foundLimitOrInterrupted`) and "cap
+reached" (`searchExhausted(attempts)`, the bounded-attempts seam whose javadoc
+names tests as its reason for existing). All four members below disable the cap
+itself — they break either the counter that feeds it or the branch that consumes
+it — so the loop is left with no exit any test can reach. This is the
+non-termination class: nothing but the watchdog can observe them.
 
-- `MaskWorker.run:46/54` and `BeginsWithMaskWorker.run:38` (`MathMutator` on
-  `++attempts`): the attempt counter stops advancing, so
-  `searchExhausted(attempts)` compares a frozen value against `maxSearches` and
-  never becomes true.
-- `MaskWorker.run:50/79` and `BeginsWithMaskWorker.run:56`
+- `MaskWorker.run:46` and `BeginsWithMaskWorker.run:38` (`MathMutator`,
+  `++attempts` → `--attempts`): the attempt counter runs backwards, so
+  `searchExhausted(attempts)` compares an ever-decreasing value against
+  `maxSearches` and never becomes true. No budget can bound this, because the
+  budget is what the mutant destroys.
+- `MaskWorker.run:79` and `BeginsWithMaskWorker.run:56`
   (`RemoveConditionalMutator_EQUAL_ELSE`): the branch that acts on the exhausted
-  cap — and, at `MaskWorker.run:50`, the endsWith match that would have queued a
-  result — is forced the way that keeps the loop going.
-- `MaskWorker.run:45` and `BaseMaskWorker.generateKeyPair:234`
-  (`VoidMethodCallMutator`): dropping the key-pair generation leaves the same
-  bytes under test on every pass, so no candidate ever matches and the loop
-  spins to the cap it can no longer reach.
-- `BaseMaskWorker.queueResult:119` (`RemoveConditionalMutator_EQUAL_ELSE`): the
-  result-queuing predicate is forced false, so a found key is never recorded,
-  the found-count never rises, and the found-exit is removed as well.
+  cap is forced the way that keeps the loop going, removing the same exit from
+  the consuming side.
 
-These are the mutants the retired allowlist was avoiding. They are worth paying
-for: eight timeout windows buys mutation coverage of the whole vanity package,
-and every one of them names a real loop exit whose removal a reader can check.
+**The deterministic seam, and why this set halved.** The four members retired on
+2026-08-08 were listed under the same "the cap is the only exit left" argument
+as the four above, and that argument was wrong for them. Their mutants do not
+touch the cap — they break the *match* path (`MaskWorker.run:45` and
+`BaseMaskWorker.generateKeyPair:234`, `VoidMethodCallMutator`, dropping key-pair
+generation so the same bytes are retested forever; `BaseMaskWorker.queueResult:119`,
+`RemoveConditionalMutator_EQUAL_ELSE`, forcing the result-queuing predicate
+false; and `MaskWorker.run:54`, `MathMutator`, `& 0xFFFF` → `| 0xFFFF`,
+corrupting the resumed-encode offset so a real tail match fails its prefix
+check). Each of those still *reaches* a working cap. They timed out only because
+every satisfiable test in `MaskWorkerTests` passed `Long.MAX_VALUE` for
+`maxSearches`, so the cap was set to a value it could never hit — the seam
+existed but no test used it. Giving those tests a finite `MAX_SEARCHES` (10,000
+attempts; the worst real search on its fixed seed takes 529, so the bound is
+~19x headroom and never fires on working code) converts all four from timeouts
+into ordinary assertion failures, and they are now `KILLED` with named covering
+tests. That is the rule the plugin states as "only `cause:liveness` is
+admissible **after deterministic seams/budgets are exhausted**": a mutant that a
+budget can bound is not a liveness member, it is an unexercised seam.
+
+`SubsequenceRecord.formatCharOptions:148` (`ORDER_IF`) was retired in the same
+pass for a different reason: the member matches no mutant in the current report
+at all — `formatCharOptions` now yields only `ORDER_ELSE` and
+`ConditionalsBoundary` at that line, both `KILLED`. This was the known
+`KILLED`↔`TIMED_OUT` flapper in the `HARDENING_NOTES.md` mode comparisons.
+
+The fixture bound is worth recording explicitly, since the plugin asks whether a
+claimed bound can fail first: `MAX_SEARCHES` is *not* the oracle for the four
+members that remain. For them it is the seam that had to be exhausted before
+liveness could be claimed at all, and the mutant's whole effect is to make it
+unreachable — which is exactly why the watchdog is the only remaining observer.

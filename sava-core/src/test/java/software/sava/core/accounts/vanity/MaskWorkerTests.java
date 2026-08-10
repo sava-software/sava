@@ -25,7 +25,14 @@ import static org.junit.jupiter.api.Assertions.*;
 final class MaskWorkerTests {
 
   private static final int CHECK_FOUND = 1024;
-  private static final long UNBOUNDED = Long.MAX_VALUE;
+
+  /// Every satisfiable search below runs on a fixed seed, so its attempt count is an exact
+  /// number rather than a draw: the worst is 529 (both ends constrained, seed 42) and the
+  /// two-character tail takes 510. This cap is ~19x that, so it never fires on working code,
+  /// while still bounding a worker whose match path a mutant has broken — under
+  /// [Long#MAX_VALUE] such a worker spins until the mutation-testing watchdog kills the whole
+  /// run, which reports a timeout instead of a failed assertion and tells us nothing.
+  private static final long MAX_SEARCHES = 10_000L;
 
   private static ArrayBlockingQueue<Result> newResults() {
     return new ArrayBlockingQueue<>(4);
@@ -57,7 +64,7 @@ final class MaskWorkerTests {
     for (final long seed : FixedSeedSecureRandom.SEEDS) {
       final var results = newResults();
       final var result = runToResult(
-          beginsWithWorker(seed, beginsWith, results, new AtomicInteger(0), new AtomicLong(0), CHECK_FOUND, UNBOUNDED),
+          beginsWithWorker(seed, beginsWith, results, new AtomicInteger(0), new AtomicLong(0), CHECK_FOUND, MAX_SEARCHES),
           results);
       final var address = result.publicKey().toBase58();
       assertTrue(address.startsWith("a") || address.startsWith("A"),
@@ -74,13 +81,13 @@ final class MaskWorkerTests {
     final var firstResults = newResults();
     final var firstSearched = new AtomicLong(0);
     final var first = runToResult(
-        beginsWithWorker(1L, beginsWith, firstResults, new AtomicInteger(0), firstSearched, 1, UNBOUNDED),
+        beginsWithWorker(1L, beginsWith, firstResults, new AtomicInteger(0), firstSearched, 1, MAX_SEARCHES),
         firstResults);
 
     final var secondResults = newResults();
     final var secondSearched = new AtomicLong(0);
     final var second = runToResult(
-        beginsWithWorker(1L, beginsWith, secondResults, new AtomicInteger(0), secondSearched, 1, UNBOUNDED),
+        beginsWithWorker(1L, beginsWith, secondResults, new AtomicInteger(0), secondSearched, 1, MAX_SEARCHES),
         secondResults);
 
     assertEquals(first.publicKey(), second.publicKey());
@@ -99,7 +106,7 @@ final class MaskWorkerTests {
       final var results = newResults();
       new MaskWorker(
           null, null, new FixedSeedSecureRandom(seed), null, null, null, false,
-          beginsWith, endsWith, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, UNBOUNDED
+          beginsWith, endsWith, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, MAX_SEARCHES
       ).run();
       final var result = results.poll();
       assertNotNull(result, "seed " + seed + " returned without queueing a result");
@@ -121,7 +128,7 @@ final class MaskWorkerTests {
       final var results = newResults();
       new MaskWorker(
           null, null, new FixedSeedSecureRandom(seed), null, null, null, false,
-          null, endsWith, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, UNBOUNDED
+          null, endsWith, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, MAX_SEARCHES
       ).run();
       final var result = results.poll();
       assertNotNull(result, "seed " + seed + " returned without queueing a result");
@@ -139,13 +146,57 @@ final class MaskWorkerTests {
     final var results = newResults();
     new MaskWorker(
         null, null, new FixedSeedSecureRandom(FixedSeedSecureRandom.SEEDS[0]), null, null, null, false,
-        null, endsWith, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, UNBOUNDED
+        null, endsWith, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, MAX_SEARCHES
     ).run();
     final var result = results.poll();
     assertNotNull(result, "worker returned without queueing a result");
     final var address = result.publicKey().toBase58();
     assertEquals("zz", address.substring(address.length() - 2).toLowerCase(),
         "address did not end with a match: " + address);
+  }
+
+  /// A budget tight enough that exhausting it is itself the assertion.
+  ///
+  /// The other satisfiable searches here cap at [#MAX_SEARCHES], which is deliberately far
+  /// above what they need: it stops a broken worker from spinning, but it is too loose to say
+  /// anything about how hard the worker had to look. This one picks a cap barely above the
+  /// real cost and asserts the search ended *early*, so it fails both ways — a worker that
+  /// stops finding trips `assertNotNull`, and one that finds only by brute-forcing its way
+  /// through the budget trips the `searched` bound.
+  ///
+  /// Both targets are one case-insensitive character, which the fixed seeds hit within a
+  /// couple of attempts, so the cap below is ~30x the real cost and the test runs in
+  /// milliseconds.
+  @Test
+  @Timeout(30)
+  void aBrokenSearchExhaustsAFiniteBudgetInsteadOfFinding() {
+    final long budget = 64L;
+
+    final var endsWith = Subsequence.create("z", false, false, false);
+    final var tailSearched = new AtomicLong(0);
+    final var tailResults = newResults();
+    new MaskWorker(
+        null, null, new FixedSeedSecureRandom(FixedSeedSecureRandom.SEEDS[0]), null, null, null, false,
+        null, endsWith, 1, new AtomicInteger(0), tailSearched, tailResults, CHECK_FOUND, budget
+    ).run();
+    final var tail = tailResults.poll();
+    assertNotNull(tail, "a reachable tail was not found inside " + budget + " attempts");
+    final var tailAddress = tail.publicKey().toBase58();
+    assertTrue(tailAddress.endsWith("z") || tailAddress.endsWith("Z"), tailAddress);
+    assertTrue(tailSearched.get() < budget,
+        "the search exhausted its budget rather than finding: " + tailSearched.get());
+
+    final var beginsWith = Subsequence.create("a", false, false, false);
+    final var headSearched = new AtomicLong(0);
+    final var headResults = newResults();
+    beginsWithWorker(FixedSeedSecureRandom.SEEDS[0], beginsWith, headResults,
+        new AtomicInteger(0), headSearched, CHECK_FOUND, budget).run();
+    final var head = headResults.poll();
+    assertNotNull(head, "a reachable prefix was not found inside " + budget + " attempts");
+    final var headAddress = head.publicKey().toBase58();
+    assertTrue(headAddress.startsWith("a") || headAddress.startsWith("A"), headAddress);
+    assertTrue(headSearched.get() < budget,
+        "the search exhausted its budget rather than finding: " + headSearched.get());
   }
 
   /// The escape hatch: an eight character target is ~58^8 addresses away, so this
@@ -203,7 +254,7 @@ final class MaskWorkerTests {
     final var results = newResults();
     final var worker = new BeginsWithMaskWorker(
         null, null, new FixedSeedSecureRandom(1L), null, null, null, true,
-        null, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, UNBOUNDED);
+        null, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, MAX_SEARCHES);
 
     assertDoesNotThrow(worker::run);
     assertNotNull(results.poll());
