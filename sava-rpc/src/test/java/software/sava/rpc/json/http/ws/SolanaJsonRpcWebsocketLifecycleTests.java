@@ -1560,4 +1560,30 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertEquals(1, errors.size(), "the pong-driven pass must deliver its escalation");
     }
   }
+
+  /// The immediate branch's build settles synchronously under the recording builder, so the
+  /// attempt it hands back must already be done when connect() returns. Asserting that is what
+  /// makes a dropped completion bridge — or a completion handler that strands the future by
+  /// feeding completeExceptionally a null — fail outright. Without it the caller simply parks,
+  /// and PIT records a load-dependent timeout where a deterministic kill was available.
+  @Test
+  void anImmediateAttemptIsSettledWhenConnectReturns() {
+    final var socket = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(new AtomicReference<>(), socket);
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null)) {
+      final var attempt = ws.connect();
+
+      assertNotNull(attempt);
+      assertTrue(attempt.toCompletableFuture().isDone(),
+          "the immediate branch's bridge must settle the attempt before connect() returns");
+      assertFalse(attempt.toCompletableFuture().isCompletedExceptionally(),
+          "a successful build must settle the attempt successfully, not strand or fail it");
+      assertSame(socket, attempt.toCompletableFuture().join());
+    }
+  }
 }

@@ -380,7 +380,9 @@ suppliers (`lambda$onPing$0`/`lambda$onPong$0` run only with DEBUG enabled).
 label `# unlicensed only` for the two whose *sole* argument is this, the rest
 carrying their own family label. Every baseline here was first recorded with
 open-source PIT; the committed `arcmutate-licence.txt` generates a smaller
-population (605 → 573 mutants for `ws`, measured 2026-08-04 on identical source),
+population (605 → 573 mutants for `ws`, measured 2026-08-04; the absolute counts move
+with the source — the licensed population was 580 after the 2026-08-08 websocket
+liveness work, and the unlicensed one has not been re-measured since),
 so a handful of accepted rows have no licensed counterpart and the verify reports
 them as unmatched on every run. **They are not stale and must not be pruned** —
 the mutants return the moment the certificate is absent or expires (15/08/2027),
@@ -493,43 +495,92 @@ slowness, not wrongness: for these mutants the ratchet cannot see a weakened
 covering assertion, so per HARDENING.md the summary's `N timed out
 (load-dependent)` is an audited set, not a count. Membership is
 machine-checked: `ws-timeouts.csv` holds the line-less `class,method,mutator`
-keys and the verify warns on any timeout outside them. A member can also read
-`KILLED` or (for the baselined flip below) `SURVIVED` on a given run.
+keys with a `cause:` tag each, and the verify warns on any timeout outside
+them. A member can also read `KILLED` on a given run.
 
-As of 2026-07-26 — 7 members, all ws, all `SolanaJsonRpcWebsocket`. The first
-two are the long-documented pair; the rest surfaced across the 2026-07-26
-five-suite parallel run and two solo confirmation runs (racers — on other
-runs they read `KILLED`, the covering test winning the race). They are one
-family: make `closed()` lie and the check loop never exits, or strand the
-connect future and the joining test parks. Expect membership to accrete a
-run at a time — each run samples a few racers — and admit a newcomer only
-with its structural cause written here:
+Re-measured 2026-08-10 against the post-review engine: 11 timeouts, all
+audited, down from 19. The set shrank by making the deadline the *test's*
+rather than the watchdog's — the lesson worth carrying to the next member,
+because a timeout is a detection nobody can audit for a weakened assertion.
+Two families were retired outright:
 
-- `SolanaJsonRpcWebsocket.run`'s `while (!closed())` forced always-true
-  (`RemoveConditionalMutator` `EQUAL_IF`): the loop that never exits, caught
-  by PIT's timeout — the stable detection documented in the ws triage
-  section above. (The class holds for every member below.)
-- `checkCycle`'s `finally` `unlock()` removal (`VoidMethodCall`): baselined
-  `SURVIVED # unlock in finally`; under load a later test blocks on the
-  leaked lock and the reading flips to `TIMED_OUT` (the 2026-07-23 migration
-  run) — audited so that flavour does not read as a newcomer.
-- `run`'s `checkCycle(sleepNanos)` call removal (`VoidMethodCall`): the loop
-  body goes empty, leaving a busy spin on `!closed()` that never parks —
-  detection races the covering test's eventual close.
-- `close`'s `msgId.set(Long.MIN_VALUE)` removal (`VoidMethodCall`):
-  `closed()` reads `msgId < 0`, so the closed marker never sets and the
-  check loop's exit never turns true — the same never-exits family as the
-  `run` while-condition.
-- the `buildAsync` completion handler's `ex == null` forced-else
-  (`lambda$connect$2`, `RemoveConditionalMutator`
-  `EQUAL_ELSE`): the connect future can only complete exceptionally, so a
-  test joining `connected` parks until its own timeout, which under load
-  loses to PIT's watchdog.
-- the scheduled connect's dropped `.whenComplete(...)` (`lambda$connect$1`,
-  `NakedReceiver`,
-  keeping the bare `buildAsync` future): the callback that completes
-  `connected` never attaches — the same park-on-connect wedge as
-  handler above; surfaced in the 2026-07-26 solo confirmation run.
-- `closed`'s `msgId.get() < 0` forced-false (`RemoveConditionalMutator`
-  `ORDER_ELSE`): `closed()` can never report true, so the check loop's exit
-  vanishes — the accessor-side twin of `close`'s marker removal.
+- **The unlock family — killed, not audited.** Seven members (`checkCycle`,
+  `deferredBuild`, `onOpen`, `rootSubscribe`, `lambda$ownBuild$0`, and both
+  `lambda$sendSubscription$*`) shared one mechanism: an `unlock()` removed
+  from a `finally`, after which a LATER locked entry parks and the run reads
+  as slow rather than wrong. `WsLockReleaseContractTests` asserts the release
+  contract directly — the lock is package-private for exactly this — so each
+  became an ordinary kill. Only `SolanaJsonRpcWebsocket.checkCycle`'s stays below, and
+  only because its kill races test ordering inside the minion.
+- **The park-on-connect family — mostly killed.** A stranded token or a
+  dropped completion bridge leaves a joining caller parked forever, and a
+  5-second test budget lost that race to PIT's ~1.6s watchdog by
+  construction. Shrinking `aDefaultDeferredConnectFiresThroughItsToken` to
+  500ms (the real path takes ~25ms), asserting `isDone()` on the scheduled
+  attempt the moment its task returns, and pinning that an immediate attempt
+  is settled when `connect()` returns converted the majority into failed
+  assertions. Three survive as racers.
+
+Structural causes, one per member:
+
+- `SolanaJsonRpcWebsocket.run`'s `while (!closed())` forced always-true (`RemoveConditionalMutator`
+  `EQUAL_IF`) — **cause:liveness.** The loop that never exits: once close()'s
+  signal is consumed the mutated path owns no finite completion, and a
+  fixture timeout is a safety exit rather than a demotion.
+- `SolanaJsonRpcWebsocket.run`'s `checkCycle(sleepNanos)` call removal (`VoidMethodCallMutator`) —
+  **cause:liveness.** The loop body goes empty, leaving a busy spin on
+  `!closed()` that never parks; the covering test's eventual close races it.
+- `SolanaJsonRpcWebsocket.close`'s `msgId.set(Long.MIN_VALUE)` removal (`VoidMethodCallMutator`) —
+  **cause:liveness.** The closed marker never sets, so every loop exit that
+  waits on `closed()` vanishes — the never-exits family, transport side.
+- `SolanaJsonRpcWebsocket.closed`'s `msgId.get() < 0` forced-false (`RemoveConditionalMutator`
+  `ORDER_ELSE`) — **cause:liveness.** The accessor-side twin: `closed()` can
+  never report true, so the same exit disappears.
+- `SolanaJsonRpcWebsocket.close`'s settled-guard forced true (`RemoveConditionalMutator` `EQUAL_IF`)
+  — **cause:liveness.** close() joins a build future that is null (an instant
+  NPE, which kills when sampled first) or still pending — parking ahead of
+  the very cancels that would have settled it. A self-inflicted wedge with no
+  path-owned exit.
+- `SolanaJsonRpcWebsocket.lambda$connect$2` — the deferred completion handler's `ex == null` forced-else
+  and its immediate-branch twin `SolanaJsonRpcWebsocket.lambda$connect$5` —
+  **cause:liveness.** `completeExceptionally(null)` NPEs inside the callback
+  and strands the attempt. The immediate case is killed outright by
+  `anImmediateAttemptIsSettledWhenConnectReturns` whenever it is sampled; the
+  deferred flavour is reachable only through a real delay, so it stays.
+- `SolanaJsonRpcWebsocket.connect` — the immediate branch's
+  `built.whenComplete(...)` reduced to bare `built` (`NakedReceiverMutator`) — **cause:liveness.** The bridge to
+  `connected` never attaches, so the returned copy never completes. Same
+  settlement pin, same racer caveat.
+Under repair — three members TERMINATE, so none of them is a liveness case, yet
+each still reads TIMED_OUT on a loaded run. They are tagged `cause:harness`,
+which does not certify, and that is the point: the suite should not certify
+while a detection nobody can audit stands in for a disposition that exists or
+is owed. Each one's disposition:
+
+- `SolanaJsonRpcWebsocket.checkCycle`'s `finally` `unlock()` removal
+  (`VoidMethodCallMutator`) is killed by `WsLockReleaseContractTests`, which
+  asserts the release contract on the test thread. Its old TIMED_OUT reading was
+  a later locked entry parking on the leak. The contract test observes the leak
+  directly, so the kill no longer depends on which test the minion samples — but
+  the parked-entry flavour still wins some runs, and the row stays until a
+  measured run stops producing it.
+- `SolanaJsonRpcWebsocket.checkCycle`'s await guard forced false
+  (`RemoveConditionalMutator` `EQUAL_ELSE`) hot-spins between passes but
+  terminates: the pass below is clock-gated rather than park-gated, since the
+  await's return is deliberately ignored. It is a stable SURVIVED equivalence
+  belongs in the accepted baseline, and the pending refresh is where it lands — a
+  park-duration assertion would be unsound against the spurious wakeups the code
+  explicitly tolerates, so the baseline is the only honest disposition.
+- `SolanaJsonRpcWebsocket.ensureCapacity`'s growth arithmetic (`MathMutator`)
+  also terminates: the clamp still guarantees `minCapacity`, so reassembly
+  finishes. What the mutation removes is amortisation, degrading a fragmented
+  message to a reallocation per fragment — the `# capacity math` equivalence,
+  whose slow flavour the fuzz replay surfaces under load. It carries an accepted
+  row already; the refresh re-anchors its drifted line tag.
+
+Retired 2026-08-10: `lambda$connect$1,NakedReceiverMutator` matched no mutant
+after the connect restructuring — that lambda is now a one-expression
+`_ -> deferredBuild(...)` with no call whose erased return type matches its
+receiver, so NakedReceiver has nothing to mutate. Its structural cause, the
+dropped `.whenComplete(...)` keeping a bare build future, was inherited by
+the scheduler-branch runnable and by `connect` itself, both listed above.
