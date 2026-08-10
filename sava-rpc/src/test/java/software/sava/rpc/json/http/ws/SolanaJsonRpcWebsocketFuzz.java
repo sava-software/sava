@@ -49,13 +49,17 @@ import java.util.Arrays;
 /// Run with `./gradlew :sava-rpc:fuzzWs [-PmaxFuzzTime=<seconds>]`.
 public final class SolanaJsonRpcWebsocketFuzz {
 
+  /// Feeding the parser garbage is the entire point here, and the engine answers each
+  /// malformed frame with a logged JsonException. Left on the console, one seed-corpus replay
+  /// buries the run in stack traces every reader has to rule out as failures. Nothing asserts
+  /// on the console — the postcondition below reads dispatch state — so the records are
+  /// silenced at the source rather than at each caller. The field holds the logger: LogManager
+  /// keeps them weakly, and a collected logger comes back with the setting undone.
+  private static final java.util.logging.Logger QUIET_ENGINE_LOG =
+      java.util.logging.Logger.getLogger(SolanaJsonRpcWebsocket.class.getName());
+
   static {
-    // Feeding the parser garbage is the entire point here, and the engine answers each
-    // malformed frame with a logged JsonException. Left on the console, one seed-corpus replay
-    // buries the run in stack traces that every reader has to rule out as failures. Nothing
-    // asserts on the console — the postcondition below reads dispatch state — so the records
-    // are silenced at the source rather than at each caller.
-    java.util.logging.Logger.getLogger(SolanaJsonRpcWebsocket.class.getName()).setUseParentHandlers(false);
+    QUIET_ENGINE_LOG.setUseParentHandlers(false);
   }
 
   private static final int HEADER_LENGTH = 12;

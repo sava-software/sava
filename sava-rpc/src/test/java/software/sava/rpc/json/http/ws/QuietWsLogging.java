@@ -21,17 +21,23 @@ import java.util.logging.Logger;
 /// unexpected noise still reaches the console until someone decides it is expected.
 final class QuietWsLogging implements BeforeAllCallback, AfterAllCallback {
 
+  /// Held, not re-fetched. `LogManager` keeps loggers by WEAK reference, so a configured
+  /// logger nobody holds can be collected between the setting and the logging — after which
+  /// `System.getLogger` hands the engine a fresh one with `useParentHandlers` back to true and
+  /// the traces return. The field is the strong reference that makes the setting stick.
+  private Logger logger;
   private boolean parentHandlers;
 
   @Override
   public void beforeAll(final ExtensionContext context) {
-    final var logger = Logger.getLogger(SolanaJsonRpcWebsocket.class.getName());
+    this.logger = Logger.getLogger(SolanaJsonRpcWebsocket.class.getName());
     this.parentHandlers = logger.getUseParentHandlers();
     logger.setUseParentHandlers(false);
   }
 
   @Override
   public void afterAll(final ExtensionContext context) {
-    Logger.getLogger(SolanaJsonRpcWebsocket.class.getName()).setUseParentHandlers(parentHandlers);
+    logger.setUseParentHandlers(parentHandlers);
+    this.logger = null;
   }
 }
