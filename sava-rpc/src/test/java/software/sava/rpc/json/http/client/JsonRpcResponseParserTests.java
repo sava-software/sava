@@ -40,6 +40,15 @@ final class JsonRpcResponseParserTests {
     assertEquals("ok", parseResult("{\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"id\":1}"));
   }
 
+  @Test
+  void genericResultParserFactoryReturnsAWorkingController() {
+    final var controller = JsonRpcHttpClient.applyGenericResponseResult(JsonIterator::readString);
+
+    assertNotNull(controller);
+    assertEquals("factory-result", controller.apply(StubHttpResponse.of(
+        200, json("{\"jsonrpc\":\"2.0\",\"result\":\"factory-result\",\"id\":1}"))));
+  }
+
   /// `result` is found by scanning, so it need not be the first field.
   @Test
   void resultIsFoundRegardlessOfFieldOrder() {
@@ -167,6 +176,23 @@ final class JsonRpcResponseParserTests {
     final var result = controller.apply(StubHttpResponse.of(200, json("""
         {"jsonrpc":"2.0","result":{"context":{"apiVersion":"2.0.5","slot":1234},"value":"payload"},"id":1}""")));
     assertEquals("1234:payload", result);
+  }
+
+  /// A missing `value` is distinct from `value: null`: the response parser is
+  /// invoked at the exhausted result-object cursor so a value parser can choose
+  /// its own absent-value default without resetting to the internal sentinel.
+  @Test
+  void valueParserReceivesTheExhaustedCursorWhenValueIsAbsent() {
+    final BiFunction<JsonIterator, Context, String> parser = (ji, context) -> {
+      assertEquals(2468, context.slot());
+      assertTrue(ji.mark() >= 0, "the absent-value path must not reset to the -1 sentinel");
+      assertEquals(ValueType.INVALID, ji.whatIsNext(), "the result object should already be exhausted");
+      return "absent";
+    };
+    final var controller = new JsonRpcValueResponseParser<>(parser);
+
+    assertEquals("absent", controller.apply(StubHttpResponse.of(200, json("""
+        {"jsonrpc":"2.0","result":{"context":{"slot":2468}},"id":1}"""))));
   }
 
   @Test

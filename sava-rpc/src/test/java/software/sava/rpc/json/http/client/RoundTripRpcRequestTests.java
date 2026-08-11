@@ -670,7 +670,11 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
         {"jsonrpc":"2.0","id":803,"method":"getLeaderSchedule","params":[999999999,{"commitment":"confirmed"}]}""", """
         {"jsonrpc":"2.0","result":null,"id":1}"""
     );
-    assertTrue(rpcClient.getLeaderSchedule(999999999L).join().isEmpty());
+    final var absentSchedule = rpcClient.getLeaderSchedule(999999999L).join();
+    assertTrue(absentSchedule.isEmpty());
+    assertThrows(UnsupportedOperationException.class,
+        () -> absentSchedule.put(identity, new long[]{1}),
+        "the null-result sentinel must be immutable just like Map.of()");
   }
 
   @Test

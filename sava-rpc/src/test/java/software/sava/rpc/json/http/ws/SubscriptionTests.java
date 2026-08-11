@@ -58,6 +58,35 @@ final class SubscriptionTests {
     assertNotEquals(a, "not a subscription");
   }
 
+  /// A built-in notification method is a public value, not merely an implementation detail used
+  /// while parsing. Channel remains an independent part of identity even for implementations
+  /// which deliberately expose the same notification namespace.
+  @Test
+  void builtInNotificationMethodAndChannelIdentityAreIndependentlyObservable() {
+    final var account = subscription(Commitment.CONFIRMED, Channel.account, "abc", 1);
+    assertEquals("accountNotification", account.notificationMethod());
+
+    final var accountInSharedNamespace = new RootSubscription<String>(
+        Commitment.CONFIRMED, Channel.account, "shared", 1, "{}", null, _ -> {
+    }) {
+      @Override
+      public String notificationMethod() {
+        return "sharedNotification";
+      }
+    };
+    final var logsInSharedNamespace = new RootSubscription<String>(
+        Commitment.CONFIRMED, Channel.logs, "shared", 2, "{}", null, _ -> {
+    }) {
+      @Override
+      public String notificationMethod() {
+        return "sharedNotification";
+      }
+    };
+
+    assertNotEquals(accountInSharedNamespace, logsInSharedNamespace,
+        "channel identity must not be inferred from the notification method");
+  }
+
   /// A resubscribe replaces the old entry rather than accumulating a duplicate.
   @Test
   void resubscribeWithANewMessageIdReplacesTheMapEntry() {

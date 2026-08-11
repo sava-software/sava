@@ -31,6 +31,13 @@ final class RecordingWebSocket implements WebSocket {
   /// Optional wrapping-socket behavior: report a terminal listener callback synchronously from
   /// abort(), exposing callers which invoke transport code while retaining their own lock.
   Runnable abortAction;
+  /// Optional wrapping-socket behavior: observe the first polite teardown call synchronously.
+  /// This is the boundary at which close() first hands control back to the transport.
+  Runnable sendCloseAction;
+  /// Optional wrapping-socket behavior: re-enter lifecycle code while demand is opened. The JDK
+  /// implementation does not do this, but a public WebSocket wrapper may, and request() is a
+  /// collaborator call made before adoption reports the connection to user code.
+  Runnable requestAction;
   boolean deferPings;
   final List<CompletableFuture<WebSocket>> deferredPings = new ArrayList<>();
   /// Holds each text send's future open, so a test drives the one-outstanding-send chain
@@ -83,6 +90,9 @@ final class RecordingWebSocket implements WebSocket {
   @Override
   public CompletableFuture<WebSocket> sendClose(final int statusCode, final String reason) {
     closeReasons.add(statusCode + ":" + reason);
+    if (sendCloseAction != null) {
+      sendCloseAction.run();
+    }
     return CompletableFuture.completedFuture(this);
   }
 
@@ -92,6 +102,9 @@ final class RecordingWebSocket implements WebSocket {
   @Override
   public void request(final long n) {
     requested += n;
+    if (requestAction != null) {
+      requestAction.run();
+    }
   }
 
   @Override

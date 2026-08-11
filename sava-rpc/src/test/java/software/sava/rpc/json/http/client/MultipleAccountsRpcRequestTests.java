@@ -8,6 +8,7 @@ import java.math.BigInteger;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
 /// The `getMultipleAccounts` and `getAccounts` convenience overloads. Each is a
 /// one-line delegation and they all issue the same `getMultipleAccounts` RPC, so
@@ -54,6 +55,14 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
   /// getAccounts keeps them, so results stay positionally aligned with the keys.
   private static void assertPositional(final List<?> accounts) {
     assertEquals(2, accounts.size(), "getAccounts should keep the null slot");
+  }
+
+  @Test
+  void emptyAccountKeysAreRejectedBeforeBuildingARequest() {
+    final var exception = assertThrowsExactly(IllegalArgumentException.class,
+        () -> rpcClient.getMultipleAccounts(List.<PublicKey>of()));
+
+    assertEquals("keys must not be empty", exception.getMessage());
   }
 
   @Test

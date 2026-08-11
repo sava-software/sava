@@ -7,8 +7,10 @@ import java.net.URI;
 import java.net.UnknownServiceException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -169,6 +171,23 @@ final class JsonHttpClientRequestTests {
       assertEquals(ENDPOINT, testClient.endpoint());
       assertSame(httpClient, testClient.httpClient());
       assertEquals(DEFAULT_TIMEOUT, testClient.defaultRequestTimeout());
+    }
+  }
+
+  @Test
+  void nullTestResponsePassesTheOriginalResponseToTheParser() {
+    try (final var httpClient = HttpClient.newHttpClient()) {
+      final var response = StubHttpResponse.of(new byte[]{1, 2, 3});
+      final var parsed = new HttpResponse<?>[1];
+      final Function<HttpResponse<?>, HttpResponse<?>> parser = candidate -> {
+        parsed[0] = candidate;
+        return candidate;
+      };
+
+      final var wrapped = client(httpClient).wrapResponseParser(parser);
+      assertSame(response, wrapped.apply(response));
+      assertSame(response, parsed[0],
+          "without a predicate, the original response must reach the parser");
     }
   }
 

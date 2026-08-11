@@ -98,6 +98,8 @@ final class SolanaRpcWebsocketBuilderTests {
   void theFourArgumentTimingsKeepsTheHistoricalResendDeadline() {
     assertEquals(9_000L, new Timings(9_000L, 15_000L, 2_000L, 30_000L).subscriptionResendDelay());
     assertEquals(9_000L, new Timings(9_000L, 15_000L, 2_000L).subscriptionResendDelay());
+    assertEquals(1L, new Timings(0L, 15_000L, 0L, 30_000L).subscriptionResendDelay(),
+        "the legacy-derived resend delay keeps its finite floor at the zero boundary");
   }
 
   /// A very large ping delay is how a caller disables pinging, so the derived keep-alive must not
@@ -311,6 +313,24 @@ final class SolanaRpcWebsocketBuilderTests {
     assertSame(NanoClock.SYSTEM, builder.clock());
     final var clock = new TestClock();
     assertSame(clock, builder.clock(clock).clock());
+  }
+
+  /// The package-private clock setter is a deterministic-test seam, and its documented null
+  /// value means "use the system clock" rather than "build a websocket with no clock".
+  @Test
+  void createNormalizesANullTestClockToTheSystemClock() {
+    final var executor = new RecordingExecutor();
+    final var configured = builder()
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(new RecordingWebSocketBuilder(new AtomicReference<>()));
+
+    try (final var websocket = assertDoesNotThrow(() -> ((SolanaRpcWebsocketBuilder) configured)
+        .clock(null)
+        .executorService(executor)
+        .create())) {
+      assertNotNull(websocket);
+      assertEquals(1, executor.tasks.size(), "creation still submits the maintenance loop");
+    }
   }
 
   /// Null (the default) means an internally created executor that close() shuts

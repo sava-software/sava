@@ -134,6 +134,14 @@ final class ClientDefaultsRpcRequestTests extends RpcRequestTests {
             {"jsonrpc":"2.0","result":"%s","id":1}""".formatted(SIGNATURE));
 
     assertEquals(SIGNATURE, rpcClient.sendTransaction(Commitment.FINALIZED, "AVXo", true).join());
+
+    registerRequest("""
+        {"jsonrpc":"2.0","id":1,"method":"sendTransaction","params":["AVXo",\
+        {"encoding":"base64","preflightCommitment":"finalized","maxRetries":1}]}""",
+        """
+            {"jsonrpc":"2.0","result":"%s","id":1}""".formatted(SIGNATURE));
+
+    assertEquals(SIGNATURE, rpcClient.sendTransaction(Commitment.FINALIZED, "AVXo", false).join());
   }
 
   @Test
@@ -145,6 +153,14 @@ final class ClientDefaultsRpcRequestTests extends RpcRequestTests {
             {"jsonrpc":"2.0","result":"%s","id":1}""".formatted(SIGNATURE));
 
     assertEquals(SIGNATURE, rpcClient.sendTransaction(Commitment.PROCESSED, "AVXo", false, 9).join());
+
+    registerRequest("""
+        {"jsonrpc":"2.0","id":1,"method":"sendTransaction","params":["AVXo",\
+        {"encoding":"base64","skipPreflight":true,"preflightCommitment":"processed","maxRetries":9}]}""",
+        """
+            {"jsonrpc":"2.0","result":"%s","id":1}""".formatted(SIGNATURE));
+
+    assertEquals(SIGNATURE, rpcClient.sendTransaction(Commitment.PROCESSED, "AVXo", true, 9).join());
   }
 
   /// The static factories substitute their own defaults rather than routing

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
 
+import java.math.BigInteger;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -114,26 +115,52 @@ final class WsDiagnosticLogTests {
     return joined.toString();
   }
 
+  private static LogRecord assertDiagnostic(final List<LogRecord> records,
+                                            final Level level,
+                                            final String template,
+                                            final Object... parameters) {
+    final var matches = records.stream()
+        .filter(record -> level.equals(record.getLevel()) && template.equals(record.getMessage()))
+        .toList();
+    assertEquals(1, matches.size(), () -> "expected one " + level + " record for '" + template
+        + "', got:\n" + messages(records));
+    final var record = matches.getFirst();
+    final var actualParameters = record.getParameters();
+    assertArrayEquals(parameters, actualParameters == null ? new Object[0] : actualParameters,
+        "diagnostic parameters classify the specific protocol outcome");
+    return record;
+  }
+
   /// The payload each frame carried is recorded only by these two lines, and only
-  /// through a lazy supplier that DEBUG gates. Asserting the payload text kills
-  /// both the removal of the log call and the supplier's forced-empty return.
+  /// through a lazy supplier that DEBUG gates. Diagnostics read a duplicate: logging
+  /// must not consume the caller's buffer while it records the remaining payload.
   @Test
   void pingAndPongLogTheirPayload() {
     try (final var ws = createWebsocket()) {
       final var socket = new RecordingWebSocket();
       final var pingPayload = "ping-payload-4711";
       final var pongPayload = "pong-payload-8123";
+      final var pingBuffer = ByteBuffer.wrap(("skip:" + pingPayload).getBytes(ISO_8859_1));
+      final var pongBuffer = ByteBuffer.wrap(("skip:" + pongPayload).getBytes(ISO_8859_1));
+      pingBuffer.position(5);
+      pongBuffer.position(5);
 
       // the socket must be current: control frames from a never-installed socket are rejected
       ws.onOpen(socket);
       final var records = capture(Level.ALL, () -> {
-        ws.onPing(socket, ByteBuffer.wrap(pingPayload.getBytes(ISO_8859_1)));
-        ws.onPong(socket, ByteBuffer.wrap(pongPayload.getBytes(ISO_8859_1)));
+        ws.onPing(socket, pingBuffer);
+        ws.onPong(socket, pongBuffer);
       });
 
       final var logged = messages(records);
-      assertTrue(logged.contains(pingPayload), () -> "ping payload not logged: " + logged);
-      assertTrue(logged.contains(pongPayload), () -> "pong payload not logged: " + logged);
+      assertAll(
+          () -> assertTrue(logged.contains(pingPayload), () -> "ping payload not logged: " + logged),
+          () -> assertTrue(logged.contains(pongPayload), () -> "pong payload not logged: " + logged),
+          () -> assertEquals(5, pingBuffer.position(),
+              "lazy Ping diagnostics must not consume the caller's buffer"),
+          () -> assertEquals(5, pongBuffer.position(),
+              "lazy Pong diagnostics must not consume the caller's buffer")
+      );
     }
   }
 
@@ -227,6 +254,33 @@ final class WsDiagnosticLogTests {
       assertTrue(logged.contains("Writing text"), () -> "outgoing frame not traced: " + logged);
       assertTrue(logged.contains("Sent text"), () -> "completed write not traced: " + logged);
       assertEquals(Long.MAX_VALUE, socket.requested, "onOpen must request message delivery");
+    }
+  }
+
+  /// A successful outbound Ping has no callback or returned future exposed to the caller. Its
+  /// DEBUG record is therefore the only durable observation of which wire timestamp was sent to
+  /// which endpoint; assert the JUL template and parameters rather than formatted text.
+  @Test
+  void aSuccessfulOutboundPingIsTracedExactly() {
+    final var clock = new TestClock();
+    try (final var ws = createWebsocket(clock)) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      final long elapsedMillis = TIMINGS.pingDelay() + 1L;
+      clock.advanceMillis(elapsedMillis);
+
+      final var records = capture(Level.FINE,
+          () -> assertDoesNotThrow(() -> ws.checkCycle(0L)));
+
+      assertEquals(1, socket.pings, "the due liveness probe must reach the transport");
+      final var record = assertDiagnostic(
+          records,
+          Level.FINE,
+          "{0} to {1}.\n",
+          Long.toString(elapsedMillis + 1L),
+          ENDPOINT.getHost()
+      );
+      assertNull(record.getThrown(), "a successful Ping diagnostic carries no failure");
     }
   }
 
@@ -341,6 +395,165 @@ final class WsDiagnosticLogTests {
 
   private static void feed(final SolanaJsonRpcWebsocket ws, final RecordingWebSocket socket, final String json) {
     ws.onText(socket, java.nio.CharBuffer.wrap(json), true);
+  }
+
+  private static void genericSubscribe(final SolanaJsonRpcWebsocket ws,
+                                       final String key,
+                                       final String params) {
+    assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification", key, params,
+        systems.comodal.jsoniter.JsonIterator::readLong, null, _ -> {
+        }));
+  }
+
+  /// These six records distinguish protocol outcomes that otherwise converge on the same
+  /// callback or lifecycle action: failed cancellation versus cancelled request versus two live
+  /// requests, and equivalent coalescing versus a fatal non-equivalent id collision. The exact
+  /// template, severity, and parameters are the diagnostic contract; state assertions belong to
+  /// the correlation tests that set up these already-proven paths.
+  @Test
+  void correlationDiagnosticsClassifySixDistinctWireOutcomes() {
+    try (final var ws = createWebsocket()) {
+      genericSubscribe(ws, "predecessor", "\"p\"");
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":2}""");
+      assertTrue(ws.unsubscribe("fooNotification", "predecessor"));
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // cancellation id 3
+      genericSubscribe(ws, "successor", "\"q\"");
+      ws.onPong(socket, ByteBuffer.wrap(new byte[0])); // successor id 4
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":4}""");
+
+      final var records = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":3}"""));
+      assertDiagnostic(records, Level.SEVERE,
+          "Un-subscription 3 for id 55 from " + ENDPOINT.getHost()
+              + " failed while a non-equivalent successor successor owns the id; replacing the connection.");
+    }
+
+    try (final var ws = createWebsocket()) {
+      genericSubscribe(ws, "owner", "\"p\"");
+      genericSubscribe(ws, "loser", "\"p\"");
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertTrue(ws.unsubscribe("fooNotification", "loser"));
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":2}""");
+
+      final var records = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":3}"""));
+      assertDiagnostic(records, Level.FINE,
+          "Cancelled request {0} was coalesced onto live subscription {1}; nothing to cancel.",
+          3L, BigInteger.valueOf(55));
+    }
+
+    try (final var ws = createWebsocket()) {
+      genericSubscribe(ws, "owner", "\"p\"");
+      genericSubscribe(ws, "loser", "\"q\"");
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":2}""");
+      assertTrue(ws.unsubscribe("fooNotification", "loser"));
+
+      final var records = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":3}"""));
+      assertDiagnostic(records, Level.SEVERE,
+          "Subscription id 55 from " + ENDPOINT.getHost()
+              + " was assigned to a cancelled request that is not equivalent to its live owner owner; "
+              + "replacing the connection.");
+    }
+
+    try (final var ws = createWebsocket()) {
+      genericSubscribe(ws, "first", "\"p\"");
+      genericSubscribe(ws, "second", "\"p\"");
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertTrue(ws.unsubscribe("fooNotification", "first"));
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":2}"""); // compensation id 4
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":true,"id":4}""");
+
+      final var records = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":3}"""));
+      assertDiagnostic(records, Level.WARNING,
+          "Grant {0} for request {1} was already cancelled; re-subscribing {2}.",
+          BigInteger.valueOf(55), 3L, "second");
+    }
+
+    try (final var ws = createWebsocket()) {
+      genericSubscribe(ws, "first", "\"p\"");
+      genericSubscribe(ws, "second", "\"p\"");
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":2}""");
+
+      final var records = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":3}"""));
+      assertDiagnostic(records, Level.WARNING,
+          "Subscription id 55 from " + ENDPOINT.getHost()
+              + " is already owned by first; releasing second — the server coalesced identical params "
+              + "onto one subscription.");
+    }
+
+    try (final var ws = createWebsocket()) {
+      genericSubscribe(ws, "first", "\"p\"");
+      genericSubscribe(ws, "second", "\"q\"");
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":2}""");
+
+      final var records = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","result":55,"id":3}"""));
+      assertDiagnostic(records, Level.SEVERE,
+          "Subscription id 55 from " + ENDPOINT.getHost()
+              + " was assigned to non-equivalent requests first and second; replacing the connection.");
+    }
+  }
+
+  /// Singleton drops and a parser failure are all intentionally non-throwing listener outcomes,
+  /// so assert their exact WARNING classifications rather than inferring them from unchanged
+  /// subscription state.
+  @Test
+  void rootAndMalformedNotificationDiagnosticsAreExact() {
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.accountSubscribe(KEY, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":700,"id":2}""");
+
+      final var records = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"rootNotification","params":{"result":2,"subscription":700}}"""));
+      assertDiagnostic(records, Level.WARNING,
+          "Dropping root notification whose subscription {0} belongs to {1}.",
+          BigInteger.valueOf(700), Channel.account);
+    }
+
+    try (final var ws = createWebsocket()) {
+      assertTrue(ws.rootSubscribe(_ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      final var early = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"rootNotification","params":{"result":2,"subscription":9}}"""));
+      assertDiagnostic(early, Level.WARNING,
+          "Dropping root notification {0} received before the subscription was confirmed.",
+          BigInteger.valueOf(9));
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","result":9,"id":2}""");
+      final var malformed = capture(Level.ALL, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","method":"rootNotification","params":{"result":{},"subscription":9}}"""));
+      final var parseFailure = assertDiagnostic(malformed, Level.WARNING, "Unexpected json rpc error.");
+      assertNotNull(parseFailure.getThrown(), "the malformed-frame diagnostic must retain its parse failure");
+    }
   }
 
   /// How an un-subscription rejection was CLASSIFIED exists nowhere but its log line: settled

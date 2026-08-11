@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.client;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Handler;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
@@ -15,6 +16,10 @@ import java.util.logging.Logger;
 final class TestLogs {
 
   static List<LogRecord> capture(final Class<?> loggerClass, final Runnable action) {
+    return capture(loggerClass, Level.ALL, action);
+  }
+
+  static List<LogRecord> capture(final Class<?> loggerClass, final Level level, final Runnable action) {
     final var records = new ArrayList<LogRecord>();
     final var handler = new Handler() {
       @Override
@@ -30,14 +35,18 @@ final class TestLogs {
       public void close() {
       }
     };
+    handler.setLevel(Level.ALL);
     final var julLogger = Logger.getLogger(loggerClass.getName());
+    final var previousLevel = julLogger.getLevel();
     final boolean parentHandlers = julLogger.getUseParentHandlers();
     julLogger.setUseParentHandlers(false);
+    julLogger.setLevel(level);
     julLogger.addHandler(handler);
     try {
       action.run();
     } finally {
       julLogger.removeHandler(handler);
+      julLogger.setLevel(previousLevel);
       julLogger.setUseParentHandlers(parentHandlers);
     }
     return records;

@@ -6,6 +6,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.logging.Level;
 import java.util.zip.GZIPOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -130,6 +131,28 @@ final class JsonHttpClientBodyTests {
     assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(
         new ByteArrayInputStream(gzipped), "Content-Encoding", "gzip", "Content-Length", "1"))
     );
+  }
+
+  @Test
+  void malformedContentLengthIsDiagnosedBeforeUsingTheSafeFallback() {
+    final byte[] raw = ascii("{\"result\":\"decoded despite the bad size hint\"}");
+    final var response = StubHttpResponse.of(
+        (InputStream) new ByteArrayInputStream(gzip(raw)),
+        "Content-Encoding", "gzip", "Content-Length", "not-a-number"
+    );
+    final var decoded = new byte[1][];
+
+    final var records = TestLogs.capture(JsonHttpClient.class, Level.FINE,
+        () -> decoded[0] = JsonHttpClient.readBody(response));
+
+    assertArrayEquals(raw, decoded[0], "an invalid allocation hint must not prevent decoding");
+    final var diagnostics = records.stream()
+        .filter(record -> "Ignoring unparseable Content-Length from {0}".equals(record.getMessage()))
+        .toList();
+    assertEquals(1, diagnostics.size(), "the malformed header should produce one diagnostic");
+    final var diagnostic = diagnostics.getFirst();
+    assertEquals(Level.FINE, diagnostic.getLevel());
+    assertArrayEquals(new Object[]{response.uri()}, diagnostic.getParameters());
   }
 
   @Test

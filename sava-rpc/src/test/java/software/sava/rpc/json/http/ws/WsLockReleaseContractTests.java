@@ -137,6 +137,22 @@ final class WsLockReleaseContractTests {
     }
   }
 
+  /// A failed subscription send takes the cleanup arm of its completion callback. That arm has
+  /// the same lifecycle-lock obligation as the successful send-stamp arm above.
+  @Test
+  void failedSubscriptionSendReleasesTheLock() {
+    try (final var ws = websocket()) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      socket.failText = new java.io.IOException("subscription send failed");
+
+      ws.onOpen(socket);
+
+      assertReleased(ws, "failed sendSubscription cleanup");
+    }
+  }
+
   @Test
   void connectPathsReleaseTheLock() {
     final var socket = new RecordingWebSocket();
