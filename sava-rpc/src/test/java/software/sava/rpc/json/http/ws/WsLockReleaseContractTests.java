@@ -43,7 +43,18 @@ final class WsLockReleaseContractTests {
   }
 
   private static void assertReleased(final SolanaJsonRpcWebsocket ws, final String path) {
-    assertFalse(ws.lock.isLocked(), path + " must return with the lifecycle lock released");
+    final int retainedHolds = ws.lock.getHoldCount();
+    // A removed unlock leaves a reentrant hold on this test thread. Release it before asserting
+    // so the intentionally failing mutant cannot strand close() or a later lock-taking path.
+    while (ws.lock.isHeldByCurrentThread()) {
+      ws.lock.unlock();
+    }
+    assertAll(
+        () -> assertEquals(0, retainedHolds,
+            path + " must return with no lifecycle-lock hold on the calling thread"),
+        () -> assertFalse(ws.lock.isLocked(),
+            path + " must return with the lifecycle lock released")
+    );
   }
 
   @Test
@@ -52,6 +63,9 @@ final class WsLockReleaseContractTests {
       assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
       }));
       assertReleased(ws, "accountSubscribe");
+      assertTrue(ws.signatureSubscribe("string-keyed-signature", _ -> {
+      }));
+      assertReleased(ws, "signatureSubscribe");
       assertTrue(ws.slotSubscribe(_ -> {
       }));
       assertReleased(ws, "slotSubscribe");
@@ -74,6 +88,28 @@ final class WsLockReleaseContractTests {
       assertReleased(ws, "rootUnsubscribe");
       assertTrue(ws.unsubscribe("fooNotification", "k"));
       assertReleased(ws, "unsubscribe");
+    }
+  }
+
+  @Test
+  void genericNotificationSnapshotReleasesTheLock() {
+    try (final var ws = websocket()) {
+      final var received = new AtomicReference<Long>();
+      assertTrue(ws.subscribe("watch", "cancelWatch", "event", "key", "",
+          JsonIterator::readLong, null, received::set));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+      assertReleased(ws, "generic confirmation handling");
+
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","method":"event","params":{"result":41,"subscription":700}}"""), true);
+
+      assertAll(
+          () -> assertEquals(41L, received.get(), "the snapshotted generic registration must receive the value"),
+          () -> assertReleased(ws, "generic notification registry snapshot")
+      );
     }
   }
 
@@ -118,12 +154,12 @@ final class WsLockReleaseContractTests {
       assertReleased(ws, "connect (immediate) and ownBuild's completion hook");
 
       // Deferred branch: the throttle routes through the scheduler; running the captured task
-      // executes deferredBuild — whose closed-check and buildAsync share one locked step —
-      // on this thread.
+      // enters startBuild on this thread. Its ownership checks use the lifecycle lock, while the
+      // caller-supplied buildAsync invocation itself remains off-lock.
       assertNotNull(ws.connect());
       assertFalse(scheduler.deferred.isEmpty(), "the second connect defers under the throttle");
       scheduler.deferred.getFirst().task().run();
-      assertReleased(ws, "deferredBuild");
+      assertReleased(ws, "startBuild");
     }
   }
 

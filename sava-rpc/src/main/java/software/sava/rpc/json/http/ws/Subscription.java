@@ -50,7 +50,14 @@ public interface Subscription<T> extends Consumer<T>, Runnable {
   /// name, or the method a generic registration was created under. Part of identity: a generic
   /// key is unique only within its notification method, so two registrations sharing a key
   /// across methods are distinct, in a consumer's collections as much as in the engine's.
-  String notificationMethod();
+  ///
+  /// Implementations predating this accessor represent built-in channels only, whose
+  /// notification method has always been derived from the channel name. A null channel is the
+  /// legacy shape used by caller-defined registrations and has no derivable method.
+  default String notificationMethod() {
+    final var channel = channel();
+    return channel == null ? null : channel.name() + "Notification";
+  }
 
   default String unSubscribeMethod() {
     return channel().unSubscribe();

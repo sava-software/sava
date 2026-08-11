@@ -16,7 +16,18 @@ final class AccountSubscription<T> extends RootSubscription<T> {
                       final String msg,
                       final Consumer<Subscription<T>> onSub,
                       final Consumer<T> consumer) {
-    super(commitment, channel, publicKey.toBase58(), msgId, msg, onSub, consumer);
+    this(commitment, channel, publicKey.toBase58(), publicKey, msgId, msg, onSub, consumer);
+  }
+
+  AccountSubscription(final Commitment commitment,
+                      final Channel channel,
+                      final String key,
+                      final PublicKey publicKey,
+                      final long msgId,
+                      final String msg,
+                      final Consumer<Subscription<T>> onSub,
+                      final Consumer<T> consumer) {
+    super(commitment, channel, key, msgId, msg, onSub, consumer);
     this.publicKey = publicKey;
   }
 

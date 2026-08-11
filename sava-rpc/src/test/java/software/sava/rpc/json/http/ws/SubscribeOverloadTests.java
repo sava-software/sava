@@ -169,7 +169,18 @@ final class SubscribeOverloadTests {
     try (final var ws = websocket()) {
       assertTrue(ws.programSubscribe(KEY, List.of(Filter.createDataSizeFilter(165)), _ -> {
       }));
-      assertFalse(ws.programSubscribe(KEY, List.of(Filter.createDataSizeFilter(165)), _ -> {
+      final var filtersMustNotBeInspected = new java.util.AbstractList<Filter>() {
+        @Override
+        public Filter get(final int index) {
+          throw new AssertionError("a duplicate program subscription inspected its filters");
+        }
+
+        @Override
+        public int size() {
+          throw new AssertionError("a duplicate program subscription inspected its filters");
+        }
+      };
+      assertFalse(ws.programSubscribe(KEY, filtersMustNotBeInspected, _ -> {
       }));
       final var frame = onlyFrame(ws);
       assertTrue(frame.contains("\"filters\":[{\"dataSize\":165}]"), frame);

@@ -76,27 +76,20 @@ final class SolanaRpcWebsocketBuilderTests {
     }
   }
 
-  /// Timings validates its own components, so a value that arrives without passing a builder
-  /// setter is checked too. Zero is legal for exactly the two delays where it says something:
-  /// "do not throttle reconnects", and "the check loop never parks".
+  /// The original three-component record was a plain value carrier and accepted every `long`.
+  /// Its published constructor cannot start rejecting old values merely because two new
+  /// components were added: canonical record validation would also run for this overload, so
+  /// validation of the new positive-only settings stays in the built-in builder.
   @Test
-  void timingsRejectsIncoherentDelays() {
-    assertDoesNotThrow(() -> new Timings(0L, 15_000L, 2_000L), "zero reconnect throttle is legal");
-    assertDoesNotThrow(() -> new Timings(3_000L, 15_000L, 0L), "a never-parking check loop is legal");
-    // both documented-legal zeros together: the derived re-send deadline floors at 1 rather
-    // than letting the record's own validation reject a combination of legal values
-    assertEquals(1L, new Timings(0L, 15_000L, 0L).subscriptionResendDelay());
+  void legacyTimingsValuesRemainRepresentable() {
+    final var legacy = assertDoesNotThrow(() -> new Timings(-1L, 0L, -2L));
+    assertEquals(-1L, legacy.reConnectDelay());
+    assertEquals(0L, legacy.pingDelay());
+    assertEquals(-2L, legacy.subscriptionAndPingCheckDelay());
 
-    assertThrows(IllegalArgumentException.class, () -> new Timings(-1L, 15_000L, 2_000L));
-    assertThrows(IllegalArgumentException.class, () -> new Timings(3_000L, 15_000L, -1L));
-    // zero here would ping every cycle and every inbound frame rather than at a cadence
-    assertThrows(IllegalArgumentException.class, () -> new Timings(3_000L, 0L, 2_000L));
-    assertThrows(IllegalArgumentException.class, () -> new Timings(3_000L, -1L, 2_000L));
-    // through the canonical constructor too: the three-argument form derives keepAliveDelay
-    // from pingDelay, so its guard fires first there and would mask a deleted pingDelay check
-    assertThrows(IllegalArgumentException.class, () -> new Timings(3_000L, 0L, 2_000L, 30_000L, 3_000L));
-    assertThrows(IllegalArgumentException.class, () -> new Timings(3_000L, 15_000L, 2_000L, 0L));
-    assertThrows(IllegalArgumentException.class, () -> new Timings(3_000L, 15_000L, 2_000L, 30_000L, 0L));
+    assertEquals(0L, legacy.keepAliveDelay(), "the added value is derived without altering pingDelay");
+    assertEquals(1L, legacy.subscriptionResendDelay(),
+        "the added retry setting keeps its finite derived floor");
   }
 
   /// Existing callers of the four-argument form get the historical meaning: the re-send follows

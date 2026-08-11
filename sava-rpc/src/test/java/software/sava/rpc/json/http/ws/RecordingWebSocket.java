@@ -14,9 +14,8 @@ import java.util.concurrent.CompletableFuture;
 /// future the JDK would have returned. The attempt is still recorded in every case.
 ///
 /// `deferPings` holds each ping's future open instead of settling it, so a test can choose when
-/// a ping resolves relative to later cycles. The rollback on ping failure runs on whichever
-/// thread completes that future, and its ordering against a subsequent ping is the whole point
-/// of the compare-and-set guarding it — an ordering no synchronously settled future can produce.
+/// a ping resolves relative to later cycles. That lets tests order send completion, peer contact,
+/// deadline claims, and transport replacement without a scheduler race.
 final class RecordingWebSocket implements WebSocket {
 
   final List<String> sentText = new ArrayList<>();
@@ -29,6 +28,9 @@ final class RecordingWebSocket implements WebSocket {
   Throwable failPing;
   RuntimeException throwText;
   RuntimeException throwPing;
+  /// Optional wrapping-socket behavior: report a terminal listener callback synchronously from
+  /// abort(), exposing callers which invoke transport code while retaining their own lock.
+  Runnable abortAction;
   boolean deferPings;
   final List<CompletableFuture<WebSocket>> deferredPings = new ArrayList<>();
   /// Holds each text send's future open, so a test drives the one-outstanding-send chain
@@ -113,5 +115,8 @@ final class RecordingWebSocket implements WebSocket {
     // The JDK reports isOutputClosed() == true after abort(); without this, a close() after an
     // abort recorded a close frame on an aborted socket — a sequence the real JDK cannot produce.
     outputClosed = true;
+    if (abortAction != null) {
+      abortAction.run();
+    }
   }
 }

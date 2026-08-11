@@ -38,8 +38,8 @@ final class WsDiagnosticLogTests {
     return createWebsocket(new TestClock());
   }
 
-  /// `onSendTextError` / `onPingError` left null on purpose: the null-handler
-  /// branch is the one whose only output is the log line.
+  /// `onSendTextError` / `onPingError` left null on purpose: the specific
+  /// observation branch is the one whose output is the log line.
   private static SolanaJsonRpcWebsocket createWebsocket(final TestClock clock) {
     return new SolanaJsonRpcWebsocket(
         ENDPOINT,
@@ -163,6 +163,14 @@ final class WsDiagnosticLogTests {
     assertFalse(blankReason.isEmpty(), "a blank reason logged nothing at all");
     assertTrue(messages(blankReason).contains("1011"), () -> "blank close lost its code: " + messages(blankReason));
     assertFalse(messages(blankReason).contains("upstream exploded"), "blank close leaked a stale reason");
+    final var blankCloseRecord = blankReason.stream()
+        .filter(record -> record.getMessage().contains("closed with code"))
+        .findFirst()
+        .orElseThrow();
+    assertFalse(blankCloseRecord.getMessage().contains("because"),
+        "a blank reason must use the no-reason diagnostic template");
+    assertEquals(2, blankCloseRecord.getParameters().length,
+        "the no-reason template carries only endpoint and status code");
     assertNotEquals(messages(withReason), messages(blankReason),
         "the reason-blank ternary picked the same message for both branches");
 
@@ -222,7 +230,8 @@ final class WsDiagnosticLogTests {
     }
   }
 
-  /// Same standing for the ping path: the failure only ever reaches a log line.
+  /// Same standing for the Ping-specific observation: ordinary error policy also receives the
+  /// transport failure, while the absent onPingError handler leaves this diagnostic to the log.
   @Test
   void pingFailureWithNoHandlerIsLogged() {
     final var clock = new TestClock();
@@ -243,6 +252,84 @@ final class WsDiagnosticLogTests {
       final var logged = messages(records);
       assertTrue(logged.contains("Failed to ping"), () -> "ping failure not logged: " + logged);
       assertTrue(logged.contains(ENDPOINT.getHost()), () -> "ping failure lost its endpoint: " + logged);
+    }
+  }
+
+  /// A failed Ping completed after takeover is expected teardown noise, so it must not reach the
+  /// successor's error policy. The DEBUG trace is the remaining evidence that the completion was
+  /// observed and deliberately discarded rather than silently lost.
+  @Test
+  void supersededSocketPingFailureIsTraced() {
+    final var clock = new TestClock();
+    try (final var ws = createWebsocket(clock)) {
+      final var first = new RecordingWebSocket();
+      first.deferPings = true;
+      ws.onOpen(first);
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, first.deferredPings.size(), "the predecessor owns one pending Ping");
+
+      final var successor = new RecordingWebSocket();
+      ws.onOpen(successor);
+      assertTrue(first.aborted, "takeover retires the predecessor transport");
+
+      final var records = capture(Level.ALL, () -> assertTrue(
+          first.deferredPings.getFirst().completeExceptionally(
+              new IllegalStateException("abort failed the predecessor Ping")
+          )
+      ));
+
+      final var logged = messages(records);
+      assertTrue(logged.contains("Dropped ping on a superseded socket."),
+          () -> "the ignored stale Ping failure left no diagnostic: " + logged);
+      assertFalse(successor.aborted, "the stale completion must not disturb its successor");
+    }
+  }
+
+  @Test
+  void aDefaultTransportErrorIsLoggedBeforeTheWrapperCloses() {
+    final var failure = new IllegalStateException("transport exploded");
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null, TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), null, null, null, null, null, null
+    );
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+
+    final var records = capture(Level.ALL, () -> ws.onError(socket, failure));
+
+    assertTrue(ws.closed());
+    assertTrue(records.stream().anyMatch(record ->
+            record.getThrown() == failure
+                && record.getMessage().contains(ENDPOINT.getHost())),
+        () -> "the terminal transport failure left no diagnostic: " + messages(records));
+  }
+
+  @Test
+  void aThrowingPingObserverIsContainedAndDiagnosed() {
+    final var clock = new TestClock();
+    final var observerFailure = new IllegalStateException("ping observer failed");
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null, TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), null, null, null, (_, _) -> {
+        }, null, (_, _) -> {
+          throw observerFailure;
+        }
+    )) {
+      final var socket = new RecordingWebSocket();
+      socket.failPing = new IllegalStateException("ping failed");
+      ws.onOpen(socket);
+
+      final var records = capture(Level.ALL, () -> {
+        clock.advanceMillis(TIMINGS.pingDelay() + 1);
+        assertDoesNotThrow(() -> ws.checkCycle(0L));
+      });
+
+      assertTrue(records.stream().anyMatch(record -> record.getThrown() == observerFailure),
+          () -> "the throwing Ping observer was not diagnosed: " + messages(records));
+      assertFalse(ws.closed(), "the custom ordinary error policy keeps the wrapper reusable");
     }
   }
 

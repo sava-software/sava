@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
+import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
@@ -14,7 +15,12 @@ import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class SolanaJsonRpcWebsocketTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");
+  private static final long CONCURRENCY_TIMEOUT_SECONDS = 5;
   // Large delays keep the check cycle's resend/ping gates closed unless a test steps the
   // clock deliberately; the RecordingExecutor never runs the loop, so no thread interleaves.
   private static final Timings TIMINGS = new Timings(60_000, 60_000, 60_000);
@@ -47,6 +54,67 @@ final class SolanaJsonRpcWebsocketTests {
         },
         null, null, null
     );
+  }
+
+  private static final class ParamsGatePublicKey implements PublicKey {
+
+    private final PublicKey delegate;
+    private final String base58;
+    private final CountDownLatch bothInParams;
+    private final CountDownLatch releaseParams;
+
+    private ParamsGatePublicKey(final PublicKey delegate,
+                                final CountDownLatch bothInParams,
+                                final CountDownLatch releaseParams) {
+      this.delegate = delegate;
+      this.base58 = delegate.toBase58();
+      this.bothInParams = bothInParams;
+      this.releaseParams = releaseParams;
+    }
+
+    @Override
+    public int write(final byte[] out, final int off) {
+      return delegate.write(out, off);
+    }
+
+    @Override
+    public byte[] toByteArray() {
+      return delegate.toByteArray();
+    }
+
+    @Override
+    public byte[] copyByteArray() {
+      return delegate.copyByteArray();
+    }
+
+    @Override
+    public String toBase58() {
+      return base58;
+    }
+
+    @Override
+    public String toBase64() {
+      return delegate.toBase64();
+    }
+
+    @Override
+    public int compareTo(final PublicKey other) {
+      return Arrays.compare(toByteArray(), other.toByteArray());
+    }
+
+    @Override
+    public String toString() {
+      bothInParams.countDown();
+      try {
+        if (!releaseParams.await(CONCURRENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+          throw new AssertionError("the duplicate-subscribe test did not release the parameter gate");
+        }
+      } catch (final InterruptedException ex) {
+        Thread.currentThread().interrupt();
+        throw new AssertionError("interrupted at the duplicate-subscribe parameter gate", ex);
+      }
+      return base58;
+    }
   }
 
   private static void feed(final SolanaJsonRpcWebsocket ws, final RecordingWebSocket socket, final String json) {
@@ -201,9 +269,9 @@ final class SolanaJsonRpcWebsocketTests {
     }
   }
 
-  /// The unknown-subscription auto-unsubscribe has two implementations: the
-  /// generic one (pinned by `unknownGenericSubscriptionIdUnsubscribes`) and the
-  /// eagerly-parsed *item* overload the `logs` channel dispatches through. Only
+  /// The unknown-subscription auto-unsubscribe has two implementations: the generic one (pinned
+  /// by `unknownGenericSubscriptionIdUsesTheRegisteredCancellationMethod`) and the eagerly-parsed
+  /// *item* overload the `logs` channel dispatches through. Only
   /// the generic one was covered, leaving the item overload's miss branch and its
   /// `sendUnSubscription` call unexercised — a stale server-side subscription
   /// would have gone on delivering with nothing to cancel it.
@@ -233,10 +301,9 @@ final class SolanaJsonRpcWebsocketTests {
     }
   }
 
-  /// A duplicate subscribe must be rejected by the channel method's own
-  /// `sub == null || !sub.containsKey(commitment)` guard, *before* reaching
-  /// `queueSubscription` — which opens with `msgId.incrementAndGet()` and would
-  /// burn a message id on the way to returning false.
+  /// A duplicate subscribe must be rejected without consuming a correlation id. The public
+  /// channel guard is the fast path; queueSubscription repeats the ownership decision under the
+  /// lifecycle lock for concurrent callers which both observed that fast path as empty.
   ///
   /// Both routes answer `false`, so asserting the return value alone cannot tell
   /// them apart, which is why the forced-true operand survived every existing
@@ -280,24 +347,170 @@ final class SolanaJsonRpcWebsocketTests {
         final int index = i;
         assertEquals(ids.get(i - 1) + 1, ids.get(i),
             () -> "a rejected duplicate burned message id " + (ids.get(index - 1) + 1) + ", so it reached "
-                + "queueSubscription instead of being stopped by its channel guard: " + ids);
+                + "the authoritative duplicate decision: " + ids);
       }
     }
   }
 
-  /// The invariant the accepted `# defensive scan` family rests on, made
-  /// executable. Those rows are the *match* inside `removeDanglingSub` and the
-  /// generic `unsubscribe` scan — the recovery path for a subscription present
-  /// in `subscriptionsBySubId` but gone from its channel map. It is accepted as
-  /// unreachable because `queueUnsubscribe(Subscription)` removes from **both**
-  /// maps, so they cannot diverge through any public sequence.
+  /// The public map check is deliberately only a fast path. Two callers may both observe an
+  /// absent key before either reaches the lifecycle lock, but the locked PublicKey-keyed helper
+  /// must still choose exactly one owner. The key's parameter rendering is the public seam that
+  /// holds both callers after that outer check; no scheduler timing is part of the oracle.
+  @Test
+  void concurrentAccountSubscribesChooseOneOwnerAndConsumeOneMessageId() throws Exception {
+    assertConcurrentDuplicateOwnership(
+        (ws, key) -> ws.accountSubscribe(Commitment.CONFIRMED, key, _ -> {
+        }),
+        "accountSubscribe"
+    );
+  }
+
+  /// The String-keyed helper reached by logs subscriptions makes the same locked ownership
+  /// decision. Both callers are held while formatting their parameters, after the public guard
+  /// but before either can enter queueSubscription.
+  @Test
+  void concurrentLogsSubscribesChooseOneOwnerAndConsumeOneMessageId() throws Exception {
+    assertConcurrentDuplicateOwnership(
+        (ws, key) -> ws.logsSubscribe(Commitment.CONFIRMED, key, _ -> {
+        }),
+        "logsSubscribe"
+    );
+  }
+
+  private static void assertConcurrentDuplicateOwnership(
+      final BiFunction<SolanaJsonRpcWebsocket, PublicKey, Boolean> subscribe,
+      final String method) throws Exception {
+    final var bothInParams = new CountDownLatch(2);
+    final var releaseParams = new CountDownLatch(1);
+    final var key = new ParamsGatePublicKey(
+        PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r"),
+        bothInParams,
+        releaseParams
+    );
+    final var executor = Executors.newFixedThreadPool(2);
+    final List<Future<Boolean>> calls = new ArrayList<>(2);
+
+    try (final var ws = createWebsocket()) {
+      try {
+        calls.add(executor.submit(() -> subscribeWithoutLeakingLock(ws, key, subscribe)));
+        calls.add(executor.submit(() -> subscribeWithoutLeakingLock(ws, key, subscribe)));
+
+        assertTrue(
+            bothInParams.await(CONCURRENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            "both callers must pass the public map guard before either enters queueSubscription"
+        );
+        releaseParams.countDown();
+
+        final var results = List.of(
+            calls.get(0).get(CONCURRENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            calls.get(1).get(CONCURRENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        );
+        assertAll(
+            () -> assertEquals(1, results.stream().filter(Boolean::booleanValue).count(),
+                () -> "exactly one concurrent caller must own the registration: " + results),
+            () -> assertEquals(1, results.stream().filter(result -> !result).count(),
+                () -> "the losing concurrent caller must be rejected: " + results)
+        );
+
+        final var socket = new RecordingWebSocket();
+        ws.onOpen(socket);
+        final var subscriptionFrames = socket.sentText.stream()
+            .filter(frame -> frame.contains("\"method\":\"" + method + "\""))
+            .toList();
+        assertAll(
+            () -> assertEquals(1, subscriptionFrames.size(),
+                () -> "the duplicate race registered more than one subscription: " + socket.sentText),
+            () -> assertTrue(subscriptionFrames.getFirst().contains("\"id\":2,"),
+                () -> "the duplicate race consumed more than one message id: " + subscriptionFrames)
+        );
+      } finally {
+        releaseParams.countDown();
+        calls.forEach(call -> call.cancel(true));
+        executor.shutdownNow();
+        assertTrue(executor.awaitTermination(CONCURRENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            "duplicate-subscribe workers did not terminate");
+      }
+    }
+  }
+
+  private static boolean subscribeWithoutLeakingLock(
+      final SolanaJsonRpcWebsocket ws,
+      final PublicKey key,
+      final BiFunction<SolanaJsonRpcWebsocket, PublicKey, Boolean> subscribe) {
+    try {
+      return subscribe.apply(ws, key);
+    } finally {
+      final int leakedHolds = ws.lock.getHoldCount();
+      while (ws.lock.isHeldByCurrentThread()) {
+        ws.lock.unlock();
+      }
+      assertEquals(0, leakedHolds, "queueSubscription must release the lifecycle lock");
+    }
+  }
+
+  /// A String-keyed channel owns one inner registry per key, with a distinct registration for
+  /// every commitment. Adding a second commitment must retain the first registration rather than
+  /// replace its inner map; both send callbacks are the public observation that adoption found
+  /// both durable registrations.
+  @Test
+  void stringKeyedRegistryRetainsEveryCommitment() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var confirmed = new AtomicReference<Subscription<TxLogs>>();
+      final var finalized = new AtomicReference<Subscription<TxLogs>>();
+
+      assertTrue(ws.logsSubscribe(Commitment.CONFIRMED, key, confirmed::set, _ -> {
+      }));
+      assertTrue(ws.logsSubscribe(Commitment.FINALIZED, key, finalized::set, _ -> {
+      }));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      assertAll(
+          () -> assertNotNull(confirmed.get(), "adding finalized replaced the confirmed registration"),
+          () -> assertNotNull(finalized.get(), "the finalized registration was not adopted"),
+          () -> assertEquals(Commitment.CONFIRMED, confirmed.get().commitment()),
+          () -> assertEquals(Commitment.FINALIZED, finalized.get().commitment()),
+          () -> assertEquals(2, socket.sentText.size(), "both commitment registrations must be sent")
+      );
+    }
+  }
+
+  /// The PublicKey-keyed overload has the same ownership contract as the String-keyed one: a
+  /// second commitment extends the key's registry and cannot evict the first registration.
+  @Test
+  void publicKeyedRegistryRetainsEveryCommitment() {
+    try (final var ws = createWebsocket()) {
+      final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
+      final var confirmed = new AtomicReference<Subscription<AccountInfo<byte[]>>>();
+      final var finalized = new AtomicReference<Subscription<AccountInfo<byte[]>>>();
+
+      assertTrue(ws.accountSubscribe(Commitment.CONFIRMED, key, confirmed::set, _ -> {
+      }));
+      assertTrue(ws.accountSubscribe(Commitment.FINALIZED, key, finalized::set, _ -> {
+      }));
+
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      assertAll(
+          () -> assertNotNull(confirmed.get(), "adding finalized replaced the confirmed registration"),
+          () -> assertNotNull(finalized.get(), "the finalized registration was not adopted"),
+          () -> assertEquals(Commitment.CONFIRMED, confirmed.get().commitment()),
+          () -> assertEquals(Commitment.FINALIZED, finalized.get().commitment()),
+          () -> assertEquals(2, socket.sentText.size(), "both commitment registrations must be sent")
+      );
+    }
+  }
+
+  /// The channel registry is the ownership authority. Removing a confirmed registration removes
+  /// its by-sub-id mapping in the same lifecycle-lock transition, so a second unsubscribe has no
+  /// dangling entry to recover by scanning a second registry.
   ///
   /// That is a claim about code that can change, so it is pinned rather than
   /// asserted in prose: a second un-subscribe of an already-confirmed,
-  /// already-removed subscription must report `false`. If a future edit ever
-  /// leaves the by-sub-id entry behind, the scan finds it, this returns `true`,
-  /// and the acceptance is revisited — instead of the family quietly becoming
-  /// reachable while the README still says it is not.
+  /// already-removed subscription must report `false`.
   @Test
   void unsubscribingTwiceFindsNothingDangling() {
     try (final var ws = createWebsocket()) {
@@ -313,8 +526,7 @@ final class SolanaJsonRpcWebsocketTests {
 
       assertTrue(ws.accountUnsubscribe(Commitment.CONFIRMED, key), "the map-first removal should report true");
       assertFalse(ws.accountUnsubscribe(Commitment.CONFIRMED, key),
-          "a second un-subscribe found a dangling by-sub-id entry: the two maps diverged, "
-              + "so the accepted defensive-scan family is reachable and needs re-triage");
+          "a second un-subscribe found a dangling registry entry: the indexes diverged");
     }
   }
 
@@ -558,15 +770,15 @@ final class SolanaJsonRpcWebsocketTests {
     }
   }
 
-  /// A generic notification whose subscription id matches no generic subscription
-  /// derives the unsubscribe method from the notification method name; the outgoing
-  /// frame must carry the derived name, not the notification's.
+  /// Generic method names are independent API values: no suffix convention relates a
+  /// notification method to its cancellation method. Unknown-id compensation must use the exact
+  /// method bound by subscribe(), including while the registration can concurrently be removed.
   @Test
-  void unknownGenericSubscriptionIdUnsubscribes() {
+  void unknownGenericSubscriptionIdUsesTheRegisteredCancellationMethod() {
     try (final var ws = createWebsocket()) {
       final var received = new ArrayList<Long>();
       assertTrue(ws.subscribe(
-          "voteSubscribe", "voteUnsubscribe", "voteNotification",
+          "watch", "cancelWatch", "event",
           "vote", "",
           ji -> ji.skipUntil("slots").openArray().readLong(),
           null,
@@ -580,11 +792,11 @@ final class SolanaJsonRpcWebsocketTests {
       );
 
       feed(ws, socket, """
-          {"jsonrpc":"2.0","method":"voteNotification","params":{"result":{"slots":[1,2]},"subscription":555}}"""
+          {"jsonrpc":"2.0","method":"event","params":{"result":{"slots":[1,2]},"subscription":555}}"""
       );
       assertTrue(received.isEmpty());
       assertEquals("""
-          {"jsonrpc":"2.0","id":3,"method":"voteUnsubscribe","params":[555]}""", socket.sentText.getLast()
+          {"jsonrpc":"2.0","id":3,"method":"cancelWatch","params":[555]}""", socket.sentText.getLast()
       );
     }
   }

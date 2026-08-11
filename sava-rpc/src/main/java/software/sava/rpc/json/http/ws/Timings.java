@@ -4,8 +4,14 @@ package software.sava.rpc.json.http.ws;
 ///
 /// @param reConnectDelay                 how long to wait before re-attempting a connection.
 /// @param pingDelay                      how long the peer may be silent before it is asked
-///                                       whether it is still there, and the minimum spacing
-///                                       between two such asks.
+///                                       whether it is still there. It is also each probe phase's
+///                                       budget: the Ping send must complete within one window,
+///                                       and a successful probe must receive a Pong or other peer
+///                                       frame within a response window that starts at successful
+///                                       send completion, not at admission. A peer frame racing a
+///                                       pending send already answers the probe, but the send must
+///                                       still settle. Failure aborts the transport and is reported
+///                                       through the websocket error seam.
 /// @param subscriptionAndPingCheckDelay  how often the check cycle runs.
 /// @param keepAliveDelay                 how long *this* end may be silent before it pokes the
 ///                                       peer. Distinct from [#pingDelay()] because it answers a
@@ -62,38 +68,14 @@ public record Timings(long reConnectDelay,
   /// contract: a caller who wants a particular keep-alive states it rather than deriving it.
   static final int DEFAULT_KEEP_ALIVE_FACTOR = 2;
 
-  /// Validated here rather than only in the builder, because this constructor is public and a
-  /// nonsensical delay is nonsensical however it arrives. The builder's own guards cover a
-  /// different thing: there, zero is the sentinel for "not given", so rejecting it stops a
-  /// caller being handed the derived default while believing their value was taken.
-  ///
-  /// Which values are nonsense differs per delay, and the two that permit zero permit it because
-  /// zero says something. A zero [#reConnectDelay()] means "do not throttle reconnects", and a
-  /// zero [#subscriptionAndPingCheckDelay()] means the check loop never parks. Zero is not
-  /// coherent for the other three: each is a "how long before acting" bound where zero collapses
-  /// to acting every time round, which is a way of asking for a flood rather than a cadence.
-  public Timings {
-    requireNotNegative(reConnectDelay, "reConnectDelay");
-    requirePositive(pingDelay, "pingDelay");
-    requireNotNegative(subscriptionAndPingCheckDelay, "subscriptionAndPingCheckDelay");
-    requirePositive(keepAliveDelay, "keepAliveDelay");
-    requirePositive(subscriptionResendDelay, "subscriptionResendDelay");
-  }
-
-  private static void requirePositive(final long value, final String name) {
-    if (value <= 0) {
-      throw new IllegalArgumentException(name + " must be positive: " + value);
-    }
-  }
-
-  private static void requireNotNegative(final long value, final String name) {
-    if (value < 0) {
-      throw new IllegalArgumentException(name + " must not be negative: " + value);
-    }
-  }
-
   /// Defaults the keep-alive to a multiple of the ping delay, so a caller who has tuned only the
   /// detection deadline still gets a keep-alive proportionate to it.
+  ///
+  /// This overload deliberately retains the original three-component record constructor's value
+  /// semantics: all `long` values are accepted. Validation cannot live in the five-component
+  /// canonical constructor without retroactively making this published signature reject values
+  /// that earlier releases represented. The built-in builder validates its newly introduced
+  /// positive-only settings before constructing this value.
   ///
   /// The multiply saturates rather than wrapping. A very large [#pingDelay()] is how a caller
   /// says "do not ping" — [Long#MAX_VALUE] being the idiomatic form — and an overflow there

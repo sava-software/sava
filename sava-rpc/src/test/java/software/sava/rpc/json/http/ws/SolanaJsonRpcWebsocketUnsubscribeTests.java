@@ -191,11 +191,10 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
     }
   }
 
-  /// A generic unsubscribe that misses its map falls back to scanning the active
-  /// subscriptions — which must skip non-generic subscriptions and generic ones
-  /// whose key does not match.
+  /// A generic unsubscribe resolves only the exact notification-method/key registration. It
+  /// must ignore non-generic subscriptions and generic registrations whose method or key differs.
   @Test
-  void genericUnsubscribeScansActiveSubscriptionsAndMisses() {
+  void genericUnsubscribeRequiresTheExactRegistration() {
     try (final var ws = websocket()) {
       assertTrue(ws.accountSubscribe(KEY, _ -> {
       }));
@@ -215,8 +214,8 @@ final class SolanaJsonRpcWebsocketUnsubscribeTests {
     }
   }
 
-  /// The dangling-subscription scan must miss on every mismatched dimension —
-  /// commitment, channel, and key — and only then report nothing to remove.
+  /// Typed subscription registries match every registration dimension. A commitment, channel,
+  /// or key mismatch must report nothing to remove without disturbing the registered subscription.
   @Test
   void unsubscribeMissesOnCommitmentChannelAndKey() {
     try (final var ws = websocket()) {

@@ -12,9 +12,16 @@ import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,6 +33,109 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");
   private static final Timings TIMINGS = new Timings(60_000, 60_000, 60_000);
+
+  /// A valid scheduler is allowed to start an enabled task before schedule() returns its handle.
+  /// Waiting for buildAsync to begin makes that ordering deterministic without sleeping.
+  private static final class BuildBeforeScheduleReturns extends ScheduledThreadPoolExecutor {
+
+    private final CountDownLatch buildEntered;
+    private final AtomicBoolean firstSchedule = new AtomicBoolean(true);
+    private volatile ScheduledFuture<?> connectHandle;
+
+    private BuildBeforeScheduleReturns(final CountDownLatch buildEntered) {
+      super(1);
+      this.buildEntered = buildEntered;
+    }
+
+    @Override
+    public ScheduledFuture<?> schedule(final Runnable command, final long delay, final TimeUnit unit) {
+      final var handle = super.schedule(command, delay, unit);
+      if (firstSchedule.compareAndSet(true, false)) {
+        connectHandle = handle;
+        try {
+          if (!buildEntered.await(500L, TimeUnit.MILLISECONDS)) {
+            throw new IllegalStateException("scheduled connect did not enter buildAsync");
+          }
+        } catch (final InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          throw new IllegalStateException("interrupted while awaiting scheduled connect", ex);
+        }
+      }
+      return handle;
+    }
+  }
+
+  /// Holds the scheduled task after it has claimed its attempt, so cancelling the scheduler
+  /// handle before schedule() returns would interrupt a live builder operation.
+  private static final class BlockingBuildAsyncBuilder implements WebSocket.Builder {
+
+    private final RecordingWebSocket socket;
+    private final CountDownLatch buildEntered;
+    private final CountDownLatch releaseBuild;
+    private final AtomicBoolean interrupted = new AtomicBoolean();
+
+    private BlockingBuildAsyncBuilder(final RecordingWebSocket socket,
+                                      final CountDownLatch buildEntered,
+                                      final CountDownLatch releaseBuild) {
+      this.socket = socket;
+      this.buildEntered = buildEntered;
+      this.releaseBuild = releaseBuild;
+    }
+
+    @Override
+    public WebSocket.Builder header(final String name, final String value) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder connectTimeout(final Duration timeout) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder subprotocols(final String mostPreferred, final String... lesserPreferred) {
+      return this;
+    }
+
+    @Override
+    public CompletableFuture<WebSocket> buildAsync(final URI uri, final WebSocket.Listener listener) {
+      buildEntered.countDown();
+      try {
+        if (!releaseBuild.await(500L, TimeUnit.MILLISECONDS)) {
+          return CompletableFuture.failedFuture(
+              new IllegalStateException("test did not release the scheduled builder"));
+        }
+      } catch (final InterruptedException ex) {
+        interrupted.set(true);
+        Thread.currentThread().interrupt();
+        return CompletableFuture.failedFuture(ex);
+      }
+      listener.onOpen(socket);
+      return CompletableFuture.completedFuture(socket);
+    }
+  }
+
+  private static final class PoisonClock implements NanoClock {
+
+    private final AtomicReference<RuntimeException> failure = new AtomicReference<>();
+
+    private void poison(final RuntimeException failure) {
+      this.failure.set(failure);
+    }
+
+    @Override
+    public long nanoTime() {
+      final var failure = this.failure.get();
+      if (failure != null) {
+        throw failure;
+      }
+      return 1_234_567_890_123_456L;
+    }
+
+    @Override
+    public void sleep(final long millis) {
+    }
+  }
 
   /// Delivers the listener's open synchronously, but leaves the builder future unsettled. This
   /// is the narrow window where a socket is current while close() still has an attempt to cancel,
@@ -70,6 +180,109 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     }
   }
 
+  /// Each build opens its socket synchronously. The first future stays pending while the second
+  /// settles, exposing whether retirement released the old single-flight authority before a
+  /// lifecycle handler re-entered connect().
+  private static final class SynchronousOpenSequenceBuilder implements WebSocket.Builder {
+
+    private final List<RecordingWebSocket> sockets;
+    private final List<CompletableFuture<WebSocket>> completions;
+    private int builds;
+    private Throwable firstBuildError;
+    private RuntimeException firstBuildThrow;
+    private RuntimeException secondBuildThrow;
+    private Error firstBuildFatal;
+    private boolean firstBuildReturnsNull;
+    private boolean firstBuildOpens = true;
+    private boolean insideBuild;
+
+    private SynchronousOpenSequenceBuilder(final List<RecordingWebSocket> sockets,
+                                           final List<CompletableFuture<WebSocket>> completions) {
+      this.sockets = sockets;
+      this.completions = completions;
+    }
+
+    @Override
+    public WebSocket.Builder header(final String name, final String value) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder connectTimeout(final Duration timeout) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder subprotocols(final String mostPreferred, final String... lesserPreferred) {
+      return this;
+    }
+
+    @Override
+    public CompletableFuture<WebSocket> buildAsync(final URI uri, final WebSocket.Listener listener) {
+      assertFalse(insideBuild, "one mutable WebSocket.Builder must not be entered re-entrantly");
+      insideBuild = true;
+      try {
+        final int attempt = builds++;
+        if (attempt == 1 && secondBuildThrow != null) {
+          throw secondBuildThrow;
+        }
+        if (attempt != 0 || firstBuildOpens) {
+          listener.onOpen(sockets.get(attempt));
+        }
+        if (attempt == 0 && firstBuildError != null) {
+          listener.onError(sockets.get(attempt), firstBuildError);
+        }
+        if (attempt == 0 && firstBuildThrow != null) {
+          throw firstBuildThrow;
+        }
+        if (attempt == 0 && firstBuildFatal != null) {
+          throw firstBuildFatal;
+        }
+        if (attempt == 0 && firstBuildReturnsNull) {
+          return null;
+        }
+        return completions.get(attempt);
+      } finally {
+        insideBuild = false;
+      }
+    }
+  }
+
+  /// Returns caller-controlled futures in order and exposes each attempt listener. This keeps
+  /// future completion, listener adoption and terminal retirement independently stepable: the
+  /// JDK permits the build future and listener executor to settle on different threads.
+  private static final class FutureSequenceBuilder implements WebSocket.Builder {
+
+    private final List<CompletableFuture<WebSocket>> completions;
+    private final List<WebSocket.Listener> listeners = new ArrayList<>();
+    private int builds;
+
+    private FutureSequenceBuilder(final List<CompletableFuture<WebSocket>> completions) {
+      this.completions = completions;
+    }
+
+    @Override
+    public WebSocket.Builder header(final String name, final String value) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder connectTimeout(final Duration timeout) {
+      return this;
+    }
+
+    @Override
+    public WebSocket.Builder subprotocols(final String mostPreferred, final String... lesserPreferred) {
+      return this;
+    }
+
+    @Override
+    public CompletableFuture<WebSocket> buildAsync(final URI uri, final WebSocket.Listener listener) {
+      listeners.add(listener);
+      return completions.get(builds++);
+    }
+  }
+
   /// Models an upgrade which is already past its cancellable phase. close() still calls cancel,
   /// but ownership of a later successful socket remains the listener's obligation.
   private static final class UncancellableWebSocketFuture extends CompletableFuture<WebSocket> {
@@ -80,8 +293,81 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     }
   }
 
+  /// Runs one deterministic action after an already-completed future's ownership observer but
+  /// before whenComplete returns to the caller which will install that future.
+  private static final class AfterOwnershipFuture extends CompletableFuture<WebSocket> {
+
+    private Runnable afterOwnership;
+    private int cancelCalls;
+
+    @Override
+    public CompletableFuture<WebSocket> whenComplete(
+        final BiConsumer<? super WebSocket, ? super Throwable> action) {
+      return super.whenComplete((webSocket, failure) -> {
+        action.accept(webSocket, failure);
+        afterOwnership.run();
+      });
+    }
+
+    @Override
+    public boolean cancel(final boolean mayInterruptIfRunning) {
+      ++cancelCalls;
+      return super.cancel(mayInterruptIfRunning);
+    }
+  }
+
+  /// Models an uncancellable build which completes exceptionally immediately after a losing
+  /// installer observes it as incomplete. Both state methods carry the seam so the test remains
+  /// faithful across the safe terminality-first implementation and the former exceptional-first
+  /// implementation: only the latter proceeds to getNow after the outcome has changed.
+  private static final class ExceptionCompletingLosingFuture extends CompletableFuture<WebSocket> {
+
+    private final Throwable failure = new IOException("build failed while close won installation");
+    private Runnable afterOwnershipRegistration;
+
+    @Override
+    public CompletableFuture<WebSocket> whenComplete(
+        final BiConsumer<? super WebSocket, ? super Throwable> action) {
+      final var dependent = super.whenComplete(action);
+      afterOwnershipRegistration.run();
+      return dependent;
+    }
+
+    @Override
+    public boolean cancel(final boolean mayInterruptIfRunning) {
+      return false;
+    }
+
+    @Override
+    public boolean isDone() {
+      final boolean done = super.isDone();
+      if (!done) {
+        completeExceptionally(failure);
+      }
+      return done;
+    }
+
+    @Override
+    public boolean isCompletedExceptionally() {
+      final boolean exceptional = super.isCompletedExceptionally();
+      if (!exceptional) {
+        completeExceptionally(failure);
+      }
+      return exceptional;
+    }
+  }
+
   private static SolanaJsonRpcWebsocket websocket(final TestClock clock,
                                                   final SolanaRpcWebsocket.OnClose onClose,
+                                                  final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError,
+                                                  final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
+    return websocket(clock, onClose, (_, _) -> {
+    }, onSendTextError, onPingError);
+  }
+
+  private static SolanaJsonRpcWebsocket websocket(final TestClock clock,
+                                                  final SolanaRpcWebsocket.OnClose onClose,
+                                                  final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
                                                   final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError,
                                                   final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
     return new SolanaJsonRpcWebsocket(
@@ -96,8 +382,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         null,
         null,
         onClose,
-        (_, _) -> {
-        },
+        onError,
         onSendTextError,
         onPingError
     );
@@ -106,6 +391,27 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   private static boolean lifecycleLockHeldByCurrentThread(final SolanaJsonRpcWebsocket ws) {
     // Package-private access, per house rule: widen visibility rather than setAccessible.
     return ws.lock.isHeldByCurrentThread();
+  }
+
+  private static void assertLifecycleLockReleasedFromAnotherThread(
+      final SolanaJsonRpcWebsocket ws) throws InterruptedException {
+    final var checked = new CountDownLatch(1);
+    final var acquired = new AtomicBoolean();
+    final var checker = new Thread(() -> {
+      final boolean locked = ws.lock.tryLock();
+      acquired.set(locked);
+      if (locked) {
+        ws.lock.unlock();
+      }
+      checked.countDown();
+    }, "websocket-lifecycle-lock-check");
+    checker.setDaemon(true);
+    checker.start();
+
+    assertTrue(checked.await(500L, TimeUnit.MILLISECONDS),
+        "the independent lock checker must finish within its deterministic bound");
+    assertTrue(acquired.get(),
+        "the lifecycle lock must be acquirable by another thread after the operation returns");
   }
 
   @Test
@@ -298,21 +604,18 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     }
   }
 
-  /// A ping that never left is not a write, so the failure path restores the previous write
-  /// stamp and the next cycle retries instead of waiting out the whole keep-alive delay.
-  ///
-  /// The setup exists to isolate that one stamp. The peer is heard from immediately before the
-  /// cycle, which holds the liveness clause false, so the keep-alive clause measuring our own
-  /// silence is the only one that can fire — and with no time passing between the two cycles,
-  /// the retry can only come from `lastWrite` having been rolled back. Without that rollback
-  /// the failed ping counts as a write and the second cycle stays silent.
+  /// The keep-alive path has the same transport semantics as the liveness path: if its Ping
+  /// cannot be written, the connection is aborted and reported rather than retried forever.
+  /// Fresh peer contact holds the liveness clause false so this isolates the keep-alive branch.
   @Test
-  void aFailedPingRollsBackTheWriteStampSoTheKeepAliveRetries() {
+  void aFailedKeepAlivePingAbortsTheTransport() {
     final var clock = new TestClock();
-    try (final var ws = websocket(clock, null, null, (_, _) -> {
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(clock, null, (_, error) -> errors.add(error), null, (_, _) -> {
     })) {
       final var socket = new RecordingWebSocket();
-      socket.failPing = new IOException("the ping never left");
+      final var failure = new IOException("the ping never left");
+      socket.failPing = failure;
       ws.onOpen(socket);
 
       clock.advanceMillis(TIMINGS.keepAliveDelay() + 1);
@@ -321,9 +624,8 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
 
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings, "our own silence is past the keep-alive bound");
-
-      assertDoesNotThrow(() -> ws.checkCycle(0L));
-      assertEquals(2, socket.pings, "a ping that never left is not a write");
+      assertTrue(socket.aborted);
+      assertEquals(java.util.List.of(failure), errors);
     }
   }
 
@@ -422,7 +724,76 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       ws.onClose(socket, 4242, "bye");
       assertEquals("4242:bye", seen.get());
       assertFalse(ws.closed(), "the handler owns the decision to close");
+      assertTrue(socket.aborted, "the dead transport is retired before policy runs");
     }
+  }
+
+  private static void terminalCallbackRetiresAPendingAdoptedAttempt(final boolean closeNotice) {
+    final var first = new RecordingWebSocket();
+    final var successor = new RecordingWebSocket();
+    final var pendingBuild = new CompletableFuture<WebSocket>();
+    final var builder = new SynchronousOpenSequenceBuilder(
+        List.of(first, successor),
+        List.of(pendingBuild, CompletableFuture.completedFuture(successor))
+    );
+    final var retiredBeforePolicy = new AtomicReference<Boolean>();
+    final var retry = new AtomicReference<CompletableFuture<?>>();
+    final Consumer<SolanaRpcWebsocket> reconnect = websocket -> {
+      retiredBeforePolicy.set(
+          first.aborted
+              && pendingBuild.isCancelled()
+              && websocket.lastMessageReceivedTimestamp() == 0L
+      );
+      retry.set(websocket.connect());
+    };
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0, 60_000, 60_000),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), null, null,
+        (websocket, _, _) -> reconnect.accept(websocket),
+        (websocket, _) -> reconnect.accept(websocket),
+        null, null
+    );
+    try (ws) {
+      final var initial = ws.connect();
+      assertNotNull(initial);
+      assertEquals(1, builder.builds);
+
+      if (closeNotice) {
+        ws.onClose(first, 4242, "retire");
+      } else {
+        ws.onError(first, new IOException("retire"));
+      }
+
+      assertEquals(Boolean.TRUE, retiredBeforePolicy.get(),
+          "the socket and its pending build must be retired before user policy");
+      assertTrue(initial.isCompletedExceptionally(),
+          "retirement must release callers waiting on the old attempt");
+      assertEquals(2, builder.builds,
+          "the re-entrant reconnect must start a successor rather than join the old attempt");
+      final var reconnectAttempt = retry.get();
+      assertNotNull(reconnectAttempt);
+      // Never join an attempt before proving it settled: a regression which accidentally
+      // rejoins the retired bridge is a finite assertion failure, not a mutation-test timeout.
+      assertTrue(reconnectAttempt.isDone(), "the synchronous successor attempt must be settled");
+      assertSame(successor, reconnectAttempt.getNow(null));
+      assertAll(
+          () -> assertFalse(successor.aborted),
+          () -> assertFalse(ws.closed(), "custom lifecycle policy keeps the reusable wrapper alive")
+      );
+    }
+  }
+
+  @Test
+  void onCloseRetiresAPendingAdoptedAttemptBeforeReconnecting() {
+    terminalCallbackRetiresAPendingAdoptedAttempt(true);
+  }
+
+  @Test
+  void onErrorRetiresAPendingAdoptedAttemptBeforeReconnecting() {
+    terminalCallbackRetiresAPendingAdoptedAttempt(false);
   }
 
   /// The default listener action is close(), but invoking it re-entrantly from the listener's
@@ -502,14 +873,23 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     }
   }
 
-  /// A failed ping rolls the ping window back so the next check retries instead of treating the
-  /// failed ping as an ask that was made.
+  /// A failed Ping send remains observable through its specific callback, but it is also a
+  /// terminal transport error. Both user callbacks run after the lifecycle lock is released.
+  /// The ordinary error policy runs first, but even a re-entrant close cannot suppress the
+  /// already-authorized Ping-send observation.
   @Test
-  void pingFailureFeedsTheHandlerAndRetriesNextCycle() {
-    final var seen = new AtomicReference<Throwable>();
+  void pingFailureFeedsBothHandlersOffLockAndAborts() {
+    final var events = new ArrayList<String>();
     final var clock = new TestClock();
     try (final var ws = websocket(clock, (_, _, _) -> {
-    }, null, (_, error) -> seen.set(error))) {
+    }, (webSocket, error) -> {
+      assertFalse(((SolanaJsonRpcWebsocket) webSocket).lock.isHeldByCurrentThread());
+      events.add("error:" + error.getMessage());
+      webSocket.close();
+    }, null, (webSocket, error) -> {
+      assertFalse(((SolanaJsonRpcWebsocket) webSocket).lock.isHeldByCurrentThread());
+      events.add("ping:" + error.getMessage());
+    })) {
       final var boom = new IllegalStateException("ping failed");
       final var socket = new RecordingWebSocket();
       socket.failPing = boom;
@@ -520,14 +900,403 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       clock.advanceMillis(TIMINGS.pingDelay() + 1);
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings);
-      assertSame(boom, seen.get());
+      assertTrue(socket.aborted);
+      assertTrue(ws.closed());
+      assertEquals(java.util.List.of("error:ping failed", "ping:ping failed"), events);
 
-      // Without advancing the clock again: a ping that never left is neither a write nor an ask,
-      // so the rollback re-arms the window and the next check retries. That is what lets a run
-      // of failures accumulate quickly enough for a caller to act on.
       assertDoesNotThrow(() -> ws.checkCycle(0L));
-      assertEquals(2, socket.pings, "a failed ping must not count as an ask");
+      assertEquals(1, socket.pings, "an escalated transport receives no further control frames");
+      assertEquals(2, events.size(), "the failure is reported exactly once through each seam");
     }
+  }
+
+  @Test
+  void aSynchronousPingThrowFeedsTheSameFailureToBothHandlersExactlyOnce() {
+    final var errors = new ArrayList<Throwable>();
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock, (_, _, _) -> {
+    }, (_, error) -> errors.add(error), null, (_, error) -> errors.add(error))) {
+      final var failure = new IllegalStateException("sendPing threw");
+      final var socket = new RecordingWebSocket();
+      socket.throwPing = failure;
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+
+      assertAll(
+          () -> assertEquals(List.of(failure, failure), errors,
+              "the ordinary error policy precedes the specific Ping observation"),
+          () -> assertTrue(socket.aborted),
+          () -> assertFalse(ws.closed(), "custom error policy keeps the reusable wrapper alive")
+      );
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(2, errors.size(), "the synchronous throw is not reported again");
+    }
+  }
+
+  /// A recorded Ping failure claims the transport before ordinary maintenance work. A queued
+  /// cancellation must therefore stay off the wire: flushing it first writes application traffic
+  /// onto a transport already known unusable and makes the early-return guard operationally real.
+  @Test
+  void aRecordedPingFailurePreventsQueuedUnsubscribeFromFlushing() {
+    final var errors = new ArrayList<Throwable>();
+    final var pingErrors = new ArrayList<Throwable>();
+    final var clock = new TestClock();
+    try (final var ws = websocket(
+        clock,
+        (_, _, _) -> {
+        },
+        (_, error) -> errors.add(error),
+        null,
+        (_, error) -> pingErrors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      socket.deferPings = true;
+      assertTrue(ws.rootSubscribe(_ -> {
+      }));
+      ws.onOpen(socket);
+      ws.onText(socket, java.nio.CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1L);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings);
+      assertTrue(ws.rootUnsubscribe(), "the confirmed cancellation is queued for maintenance");
+      assertTrue(socket.sentText.stream().noneMatch(msg -> msg.contains("rootUnsubscribe")));
+
+      final var failure = new IOException("queued work lost its transport");
+      socket.deferredPings.getFirst().completeExceptionally(failure);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+
+      assertAll(
+          () -> assertTrue(socket.aborted),
+          () -> assertTrue(socket.sentText.stream().noneMatch(msg -> msg.contains("rootUnsubscribe")),
+              "failed-Ping escalation must precede every queued application frame"),
+          () -> assertEquals(List.of(failure), errors),
+          () -> assertEquals(List.of(failure), pingErrors)
+      );
+    }
+  }
+
+  /// Once another maintenance finding has claimed the connection, a deferred Ping failure is
+  /// teardown fallout, not a replacement terminal cause. The transition seam places completion
+  /// after the connection enters its `ESCALATED` lifecycle state but before the transport is
+  /// retired, distinguishing that guard from the already-covered superseded-socket guard.
+  @Test
+  void aPingFailureLosingToAnAlreadyClaimedDeadlineIsDropped() throws InterruptedException {
+    final var errors = new ArrayList<Throwable>();
+    final var pingErrors = new ArrayList<Throwable>();
+    final var clock = new TestClock();
+    try (final var ws = websocket(
+        clock,
+        (_, _, _) -> {
+        },
+        (_, error) -> errors.add(error),
+        null,
+        (_, error) -> pingErrors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      socket.deferPings = true;
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      ws.checkCycle(0L);
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      final var deadlineDelivery = ws.prepareCheckCycleDelivery(0L);
+      assertNotNull(deadlineDelivery, "the pending send deadline has claimed this connection");
+
+      final var losingFailure = new IOException("send failed after its deadline lost");
+      socket.deferredPings.getFirst().completeExceptionally(losingFailure);
+      deadlineDelivery.run();
+
+      assertAll(
+          () -> assertTrue(socket.aborted),
+          () -> assertEquals(1, errors.size()),
+          () -> assertNotSame(losingFailure, errors.getFirst(),
+              "the already-claimed deadline remains the one terminal cause"),
+          () -> assertTrue(errors.getFirst().getMessage().startsWith("Ping send to ")),
+          () -> assertTrue(pingErrors.isEmpty(),
+              "an abort-induced losing completion is not a failed-Ping observation")
+      );
+    }
+  }
+
+  /// An empty maintenance pass must not claim a healthy connection. Besides being the ordinary
+  /// no-failure path, this is what lets a later silence window send its first liveness probe.
+  @Test
+  void anEmptyMaintenancePassLeavesTheConnectionEligibleForItsFirstPing()
+      throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock, (_, _, _) -> {
+    }, (_, _) -> {
+    }, null, (_, _) -> {
+    })) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      ws.checkCycle(0L);
+      clock.advanceMillis(TIMINGS.pingDelay() + 1L);
+      ws.checkCycle(0L);
+
+      assertEquals(1, socket.pings,
+          "a null failed-Ping slot must not mark the healthy connection escalated");
+      assertFalse(socket.aborted);
+    }
+  }
+
+  /// A failed Ping is claimed under the lifecycle lock before its callbacks run off-lock. A
+  /// second maintenance pass in that handoff window must therefore find no delivery of its own;
+  /// otherwise two passes can race to report the same terminal transport failure.
+  @Test
+  void aRecordedPingFailureHasOneMaintenanceDeliveryClaim() throws InterruptedException {
+    final var errors = new ArrayList<Throwable>();
+    final var pingErrors = new ArrayList<Throwable>();
+    final var clock = new TestClock();
+    try (final var ws = websocket(
+        clock,
+        (_, _, _) -> {
+        },
+        (_, error) -> errors.add(error),
+        null,
+        (_, error) -> pingErrors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      socket.deferPings = true;
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1L);
+      ws.checkCycle(0L);
+      assertEquals(1, socket.deferredPings.size());
+      final var failure = new IOException("failed Ping awaiting delivery");
+      socket.deferredPings.getFirst().completeExceptionally(failure);
+
+      final var delivery = ws.prepareCheckCycleDelivery(0L);
+      assertNotNull(delivery, "the first maintenance pass claims the recorded failure");
+      assertNull(ws.prepareCheckCycleDelivery(0L),
+          "the lifecycle claim excludes a duplicate before off-lock delivery runs");
+
+      delivery.run();
+      assertAll(
+          () -> assertTrue(socket.aborted),
+          () -> assertEquals(List.of(failure), errors),
+          () -> assertEquals(List.of(failure), pingErrors)
+      );
+    }
+  }
+
+  /// A cycle with no current transport has no maintenance finding to deliver. Drive this path
+  /// directly so a broken null-connection branch fails synchronously rather than only from the
+  /// background loop's terminal catch.
+  @Test
+  void aMaintenanceCycleWithoutAConnectionHasNoDelivery() throws InterruptedException {
+    final var ws = websocket(new TestClock(), null, null, null);
+    try {
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertFalse(ws.lock.isHeldByCurrentThread());
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// An open, unsignalled cycle must enter the Condition wait. A pre-existing interrupt is the
+  /// synchronous oracle: the real await consumes it and throws immediately, while either
+  /// forced-false operand of the wait guard skips the await and returns normally. Cleanup clears
+  /// the flag independently so a failing mutation cannot contaminate the next test.
+  @Test
+  void anOpenUnsignalledCycleObservesInterruptAtTheConditionWait() {
+    final var ws = websocket(new TestClock(), null, null, null);
+    final var socket = new RecordingWebSocket();
+    ws.onOpen(socket);
+    try {
+      Thread.currentThread().interrupt();
+      assertThrows(InterruptedException.class,
+          () -> ws.prepareCheckCycleDelivery(Long.MAX_VALUE));
+      assertFalse(Thread.currentThread().isInterrupted(),
+          "Condition.awaitNanos consumes the interrupt before throwing");
+    } finally {
+      // Mutation-safe cleanup: a skipped await leaves the test thread interrupted.
+      Thread.interrupted();
+      ws.close();
+    }
+  }
+
+  /// The Condition signal has memory in `checkSignalled`, and terminal close is independently a
+  /// no-wait state. Exercise each side only with a zero-duration wait: guard mutations remain
+  /// finite and cannot turn this structural coverage into a parked-thread timeout.
+  @Test
+  void aRememberedSignalAndClosedStateBothCompleteZeroDelayCycles() throws InterruptedException {
+    final var ws = websocket(new TestClock(), null, null, null);
+    try {
+      assertTrue(ws.slotSubscribe(_ -> {
+      }), "registration records a signal before a waiter exists");
+      assertNull(ws.prepareCheckCycleDelivery(0L));
+      assertFalse(ws.lock.isHeldByCurrentThread());
+
+      ws.close();
+      // Consume close's remembered signal first, then isolate the closed guard with a false flag.
+      assertNull(ws.prepareCheckCycleDelivery(0L));
+      assertNull(ws.prepareCheckCycleDelivery(0L));
+      assertFalse(ws.lock.isHeldByCurrentThread());
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// A Ping failure may complete after the maintenance loop has actually parked. The completion
+  /// must both remember the finding and signal the Condition. The test itself owns the lock-to-
+  /// await handoff, so the queue state is a synchronous oracle without adding checkpoint work to
+  /// production; bounded thread joins are cleanup only.
+  @Test
+  void aFailedPingSignalsAnAlreadyParkedMaintenanceCycle() throws InterruptedException {
+    final var errors = new ArrayList<Throwable>();
+    final var pingErrors = new ArrayList<Throwable>();
+    final var clock = new TestClock();
+    final var ws = websocket(
+        clock,
+        (_, _, _) -> {
+        },
+        (_, error) -> errors.add(error),
+        null,
+        (_, error) -> pingErrors.add(error)
+    );
+    final var socket = new RecordingWebSocket();
+    socket.deferPings = true;
+    ws.onOpen(socket);
+    clock.advanceMillis(TIMINGS.pingDelay() + 1);
+    ws.checkCycle(0L);
+
+    final var beforeAwait = new CompletableFuture<Void>();
+    final var cycleCompleted = new CompletableFuture<Void>();
+    final var cycleFailure = new AtomicReference<Throwable>();
+    final var cycle = new Thread(() -> {
+      ws.lock.lock();
+      try {
+        beforeAwait.complete(null);
+        //noinspection ResultOfMethodCallIgnored
+        ws.newSubscription.awaitNanos(Long.MAX_VALUE);
+      } catch (final Throwable ex) {
+        cycleFailure.set(ex);
+      } finally {
+        // Mutation-safe cleanup: any retained reentrant holds belong to this test thread and
+        // must be released before it terminates so a failing assertion cannot poison teardown.
+        while (ws.lock.isHeldByCurrentThread()) {
+          ws.lock.unlock();
+        }
+        cycleCompleted.complete(null);
+      }
+    }, "parked-websocket-maintenance-test");
+    cycle.start();
+
+    boolean enteredAwait = false;
+    boolean signalTransferred = false;
+    try {
+      // Completing beforeAwait while holding the lifecycle lock makes the following lock
+      // acquisition wait until awaitNanos has atomically enqueued the cycle and released it.
+      CompletableFuture.anyOf(beforeAwait, cycleCompleted).join();
+      enteredAwait = beforeAwait.isDone();
+      if (enteredAwait) {
+        ws.lock.lock();
+        try {
+          assertTrue(ws.lock.hasWaiters(ws.newSubscription));
+        } finally {
+          while (ws.lock.isHeldByCurrentThread()) {
+            ws.lock.unlock();
+          }
+        }
+        final var failure = new IOException("parked Ping failed");
+        socket.deferredPings.getFirst().completeExceptionally(failure);
+        ws.lock.lock();
+        try {
+          signalTransferred = !ws.lock.hasWaiters(ws.newSubscription);
+        } finally {
+          while (ws.lock.isHeldByCurrentThread()) {
+            ws.lock.unlock();
+          }
+        }
+      }
+      if (!signalTransferred) {
+        // Cleanup for the signal-removal mutant: close owns a separate, independently tested
+        // wake and releases the deliberately parked thread before assertions run.
+        ws.close();
+      }
+      cycle.join(1_000L);
+      if (!cycle.isAlive()) {
+        // The test-owned waiter proves the wake but deliberately performs no maintenance work.
+        // Drain the recorded failure through a separate zero-delay production cycle so callback
+        // delivery remains synchronous and independent of the parked thread's scheduling.
+        ws.checkCycle(0L);
+      }
+    } finally {
+      ws.close();
+      if (cycle.isAlive()) {
+        cycle.interrupt();
+        cycle.join(1_000L);
+      }
+    }
+
+    final boolean didEnterAwait = enteredAwait;
+    final boolean didTransferSignal = signalTransferred;
+    assertAll(
+        () -> assertTrue(didEnterAwait, "the deterministic checkpoint must enter the await path"),
+        () -> assertTrue(didTransferSignal,
+            "recordFailedPing.signal() must transfer the parked cycle off the Condition queue"),
+        () -> assertFalse(cycle.isAlive()),
+        () -> assertNull(cycleFailure.get()),
+        () -> assertEquals(1, errors.size()),
+        () -> assertEquals(1, pingErrors.size()),
+        () -> assertSame(errors.getFirst(), pingErrors.getFirst(),
+            "the woken cycle delivers one coherent failed-Ping callback set")
+    );
+  }
+
+  private static void aTerminalNoticeCannotLoseARecordedPingFailure(final boolean closeNotice) {
+    final var events = new ArrayList<String>();
+    final var clock = new TestClock();
+    try (final var ws = websocket(
+        clock,
+        (_, _, _) -> events.add("close"),
+        (_, error) -> events.add("error:" + error.getMessage()),
+        null,
+        (_, error) -> events.add("ping:" + error.getMessage())
+    )) {
+      final var failure = new IOException("ping failed before terminal notice");
+      final var socket = new RecordingWebSocket();
+      socket.deferPings = true;
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.deferredPings.size());
+      socket.deferredPings.getFirst().completeExceptionally(failure);
+
+      if (closeNotice) {
+        ws.onClose(socket, 4242, "peer closed while ping failed");
+      } else {
+        ws.onError(socket, new IOException("socket error after ping failure"));
+      }
+
+      assertAll(
+          () -> assertEquals(List.of(
+              "error:ping failed before terminal notice",
+              "ping:ping failed before terminal notice"
+          ), events, "the first recorded terminal finding owns one coherent callback set"),
+          () -> assertTrue(socket.aborted),
+          () -> assertFalse(ws.closed(), "custom error policy keeps the reusable wrapper alive")
+      );
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(2, events.size(), "the signalled maintenance pass must not report it again");
+    }
+  }
+
+  @Test
+  void onCloseCannotLoseAPingFailureAlreadyRecordedForThatTransport() {
+    aTerminalNoticeCannotLoseARecordedPingFailure(true);
+  }
+
+  @Test
+  void onErrorCannotLoseAPingFailureAlreadyRecordedForThatTransport() {
+    aTerminalNoticeCannotLoseARecordedPingFailure(false);
   }
 
   /// A ping failure caused by this engine aborting a superseded socket is expected transport
@@ -620,6 +1389,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         }, null, null
     );
     ws.close();
+    assertTrue(ws.closed(), "close commits its terminal sentinel synchronously");
     assertFalse(executor.shutdown, "an injected executor is the caller's to shut down");
     executor.tasks.getFirst().run();
     assertFalse(Thread.currentThread().isInterrupted());
@@ -691,7 +1461,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   @Test
   void checkLoopClosesAndLogsAnUnhandledException() {
     final var executor = new RecordingExecutor();
-    final var clock = new TestClock();
+    final var clock = new PoisonClock();
     final var timings = new Timings(60_000, 60_000, 0); // zero check delay: the await never parks
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
@@ -704,11 +1474,8 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     }));
     final var socket = new RecordingWebSocket();
     ws.onOpen(socket);
-    clock.advanceMillis(timings.reConnectDelay() + 1);
-    // The ping, not the text send: a throwing text send is contained by the outbound chain and
-    // reported through onSendTextError, so it can no longer take the loop down. The advance has
-    // already opened the ping gate.
-    socket.throwPing = new IllegalStateException("send blew up");
+    final var poison = new IllegalStateException("check loop poisoned");
+    clock.poison(poison);
 
     final var records = new ArrayList<java.util.logging.LogRecord>();
     final var handler = new java.util.logging.Handler() {
@@ -736,11 +1503,10 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       julLogger.setUseParentHandlers(parentHandlers);
     }
 
-    // one frame, not two: the successful open-time send stays gated until a response, so the
-    // advance past the resend window queues nothing further before the poisoned ping fires
+    // one frame, not two: the successful open-time send completed before the poisoned cycle
     assertEquals(1, socket.sentText.size(), "the successful send stays gated until a response");
     assertTrue(ws.closed(), "an unhandled loop exception closes the websocket");
-    assertTrue(records.stream().anyMatch(record -> record.getThrown() == socket.throwPing),
+    assertTrue(records.stream().anyMatch(record -> record.getThrown() == poison),
         "the failure funnel must log the exception, not swallow it");
   }
 
@@ -748,13 +1514,15 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   void pingFailureWithoutAHandlerIsLoggedNotThrown() {
     final var clock = new TestClock();
     try (final var ws = websocket(clock, (_, _, _) -> {
-    }, null, null)) {
+    }, null, null, null)) {
       final var socket = new RecordingWebSocket();
       socket.failPing = new IllegalStateException("ping failed");
       ws.onOpen(socket);
       clock.advanceMillis(TIMINGS.pingDelay() + 1);
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings);
+      assertTrue(socket.aborted);
+      assertTrue(ws.closed(), "the default onError policy closes an unresponsive instance");
     }
   }
 
@@ -813,12 +1581,12 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   /// The check loop dying is the one terminal transition the instance makes on its own, and it
   /// must reach the consumer's error seam — their reconnect policy lives there, and a close()
   /// with no notification bypasses it invisibly. A zero check delay keeps the loop from
-  /// parking, and a socket that throws from sendText is the poison.
+  /// parking, and a clock which starts throwing after adoption is the deterministic poison.
   @Test
   @org.junit.jupiter.api.Timeout(30)
   void aCheckLoopFailureReachesOnErrorBeforeClosing() {
     final var seen = new AtomicReference<Throwable>();
-    final var clock = new TestClock();
+    final var clock = new PoisonClock();
     final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT,
         SolanaAccounts.MAIN_NET,
@@ -837,12 +1605,8 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     );
     final var socket = new RecordingWebSocket();
     ws.onOpen(socket);
-    // The poison is the ping: a throwing text send is contained by the outbound chain and
-    // reported through onSendTextError rather than killing the loop, so the ping — sent
-    // directly, outside the chain — is what can still take the loop down.
     final var boom = new IllegalStateException("socket poisoned");
-    socket.throwPing = boom;
-    clock.advanceMillis(2L); // past the 1ms ping delay, so the first cycle pings
+    clock.poison(boom);
 
     ws.run();
 
@@ -1096,7 +1860,11 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         webSocketBuilder.connectTimeout(java.time.Duration.ofMillis(1_000)),
         TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
         new RecordingExecutor(), new RecordingScheduler(),
-        w -> reentrant.set(w.connect()), (_, _, _) -> {
+        w -> {
+          assertFalse(((SolanaJsonRpcWebsocket) w).lock.isHeldByCurrentThread(),
+              "a synchronous builder callback must not retain connect()'s lifecycle-lock hold");
+          reentrant.set(w.connect());
+        }, (_, _, _) -> {
         }, null, null, null)) {
       final var outer = ws.connect();
       assertNotNull(outer);
@@ -1113,6 +1881,494 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertTrue(socket.sentText.stream().anyMatch(m -> m.contains("slotSubscribe")),
           "the adopted connection must carry traffic: " + socket.sentText);
     }
+  }
+
+  /// Every caller receives a disposable view of the single-flight attempt, including callers
+  /// which arrive after that attempt was reserved. Cancelling a joined view must not cancel the
+  /// internal bridge and admit a second mutable-builder invocation.
+  @Test
+  void cancellingAJoinedConnectViewDoesNotAbandonTheAttempt() {
+    final var current = new RecordingWebSocket();
+    final var built = new RecordingWebSocket();
+    final var scheduler = new RecordingScheduler();
+    final var builder = new RecordingWebSocketBuilder(new AtomicReference<>(), built);
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)), TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    try {
+      ws.onOpen(current);
+      final var owner = ws.connect();
+      final var joined = ws.connect();
+      assertNotNull(owner);
+      assertNotNull(joined);
+      assertEquals(1, scheduler.deferred.size());
+
+      joined.cancel(true);
+      final var stillJoined = ws.connect();
+
+      assertNotNull(stillJoined);
+      assertFalse(stillJoined.isDone(), "cancelling one joined view must not settle the owner");
+      assertEquals(1, scheduler.deferred.size(), "the cancellation must not admit another attempt");
+
+      scheduler.deferred.getFirst().task().run();
+      assertSame(built, owner.join());
+      assertSame(built, stillJoined.join());
+      assertTrue(joined.isCancelled(), "only the caller's abandoned view remains cancelled");
+      assertEquals(1, builder.builds, "the shared attempt invokes the mutable builder once");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// Once close commits, the locked lifecycle guard is the authority for connect admission.
+  /// A closed wrapper returns no attempt and never reaches the public builder again.
+  @Test
+  void connectAfterCloseCannotEnterTheBuilder() {
+    final var builder = new RecordingWebSocketBuilder(
+        new AtomicReference<>(), new RecordingWebSocket()
+    );
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)), TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null
+    );
+    ws.close();
+
+    assertNull(ws.connect());
+    assertEquals(0, builder.builds, "a closed wrapper owns no further builder invocation");
+  }
+
+  /// A public builder may deliver the whole first lifecycle stack before buildAsync returns.
+  /// Retirement and a policy-driven reconnect must not let the original continuation overwrite
+  /// the successor's build ownership; closing the wrapper must still cancel that successor.
+  @Test
+  void aSynchronousTerminalCallbackCannotOverwriteItsReentrantSuccessor() {
+    final var first = new RecordingWebSocket();
+    final var successor = new RecordingWebSocket();
+    final var firstBuild = new CompletableFuture<WebSocket>();
+    final var successorBuild = new CompletableFuture<WebSocket>();
+    final var builder = new SynchronousOpenSequenceBuilder(
+        List.of(first, successor), List.of(firstBuild, successorBuild)
+    );
+    builder.firstBuildError = new IOException("failed during buildAsync");
+    final var callbackHeldLock = new AtomicReference<Boolean>();
+    final var joinedAttempt = new AtomicReference<CompletableFuture<?>>();
+    final var attemptReleasedBeforePolicy = new AtomicReference<Boolean>();
+    final var retry = new AtomicReference<CompletableFuture<?>>();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0, 60_000, 60_000),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), null,
+        websocket -> joinedAttempt.set(websocket.connect()), (_, _, _) -> {
+        }, (websocket, _) -> {
+          callbackHeldLock.set(((SolanaJsonRpcWebsocket) websocket).lock.isHeldByCurrentThread());
+          final var joined = joinedAttempt.get();
+          attemptReleasedBeforePolicy.set(joined != null && joined.isDone());
+          retry.set(websocket.connect());
+        }, null, null
+    );
+    try {
+      final var initial = ws.connect();
+
+      assertEquals(Boolean.FALSE, callbackHeldLock.get(),
+          "the terminal policy must run after buildAsync's reservation lock is released");
+      assertEquals(Boolean.TRUE, attemptReleasedBeforePolicy.get(),
+          "retirement must settle every joined attempt before invoking recovery policy");
+      assertEquals(2, builder.builds);
+      assertTrue(initial.isCompletedExceptionally(), "retirement settles the predecessor attempt");
+      assertTrue(firstBuild.isCancelled(), "the predecessor builder operation is released");
+      assertNotNull(retry.get());
+      assertFalse(retry.get().isDone(), "the successor still owns its pending builder operation");
+      assertFalse(successorBuild.isCancelled());
+
+      ws.close();
+
+      assertTrue(successorBuild.isCancelled(),
+          "close must cancel the successor build rather than a stale predecessor handle");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// A predecessor can lose installation after terminal policy has reserved a successor but
+  /// before that successor may enter the mutable builder. If the successor builder then fails,
+  /// close must not find the predecessor installed as the successor's cancellation owner.
+  @Test
+  void aLosingPredecessorBuildCannotBecomeTheSuccessorsCancellationOwner() {
+    final var predecessor = new RecordingWebSocket();
+    final var successor = new RecordingWebSocket();
+    final var predecessorBuild = new AfterOwnershipFuture();
+    predecessorBuild.complete(predecessor);
+    final var builder = new SynchronousOpenSequenceBuilder(
+        List.of(predecessor, successor),
+        List.of(predecessorBuild, new CompletableFuture<>())
+    );
+    builder.secondBuildThrow = new IllegalStateException("successor builder failed");
+    final var retry = new AtomicReference<CompletableFuture<?>>();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, (websocket, _) -> retry.set(websocket.connect()), null, null
+    );
+    predecessorBuild.afterOwnership = () -> ws.onError(
+        predecessor, new IOException("predecessor retired before installation")
+    );
+    try {
+      final var initial = ws.connect();
+
+      assertNotNull(initial);
+      assertTrue(initial.isCompletedExceptionally(), "retirement settles the predecessor bridge");
+      assertEquals(2, builder.builds, "the reserved successor receives the released builder");
+      assertNotNull(retry.get());
+      assertTrue(retry.get().isCompletedExceptionally(), "the successor contains its builder failure");
+      assertEquals(1, predecessorBuild.cancelCalls,
+          "losing installation cancels the predecessor build exactly once");
+
+      ws.close();
+
+      assertEquals(1, predecessorBuild.cancelCalls,
+          "close must not rediscover the predecessor as the successor's build owner");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// A builder operation may be past cancellation when its adopted connection fails. Recovery
+  /// gives a newer generation authority immediately; if the predecessor future later produces a
+  /// different, still-unadopted transport, that result belongs to the retired generation and must
+  /// be aborted without disturbing the current generation's successful build.
+  @Test
+  void aRetiredUncancellableBuildAbortsItsLateResultWithoutDisturbingTheSuccessor() {
+    final var predecessorBuild = new UncancellableWebSocketFuture();
+    final var successor = new RecordingWebSocket();
+    final var builder = new FutureSequenceBuilder(List.of(
+        predecessorBuild,
+        CompletableFuture.completedFuture(successor)
+    ));
+    final var retry = new AtomicReference<CompletableFuture<?>>();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, (websocket, _) -> retry.set(websocket.connect()), null, null
+    );
+    try {
+      final var predecessor = ws.connect();
+      assertNotNull(predecessor);
+      assertEquals(1, builder.builds);
+      final var retired = new RecordingWebSocket();
+      builder.listeners.getFirst().onOpen(retired);
+
+      builder.listeners.getFirst().onError(retired, new IOException("retire predecessor"));
+
+      assertTrue(predecessor.isCompletedExceptionally(),
+          "retirement settles the predecessor even when its builder future cannot be cancelled");
+      assertEquals(2, builder.builds, "recovery must start a fresh builder generation");
+      assertNotNull(retry.get());
+      assertSame(successor,
+          retry.get().orTimeout(500L, TimeUnit.MILLISECONDS).join(),
+          "the successor owns the recovery attempt");
+      assertFalse(successor.aborted,
+          "a current successful build awaiting onOpen remains owned by its generation");
+
+      final var late = new RecordingWebSocket();
+      assertTrue(predecessorBuild.complete(late));
+
+      assertTrue(late.aborted,
+          "a late result from the retired generation must be released without waiting on onOpen");
+      assertFalse(successor.aborted,
+          "cleaning the stale predecessor must not release the current unadopted successor");
+      builder.listeners.get(1).onOpen(successor);
+      assertEquals(Long.MAX_VALUE, successor.requested,
+          "the preserved successor must remain adoptable after stale cleanup");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// buildAsync is public collaborator code and may throw synchronously. The throw is contained
+  /// into the returned attempt, and releasing the builder reservation must let a later retry use
+  /// that same mutable builder rather than leave the retry permanently queued.
+  @Test
+  void aSynchronousBuilderThrowSettlesAndReleasesItsRetry() {
+    final var first = new RecordingWebSocket();
+    final var successor = new RecordingWebSocket();
+    final var builder = new SynchronousOpenSequenceBuilder(
+        List.of(first, successor),
+        List.of(new CompletableFuture<>(), CompletableFuture.completedFuture(successor))
+    );
+    builder.firstBuildThrow = new IllegalStateException("builder threw synchronously");
+    builder.firstBuildOpens = false;
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null
+    );
+    try {
+      final var initial = assertDoesNotThrow(ws::connect,
+          "a synchronous builder throw must settle the attempt instead of escaping connect");
+
+      assertNotNull(initial);
+      assertTrue(initial.isCompletedExceptionally());
+      assertEquals(1, builder.builds, "the failed invocation settles before an explicit retry");
+
+      final var retry = assertDoesNotThrow(ws::connect);
+
+      assertNotNull(retry);
+      assertEquals(2, builder.builds,
+          "the retry must enter buildAsync after the throwing invocation releases it");
+      assertSame(successor, retry.orTimeout(500L, TimeUnit.MILLISECONDS).join());
+      assertFalse(successor.aborted, "the retry's live transport remains current");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// An exceptionally completed builder future is a settled predecessor, not an exception for
+  /// the next connect caller to join. Retry must discard that failed owner and enter the builder
+  /// for a fresh generation without throwing from connect itself.
+  @Test
+  void retryAfterAnExceptionalBuilderFutureDoesNotJoinTheFailure() {
+    final var successor = new RecordingWebSocket();
+    final var builderFailure = new IOException("first builder future failed");
+    final var builder = new FutureSequenceBuilder(List.of(
+        CompletableFuture.failedFuture(builderFailure),
+        CompletableFuture.completedFuture(successor)
+    ));
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null
+    );
+    try {
+      final var failed = ws.connect();
+      assertNotNull(failed);
+      assertTrue(failed.isCompletedExceptionally());
+
+      final var retry = assertDoesNotThrow(ws::connect,
+          "a failed prior builder future must not escape from the retry's caller stack");
+
+      assertNotNull(retry);
+      assertSame(successor, retry.join());
+      assertEquals(2, builder.builds, "the retry owns a fresh builder invocation");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// Returning null violates WebSocket.Builder's future contract, but the wrapper must contain
+  /// that collaborator failure exactly like a synchronous throw and release the builder for a
+  /// later retry.
+  @Test
+  void aNullBuilderFutureSettlesAndReleasesItsRetry() {
+    final var first = new RecordingWebSocket();
+    final var successor = new RecordingWebSocket();
+    final var builder = new SynchronousOpenSequenceBuilder(
+        List.of(first, successor),
+        List.of(new CompletableFuture<>(), CompletableFuture.completedFuture(successor))
+    );
+    builder.firstBuildReturnsNull = true;
+    builder.firstBuildOpens = false;
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, null, null, null
+    );
+    try {
+      final var initial = assertDoesNotThrow(ws::connect,
+          "a null builder future must settle the attempt instead of escaping connect");
+
+      assertNotNull(initial);
+      assertTrue(initial.isCompletedExceptionally());
+      assertEquals(1, builder.builds, "the failed invocation settles before an explicit retry");
+
+      final var retry = assertDoesNotThrow(ws::connect);
+
+      assertNotNull(retry);
+      assertEquals(2, builder.builds,
+          "the retry must enter buildAsync after the null-returning invocation releases it");
+      assertSame(successor, retry.orTimeout(500L, TimeUnit.MILLISECONDS).join());
+      assertFalse(successor.aborted, "the retry's live transport remains current");
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// A lifecycle callback may retire the attempt and reserve its successor before the mutable
+  /// builder returns. If that same builder invocation then throws, ordinary failure containment
+  /// must still hand the reservation to the queued successor after leaving buildAsync — starting
+  /// it re-entrantly would violate the JDK builder's threading contract, while dropping it would
+  /// strand the recovery future forever.
+  @Test
+  void aSynchronousBuilderThrowAfterRetirementStartsTheQueuedSuccessor() throws InterruptedException {
+    final var first = new RecordingWebSocket();
+    final var successor = new RecordingWebSocket();
+    final var builder = new SynchronousOpenSequenceBuilder(
+        List.of(first, successor),
+        List.of(new CompletableFuture<>(), CompletableFuture.completedFuture(successor))
+    );
+    builder.firstBuildError = new IOException("retired during buildAsync");
+    builder.firstBuildThrow = new IllegalStateException("builder threw after retirement");
+    final var retry = new AtomicReference<CompletableFuture<?>>();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, (websocket, _) -> retry.set(websocket.connect()), null, null
+    );
+    try {
+      final var initial = assertDoesNotThrow(ws::connect);
+
+      assertNotNull(initial);
+      assertTrue(initial.isCompletedExceptionally(), "retirement settles the predecessor bridge");
+      assertEquals(2, builder.builds,
+          "the queued successor starts only after the throwing builder invocation exits");
+      assertNotNull(retry.get());
+      assertSame(successor, retry.get().join());
+      assertLifecycleLockReleasedFromAnotherThread(ws);
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// Errors are not converted into an ordinary connection failure, but the builder reservation
+  /// is still resource ownership and must be released on that exceptional edge. A successor
+  /// already reserved by terminal policy therefore starts before the Error escapes to the caller.
+  @Test
+  void aFatalBuilderThrowStillStartsTheQueuedSuccessorBeforeEscaping() throws InterruptedException {
+    final var first = new RecordingWebSocket();
+    final var successor = new RecordingWebSocket();
+    final var builder = new SynchronousOpenSequenceBuilder(
+        List.of(first, successor),
+        List.of(new CompletableFuture<>(), CompletableFuture.completedFuture(successor))
+    );
+    builder.firstBuildError = new IOException("retired during buildAsync");
+    builder.firstBuildFatal = new AssertionError("fatal builder failure");
+    final var retry = new AtomicReference<CompletableFuture<?>>();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(0L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), new RecordingScheduler(), null, (_, _, _) -> {
+        }, (websocket, _) -> retry.set(websocket.connect()), null, null
+    );
+    try {
+      final var fatal = assertThrows(AssertionError.class, ws::connect);
+
+      assertEquals("fatal builder failure", fatal.getMessage());
+      assertEquals(2, builder.builds,
+          "exceptional builder release transfers ownership to the queued successor");
+      assertNotNull(retry.get());
+      assertSame(successor, retry.get().join());
+      assertLifecycleLockReleasedFromAnotherThread(ws);
+    } finally {
+      ws.close();
+    }
+  }
+
+  /// A completed builder future can publish its socket to ownBuild before the later install lock
+  /// is reacquired. If close wins in that exact gap, the socket has no listener adoption and a
+  /// completed future cannot be cancelled; the losing install must abort it explicitly.
+  @Test
+  void closeBetweenCompletedBuildObservationAndInstallationAbortsTheSocket() {
+    final var socket = new RecordingWebSocket();
+    final var built = new AfterOwnershipFuture();
+    built.complete(socket);
+    final var builder = new SynchronousOpenPendingBuilder(socket, built);
+    builder.invokeOnOpen = false;
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)), TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), null, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    built.afterOwnership = ws::close;
+
+    final var attempt = ws.connect();
+
+    assertNotNull(attempt);
+    assertTrue(attempt.isCompletedExceptionally());
+    assertTrue(socket.aborted,
+        "a successful build which loses installation must not escape without an owner");
+    assertTrue(ws.closed());
+  }
+
+  /// A wrapping builder can violate its future contract by completing successfully with null.
+  /// If close wins after ownership observation, losing-install cleanup must still settle the
+  /// bridge without dereferencing an absent transport or letting that collaborator defect escape
+  /// synchronously from connect().
+  @Test
+  void aNullSuccessfulBuildLosingInstallationIsContained() {
+    final var built = new AfterOwnershipFuture();
+    built.complete(null);
+    final var builder = new SynchronousOpenPendingBuilder(new RecordingWebSocket(), built);
+    builder.invokeOnOpen = false;
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)), TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), null, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    built.afterOwnership = ws::close;
+
+    final var attempt = assertDoesNotThrow(ws::connect);
+
+    assertNotNull(attempt);
+    assertTrue(attempt.isCompletedExceptionally());
+    assertTrue(ws.closed());
+  }
+
+  /// close() can also win installation while an uncancellable builder future is still pending.
+  /// Its exceptional completion may then race the losing cleanup; connect() must contain that
+  /// outcome in the reserved attempt rather than throwing it from the caller's stack.
+  @Test
+  void exceptionalBuildCompletionRacingLosingInstallationDoesNotEscapeConnect() {
+    final var built = new ExceptionCompletingLosingFuture();
+    final var builder = new SynchronousOpenPendingBuilder(new RecordingWebSocket(), built);
+    builder.invokeOnOpen = false;
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)), TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), null, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    built.afterOwnershipRegistration = ws::close;
+
+    final var attempt = assertDoesNotThrow(ws::connect,
+        "a losing installer must not expose a raced exceptional build completion");
+
+    assertNotNull(attempt);
+    assertTrue(attempt.isCompletedExceptionally());
+    assertTrue(built.isCompletedExceptionally());
+    assertTrue(ws.closed());
   }
 
   /// A completion action attached by the synchronous onOpen re-entry is allowed to reconnect too.
@@ -1249,12 +2505,72 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     );
   }
 
+  /// Before buildAsync starts, the scheduled wake is the operation retaining this websocket.
+  /// Cancelling the caller bridge invokes completion actions on the close stack, so that wake must
+  /// already be cancelled when caller code runs — a blocking action cannot be allowed to strand it.
+  @Test
+  void closeCancelsTheDeferredWakeBeforeNotifyingConnectWaiters() {
+    final var socket = new RecordingWebSocket();
+    final var scheduler = new RecordingScheduler();
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        new RecordingWebSocketBuilder(new AtomicReference<>(), new RecordingWebSocket())
+            .connectTimeout(Duration.ofMillis(1_000)),
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    ws.onOpen(socket);
+    final var connected = ws.connect();
+    assertNotNull(connected);
+    assertEquals(1, scheduler.deferred.size());
+    final var handle = scheduler.deferred.getFirst().handle();
+    final var cancelledWhenNotified = new AtomicReference<Boolean>();
+    connected.whenComplete((_, _) -> cancelledWhenNotified.set(handle.isCancelled()));
+
+    ws.close();
+
+    assertEquals(Boolean.TRUE, cancelledWhenNotified.get(),
+        "the deferred wake must be released before bridge cancellation invokes caller code");
+  }
+
+  /// A cancelled scheduler handle may still race into its Runnable. Once close has displaced its
+  /// exact bridge, that stale wake must stop at the ownership check: it may not touch the pacing
+  /// clock, reserve the mutable builder, or invoke buildAsync.
+  @Test
+  void aStaleDeferredWakeCannotCrossTheAttemptOwnershipGuard() {
+    final var clock = new PoisonClock();
+    final var scheduler = new RecordingScheduler();
+    final var builder = new RecordingWebSocketBuilder(
+        new AtomicReference<>(), new RecordingWebSocket()
+    );
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)), TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock, new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    ws.onOpen(new RecordingWebSocket());
+    final var attempt = ws.connect();
+    assertNotNull(attempt);
+    assertEquals(1, scheduler.deferred.size());
+    final var staleWake = scheduler.deferred.getFirst();
+
+    ws.close();
+    assertTrue(staleWake.handle().isCancelled());
+    clock.poison(new IllegalStateException("stale wake touched the pacing clock"));
+
+    assertDoesNotThrow(staleWake.task()::run);
+    assertEquals(0, builder.builds, "a displaced wake owns no builder invocation");
+  }
+
   /// The injected scheduler is part of initiating a deferred attempt, so rejecting the schedule
   /// is the same shape as a builder throwing: the returned attempt fails and releases the
   /// single-flight slot. Installing an incomplete bridge before schedule() and then letting the
   /// throw escape leaves every later caller joined to a future nothing can ever settle.
   @Test
-  void aRejectedDeferredScheduleDoesNotPoisonSingleFlightAuthority() {
+  void aRejectedDeferredScheduleDoesNotPoisonSingleFlightAuthority() throws InterruptedException {
     final var scheduler = new java.util.concurrent.ScheduledThreadPoolExecutor(1);
     scheduler.shutdown();
     final var socket = new RecordingWebSocket();
@@ -1272,6 +2588,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
           "schedule rejection is contained into the attempt like a synchronous builder throw");
       assertNotNull(first);
       assertTrue(first.isCompletedExceptionally(), "the rejected attempt must settle");
+      assertLifecycleLockReleasedFromAnotherThread(ws);
 
       final var retry = assertDoesNotThrow(ws::connect,
           "a settled rejection releases the single-flight slot for a real retry");
@@ -1280,6 +2597,74 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertNotSame(first, retry, "the retry must not join the poisoned first bridge");
     } finally {
       ws.close();
+    }
+  }
+
+  /// Scheduling is collaborator code and runs after the placeholder is published. If close wins
+  /// inside schedule(), the real handle returned afterward has lost ownership and must be
+  /// cancelled rather than retained to its deadline.
+  @Test
+  void aScheduledHandleReturnedAfterCloseIsCancelled() {
+    final var scheduler = new RecordingScheduler();
+    final var socket = new RecordingWebSocket();
+    final var builder = new RecordingWebSocketBuilder(new AtomicReference<>(), new RecordingWebSocket());
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)), TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    ws.onOpen(socket);
+    scheduler.duringSchedule = ws::close;
+
+    final var attempt = ws.connect();
+
+    assertNotNull(attempt);
+    assertTrue(attempt.isCompletedExceptionally());
+    assertEquals(1, scheduler.deferred.size());
+    assertTrue(scheduler.deferred.getFirst().handle().isCancelled(),
+        "the handle returned after its placeholder lost ownership must be released");
+    assertEquals(0, builder.builds, "close wins before the deferred builder may run");
+  }
+
+  /// A scheduled task may become enabled and enter buildAsync before schedule() returns. Once
+  /// startBuild has consumed the placeholder, that missing placeholder means "started", not
+  /// "stale": cancelling the late-returned handle with interruption would kill the live attempt.
+  @Test
+  void aScheduledBuildWhichStartsBeforeItsHandleReturnsIsNotCancelled() {
+    final var buildEntered = new CountDownLatch(1);
+    final var releaseBuild = new CountDownLatch(1);
+    final var built = new RecordingWebSocket();
+    final var builder = new BlockingBuildAsyncBuilder(built, buildEntered, releaseBuild);
+    final var scheduler = new BuildBeforeScheduleReturns(buildEntered);
+    final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        builder.connectTimeout(Duration.ofMillis(1_000)),
+        new Timings(1L, 60_000L, 60_000L),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        new TestClock(), new RecordingExecutor(), scheduler, null, (_, _, _) -> {
+        }, null, null, null
+    );
+    try {
+      ws.onOpen(new RecordingWebSocket()); // stamps a one-millisecond reconnect delay
+
+      final var attempt = ws.connect();
+
+      assertNotNull(attempt);
+      assertNotNull(scheduler.connectHandle);
+      assertFalse(scheduler.connectHandle.isCancelled(),
+          "a wake which already claimed the current attempt must not be cancelled as stale");
+      assertFalse(builder.interrupted.get(), "the valid build must retain its worker");
+
+      releaseBuild.countDown();
+      assertSame(built, attempt.toCompletableFuture().orTimeout(500L, TimeUnit.MILLISECONDS).join());
+      assertFalse(scheduler.connectHandle.isCancelled());
+      assertFalse(builder.interrupted.get());
+    } finally {
+      releaseBuild.countDown();
+      ws.close();
+      scheduler.shutdownNow();
     }
   }
 

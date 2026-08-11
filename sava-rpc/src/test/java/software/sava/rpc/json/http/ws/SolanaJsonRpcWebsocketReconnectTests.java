@@ -11,6 +11,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -44,6 +47,39 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   private static final PublicKey ACCOUNT_B =
       PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
+  /// Stops exactly one monotonic read after announcing that it was reached. A peer callback
+  /// resolves its Connection before that read, so a test can install a successor and then let
+  /// the callback enter maintenance with the now-stale predecessor — no sleep or scheduler race.
+  private static final class OneReadGateClock implements NanoClock {
+
+    private final TestClock delegate = new TestClock();
+    private final AtomicBoolean gateNext = new AtomicBoolean();
+    private final CompletableFuture<Void> entered = new CompletableFuture<>();
+    private final CompletableFuture<Void> release = new CompletableFuture<>();
+
+    private void gateNextRead() {
+      gateNext.set(true);
+    }
+
+    private void advanceMillis(final long millis) {
+      delegate.advanceMillis(millis);
+    }
+
+    @Override
+    public long nanoTime() {
+      if (gateNext.compareAndSet(true, false)) {
+        entered.complete(null);
+        release.join();
+      }
+      return delegate.nanoTime();
+    }
+
+    @Override
+    public void sleep(final long millis) {
+      delegate.sleep(millis);
+    }
+  }
+
   private static SolanaJsonRpcWebsocket websocket(final Timings timings) {
     return websocket(timings, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(), null, null);
   }
@@ -59,6 +95,15 @@ final class SolanaJsonRpcWebsocketReconnectTests {
                                                   final NanoClock clock,
                                                   final Consumer<SolanaRpcWebsocket> onOpen,
                                                   final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
+    return websocket(timings, maxMessageLength, clock, onOpen, onError, null);
+  }
+
+  private static SolanaJsonRpcWebsocket websocket(final Timings timings,
+                                                  final int maxMessageLength,
+                                                  final NanoClock clock,
+                                                  final Consumer<SolanaRpcWebsocket> onOpen,
+                                                  final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
+                                                  final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
     return new SolanaJsonRpcWebsocket(
         ENDPOINT,
         SolanaAccounts.MAIN_NET,
@@ -74,7 +119,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
         },
         onError,
         null,
-        null
+        onPingError
     );
   }
 
@@ -89,6 +134,18 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   private static void assertNotSent(final RecordingWebSocket socket, final String method) {
     assertTrue(socket.sentText.stream().noneMatch(m -> m.contains("\"method\":\"" + method + '"')),
         method + " should not have been sent: " + socket.sentText);
+  }
+
+  private static void assertLifecycleLockReleased(final SolanaJsonRpcWebsocket ws,
+                                                  final String path) {
+    final int retainedHolds = ws.lock.getHoldCount();
+    // A removed unlock leaves a re-entrant hold on this test thread. Release it before the
+    // assertion so the intentionally failing mutant cannot strand close() or later cleanup.
+    while (ws.lock.isHeldByCurrentThread()) {
+      ws.lock.unlock();
+    }
+    assertEquals(0, retainedHolds,
+        path + " must return without retaining the lifecycle lock");
   }
 
   /// A subscription re-sent inside the reconnect window is skipped on that pass —
@@ -209,25 +266,33 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
 
-      // well inside the liveness window, but past a keep-alive set far shorter than it
-      clock.advanceMillis(1_001L);
+      // The keep-alive uses the same exclusive elapsed-time rule as liveness: its exact
+      // boundary is still admissible, and one millisecond beyond it sends the frame.
+      clock.advanceMillis(1_000L);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(0, socket.pings, "the exact keep-alive boundary is admissible");
+      clock.advanceMillis(1L);
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings, "the configured keep-alive is what the gate reads");
     }
   }
 
-  /// One outstanding ping at a time: the JDK permits a single pending control-frame send, so a
-  /// second ping over a pending one failed every cycle with a misleading "pending" error while
-  /// its rollback re-armed the gate — an error storm reporting the wrong cause. The guard
-  /// suppresses the ask until the pending ping settles; a failure then rolls the clocks back so
-  /// the retry is immediate rather than waiting out a fresh window.
-  ///
-  /// This replaces the overlapping-pings interleave test: the interleave it pinned is now
-  /// impossible by construction, which is the point.
+  /// A Ping whose send future never settles cannot be allowed to suppress liveness forever. The
+  /// send operation gets one full ping window: its exact boundary is admissible; one millisecond
+  /// beyond it aborts and reports the transport without piling on a second control-frame send.
   @Test
-  void aPendingPingSuppressesFurtherPingsUntilItSettles() {
+  void aPendingPingHasAFiniteSendDeadline() {
     final var clock = new TestClock();
-    try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
+    final var errors = new ArrayList<Throwable>();
+    final var pingErrors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> errors.add(error),
+        (_, error) -> pingErrors.add(error)
+    )) {
       final var socket = new RecordingWebSocket();
       socket.deferPings = true;
       ws.onOpen(socket);
@@ -236,22 +301,30 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings, "the first ask");
 
-      // a full further window elapses, but the first ask has not settled
-      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      clock.advanceMillis(TIMINGS.pingDelay());
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings, "one outstanding ping at a time");
+      assertFalse(socket.aborted, "the send deadline is exclusive at its exact boundary");
+      assertTrue(errors.isEmpty());
 
-      // settling it as a failure rolls the clocks back, so the retry is immediate
-      socket.deferredPings.getFirst().completeExceptionally(new IllegalStateException("late failure"));
+      clock.advanceMillis(1L);
       assertDoesNotThrow(() -> ws.checkCycle(0L));
-      assertEquals(2, socket.pings, "a settled failure re-opens the gate without a fresh window");
+      assertTrue(socket.aborted);
+      assertEquals(1, socket.pings, "a pending control send must not be duplicated");
+      assertEquals(1, errors.size());
+      assertInstanceOf(IllegalStateException.class, errors.getFirst());
+      assertEquals(
+          "Ping send to api.mainnet-beta.solana.com has not completed in 60001ms; replacing the connection.",
+          errors.getFirst().getMessage());
+      assertTrue(pingErrors.isEmpty(),
+          "a send deadline is not an exceptionally completed send and has no onPingError event");
     }
   }
 
-  /// Both boundaries of the ping gate. Every other ping test steps `pingDelay + 1`, so none of
-  /// them can tell `>` from `>=` on either clause — the silence window or the rate limit.
+  /// The silence boundary of the ping gate. Every other ping test steps `pingDelay + 1`, so none
+  /// of them can tell `>` from `>=` at the first ask.
   @Test
-  void thePingGateIsExclusiveOnBothItsBoundaries() {
+  void thePingGateIsExclusiveAtItsSilenceBoundary() {
     final var clock = new TestClock();
     try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null)) {
       final var socket = new RecordingWebSocket();
@@ -265,16 +338,340 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       clock.advanceMillis(1L);
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings, "one millisecond past it, the peer is asked");
+    }
+  }
 
-      // and the rate limit is exclusive at its own boundary: exactly pingDelay after the ask,
-      // with the peer still silent, is not yet time to ask again
+  /// Completing sendPing proves only that the Ping frame was sent. If the peer supplies no Pong
+  /// or other frame for a further ping window, RFC 6455's responsiveness probe has failed and the
+  /// current transport must be replaced through the existing error seam. The deadline shares the
+  /// ping gate's exclusive boundary: exactly one window is still admissible, one millisecond past
+  /// it is not.
+  @Test
+  void aSuccessfullySentButUnansweredPingAbortsTheConnection() {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    final var pingErrors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (webSocket, error) -> {
+          assertFalse(((SolanaJsonRpcWebsocket) webSocket).lock.isHeldByCurrentThread());
+          errors.add(error);
+        },
+        (_, error) -> pingErrors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings);
+      assertFalse(socket.aborted);
+
       clock.advanceMillis(TIMINGS.pingDelay());
       assertDoesNotThrow(() -> ws.checkCycle(0L));
-      assertEquals(1, socket.pings, "the rate limit is exclusive at its boundary");
+      assertFalse(socket.aborted, "the response deadline is exclusive at its exact boundary");
+      assertTrue(errors.isEmpty());
 
       clock.advanceMillis(1L);
       assertDoesNotThrow(() -> ws.checkCycle(0L));
-      assertEquals(2, socket.pings, "one millisecond past it, the peer is asked again");
+      assertTrue(socket.aborted);
+      assertEquals(1, errors.size(), "an unanswered probe must be reported exactly once");
+      assertInstanceOf(IllegalStateException.class, errors.getFirst());
+      assertEquals(
+          "Ping to api.mainnet-beta.solana.com has gone unanswered for 60001ms; replacing the connection.",
+          errors.getFirst().getMessage());
+      assertTrue(pingErrors.isEmpty(),
+          "a successfully sent frame has no failed-send observation even when its answer times out");
+
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings, "an escalated connection must not receive another ping");
+      assertEquals(1, errors.size());
+    }
+  }
+
+  /// Escalation is computed under the lifecycle lock but delivered after it. A real terminal
+  /// callback can retire that transport and let policy install a successor in between; the
+  /// stale delivery then owns neither transport and must do nothing, especially not abort the
+  /// successor or report the predecessor's already-lost maintenance finding.
+  @Test
+  void terminalRetirementWinningBeforeEscalationDeliveryLeavesItsSuccessorAlone()
+      throws InterruptedException {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    final var successor = new RecordingWebSocket();
+    final var terminal = new IOException("peer failed while maintenance was delivering");
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (webSocket, error) -> {
+          errors.add(error);
+          if (error == terminal) {
+            ((SolanaJsonRpcWebsocket) webSocket).onOpen(successor);
+          }
+        }
+    )) {
+      final var first = new RecordingWebSocket();
+      ws.onOpen(first);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      ws.checkCycle(0L);
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      final var staleDelivery = ws.prepareCheckCycleDelivery(0L);
+      assertNotNull(staleDelivery, "the unanswered Ping has claimed a terminal finding");
+      assertFalse(first.aborted, "preparing off-lock delivery does not retire the transport yet");
+
+      ws.onError(first, terminal);
+      assertAll(
+          () -> assertTrue(first.aborted),
+          () -> assertFalse(successor.aborted),
+          () -> assertEquals(java.util.List.of(terminal), errors)
+      );
+
+      assertDoesNotThrow(staleDelivery::run);
+      assertAll(
+          () -> assertFalse(successor.aborted,
+              "the predecessor's stale delivery has no authority over its successor"),
+          () -> assertEquals(java.util.List.of(terminal), errors,
+              "the losing maintenance finding is not reported as a second terminal event")
+      );
+    }
+  }
+
+  /// A Pong can arrive before the JDK completes the corresponding send future. Peer contact owns
+  /// that race: completing the send later must not re-arm a question which the peer already
+  /// answered. A later silence window may send a fresh probe, but it must not abort the connection
+  /// for the answered one.
+  @Test
+  void peerContactBeforePingSendCompletionDoesNotResurrectTheProbe() {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> errors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      socket.deferPings = true;
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings);
+
+      ws.onPong(socket, ByteBuffer.allocate(0));
+      clock.advanceMillis(TIMINGS.pingDelay());
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings, "peer contact does not permit a second still-pending send");
+      assertFalse(socket.aborted, "the pending send still owns its exact deadline boundary");
+
+      socket.deferredPings.getFirst().complete(socket);
+
+      clock.advanceMillis(1L);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertFalse(socket.aborted);
+      assertTrue(errors.isEmpty());
+      assertEquals(2, socket.pings, "the next probe is fresh, not a timeout of the answered one");
+    }
+  }
+
+  /// The maintenance pass may observe an overdue response immediately before a Pong arrives.
+  /// The probe-reference CAS, not the earlier clock observation, is the retirement authority:
+  /// contact which removes that exact probe wins and leaves the transport live.
+  @Test
+  void peerContactWinningThePreparedDeadlineClaimKeepsTheTransportLive() {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> errors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings);
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+
+      final var deadline = ws.preparePingDeadlineTransition();
+      assertNotNull(deadline);
+      assertFalse(ws.lock.isHeldByCurrentThread(),
+          "the test-only snapshot must release its temporary lifecycle hold before interposing peer contact");
+      ws.answerPingDeadlineTransition(deadline);
+      assertNull(ws.claimPingDeadlineTransition(deadline),
+          "peer contact won the probe CAS after the deadline observation");
+      assertFalse(socket.aborted);
+      assertTrue(errors.isEmpty());
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(2, socket.pings, "later silence starts a fresh probe on the live transport");
+      assertFalse(socket.aborted);
+      assertTrue(errors.isEmpty());
+    }
+  }
+
+  /// Admission time bounds only the send operation. Once a delayed send succeeds it receives a
+  /// fresh, full response window; time spent waiting for the JDK send future is not charged to
+  /// the peer's answer budget.
+  @Test
+  void aDelayedPingSendGetsItsFullResponseWindowAfterCompletion() {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> errors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      socket.deferPings = true;
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      clock.advanceMillis(TIMINGS.pingDelay());
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      socket.deferredPings.getFirst().complete(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay());
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertFalse(socket.aborted, "completion starts a fresh exclusive response window");
+      assertTrue(errors.isEmpty());
+
+      clock.advanceMillis(1L);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertTrue(socket.aborted);
+      assertEquals(1, errors.size());
+    }
+  }
+
+  /// The pending-send deadline and the JDK send completion can both observe the same probe.
+  /// Completion which changes sentAt first wins the inner CAS and starts a full response window;
+  /// the stale admission-time observation cannot charge that send latency to the peer.
+  @Test
+  void sendCompletionWinningThePreparedDeadlineClaimStartsAFreshResponseWindow() {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> errors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      socket.deferPings = true;
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      final var deadline = ws.preparePingDeadlineTransition();
+      assertNotNull(deadline, "the pending send is past its admission-time deadline");
+      assertFalse(ws.lock.isHeldByCurrentThread(),
+          "the test-only snapshot must release its temporary lifecycle hold before interposing send completion");
+
+      socket.deferredPings.getFirst().complete(socket);
+      assertNull(ws.claimPingDeadlineTransition(deadline),
+          "send completion won sentAt and invalidated the admission-time claim");
+
+      clock.advanceMillis(TIMINGS.pingDelay());
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertFalse(socket.aborted, "completion receives a fresh exclusive response window");
+      assertTrue(errors.isEmpty());
+
+      ws.onPong(socket, ByteBuffer.allocate(0));
+      assertFalse(socket.aborted);
+      assertTrue(errors.isEmpty());
+    }
+  }
+
+  /// A short keep-alive cadence must not send repeated probes while the longer response window
+  /// is outstanding. The one admitted Ping owns the connection until peer contact or timeout.
+  @Test
+  void anUnansweredKeepAliveIsNotRepeatedBeforeItsResponseDeadline() {
+    final var timings = new Timings(60_000L, 60_000L, 60_000L, 1_000L);
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        timings,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> errors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      clock.advanceMillis(timings.keepAliveDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings);
+
+      clock.advanceMillis(timings.keepAliveDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings, "an outstanding keep-alive is not repeated at its send cadence");
+      assertFalse(socket.aborted);
+
+      clock.advanceMillis(timings.pingDelay() - timings.keepAliveDelay() - 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertFalse(socket.aborted, "the response window is exclusive at its exact boundary");
+
+      clock.advanceMillis(1L);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertTrue(socket.aborted);
+      assertEquals(1, errors.size());
+    }
+  }
+
+  /// Every current-socket peer frame proves transport responsiveness, whether it is the expected
+  /// Pong, the peer's own Ping, or a text fragment. Each must discharge the outstanding probe;
+  /// after another silence window the engine sends a new one rather than retiring a live socket.
+  @Test
+  void everyPeerFrameAnswersTheOutstandingPing() {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> errors.add(error)
+    )) {
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, socket.pings);
+      ws.onPong(socket, ByteBuffer.allocate(0));
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(2, socket.pings);
+      ws.onPing(socket, ByteBuffer.allocate(0));
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(3, socket.pings);
+      ws.onText(socket, CharBuffer.allocate(0), false);
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(4, socket.pings);
+      assertFalse(socket.aborted);
+      assertTrue(errors.isEmpty());
     }
   }
 
@@ -328,9 +725,11 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       assertDoesNotThrow(() -> ws.checkCycle(0L));
       assertEquals(1, socket.pings, "the ask was made; the window restarts from it");
 
+      ws.onPong(socket, ByteBuffer.allocate(0));
+
       clock.advanceMillis(TIMINGS.pingDelay() + 1);
       assertDoesNotThrow(() -> ws.checkCycle(0L));
-      assertEquals(2, socket.pings, "pinging resumes once the window elapses again");
+      assertEquals(2, socket.pings, "an answered connection may be probed again after more silence");
 
       // Anything from the peer answers the question the ping asks, so it restarts the window —
       // an inbound frame cannot be used to drive a check into pinging.
@@ -418,16 +817,28 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   }
 
   @Test
-  void onErrorWithAHandlerDelegatesAndLeavesTheConnectionOpen() {
+  void onErrorWithAHandlerRetiresTheTransportButKeepsTheWrapperReusable() {
     final var seen = new AtomicReference<Throwable>();
-    try (final var ws = websocket(TIMINGS, null, (_, error) -> seen.set(error))) {
+    final var clock = new TestClock();
+    try (final var ws = websocket(
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null,
+        (_, error) -> seen.set(error))) {
+      assertTrue(ws.slotSubscribe(_ -> {
+      }));
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
+      assertSent(socket, "slotSubscribe", "");
       final var boom = new IllegalStateException("boom");
       ws.onError(socket, boom);
 
       assertSame(boom, seen.get());
       assertFalse(ws.closed(), "the handler owns the decision to close");
+      assertTrue(socket.aborted, "an errored transport is not maintained during policy backoff");
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay() + 1);
+      final var successor = new RecordingWebSocket();
+      ws.onOpen(successor);
+      assertSent(successor, "slotSubscribe", "");
     }
   }
 
@@ -583,10 +994,95 @@ final class SolanaJsonRpcWebsocketReconnectTests {
     }
   }
 
-  /// The superseded-socket guard on the control-frame and error callbacks. onText and onClose
-  /// are pinned elsewhere; these three complete the set, each with its own observable: a stale
-  /// ping or pong must not vouch for the peer, and a stale error must not close the live
-  /// connection — this fixture installs no onError handler, so an unguarded error would close.
+  /// A peer callback resolves its socket before taking the maintenance lock. A connection
+  /// takeover in that interval must make the captured predecessor stale; otherwise its queued
+  /// cancellation is flushed onto an already-aborted transport after the successor is current.
+  @Test
+  void takeoverBetweenPeerContactAndMaintenanceDoesNotFlushTheStaleConnection()
+      throws InterruptedException {
+    final var clock = new OneReadGateClock();
+    final var ws = websocket(
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null, null
+    );
+    final var first = new RecordingWebSocket();
+    final var callbackFailure = new AtomicReference<Throwable>();
+    final var callbackRetainedLock = new AtomicBoolean();
+    final var callbackDone = new CompletableFuture<Void>();
+    final var callback = new Thread(() -> {
+      try {
+        ws.onPong(first, ByteBuffer.allocate(0));
+      } catch (final Throwable ex) {
+        callbackFailure.set(ex);
+      } finally {
+        callbackRetainedLock.set(ws.lock.isHeldByCurrentThread());
+        while (ws.lock.isHeldByCurrentThread()) {
+          ws.lock.unlock();
+        }
+        callbackDone.complete(null);
+      }
+    }, "stale-pong-maintenance-test");
+    callback.setDaemon(true);
+    try {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      ws.onOpen(first);
+      ws.onText(first, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+      // The confirmation's correlation block runs on this thread. If it retained the lifecycle
+      // lock, starting the callback below would park that second thread before its clock
+      // checkpoint, and the harness would wait for an event which cannot occur. Observe the
+      // ownership defect at its finite return boundary and release the leaked hold before
+      // asserting, so this test reports the contract failure instead of delegating it to PIT's
+      // watchdog.
+      final int confirmationHolds = ws.lock.getHoldCount();
+      while (ws.lock.isHeldByCurrentThread()) {
+        ws.lock.unlock();
+      }
+      assertEquals(0, confirmationHolds,
+          "subscription confirmation must return with the lifecycle lock released");
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      assertNotSent(first, "accountUnsubscribe");
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay() + 1L);
+      clock.gateNextRead();
+      callback.start();
+      // A mutation which returns before pacingMillis completes callbackDone instead of entering
+      // the clock gate. Arbitrate those two finite outcomes so the assertion reports that defect
+      // instead of waiting forever for a checkpoint the callback can no longer reach.
+      CompletableFuture.anyOf(clock.entered, callbackDone).join();
+      final boolean enteredClock = clock.entered.isDone();
+      assertTrue(enteredClock, "the callback must reach the gated clock read");
+      if (enteredClock) {
+        final var successor = new RecordingWebSocket();
+        ws.onOpen(successor);
+        clock.release.complete(null);
+        callback.join(1_000L);
+
+        assertAll(
+            () -> assertFalse(callback.isAlive(), "the released callback must terminate"),
+            () -> assertTrue(callbackDone.isDone()),
+            () -> assertNull(callbackFailure.get()),
+            () -> assertFalse(callbackRetainedLock.get(),
+                "onPong maintenance must release the lifecycle lock"),
+            () -> assertNotSent(first, "accountUnsubscribe"),
+            () -> assertTrue(first.aborted),
+            () -> assertFalse(successor.aborted)
+        );
+      }
+    } finally {
+      clock.release.complete(null);
+      if (callback.isAlive()) {
+        callback.interrupt();
+        callback.join(1_000L);
+      }
+      ws.close();
+    }
+  }
+
+  /// The superseded-socket guard on peer-contact and error callbacks. Stale text, Ping, or Pong
+  /// must not answer the live connection's outstanding probe, and a stale error must not close
+  /// it directly. This fixture installs no onError handler, so either defect is terminal and
+  /// observable.
   @Test
   void aSupersededSocketsControlFramesAndErrorsAreIgnored() {
     final var clock = new TestClock();
@@ -599,14 +1095,20 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       assertTrue(first.aborted, "the displaced socket is aborted at takeover");
 
       clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertEquals(1, second.pings, "the live connection has an outstanding liveness probe");
+
       ws.onPing(first, ByteBuffer.wrap(new byte[0]));
       ws.onPong(first, ByteBuffer.wrap(new byte[0]));
-      assertDoesNotThrow(() -> ws.checkCycle(0L));
-      assertEquals(1, second.pings,
-          "a superseded socket's control frames must not vouch for the peer on the live one");
-
+      ws.onText(first, CharBuffer.allocate(0), false);
       ws.onError(first, new IllegalStateException("the abandoned socket finally noticed"));
       assertFalse(ws.closed(), "a superseded socket's error must not close the live connection");
+
+      clock.advanceMillis(TIMINGS.pingDelay() + 1);
+      assertDoesNotThrow(() -> ws.checkCycle(0L));
+      assertTrue(second.aborted,
+          "a superseded socket's control frames must not answer the live connection's probe");
+      assertTrue(ws.closed(), "the default error policy closes after the live probe times out");
     }
   }
 
@@ -965,6 +1467,8 @@ final class SolanaJsonRpcWebsocketReconnectTests {
     assertEquals(1, scheduler.deferred.size());
 
     ws.close();
+    assertTrue(scheduler.deferred.getFirst().handle().isCancelled(),
+        "close must cancel the scheduler-owned handle, not only the caller bridge");
     final int builtBefore = webSocketBuilder.builds;
     scheduler.deferred.getFirst().task().run();
     assertEquals(builtBefore, webSocketBuilder.builds, "a closed instance must not build a handshake");
@@ -1225,6 +1729,84 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       ws.onText(socketA, CharBuffer.wrap("""
           {"jsonrpc":"2.0","result":701,"id":3}"""), true);
       assertEquals(delivered, ws.lastMessageReceivedTimestamp(), "the stale socket cannot stamp");
+    }
+  }
+
+  /// Retirement invalidates the adopted attempt before lifecycle policy can reconnect. The
+  /// reconnect's own generation step must not circle back to the retired listener's token: a
+  /// second, late onOpen from that listener remains stale even after its immediate successor.
+  @Test
+  void reconnectAfterRetirementCannotReauthorizeTheRetiredAttemptListener() {
+    final var clock = new TestClock();
+    final var first = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(
+        new java.util.concurrent.atomic.AtomicReference<>(), first);
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(java.time.Duration.ofMillis(1_000)),
+        new Timings(0, 60_000, 60_000),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), new RecordingScheduler(), null, null, (_, _) -> {
+        }, null, null)) {
+      assertNotNull(ws.connect());
+      final var retiredListener = webSocketBuilder.listeners.getFirst();
+      retiredListener.onOpen(first);
+      ws.onError(first, new IOException("retire attempt one"));
+      assertTrue(first.aborted);
+
+      assertNotNull(ws.connect());
+      final var successor = new RecordingWebSocket();
+      webSocketBuilder.listeners.get(1).onOpen(successor);
+
+      final var late = new RecordingWebSocket();
+      retiredListener.onOpen(late);
+      assertTrue(late.aborted, "retirement must permanently invalidate its attempt listener");
+
+      clock.advanceMillis(1_000L);
+      final long delivered = clock.currentTimeMillis();
+      ws.onText(successor, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","result":700,"id":2}"""), true);
+      assertEquals(delivered, ws.lastMessageReceivedTimestamp(), "the successor remains current");
+    }
+  }
+
+  /// Generation retirement must move forward, not merely away from the listener being retired.
+  /// Moving backward can collide with an even older listener: attempt 2 retiring by subtraction
+  /// and attempt 3 incrementing would make attempt 1 current again.
+  @Test
+  void reconnectAfterRetirementCannotReauthorizeAnEarlierAttemptListener() {
+    final var clock = new TestClock();
+    final var first = new RecordingWebSocket();
+    final var webSocketBuilder = new RecordingWebSocketBuilder(
+        new java.util.concurrent.atomic.AtomicReference<>(), first);
+    try (final var ws = new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED,
+        webSocketBuilder.connectTimeout(java.time.Duration.ofMillis(1_000)),
+        new Timings(0, 60_000, 60_000),
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock,
+        new RecordingExecutor(), new RecordingScheduler(), null, null, (_, _) -> {
+        }, null, null)) {
+      assertNotNull(ws.connect());
+      final var earlierListener = webSocketBuilder.listeners.getFirst();
+      earlierListener.onOpen(first);
+
+      assertNotNull(ws.connect());
+      final var retiredListener = webSocketBuilder.listeners.get(1);
+      final var retired = new RecordingWebSocket();
+      retiredListener.onOpen(retired);
+      ws.onError(retired, new IOException("retire attempt two"));
+      assertTrue(retired.aborted);
+
+      assertNotNull(ws.connect());
+      final var successor = new RecordingWebSocket();
+      webSocketBuilder.listeners.get(2).onOpen(successor);
+
+      final var late = new RecordingWebSocket();
+      earlierListener.onOpen(late);
+
+      assertTrue(late.aborted,
+          "retirement must never circle back to any prior attempt listener's generation");
+      assertFalse(successor.aborted, "the live successor must retain ownership");
     }
   }
 
@@ -1858,6 +2440,8 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       ws.onText(socket, CharBuffer.wrap("""
           {"jsonrpc":"2.0","result":55,"id":3}"""), true);
 
+      assertLifecycleLockReleased(ws, "coalesced subscription confirmation");
+
       assertEquals(1, errors.size(), "the coalesced grant is consumer news");
       assertInstanceOf(IllegalStateException.class, errors.getFirst());
       assertTrue(socket.sentText.stream().noneMatch(m -> m.contains("fooUnsubscribe")),
@@ -1897,11 +2481,13 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       ws.checkCycle(0L);
       assertTrue(errors.isEmpty());
       socket.deferredTexts.getFirst().complete(socket); // transmission: the clock restarts here
+      ws.onPong(socket, ByteBuffer.allocate(0)); // transport alive; the JSON-RPC answer is still owed
 
       clock.advanceMillis(120_000); // past the admission deadline, inside the transmission one
       ws.checkCycle(0L);
       assertTrue(errors.isEmpty(), "the deadline must judge the server's silence, not the chain's: " + errors);
       assertFalse(socket.aborted);
+      ws.onPong(socket, ByteBuffer.allocate(0));
 
       clock.advanceMillis(200_000); // past the transmission deadline
       ws.checkCycle(0L);
@@ -2194,13 +2780,20 @@ final class SolanaJsonRpcWebsocketReconnectTests {
   /// One id answering two DIFFERENT requests is a server defect no local bookkeeping can
   /// adjudicate — whose stream is it? The connection is the unit that can be made honest
   /// again: aborted, through the same error seam every other irrecoverable transport state
-  /// uses, and owed nothing further.
+  /// uses, and owed nothing further. A wrapping socket may synchronously report its local abort;
+  /// retirement must already have made that callback stale so the intended collision error wins
+  /// off the lifecycle lock.
   @Test
   void aNonEquivalentIdCollisionReplacesTheConnection() throws InterruptedException {
     final var clock = new TestClock();
     final var errors = new java.util.ArrayList<Throwable>();
+    final var handlerSawLifecycleLock = new AtomicBoolean();
     try (final var ws = websocket(TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, clock, null,
-        (_, ex) -> errors.add(ex))) {
+        (websocket, ex) -> {
+          errors.add(ex);
+          handlerSawLifecycleLock.set(
+              ((SolanaJsonRpcWebsocket) websocket).lock.isHeldByCurrentThread());
+        })) {
       assertTrue(ws.subscribe("fooSubscribe", "fooUnsubscribe", "fooNotification",
           "K1", "\"p\"", JsonIterator::readLong, null, _ -> {
           }));
@@ -2208,6 +2801,13 @@ final class SolanaJsonRpcWebsocketReconnectTests {
           "K2", "\"q\"", JsonIterator::readLong, null, _ -> {
           }));
       final var socket = new RecordingWebSocket();
+      final var abortReported = new AtomicBoolean();
+      final var abortNotice = new IOException("wrapping socket reported local abort");
+      socket.abortAction = () -> {
+        if (abortReported.compareAndSet(false, true)) {
+          ws.onError(socket, abortNotice);
+        }
+      };
       ws.onOpen(socket);
 
       ws.onText(socket, CharBuffer.wrap("""
@@ -2215,9 +2815,13 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       ws.onText(socket, CharBuffer.wrap("""
           {"jsonrpc":"2.0","result":55,"id":3}"""), true); // different params, same id
 
+      assertLifecycleLockReleased(ws, "non-equivalent subscription-id collision");
       assertTrue(socket.aborted, "one id for two different requests is connection-fatal");
       assertEquals(1, errors.size());
       assertInstanceOf(IllegalStateException.class, errors.getFirst());
+      assertNotSame(abortNotice, errors.getFirst(), "the local abort callback must not displace the collision cause");
+      assertTrue(errors.getFirst().getMessage().contains("non-equivalent requests"), errors.getFirst().getMessage());
+      assertFalse(handlerSawLifecycleLock.get(), "the collision handler must run off the lifecycle lock");
       final int frames = socket.sentText.size();
       ws.checkCycle(0L);
       assertEquals(frames, socket.sentText.size(), "the replaced connection is owed nothing further");
@@ -2432,6 +3036,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       ws.onText(socket, CharBuffer.wrap("""
           {"jsonrpc":"2.0","result":55,"id":3}"""), true);
 
+      assertLifecycleLockReleased(ws, "tombstoned non-equivalent subscription-id collision");
       assertTrue(socket.aborted, "one id for non-equivalent requests remains fatal after the loser is cancelled");
       assertEquals(1, errors.size());
       assertInstanceOf(IllegalStateException.class, errors.getFirst());

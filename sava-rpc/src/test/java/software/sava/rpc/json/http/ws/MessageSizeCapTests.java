@@ -53,14 +53,18 @@ final class MessageSizeCapTests {
 
   /// Subscribes, opens, and confirms subscription id 11 so `NOTIFICATION` has a
   /// live target; returns the consumer's sink.
-  private static List<AccountInfo<byte[]>> subscribe(final SolanaJsonRpcWebsocket ws, final RecordingWebSocket socket) {
+  private record SubscriptionFixture(List<AccountInfo<byte[]>> received, AtomicLong msgId) {
+  }
+
+  private static SubscriptionFixture subscribe(final SolanaJsonRpcWebsocket ws,
+                                               final RecordingWebSocket socket) {
     final var received = new ArrayList<AccountInfo<byte[]>>();
     final var msgId = new AtomicLong();
     final var key = PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
     assertTrue(ws.accountSubscribe(key, sub -> msgId.set(sub.msgId()), received::add));
     ws.onOpen(socket);
     ws.onText(socket, CharBuffer.wrap("{\"jsonrpc\":\"2.0\",\"result\":11,\"id\":" + msgId.get() + "}"), true);
-    return received;
+    return new SubscriptionFixture(received, msgId);
   }
 
   @Test
@@ -68,7 +72,8 @@ final class MessageSizeCapTests {
     final var errors = new ArrayList<Throwable>();
     try (final var ws = createWebsocket(512, errors)) {
       final var socket = new RecordingWebSocket();
-      final var received = subscribe(ws, socket);
+      final var subscription = subscribe(ws, socket);
+      final var received = subscription.received();
 
       final var fragment = "x".repeat(300);
       ws.onText(socket, CharBuffer.wrap(fragment), false);
@@ -87,9 +92,19 @@ final class MessageSizeCapTests {
       );
       assertTrue(received.isEmpty());
 
-      // the partial message was dropped with it: a canonical whole notification
-      // dispatches without the 300 stale chars prepending themselves
+      // The failed transport is stale, but the durable subscription survives. Once a
+      // successor opens and confirms the replayed request, a canonical notification
+      // dispatches without the 300 stale chars prepending themselves.
       ws.onText(socket, CharBuffer.wrap(NOTIFICATION), true);
+      assertTrue(received.isEmpty());
+      final var successor = new RecordingWebSocket();
+      ws.onOpen(successor);
+      ws.onText(
+          successor,
+          CharBuffer.wrap("{\"jsonrpc\":\"2.0\",\"result\":11,\"id\":" + subscription.msgId().get() + "}"),
+          true
+      );
+      ws.onText(successor, CharBuffer.wrap(NOTIFICATION), true);
       assertEquals(1, received.size());
       assertEquals(33594L, received.getFirst().lamports());
       assertEquals(1, errors.size());
@@ -101,7 +116,7 @@ final class MessageSizeCapTests {
     final var errors = new ArrayList<Throwable>();
     try (final var ws = createWebsocket(NOTIFICATION.length(), errors)) {
       final var socket = new RecordingWebSocket();
-      final var received = subscribe(ws, socket);
+      final var received = subscribe(ws, socket).received();
 
       // whole, then fragmented: both sum to exactly the cap
       ws.onText(socket, CharBuffer.wrap(NOTIFICATION), true);
@@ -120,7 +135,7 @@ final class MessageSizeCapTests {
     final var errors = new ArrayList<Throwable>();
     try (final var ws = createWebsocket(NOTIFICATION.length() - 1, errors)) {
       final var socket = new RecordingWebSocket();
-      final var received = subscribe(ws, socket);
+      final var received = subscribe(ws, socket).received();
 
       ws.onText(socket, CharBuffer.wrap(NOTIFICATION), true);
 
