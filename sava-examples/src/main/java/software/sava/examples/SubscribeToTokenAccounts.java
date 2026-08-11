@@ -38,12 +38,13 @@ public final class SubscribeToTokenAccounts {
           .commitment(Commitment.CONFIRMED)
           .solanaAccounts(solanaAccounts)
           .onOpen(ws -> System.out.println("Websocket connected to " + ws.endpoint().getHost()))
-          // A server-side close or a transport error reconnects; wiring every callback to
-          // close() meant one transient ping failure permanently terminated the client. Send
-          // and ping failures are transient and only logged — the implementation retries them.
-          // If the internal check loop itself dies, the instance invokes onError and then
-          // closes itself — this reconnect is cancelled and connect() returns null from then
-          // on — so a supervisor that must survive even that builds a replacement instance.
+          // A server-side close or transport error reconnects. A failed Ping send is a terminal
+          // transport error: the engine retires that socket, invokes onError as its recovery
+          // policy, then invokes onPingError as the Ping-specific observation. Failed text sends
+          // remain observable through onSendTextError; eligible subscription work is paced for
+          // retry. If the internal check loop itself dies, the instance invokes onError and then
+          // closes itself — this reconnect is cancelled and connect() returns null from then on —
+          // so a supervisor that must survive even that builds a replacement instance.
           .onClose((ws, statusCode, reason) -> {
             System.out.format("%d: %s — reconnecting%n", statusCode, reason);
             connect(ws);

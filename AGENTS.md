@@ -483,15 +483,14 @@ failure prints. Sync or **act on** each changed bullet before updating the marke
 template the *installed* plugin carries with `hardeningAgentTemplate` rather than
 copying a possibly newer block out of sava-build's moving `main`.
 
-**This repo pins a candidate ahead of its release.** The three pins — both ids in
+**This repo pins a published sava-build release.** The three pins — both ids in
 the root `settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read
-`21.5.22`, and the marker above is that candidate's digest, reconciled bullet by
-bullet on 2026-08-04. **The pins must move together**; a settings-only bump has
-silently missed the jmh pin more than once. Until 21.5.22 is published, this
-combination only resolves under `-PsavaBuildLocalRepo` pointed at a local
-`0.0.0-test` publish — that is the deliberate pre-release state, not a mistake, and
-it reverts to ordinary published resolution the moment the release lands. The
-sequence for the next bump is the same one: move all three pins, run
+`21.5.25`, and the marker above is that release's digest, reconciled bullet by
+bullet on 2026-08-10. **The pins must move together**; a settings-only bump has
+silently missed the jmh pin more than once. This combination resolves from the
+ordinary published repository; `-PsavaBuildLocalRepo` is needed only while
+evaluating an unpublished candidate. The sequence for the next bump is: move all
+three pins, run
 `hardeningAgentTemplate`, re-diff this block against what it prints, act on each
 changed bullet, then stamp the digest it prints.
 

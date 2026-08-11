@@ -88,6 +88,7 @@ run, not the last.
 `onOpen` / `onText` with a `RecordingWebSocket`. Subscribe *before* the `onOpen`
 you assert on: `queueSubscription` only queues and signals, and of the two things
 that flush the queue — a background thread started in the constructor, and
-`onOpen` — only `onOpen` is synchronous with the test. `reConnectDelay` doubles
-as a resend throttle, which is why large `Timings` values keep the background
-thread out of the way.
+`onOpen` — only `onOpen` is synchronous with the test. The dedicated
+`subscriptionResendDelay` controls retry and unanswered-request deadlines; set
+it large when a test needs to keep the background thread away from pending
+subscription work.

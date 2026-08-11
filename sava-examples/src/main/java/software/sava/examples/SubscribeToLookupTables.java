@@ -35,12 +35,14 @@ public final class SubscribeToLookupTables {
           .onOpen(_ -> System.out.println("Websocket connected"))
           // The examples are de-facto documentation, so they carry the minimal wiring a
           // long-lived consumer needs: a server-side close or a transport error reconnects —
-          // logging alone would leave the check loop pinging a dead socket forever — while
-          // send and ping failures are transient and only logged; the implementation retries
-          // them on its own. One failure this wiring cannot cover: if the internal check loop
-          // itself dies, the instance invokes onError and then closes itself — the reconnect
-          // started here is cancelled and connect() returns null from then on — so a
-          // supervisor that must survive even that builds a replacement instance.
+          // logging alone would leave the instance without a successor. A failed Ping send also
+          // retires the current transport and enters onError; onPingError observes that same
+          // failure after the recovery policy runs. Failed text sends remain observable through
+          // onSendTextError, and eligible subscription work is paced for retry. One failure this
+          // wiring cannot cover: if the internal check loop itself dies, the instance invokes
+          // onError and then closes itself — the reconnect started here is cancelled and
+          // connect() returns null from then on — so a supervisor that must survive even that
+          // builds a replacement instance.
           .onClose((ws, statusCode, reason) -> {
             System.out.format("%d: %s — reconnecting%n", statusCode, reason);
             connect(ws);
