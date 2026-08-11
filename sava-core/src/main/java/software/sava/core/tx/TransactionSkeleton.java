@@ -25,12 +25,9 @@ public interface TransactionSkeleton {
   /**
    * Parses the serialized transaction into its structural views.
    *
-   * <p>Current-behavior compatibility note: for a version-0 message whose address-table
-   * lookup count is zero, or whose data ends before that count byte, program indexes remain
-   * in instruction order but are binary searched by the versioned account-parsing paths.
-   * Out-of-order program indexes can therefore be returned as non-invoked even though Solana
-   * defines every instruction's {@code program_id_index} as called-as-program. This is retained
-   * pending an owner decision.</p>
+   * <p>For versioned messages, account parsing marks every included read-only account referenced
+   * by an instruction's {@code program_id_index} as invoked. This also holds when the address-table
+   * lookup count is zero or the data ends immediately after the instruction section.</p>
    */
   static TransactionSkeleton deserializeSkeleton(final byte[] data) {
     int o = 0;
@@ -80,6 +77,8 @@ public interface TransactionSkeleton {
         o += getByteLen(data, o);
         o += len;
       }
+      // Versioned account parsing uses binary search to identify invoked read-only accounts.
+      Arrays.sort(invokedIndexes);
       if (o < data.length) {
         final int numLookupTables = decode(data, o);
         ++o;
@@ -101,7 +100,6 @@ public interface TransactionSkeleton {
             o += numReadIndexes;
             numAccounts += numReadIndexes;
           }
-          Arrays.sort(invokedIndexes);
           return new TransactionSkeletonRecord(
               data,
               version,

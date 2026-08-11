@@ -1,6 +1,7 @@
 package software.sava.core.accounts.sysvar;
 
 import org.junit.jupiter.api.Test;
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
 
 import java.io.IOException;
@@ -50,25 +51,63 @@ final class SysvarTests {
     assertFalse(epochRewards.active());
   }
 
-  /// Upstream places `active` after the eight-byte `distributed_rewards` field, and this
-  /// class's writer does the same. The reader currently uses the second byte inside
-  /// `distributed_rewards` instead. Pin both reader outcomes at a non-zero base offset without
-  /// describing either result as the intended wire contract.
   @Test
-  void epochRewardsActiveOffsetMismatchIsCurrentBehaviorPendingOwnerDecision() {
+  void epochRewardsActiveUsesFinalWireByteAndRoundTripsAtNonZeroOffset() {
     final int offset = 5;
     final int activeOffset = offset + EpochRewards.BYTES - 1;
     final int distributedRewardsOffset = activeOffset - Long.BYTES;
     final byte[] data = new byte[offset + EpochRewards.BYTES];
 
     data[distributedRewardsOffset + 1] = 1;
-    assertTrue(EpochRewards.read(data, offset).active(),
-        "current reader takes active from inside distributedRewards");
+    assertFalse(EpochRewards.read(data, offset).active(),
+        "distributedRewards bytes must not determine active");
 
     data[distributedRewardsOffset + 1] = 0;
     data[activeOffset] = 1;
-    assertFalse(EpochRewards.read(data, offset).active(),
-        "current reader ignores the serialized active byte");
+    assertTrue(EpochRewards.read(data, offset).active(),
+        "the final wire byte determines active");
+
+    final byte[] parentBlockHash = Base64.getDecoder().decode(
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=");
+    final var expected = new EpochRewards(
+        PublicKey.NONE,
+        410_931_944L,
+        299L,
+        parentBlockHash,
+        new BigInteger("2961927942218846368304213"),
+        129_229_732_223_529L,
+        129_229_730_679_378L,
+        true
+    );
+    final byte[] written = new byte[offset + EpochRewards.BYTES];
+    assertEquals(EpochRewards.BYTES, expected.write(written, offset));
+
+    final var actual = EpochRewards.read(PublicKey.NONE, written, offset);
+    assertEquals(expected.address(), actual.address());
+    assertEquals(
+        expected.distributionStartingBlockHeight(),
+        actual.distributionStartingBlockHeight()
+    );
+    assertEquals(expected.numPartitions(), actual.numPartitions());
+    assertArrayEquals(expected.parentBlockHash(), actual.parentBlockHash());
+    assertEquals(expected.totalPoints(), actual.totalPoints());
+    assertEquals(expected.totalRewards(), actual.totalRewards());
+    assertEquals(expected.distributedRewards(), actual.distributedRewards());
+    assertEquals(expected.active(), actual.active());
+
+    final var inactive = new EpochRewards(
+        expected.address(),
+        expected.distributionStartingBlockHeight(),
+        expected.numPartitions(),
+        expected.parentBlockHash(),
+        expected.totalPoints(),
+        expected.totalRewards(),
+        expected.distributedRewards(),
+        false
+    );
+    assertEquals(EpochRewards.BYTES, inactive.write(written, offset));
+    assertEquals(0, written[activeOffset], "writing inactive clears the final wire byte");
+    assertFalse(EpochRewards.read(PublicKey.NONE, written, offset).active());
   }
 
   @Test

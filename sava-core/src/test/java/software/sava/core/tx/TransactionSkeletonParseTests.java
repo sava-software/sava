@@ -356,20 +356,14 @@ final class TransactionSkeletonParseTests {
     assertNotNull(skeleton.createTransaction());
   }
 
-  /// Solana defines every instruction's `program_id_index` as called-as-program regardless
-  /// of whether address-table lookups exist. With a zero table count, the current parser
-  /// leaves `[2, 1]` unsorted and binary search misses index 1. The instruction view repairs
-  /// the flag later, so pinning the disagreement records current behavior pending an owner
-  /// decision rather than blessing it as the wire contract.
-  @Test
-  void zeroTableUnsortedInvokedIndexesAreCurrentBehaviorPendingOwnerDecision() {
+  private static byte[] versionedWithOutOfOrderProgramIndexes(final boolean includeLookupTableCount) {
     final byte[] data = new byte[
         1 + Transaction.SIGNATURE_LENGTH
             + 1 + 3
             + 1 + (3 * PublicKey.PUBLIC_KEY_LENGTH)
             + Transaction.BLOCK_HASH_LENGTH
             + 1 + (2 * 3)
-            + 1
+            + (includeLookupTableCount ? 1 : 0)
         ];
     int o = 0;
     data[o++] = 1;                            // one signature
@@ -391,18 +385,37 @@ final class TransactionSkeletonParseTests {
     data[o++] = 1;                            // second program index: out of order
     data[o++] = 0;
     data[o++] = 0;
-    data[o++] = 0;                            // zero address-lookup tables
+    if (includeLookupTableCount) {
+      data[o++] = 0;                          // zero address-lookup tables
+    }
     assertEquals(data.length, o);
+    return data;
+  }
 
+  private static void assertOutOfOrderProgramAccountsAreInvoked(final byte[] data) {
     final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
     final var accounts = skeleton.parseAccounts(List.of(), List.of());
     final var instructions = skeleton.parseInstructions(accounts);
 
-    assertTrue(accounts[2].invoked(), "binary search happens to find the first index");
-    assertFalse(accounts[1].invoked(), "binary search currently misses the later lower index");
+    assertEquals(accounts[2].publicKey(), instructions[0].programId().publicKey());
     assertEquals(accounts[1].publicKey(), instructions[1].programId().publicKey());
-    assertTrue(instructions[1].programId().invoked(),
-        "the instruction view still identifies its program as invoked");
+    assertTrue(accounts[2].invoked(), "first instruction's program index 2 must be invoked");
+    assertTrue(accounts[1].invoked(), "second instruction's program index 1 must be invoked");
+  }
+
+  /// A versioned message's lookup-table count does not control whether its instruction
+  /// program accounts are invoked. The out-of-order indexes exercise the binary-search
+  /// ordering requirement rather than succeeding accidentally in instruction order.
+  @Test
+  void zeroLookupTableCountMarksOutOfOrderProgramIndexesInvoked() {
+    assertOutOfOrderProgramAccountsAreInvoked(versionedWithOutOfOrderProgramIndexes(true));
+  }
+
+  /// The parser accepts a v0 message ending after its instruction section; that early-return
+  /// shape must preserve the same invoked-account contract as an explicit zero table count.
+  @Test
+  void missingLookupTableCountMarksOutOfOrderProgramIndexesInvoked() {
+    assertOutOfOrderProgramAccountsAreInvoked(versionedWithOutOfOrderProgramIndexes(false));
   }
 
   @Test
