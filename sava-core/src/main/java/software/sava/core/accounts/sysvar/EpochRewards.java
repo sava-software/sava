@@ -7,7 +7,14 @@ import software.sava.core.encoding.ByteUtil;
 import java.math.BigInteger;
 import java.util.function.BiFunction;
 
-// https://github.com/anza-xyz/solana-sdk/blob/master/epoch-rewards/src/lib.rs
+/// The serialized layout follows Solana's
+/// [EpochRewards](https://github.com/anza-xyz/solana-sdk/blob/master/epoch-rewards/src/lib.rs)
+/// sysvar.
+///
+/// Current-behavior compatibility note: [#read(PublicKey, byte[], int)] reads `active`
+/// from `offset + 73`, the second byte of `distributedRewards`, rather than from the
+/// serialized boolean at `offset + 80` written by [#write(byte[], int)]. This contradicts
+/// the upstream 81-byte layout and is retained pending an owner decision.
 public record EpochRewards(PublicKey address,
                            long distributionStartingBlockHeight,
                            long numPartitions,

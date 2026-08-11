@@ -7,6 +7,11 @@ import java.util.Base64;
 
 public enum PrivateKeyEncoding {
 
+  /// A JSON array containing the 64 unsigned key-pair bytes.
+  ///
+  /// Current-behavior compatibility note: [#parseSecret(String)] accepts an otherwise
+  /// complete 64-value array when its closing `]` is missing. That contradicts the JSON
+  /// array grammar and is retained pending an owner decision.
   jsonKeyPairArray,
   base64PrivateKey,
   base64KeyPair,

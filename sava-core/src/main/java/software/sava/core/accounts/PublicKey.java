@@ -174,6 +174,16 @@ public interface PublicKey extends Comparable<PublicKey> {
     return readPubKey(bytes, 0);
   }
 
+  /**
+   * Creates a public key from 32 bytes.
+   *
+   * <p>Current-behavior compatibility note: the current implementation retains the input
+   * array, and {@link #toByteArray()} exposes that same array. If those bytes are mutated
+   * after {@link #toBase58()} or {@link Object#hashCode()} has populated its cache, the cached
+   * representation can disagree with the current bytes; two equal keys can then have
+   * different hash codes, contrary to {@link Object#hashCode()}. This is retained pending
+   * an owner decision.</p>
+   */
   static PublicKey createPubKey(final byte[] publicKey) {
     if (publicKey.length != PublicKey.PUBLIC_KEY_LENGTH) {
       throw new IllegalArgumentException("Invalid public key input");
@@ -281,8 +291,14 @@ public interface PublicKey extends Comparable<PublicKey> {
     return PublicKey.createPubKey(digest.digest());
   }
 
+  /**
+   * Returns this implementation's byte array. Implementations may differ in whether that array
+   * is shared; keys returned by {@link #createPubKey(byte[])} currently expose their backing
+   * array, as described by that factory's cache-coherence compatibility note.
+   */
   byte[] toByteArray();
 
+  /** Returns a copy of the public-key bytes. */
   byte[] copyByteArray();
 
   String toBase58();

@@ -33,6 +33,31 @@ final class PublicKeyTest {
     assertArrayEquals(byteKey, PublicKey.fromBase58Encoded(key3.toBase58()).toByteArray());
   }
 
+  /// `createPubKey` and `toByteArray` expose one mutable backing array while Base58 and
+  /// hashCode are cached. Java's independent contract requires equal objects to have equal
+  /// hash codes, and a public key's Base58 text should encode its current bytes. Pin the
+  /// present contradiction pending an owner decision; do not present it as intended value
+  /// semantics.
+  @Test
+  void backingMutationLeavesCachedPublicKeyViewsStalePendingOwnerDecision() {
+    final byte[] backing = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    final var key = PublicKey.createPubKey(backing);
+    final String cachedBase58 = key.toBase58();
+    final int cachedHash = key.hashCode();
+
+    assertSame(backing, key.toByteArray(), "the current implementation exposes its backing array");
+    backing[backing.length - 1] = 1;
+    final var equalCurrentKey = PublicKey.createPubKey(backing.clone());
+
+    assertEquals(equalCurrentKey, key, "equals observes the mutated bytes");
+    assertNotEquals(equalCurrentKey.hashCode(), key.hashCode(),
+        "the cached hash remains from before the mutation");
+    assertEquals(cachedHash, key.hashCode());
+    assertEquals(cachedBase58, key.toBase58(), "Base58 also remains cached");
+    assertNotEquals(equalCurrentKey.toBase58(), key.toBase58(),
+        "an equal key encodes the current bytes instead");
+  }
+
   @Test
   public void readPubKeyRejectsTruncatedData() {
     final byte[] data = new byte[PublicKey.PUBLIC_KEY_LENGTH + 7];

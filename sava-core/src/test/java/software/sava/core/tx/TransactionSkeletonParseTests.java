@@ -356,6 +356,55 @@ final class TransactionSkeletonParseTests {
     assertNotNull(skeleton.createTransaction());
   }
 
+  /// Solana defines every instruction's `program_id_index` as called-as-program regardless
+  /// of whether address-table lookups exist. With a zero table count, the current parser
+  /// leaves `[2, 1]` unsorted and binary search misses index 1. The instruction view repairs
+  /// the flag later, so pinning the disagreement records current behavior pending an owner
+  /// decision rather than blessing it as the wire contract.
+  @Test
+  void zeroTableUnsortedInvokedIndexesAreCurrentBehaviorPendingOwnerDecision() {
+    final byte[] data = new byte[
+        1 + Transaction.SIGNATURE_LENGTH
+            + 1 + 3
+            + 1 + (3 * PublicKey.PUBLIC_KEY_LENGTH)
+            + Transaction.BLOCK_HASH_LENGTH
+            + 1 + (2 * 3)
+            + 1
+        ];
+    int o = 0;
+    data[o++] = 1;                            // one signature
+    o += Transaction.SIGNATURE_LENGTH;
+    data[o++] = (byte) 0x80;                  // versioned marker, version 0
+    data[o++] = 1;                            // one required signature
+    data[o++] = 0;                            // no read-only signers
+    data[o++] = 2;                            // both unsigned accounts are read-only
+    data[o++] = 3;                            // payer plus two program accounts
+    for (int key = 1; key <= 3; ++key) {
+      data[o + PublicKey.PUBLIC_KEY_LENGTH - 1] = (byte) key;
+      o += PublicKey.PUBLIC_KEY_LENGTH;
+    }
+    o += Transaction.BLOCK_HASH_LENGTH;
+    data[o++] = 2;                            // two instructions
+    data[o++] = 2;                            // first program index
+    data[o++] = 0;                            // no instruction accounts
+    data[o++] = 0;                            // no instruction data
+    data[o++] = 1;                            // second program index: out of order
+    data[o++] = 0;
+    data[o++] = 0;
+    data[o++] = 0;                            // zero address-lookup tables
+    assertEquals(data.length, o);
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    final var accounts = skeleton.parseAccounts(List.of(), List.of());
+    final var instructions = skeleton.parseInstructions(accounts);
+
+    assertTrue(accounts[2].invoked(), "binary search happens to find the first index");
+    assertFalse(accounts[1].invoked(), "binary search currently misses the later lower index");
+    assertEquals(accounts[1].publicKey(), instructions[1].programId().publicKey());
+    assertTrue(instructions[1].programId().invoked(),
+        "the instruction view still identifies its program as invoked");
+  }
+
   @Test
   void versionedTransactionWithoutLookupTableSection() {
     // the same message with the trailing empty-table section chopped off: a truncated v0

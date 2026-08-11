@@ -3,6 +3,7 @@ package software.sava.core.accounts.vanity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
+import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.pbkdf.KeyDerivation;
 import software.sava.core.accounts.pbkdf.PBKDFEncryption;
 
@@ -101,6 +102,29 @@ final class KeyFileRoundTripTests {
         assertEquals(result.publicKey(), recovered.publicKey(), label + " recovered a different address");
       }
     }
+  }
+
+  /// JSON requires an array to end with `]`. The current hand-written key-pair parser
+  /// treats end-of-input as the last value's delimiter after it has read 64 values, so an
+  /// unterminated array is accepted. Pin that published behavior pending an owner decision
+  /// without describing it as valid JSON.
+  @Test
+  void unterminatedJsonKeyPairArrayIsCurrentBehaviorPendingOwnerDecision() {
+    final byte[] keyPair = Signer.createKeyPairBytesFromPrivateKey(new byte[Signer.KEY_LENGTH]);
+    final var json = new StringBuilder("[");
+    for (int i = 0; i < keyPair.length; ++i) {
+      if (i > 0) {
+        json.append(',');
+      }
+      json.append(Byte.toUnsignedInt(keyPair[i]));
+    }
+    final String unterminated = json.toString();
+    final String complete = unterminated + ']';
+
+    final var expected = PrivateKeyEncoding.jsonKeyPairArray.parseSecret(complete);
+    final var accepted = PrivateKeyEncoding.jsonKeyPairArray.parseSecret(unterminated);
+    assertEquals(expected.publicKey(), accepted.publicKey(),
+        "current parser accepts end-of-input in place of the closing bracket");
   }
 
   /// The key-pair encodings carry the seed and the public key; the private-key

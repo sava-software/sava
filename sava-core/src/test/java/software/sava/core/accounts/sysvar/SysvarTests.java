@@ -50,6 +50,27 @@ final class SysvarTests {
     assertFalse(epochRewards.active());
   }
 
+  /// Upstream places `active` after the eight-byte `distributed_rewards` field, and this
+  /// class's writer does the same. The reader currently uses the second byte inside
+  /// `distributed_rewards` instead. Pin both reader outcomes at a non-zero base offset without
+  /// describing either result as the intended wire contract.
+  @Test
+  void epochRewardsActiveOffsetMismatchIsCurrentBehaviorPendingOwnerDecision() {
+    final int offset = 5;
+    final int activeOffset = offset + EpochRewards.BYTES - 1;
+    final int distributedRewardsOffset = activeOffset - Long.BYTES;
+    final byte[] data = new byte[offset + EpochRewards.BYTES];
+
+    data[distributedRewardsOffset + 1] = 1;
+    assertTrue(EpochRewards.read(data, offset).active(),
+        "current reader takes active from inside distributedRewards");
+
+    data[distributedRewardsOffset + 1] = 0;
+    data[activeOffset] = 1;
+    assertFalse(EpochRewards.read(data, offset).active(),
+        "current reader ignores the serialized active byte");
+  }
+
   @Test
   void rent() {
     final byte[] data = Base64.getDecoder().decode("MBsAAAAAAAAAAAAAAADwPzI=");
