@@ -632,8 +632,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final CompletableFuture<WebSocket> built;
     try {
       built = Objects.requireNonNull(this.webSocketBuilder.buildAsync(
-          this.endpoint, new AttemptListener(generation)
-      ), "websocket builder returned null");
+              this.endpoint, new AttemptListener(generation)
+          ), "websocket builder returned null"
+      );
     } catch (final RuntimeException ex) {
       connected.completeExceptionally(ex);
       return;
@@ -1003,10 +1004,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       }
       checkSignalled = false;
       conn = this.connection;
-      escalation = switch (conn) {
-        case null -> null;
-        default -> handlePendingSubscriptions(conn);
-      };
+      if (conn != null) {
+        escalation = handlePendingSubscriptions(conn);
+      } else {
+        escalation = null;
+      }
     } finally {
       lock.unlock();
     }
@@ -1980,7 +1982,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       sendUnSubscriptionLockHeld(conn,
           queued == null ? unSubscribeMethod : queued.unSubscribeMethod(),
           subId,
-          queued == null ? fingerprint : queued.fingerprint());
+          queued == null ? fingerprint : queued.fingerprint()
+      );
     } finally {
       lock.unlock();
     }
@@ -2778,10 +2781,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // pause, and resume after transport B has taken over; maintenance belongs to B rather
       // than to a captured, already-aborted Connection.
       conn = this.connection;
-      escalation = switch (conn) {
-        case null -> null;
-        default -> handlePendingSubscriptions(conn);
-      };
+      if (conn != null) {
+        escalation = handlePendingSubscriptions(conn);
+      } else {
+        escalation = null;
+      }
     } finally {
       lock.unlock();
     }
@@ -2794,9 +2798,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// failures enter the ordinary transport error seam and retain their specific observation
   /// callback: a control frame which could not be written is not a healthy connection.
   private void deliverEscalation(final Connection conn, final Throwable escalation) {
-    // Claim the transport once for the whole notice. A concurrent connect may already have
+    // Claim the transport once for the whole notice. A concurrent connection may already have
     // displaced it. A close/error callback which wins retirement also takes any already-recorded
-    // Ping failure, so the specific observation cannot disappear in the gap between signalling
+    // Ping failure, so the specific observation cannot disappear in the gap between signaling
     // this maintenance pass and its delivery.
     final var retired = retireConnection(conn.socket);
     if (retired == null) {
@@ -3058,12 +3062,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
     transition.conn.lifecycle = ConnectionLifecycle.ESCALATED;
     final long elapsed = transition.now - transition.startedAt;
-    final var unanswered = new IllegalStateException(transition.sendPending
+    return new IllegalStateException(transition.sendPending
         ? "Ping send to " + endpoint.getHost() + " has not completed in " + elapsed
         + "ms; replacing the connection."
         : "Ping to " + endpoint.getHost() + " has gone unanswered for " + elapsed
         + "ms; replacing the connection.");
-    return unanswered;
   }
 
   /// Test seam for the observation-to-CAS transition above. It snapshots an overdue current

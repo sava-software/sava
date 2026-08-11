@@ -13,6 +13,7 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,7 +49,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
       PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
   /// Stops exactly one monotonic read after announcing that it was reached. A peer callback
-  /// resolves its Connection before that read, so a test can install a successor and then let
+  /// resolves its Connection before that read, so a test can retire or replace it and then let
   /// the callback enter maintenance with the now-stale predecessor — no sleep or scheduler race.
   private static final class OneReadGateClock implements NanoClock {
 
@@ -1069,6 +1070,77 @@ final class SolanaJsonRpcWebsocketReconnectTests {
             () -> assertFalse(successor.aborted)
         );
       }
+    } finally {
+      clock.release.complete(null);
+      if (callback.isAlive()) {
+        callback.interrupt();
+        callback.join(1_000L);
+      }
+      ws.close();
+    }
+  }
+
+  /// A peer callback resolves its socket before reading the pacing clock. If that transport is
+  /// retired while the callback is paused and no successor takes its place, the callback's
+  /// maintenance pass has no Connection to handle. This is distinct from takeover: the null
+  /// state must be a quiet no-op rather than being passed into connection maintenance.
+  @Test
+  void retirementBetweenPeerContactAndMaintenanceLeavesNoConnectionToMaintain()
+      throws Exception {
+    final var clock = new OneReadGateClock();
+    final var observedError = new AtomicReference<Throwable>();
+    final var ws = websocket(
+        TIMINGS,
+        SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH,
+        clock,
+        null,
+        (_, error) -> observedError.set(error)
+    );
+    final var socket = new RecordingWebSocket();
+    final var callbackFailure = new AtomicReference<Throwable>();
+    final var callbackRetainedLock = new AtomicBoolean();
+    final var callbackDone = new CompletableFuture<Void>();
+    final var callback = new Thread(() -> {
+      try {
+        ws.onPong(socket, ByteBuffer.allocate(0));
+      } catch (final Throwable ex) {
+        callbackFailure.set(ex);
+      } finally {
+        callbackRetainedLock.set(ws.lock.isHeldByCurrentThread());
+        while (ws.lock.isHeldByCurrentThread()) {
+          ws.lock.unlock();
+        }
+        callbackDone.complete(null);
+      }
+    }, "retired-pong-maintenance-test");
+    callback.setDaemon(true);
+    final var failure = new IOException("deterministic transport retirement");
+    try {
+      ws.onOpen(socket);
+      assertLifecycleLockReleased(ws, "onOpen setup");
+      clock.gateNextRead();
+      callback.start();
+      CompletableFuture.anyOf(clock.entered, callbackDone).get(1L, TimeUnit.SECONDS);
+      assertTrue(clock.entered.isDone(),
+          "the callback must resolve the transport before retirement");
+
+      ws.onError(socket, failure);
+      assertLifecycleLockReleased(ws, "onError retirement");
+      assertAll(
+          () -> assertTrue(socket.aborted),
+          () -> assertSame(failure, observedError.get()),
+          () -> assertFalse(ws.closed(), "the custom error policy keeps the wrapper reusable")
+      );
+
+      clock.release.complete(null);
+      callbackDone.get(1L, TimeUnit.SECONDS);
+      callback.join(1_000L);
+      assertAll(
+          () -> assertFalse(callback.isAlive(), "the released callback must terminate"),
+          () -> assertNull(callbackFailure.get()),
+          () -> assertFalse(callbackRetainedLock.get(),
+              "onPong maintenance must release the lifecycle lock")
+      );
     } finally {
       clock.release.complete(null);
       if (callback.isAlive()) {
