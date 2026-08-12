@@ -61,4 +61,18 @@ final class ParseCustomErrorCodeTests {
     assertEquals(codeFirst.customError(), dataFirst.customError());
     assertEquals(new RpcCustomError.NodeUnhealthy(OptionalLong.of(42)), dataFirst.customError());
   }
+
+  @Test
+  void deferredErrorDataParsingRestoresTheOuterCursor() {
+    final var ji = JsonIterator.parse(
+        """
+            [{"data":{"numSlotsBehind":42},"code":-32005,"message":"unhealthy"},73]""");
+
+    assertTrue(ji.readArray());
+    final var exception = JsonRpcException.parseException(ji, OptionalLong.empty());
+    assertEquals(new RpcCustomError.NodeUnhealthy(OptionalLong.of(42)), exception.customError());
+    assertTrue(ji.readArray());
+    assertEquals(73, ji.readInt());
+    assertFalse(ji.readArray());
+  }
 }

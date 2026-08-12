@@ -34,7 +34,7 @@ public final class JsonRpcException extends RuntimeException {
   public static JsonRpcException parseException(final JsonIterator ji, final OptionalLong retryAfterSeconds) {
     final var parser = new Parser();
     ji.testObject(parser);
-    if (parser.dataMark >= 0) {
+    if (parser.dataMark != null) {
       // Member order is free, and `data`'s interpretation depends on `code`: when data arrived
       // first it was parsed against code 0 and valid structured details were misclassified.
       // The mark defers it until the whole error object has been read — and the cursor is
@@ -64,8 +64,7 @@ public final class JsonRpcException extends RuntimeException {
     private long code;
     private String message;
     private RpcCustomError customError;
-    private boolean codeSeen;
-    private int dataMark = -1;
+    private Integer dataMark;
 
     private Parser() {
     }
@@ -83,16 +82,11 @@ public final class JsonRpcException extends RuntimeException {
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("code", buf, offset, len)) {
         code = ji.readLong();
-        codeSeen = true;
       } else if (fieldEquals("message", buf, offset, len)) {
         message = ji.readString();
       } else if (fieldEquals("data", buf, offset, len)) {
-        if (codeSeen) {
-          customError = RpcCustomError.parseError(code, ji);
-        } else {
-          dataMark = ji.mark();
-          ji.skip();
-        }
+        dataMark = ji.mark();
+        ji.skip();
       } else {
         ji.skip();
       }
