@@ -1,5 +1,31 @@
 # Changelog
 
+## [25.9.0](https://github.com/sava-software/sava/compare/25.8.3...25.9.0) (2026-08-12)
+
+
+### Features
+
+* **websocket:** detect a peer that stopped answering ([d48cd62](https://github.com/sava-software/sava/commit/d48cd6230c85bb7784c35212e9048bfe7fa66fd2))
+* **websocket:** make transport recovery self-healing ([52dce85](https://github.com/sava-software/sava/commit/52dce858c98a4d03a40197a19e47a04e774757be))
+
+
+### Bug Fixes
+
+* **core:** correct sysvar and invoked-account parsing ([6297d63](https://github.com/sava-software/sava/commit/6297d63c8a8acabb7490299bba7d186e554c5520))
+* **rpc:** harden websocket lifecycle and mutation contracts ([b4c0afe](https://github.com/sava-software/sava/commit/b4c0afe22a3042fc316eb82dce0515e24a7d0ef1))
+* **rpc:** preserve error parser cursor ([f0eefe1](https://github.com/sava-software/sava/commit/f0eefe14cd9e623970b0bdf29cc7034ab74bfa25))
+* **websocket:** adjudicate shared subscription ids by wire order ([a17daf2](https://github.com/sava-software/sava/commit/a17daf249ca03001929dc4229974076ed2726fca))
+* **websocket:** an attempt's ordinal dies with the attempt ([0d4f07a](https://github.com/sava-software/sava/commit/0d4f07a8739902596bf8de0eb5ec58b2e558563e))
+* **websocket:** cancel before resubscribing; pin live server behavior ([0f6e808](https://github.com/sava-software/sava/commit/0f6e8081e0aa30be3ab57b87111df88229bd2adf))
+* **websocket:** carry wire order on attempt ordinals, not request ids ([05a4294](https://github.com/sava-software/sava/commit/05a42941f9ccd3c296907dd076a973a4101db752))
+* **websocket:** record gate-blocked cancellations; equivalence-check obsolescence ([6bdbfb1](https://github.com/sava-software/sava/commit/6bdbfb1c8ca11de50fd99ecaeadeb85ddd57f4d2))
+* **websocket:** release adjudication bookkeeping on every terminal path ([6c6f6ca](https://github.com/sava-software/sava/commit/6c6f6ca3369792dc040e976ddf468b3cecaafff8))
+
+
+### Miscellaneous Chores
+
+* release 25.9.0 ([df68beb](https://github.com/sava-software/sava/commit/df68bebca65aa6936d28dc5db5c021165d21aa0a))
+
 ## [25.8.3](https://github.com/sava-software/sava/compare/25.8.2...25.8.3) (2026-08-05)
 
 
