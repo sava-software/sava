@@ -75,4 +75,18 @@ final class ParseCustomErrorCodeTests {
     assertEquals(73, ji.readInt());
     assertFalse(ji.readArray());
   }
+
+  /// Duplicate object members are malformed and their ordering is not a protocol contract,
+  /// but an untrusted response must not expose a code whose structured classification was
+  /// produced from a different code. The code retained by the field scan classifies `data`.
+  @Test
+  void duplicateCodesCannotProduceAnInternallyInconsistentError() {
+    final var exception = JsonRpcException.parseException(JsonIterator.parse(
+        """
+            {"code":-32005,"data":{"numSlotsBehind":1,"contextSlot":2},"code":-32016}"""),
+        OptionalLong.empty());
+
+    assertEquals(-32016, exception.code());
+    assertEquals(new RpcCustomError.MinContextSlotNotReached(2), exception.customError());
+  }
 }
