@@ -3,11 +3,14 @@ package software.sava.rpc.json.http.ws;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
+import software.sava.rpc.json.http.response.JsonUtil;
 
 import java.net.URI;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.logging.Logger;
 
 /// Jazzer entry point for websocket message handling against hostile framing: the
 /// fragment-reassembly arithmetic of `onText` (four distinct copy branches over
@@ -49,17 +52,19 @@ import java.util.Arrays;
 /// Run with `./gradlew :sava-rpc:fuzzWs [-PmaxFuzzTime=<seconds>]`.
 public final class SolanaJsonRpcWebsocketFuzz {
 
-  /// Feeding the parser garbage is the entire point here, and the engine answers each
-  /// malformed frame with a logged JsonException. Left on the console, one seed-corpus replay
-  /// buries the run in stack traces every reader has to rule out as failures. Nothing asserts
-  /// on the console — the postcondition below reads dispatch state — so the records are
-  /// silenced at the source rather than at each caller. The field holds the logger: LogManager
-  /// keeps them weakly, and a collected logger comes back with the setting undone.
-  private static final java.util.logging.Logger QUIET_ENGINE_LOG =
-      java.util.logging.Logger.getLogger(SolanaJsonRpcWebsocket.class.getName());
+  /// Feeding the parser garbage is the entire point here, and the engine and shared JSON
+  /// utility diagnose malformed frames before the harness checks its state postcondition.
+  /// Letting those records reach JUL's parent console handler floods a campaign without adding
+  /// fuzz evidence. The fields hold the loggers strongly because LogManager otherwise retains
+  /// them weakly and may recreate one with parent propagation restored during a long run.
+  /// Direct diagnostic handlers remain usable; only default console propagation is disabled.
+  private static final List<Logger> QUIET_PARSER_LOGS = List.of(
+      Logger.getLogger(SolanaJsonRpcWebsocket.class.getName()),
+      Logger.getLogger(JsonUtil.class.getName())
+  );
 
   static {
-    QUIET_ENGINE_LOG.setUseParentHandlers(false);
+    QUIET_PARSER_LOGS.forEach(logger -> logger.setUseParentHandlers(false));
   }
 
   private static final int HEADER_LENGTH = 12;
