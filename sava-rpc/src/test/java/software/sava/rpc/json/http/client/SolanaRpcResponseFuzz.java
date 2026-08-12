@@ -8,6 +8,7 @@ import java.net.http.HttpResponse;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
+import java.util.logging.Logger;
 
 import static software.sava.rpc.json.http.client.BaseSolanaJsonRpcClient.applyGenericResponseValue;
 import static software.sava.rpc.json.http.client.JsonRpcHttpClient.applyGenericResponseResult;
@@ -37,6 +38,22 @@ import static software.sava.rpc.json.http.client.JsonRpcHttpClient.applyGenericR
 ///
 /// Run with `./gradlew :sava-rpc:fuzzResponses [-PmaxFuzzTime=<seconds>]`.
 public final class SolanaRpcResponseFuzz {
+
+  /// Malformed bodies are expected inputs, but the production controllers deliberately log
+  /// their provider diagnostics before rethrowing. Letting those records reach JUL's parent
+  /// console handler floods a campaign without adding fuzz evidence. The loggers are held
+  /// strongly because [java.util.logging.LogManager] otherwise retains them weakly and may
+  /// recreate one with parent propagation restored during a long run. Direct diagnostic
+  /// handlers remain usable; only default console propagation is disabled in this fuzz JVM.
+  private static final List<Logger> QUIET_PARSER_LOGS = List.of(
+      Logger.getLogger(BaseJsonResponseController.class.getName()),
+      Logger.getLogger(BaseJsonRpcResponseParser.class.getName()),
+      Logger.getLogger(JsonUtil.class.getName())
+  );
+
+  static {
+    QUIET_PARSER_LOGS.forEach(logger -> logger.setUseParentHandlers(false));
+  }
 
   private static final PublicKey ACCOUNT_KEY =
       PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
