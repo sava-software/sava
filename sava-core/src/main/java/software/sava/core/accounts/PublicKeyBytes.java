@@ -1,10 +1,12 @@
 package software.sava.core.accounts;
 
+import software.sava.core.crypto.Hash;
 import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.function.Predicate;
 
 final class PublicKeyBytes implements PublicKey {
 
@@ -21,10 +23,11 @@ final class PublicKeyBytes implements PublicKey {
   static byte[] createBuffer(final List<byte[]> seeds,
                              final boolean nonce,
                              final PublicKey programId) {
-    if (seeds.size() > PublicKey.MAX_SEEDS) {
+    final long totalSeeds = seeds.size() + (nonce ? 1L : 0L);
+    if (totalSeeds > PublicKey.MAX_SEEDS) {
       throw new IllegalArgumentException(String.format(
           "Maximum number of seeds [%d] exceeded. Given [%d].",
-          PublicKey.MAX_SEEDS, seeds.size()
+          PublicKey.MAX_SEEDS, totalSeeds
       ));
     }
     int bufLength = nonce ? 1 : 0;
@@ -52,6 +55,23 @@ final class PublicKeyBytes implements PublicKey {
     System.arraycopy(PDA_BYTES, 0, buffer, from, PDA_BYTES.length);
 
     return buffer;
+  }
+
+  // The predicate parameter keeps the otherwise unreachable bump-1/exhaustion boundary testable.
+  static ProgramDerivedAddress findProgramAddress(final List<byte[]> seeds,
+                                                  final PublicKey programId,
+                                                  final Predicate<byte[]> isNotOnCurve) {
+    final byte[] buffer = createBuffer(seeds, true, programId);
+    final int nonceOffset = buffer.length - (1 + PublicKey.PUBLIC_KEY_LENGTH + PDA_BYTES.length);
+    final var sha256 = Hash.sha256Digest();
+    for (int nonce = 255; nonce > 0; --nonce) {
+      buffer[nonceOffset] = (byte) nonce;
+      final byte[] hash = sha256.digest(buffer);
+      if (isNotOnCurve.test(hash)) {
+        return ProgramDerivedAddress.createPDA(seeds, PublicKey.createPubKey(hash), nonce);
+      }
+    }
+    throw new RuntimeException("Unable to find a viable program derived address nonce");
   }
 
   @Override

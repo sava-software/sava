@@ -21,7 +21,6 @@ import java.util.Base64;
 import java.util.List;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
-import static software.sava.core.accounts.PublicKeyBytes.PDA_BYTES;
 import static software.sava.core.crypto.Hash.sha256Digest;
 import static software.sava.core.crypto.SunCrypto.ED_25519_KEY_FACTORY;
 
@@ -29,6 +28,8 @@ public interface PublicKey extends Comparable<PublicKey> {
 
   int PUBLIC_KEY_LENGTH = 32;
   int MAX_SEED_LENGTH = 32;
+
+  /** Maximum number of seed byte arrays in a PDA derivation, including the bump when present. */
   int MAX_SEEDS = 16;
   PublicKey NONE = new PublicKeyBytes(new byte[PUBLIC_KEY_LENGTH]); // 11111111111111111111111111111111
 
@@ -228,18 +229,17 @@ public interface PublicKey extends Comparable<PublicKey> {
     return Ed25519Util.isNotOnCurve(hash) ? PublicKey.createPubKey(hash) : null;
   }
 
+  /**
+   * Finds Solana's canonical program address by trying bump seeds from 255 through 1.
+   * The generated bump counts toward {@link #MAX_SEEDS}, so callers may provide at most
+   * 15 seeds.
+   *
+   * @throws IllegalArgumentException if the caller provides more than 15 seeds or any
+   *                                  seed exceeds {@link #MAX_SEED_LENGTH}
+   * @throws RuntimeException if no viable address exists for bumps 255 through 1
+   */
   static ProgramDerivedAddress findProgramAddress(final List<byte[]> seeds, final PublicKey programId) {
-    final byte[] buffer = PublicKeyBytes.createBuffer(seeds, true, programId);
-    final int nonceOffset = buffer.length - (1 + PublicKey.PUBLIC_KEY_LENGTH + PDA_BYTES.length);
-    final var sha256 = Hash.sha256Digest();
-    for (int nonce = 255; nonce >= 0; --nonce) {
-      buffer[nonceOffset] = (byte) nonce;
-      final byte[] hash = sha256.digest(buffer);
-      if (Ed25519Util.isNotOnCurve(hash)) {
-        return ProgramDerivedAddress.createPDA(seeds, PublicKey.createPubKey(hash), nonce);
-      }
-    }
-    throw new RuntimeException("Unable to find a viable program derived address nonce");
+    return PublicKeyBytes.findProgramAddress(seeds, programId, Ed25519Util::isNotOnCurve);
   }
 
   static AccountWithSeed createOffCurveAccountWithAsciiSeed(final PublicKey base,

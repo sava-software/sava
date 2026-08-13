@@ -2,8 +2,11 @@ package software.sava.core.accounts;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static software.sava.core.accounts.SolanaAccounts.MAIN_NET;
@@ -138,6 +141,64 @@ final class PublicKeyTest {
     );
     assertEquals(programAddress2.publicKey(), PublicKey.fromBase58Encoded("GXLbx3CbJuTTtJDZeS1PGzwJJ5jGYVEqcXum7472kpUp"));
     assertEquals(254, programAddress2.nonce());
+  }
+
+  @Test
+  void programAddressSeedLimitIncludesTheBump() {
+    final var programId = PublicKey.fromBase58Encoded("BPFLoader1111111111111111111111111111111111");
+    final var maximumFindSeeds = Collections.nCopies(PublicKey.MAX_SEEDS - 1, new byte[0]);
+
+    final var programAddress = PublicKey.findProgramAddress(maximumFindSeeds, programId);
+    final var seedsWithBump = new ArrayList<>(maximumFindSeeds);
+    seedsWithBump.add(new byte[]{(byte) programAddress.nonce()});
+    assertEquals(programAddress.publicKey(), PublicKey.createProgramAddress(seedsWithBump, programId));
+
+    final var maximumCreateSeeds = Collections.nCopies(PublicKey.MAX_SEEDS, new byte[0]);
+    assertDoesNotThrow(() -> PublicKey.createProgramAddress(maximumCreateSeeds, programId));
+
+    final var findException = assertThrows(
+        IllegalArgumentException.class,
+        () -> PublicKey.findProgramAddress(maximumCreateSeeds, programId)
+    );
+    assertEquals("Maximum number of seeds [16] exceeded. Given [17].", findException.getMessage());
+
+    final var tooManyCreateSeeds = Collections.nCopies(PublicKey.MAX_SEEDS + 1, new byte[0]);
+    final var createException = assertThrows(
+        IllegalArgumentException.class,
+        () -> PublicKey.createProgramAddress(tooManyCreateSeeds, programId)
+    );
+    assertEquals("Maximum number of seeds [16] exceeded. Given [17].", createException.getMessage());
+  }
+
+  @Test
+  void canonicalProgramAddressSearchIncludesBumpOne() {
+    final var classifications = new AtomicInteger();
+
+    final var programAddress = PublicKeyBytes.findProgramAddress(
+        List.of(),
+        PublicKey.NONE,
+        ignored -> classifications.incrementAndGet() == 255
+    );
+
+    assertEquals(255, classifications.get());
+    assertEquals(1, programAddress.nonce());
+  }
+
+  @Test
+  void canonicalProgramAddressSearchExcludesBumpZero() {
+    final var classifications = new AtomicInteger();
+
+    final var exception = assertThrows(RuntimeException.class, () -> PublicKeyBytes.findProgramAddress(
+        List.of(),
+        PublicKey.NONE,
+        ignored -> {
+          assertTrue(classifications.incrementAndGet() <= 255, "bump zero must not be classified");
+          return false;
+        }
+    ));
+
+    assertEquals(255, classifications.get());
+    assertEquals("Unable to find a viable program derived address nonce", exception.getMessage());
   }
 
   @Test
