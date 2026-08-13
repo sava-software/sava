@@ -90,6 +90,21 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// is unsettled, every caller receives a future that settles with that attempt — a private
   /// copy, so cancelling it abandons only that caller's view — rather than starting another
   /// handshake. The socket being replaced is aborted; its late callbacks are ignored.
+  ///
+  /// Callers must not assume exactly-once or correlated failure notification across the returned
+  /// future and the lifecycle callbacks. In the implementation created by [#build()], retiring a
+  /// current transport while its connection attempt remains unsettled settles that attempt
+  /// exceptionally before invoking a configured [Builder#onClose(OnClose)] or
+  /// [Builder#onError(BiConsumer)] callback. A future returned for that attempt may therefore
+  /// expose a separate exceptional observation. The future and callback need not expose the same
+  /// details: the future may report cancellation or invalidation while the callback reports the
+  /// transport error or close status and reason.
+  ///
+  /// A returned future represents its connection attempt. Lifecycle callbacks receive this
+  /// reusable wrapper and no attempt token, so this API cannot attribute a callback to a
+  /// particular future. Recovery code that consumes both channels must treat them as potentially
+  /// overlapping, uncorrelated signals rather than independently attributing each one to the
+  /// current attempt. Delaying reconnect can narrow the overlap but cannot provide attribution.
   CompletableFuture<?> connect();
 
   /// Registers a consumer for engine-reported failures: correlated request rejections, terminal
@@ -542,6 +557,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     /// This behavior can be changed to instead attempt to [re-connect][#connect()] the underlying
     /// WebSocket and re-use this instance; durable registrations are replayed on its successor.
     /// The handler runs without the websocket lifecycle lock.
+    ///
+    /// When this callback follows a transport retirement, do not assume it is the only observation
+    /// of that retirement. In the implementation created by [SolanaRpcWebsocket#build()], if that
+    /// transport's connection attempt is still unsettled, the attempt is settled exceptionally
+    /// before this configured callback is invoked. A future returned for that attempt may expose a
+    /// separate exceptional observation, and the two channels need not expose the same details. The
+    /// [SolanaRpcWebsocket] passed here is the reusable wrapper and carries no identity for that
+    /// attempt; see [SolanaRpcWebsocket#connect()].
     Builder onClose(final OnClose onClose);
 
     BiConsumer<SolanaRpcWebsocket, Throwable> onError();
@@ -558,6 +581,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     ///
     /// This handler runs without the websocket lifecycle lock, on whichever thread reports the
     /// failure; keep it brief and non-blocking.
+    ///
+    /// When this callback follows a transport retirement, do not assume it is the only observation
+    /// of that retirement. In the implementation created by [SolanaRpcWebsocket#build()], if that
+    /// transport's connection attempt is still unsettled, the attempt is settled exceptionally
+    /// before this configured callback is invoked. A future returned for that attempt may expose a
+    /// separate exceptional observation, and the two channels need not expose the same details. The
+    /// [SolanaRpcWebsocket] passed here is the reusable wrapper and carries no identity for that
+    /// attempt; see [SolanaRpcWebsocket#connect()].
     Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError);
 
     BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError();
