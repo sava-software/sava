@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,6 +28,7 @@ final class ParseRewardsAndVoteAccountsTests {
             "postBalance":499998932500,
             "pubkey":"9wYbdLDCVSXCVPqvXsgkDkyTTCFC7HgHm6QrfPWBrRzn",
             "rewardType":"Staking",
+            "commissionBps":525,
             "unknownField":{"skipped":[1,2]}
           },
           {
@@ -34,25 +36,50 @@ final class ParseRewardsAndVoteAccountsTests {
             "lamports":10,
             "postBalance":42,
             "pubkey":"3nvAV4PVG2w1F9GDh3YMnhYNvEEzV3LRMJ5e6bMYcULk",
-            "rewardType":"rent"
+            "rewardType":"rent",
+            "commissionBps":null
+          },
+          {
+            "commissionBps":9750,
+            "commission":97,
+            "lamports":-777,
+            "postBalance":123456789,
+            "pubkey":"So11111111111111111111111111111111111111112",
+            "rewardType":"DeactivatedStake"
           }
         ]""";
     final var rewards = TxReward.parseRewards(JsonIterator.parse(json));
-    assertEquals(2, rewards.size());
+    assertEquals(3, rewards.size());
 
     var reward = rewards.getFirst();
     assertEquals(PublicKey.fromBase58Encoded("9wYbdLDCVSXCVPqvXsgkDkyTTCFC7HgHm6QrfPWBrRzn"), reward.publicKey());
     assertEquals(-125000, reward.lamports());
     assertEquals(499998932500L, reward.postBalance());
     assertEquals(RewardType.STAKING, reward.rewardType());
-    assertEquals(5, reward.commission());
+    assertEquals(525, reward.commission());
+    assertTrue(reward.commissionBps());
 
-    reward = rewards.getLast();
+    reward = rewards.get(1);
     assertEquals(PublicKey.fromBase58Encoded("3nvAV4PVG2w1F9GDh3YMnhYNvEEzV3LRMJ5e6bMYcULk"), reward.publicKey());
     assertEquals(10, reward.lamports());
     assertEquals(42, reward.postBalance());
     assertEquals(RewardType.RENT, reward.rewardType());
     assertEquals(0, reward.commission());
+    assertFalse(reward.commissionBps());
+
+    reward = rewards.getLast();
+    assertEquals(PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112"), reward.publicKey());
+    assertEquals(-777, reward.lamports());
+    assertEquals(123456789, reward.postBalance());
+    assertEquals(RewardType.DEACTIVATED_STAKE, reward.rewardType());
+    // Basis points supersede the percentage even when the JSON fields are reversed.
+    assertEquals(9750, reward.commission());
+    assertTrue(reward.commissionBps());
+
+    // Keep the pre-commissionBps constructor descriptor available to published-library callers.
+    final var compatibilityShape = new TxReward(reward.publicKey(), 1, 2, RewardType.FEE, 3);
+    assertEquals(3, compatibilityShape.commission());
+    assertFalse(compatibilityShape.commissionBps());
 
     assertTrue(TxReward.parseRewards(JsonIterator.parse("null")).isEmpty());
   }

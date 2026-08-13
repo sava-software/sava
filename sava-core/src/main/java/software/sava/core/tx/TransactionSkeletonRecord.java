@@ -145,7 +145,7 @@ record TransactionSkeletonRecord(byte[] data,
     int serializedInstructionsLength = 0;
     int o = instructionsOffset;
     for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
-      o += getByteLen(data, o); // program index
+      ++o; // raw u8 program index
 
       numAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -241,8 +241,7 @@ record TransactionSkeletonRecord(byte[] data,
   public Instruction[] parseInstructions(final AccountMeta[] accounts) {
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, accountIndex; i < numInstructions; ++i) {
-      final var programAccount = invokedProgramAccount(accounts[decode(data, o)]);
-      o += getByteLen(data, o);
+      final var programAccount = invokedProgramAccount(accounts[data[o++] & 0xFF]);
 
       numIxAccounts = decode(data, o);
       final var ixAccounts = new AccountMeta[numIxAccounts];
@@ -272,8 +271,7 @@ record TransactionSkeletonRecord(byte[] data,
   public PublicKey[] parseProgramAccounts() {
     final var programs = new PublicKey[numInstructions];
     for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
-      programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
+      programAccountIndex = data[o++] & 0xFF;
       programs[i] = getAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
@@ -293,8 +291,7 @@ record TransactionSkeletonRecord(byte[] data,
   public Instruction[] parseInstructionsWithoutAccounts() {
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
+      final int programAccountIndex = data[o++] & 0xFF;
       final var programAccount = getAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
@@ -314,8 +311,7 @@ record TransactionSkeletonRecord(byte[] data,
     final var instructions = new Instruction[numInstructions];
     int d = 0;
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
+      final int programAccountIndex = data[o++] & 0xFF;
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -345,8 +341,7 @@ record TransactionSkeletonRecord(byte[] data,
     final var instructions = new Instruction[numInstructions];
     int d = 0;
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
+      final int programAccountIndex = data[o++] & 0xFF;
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);

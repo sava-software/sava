@@ -105,9 +105,16 @@ public record AccountInfo<T>(PublicKey pubKey,
   public static <T> List<AccountInfo<T>> parseAccounts(final JsonIterator ji,
                                                        final Context context,
                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    return parseAccounts(ji, context, factory, null);
+  }
+
+  public static <T> List<AccountInfo<T>> parseAccounts(final JsonIterator ji,
+                                                       final Context context,
+                                                       final BiFunction<PublicKey, byte[], T> factory,
+                                                       final ZstdDecompressor zstdDecompressor) {
     final var accounts = new ArrayList<AccountInfo<T>>();
     while (ji.readArray()) {
-      final var parser = new Parser(context);
+      final var parser = new Parser(context, zstdDecompressor);
       ji.testObject(parser, PARSER);
       accounts.add(parser.create(factory));
     }
@@ -134,14 +141,21 @@ public record AccountInfo<T>(PublicKey pubKey,
     private BigInteger rentEpoch;
     private int space;
     private byte[] data;
+    private final ZstdDecompressor zstdDecompressor;
 
     private Parser(final Context context) {
+      this(context, (ZstdDecompressor) null);
+    }
+
+    private Parser(final Context context, final ZstdDecompressor zstdDecompressor) {
       super(context);
+      this.zstdDecompressor = zstdDecompressor;
     }
 
     private Parser(final Context context, final PublicKey pubKey) {
       super(context);
       this.pubKey = pubKey;
+      this.zstdDecompressor = null;
     }
 
     private <T> AccountInfo<T> create(final BiFunction<PublicKey, byte[], T> factory) {
@@ -162,7 +176,7 @@ public record AccountInfo<T>(PublicKey pubKey,
       switch (fieldIndex) {
         case 0 -> {
           final var next = ji.whatIsNext();
-          data = parseEncodedData(ji, next);
+          data = parseEncodedData(ji, next, zstdDecompressor);
         }
         case 1 -> executable = ji.readBoolean();
         case 2 -> lamports = ji.readLong();

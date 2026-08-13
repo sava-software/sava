@@ -8,9 +8,11 @@ import java.util.Base64;
 import java.util.List;
 import java.util.function.Predicate;
 
+import static java.nio.charset.StandardCharsets.US_ASCII;
+
 final class PublicKeyBytes implements PublicKey {
 
-  static final byte[] PDA_BYTES = "ProgramDerivedAddress".getBytes();
+  static final byte[] PDA_BYTES = "ProgramDerivedAddress".getBytes(US_ASCII);
 
   private final byte[] publicKey;
   private String base58PublicKey;
@@ -69,6 +71,29 @@ final class PublicKeyBytes implements PublicKey {
       final byte[] hash = sha256.digest(buffer);
       if (isNotOnCurve.test(hash)) {
         return ProgramDerivedAddress.createPDA(seeds, PublicKey.createPubKey(hash), nonce);
+      }
+    }
+    throw new RuntimeException("Unable to find a viable program derived address nonce");
+  }
+
+  // The predicate parameter keeps nonce 0 and exhaustion deterministic in tests.
+  static AccountWithSeed createOffCurveAccountWithAsciiSeed(final PublicKey base,
+                                                            final byte[] baseSeed,
+                                                            final PublicKey programId,
+                                                            final Predicate<byte[]> isNotOnCurve) {
+    final byte[] buffer = new byte[PUBLIC_KEY_LENGTH + baseSeed.length + 1 + PUBLIC_KEY_LENGTH];
+    base.write(buffer, 0);
+    System.arraycopy(baseSeed, 0, buffer, PUBLIC_KEY_LENGTH, baseSeed.length);
+    programId.write(buffer, buffer.length - PUBLIC_KEY_LENGTH);
+
+    final int nonceOffset = PUBLIC_KEY_LENGTH + baseSeed.length;
+    final var sha256 = Hash.sha256Digest();
+    for (int nonce = 127; nonce >= 0; --nonce) {
+      buffer[nonceOffset] = (byte) nonce;
+      final byte[] hash = sha256.digest(buffer);
+      if (isNotOnCurve.test(hash)) {
+        final byte[] bumpSeed = Arrays.copyOfRange(buffer, PUBLIC_KEY_LENGTH, nonceOffset + 1);
+        return new AccountWithSeedRecord(base, PublicKey.createPubKey(hash), bumpSeed, programId);
       }
     }
     throw new RuntimeException("Unable to find a viable program derived address nonce");

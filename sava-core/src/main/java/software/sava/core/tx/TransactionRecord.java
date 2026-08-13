@@ -151,25 +151,19 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public void sign(final Signer signer) {
-    if (numSigners > 1) {
-      final byte[] pubKey = signer.publicKey().toByteArray();
-      for (int from = accountsOffset, i = 0; i < numSigners; ++i, from += PUBLIC_KEY_LENGTH) {
-        if (Arrays.equals(pubKey, 0, PUBLIC_KEY_LENGTH, data, from, from + PUBLIC_KEY_LENGTH)) {
-          Transaction.sign(
-              signer,
-              this.data,
-              this.messageOffset,
-              this.data.length - this.messageOffset,
-              1 + (i * SIGNATURE_LENGTH)
-          );
-          return;
-        }
+    final int signerIndex = signerIndex(signer);
+    this.data[0] = (byte) numSigners;
+    sign(signerIndex, signer);
+  }
+
+  private int signerIndex(final Signer signer) {
+    final byte[] pubKey = signer.publicKey().toByteArray();
+    for (int from = accountsOffset, i = 0; i < numSigners; ++i, from += PUBLIC_KEY_LENGTH) {
+      if (Arrays.equals(pubKey, 0, PUBLIC_KEY_LENGTH, data, from, from + PUBLIC_KEY_LENGTH)) {
+        return i;
       }
-      throw new IllegalArgumentException("Failed to find index for signer " + signer.publicKey());
-    } else {
-      this.data[0] = 1;
-      Transaction.sign(signer, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);
     }
+    throw new IllegalArgumentException("Failed to find index for signer " + signer.publicKey());
   }
 
   @Override
@@ -195,13 +189,29 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public void sign(final Collection<Signer> signers) {
-    final int numSigners = signers.size();
-    if (numSigners != this.numSigners) {
-      throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners, numSigners));
+    final Signer[] signerArray = signers.toArray(Signer[]::new);
+    final int passedSigners = signerArray.length;
+    if (passedSigners != this.numSigners) {
+      throw new IllegalArgumentException(String.format(
+          "Expected %d signers, only passed %d.", this.numSigners, passedSigners
+      ));
     }
-    this.data[0] = (byte) numSigners;
-    for (final var signer : signers) {
-      sign(signer);
+    final int[] signerIndexes = new int[passedSigners];
+    final boolean[] seenSignerIndexes = new boolean[passedSigners];
+    int i = 0;
+    for (final var signer : signerArray) {
+      final int signerIndex = signerIndex(signer);
+      if (seenSignerIndexes[signerIndex]) {
+        throw new IllegalArgumentException("Duplicate signer " + signer.publicKey());
+      }
+      seenSignerIndexes[signerIndex] = true;
+      signerIndexes[i++] = signerIndex;
+    }
+
+    this.data[0] = (byte) passedSigners;
+    i = 0;
+    for (final var signer : signerArray) {
+      sign(signerIndexes[i++], signer);
     }
   }
 

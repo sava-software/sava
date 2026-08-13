@@ -4,6 +4,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.RpcEncoding;
+import software.sava.rpc.json.http.response.ZstdDecompressor;
 
 import java.math.BigInteger;
 import java.time.Duration;
@@ -39,6 +40,14 @@ public interface ProgramAccountsRequest<T> {
 
   BiFunction<PublicKey, byte[], T> factory();
 
+  /**
+   * Returns the decoder used for {@link RpcEncoding#base64_zstd}, or {@code null} when none was
+   * supplied. This default preserves compatibility with third-party request implementations.
+   */
+  default ZstdDecompressor zstdDecompressor() {
+    return null;
+  }
+
   final class Builder {
 
     private Duration requestTimeout;
@@ -49,6 +58,7 @@ public interface ProgramAccountsRequest<T> {
     private int dataSliceLength;
     private int dataSliceOffset;
     private RpcEncoding encoding;
+    private ZstdDecompressor zstdDecompressor;
 
     Builder() {
     }
@@ -58,6 +68,10 @@ public interface ProgramAccountsRequest<T> {
     }
 
     public <T> ProgramAccountsRequest<T> createRequest(final BiFunction<PublicKey, byte[], T> factory) {
+      final var encoding = Objects.requireNonNullElse(this.encoding, RpcEncoding.base64);
+      if (encoding == RpcEncoding.base64_zstd && zstdDecompressor == null) {
+        throw missingZstdDecompressor();
+      }
       return new ProgramAccountsRequestRecord<>(
           requestTimeout,
           programId,
@@ -66,8 +80,9 @@ public interface ProgramAccountsRequest<T> {
           filters,
           dataSliceLength,
           dataSliceOffset,
-          Objects.requireNonNullElse(encoding, RpcEncoding.base64),
-          factory
+          encoding,
+          factory,
+          zstdDecompressor
       );
     }
 
@@ -104,9 +119,27 @@ public interface ProgramAccountsRequest<T> {
       return this;
     }
 
+    /// Selects the account-data encoding sent to `getProgramAccounts`. In particular,
+    /// [RpcEncoding#base64_zstd] opts into Solana's `base64+zstd` wire representation and also
+    /// requires [#zstdDecompressor(ZstdDecompressor)] before the request can be executed.
     public Builder encoding(final RpcEncoding encoding) {
       this.encoding = encoding;
       return this;
+    }
+
+    /**
+     * Supplies the optional zstd implementation used to decode {@code base64+zstd} account data.
+     * Sava deliberately has no runtime dependency on a particular zstd library.
+     */
+    public Builder zstdDecompressor(final ZstdDecompressor zstdDecompressor) {
+      this.zstdDecompressor = zstdDecompressor;
+      return this;
+    }
+
+    static IllegalStateException missingZstdDecompressor() {
+      return new IllegalStateException(
+          "base64+zstd requires ProgramAccountsRequest.Builder.zstdDecompressor(...)"
+      );
     }
   }
 }

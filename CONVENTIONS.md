@@ -54,6 +54,11 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   replaces everything, compression header included.
 - Both `simulateTransaction` families default `replaceRecentBlockhash` to
   `true`, so a simulation does not fail on an expired blockhash by default.
+- `Transaction.sign(List<Signer>)` selects the `SequencedCollection` overload and signs
+  **positionally**; the first element writes the first required-signature slot even when
+  its public key belongs to another slot. `sign(Collection<Signer>)` validates the complete
+  by-key assignment before signing. Cast a list to `Collection<Signer>` when its order is
+  not already message signer order.
 
 ## Wire field names vs Java accessors
 

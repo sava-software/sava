@@ -1,0 +1,18 @@
+[package]
+name = "sava-solana-legacy-message-vectors"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+sha2 = "=0.10.9"
+solana-address = { version = "=2.7.0", default-features = false }
+solana-hash = { version = "=4.6.0", default-features = false, features = ["wincode"] }
+solana-instruction = "=3.5.0"
+solana-keypair = "=3.1.2"
+solana-message = { version = "=4.5.0", features = ["wincode"] }
+solana-signer = "=3.0.1"
+solana-transaction = { version = "=4.2.0", features = ["wincode"] }
+wincode = "=0.6.1"

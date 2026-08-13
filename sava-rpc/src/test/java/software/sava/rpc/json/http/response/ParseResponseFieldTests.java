@@ -1,13 +1,18 @@
 package software.sava.rpc.json.http.response;
 
+import io.airlift.compress.v3.zstd.ZstdInputStream;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.Base58;
 import software.sava.rpc.json.http.request.Commitment;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
@@ -22,12 +27,17 @@ import static org.junit.jupiter.api.Assertions.*;
 /// silently drops or defaults a field must fail a test here.
 final class ParseResponseFieldTests {
 
+  private static final ZstdDecompressor ZSTD = ZstdInputStream::new;
   private static final Context CONTEXT = new Context(1234, "2.3.4");
   private static final String KEY_1 = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
   private static final String KEY_2 = "So11111111111111111111111111111111111111112";
 
   private static JsonIterator ji(final String json) {
     return JsonIterator.parse(json);
+  }
+
+  private static byte[] parseZstd(final JsonIterator ji) {
+    return JsonUtil.parseEncodedData(ji, ZSTD);
   }
 
   private static PublicKey key(final String base58) {
@@ -290,21 +300,74 @@ final class ParseResponseFieldTests {
   }
 
   @Test
-  void jsonUtilEncodedData() {
+  void jsonUtilEncodedData() throws Exception {
     assertArrayEquals("hello".getBytes(), JsonUtil.parseEncodedData(ji("\"aGVsbG8=\"")));
+    final var explicitType = ji("\"aGVsbG8=\"");
+    assertArrayEquals(
+        "hello".getBytes(),
+        JsonUtil.parseEncodedData(explicitType, explicitType.whatIsNext())
+    );
     assertArrayEquals(new byte[0], JsonUtil.parseEncodedData(ji("[null]")));
     assertArrayEquals("hello".getBytes(), JsonUtil.parseEncodedData(ji("""
         ["aGVsbG8=","base64"]""")));
     assertArrayEquals(Base58.decode("he11o"), JsonUtil.parseEncodedData(ji("""
         ["he11o","base58"]""")));
-    assertArrayEquals("hello".getBytes(), JsonUtil.parseEncodedData(ji("""
-        ["aGVsbG8=","base64+zstd"]""")));
+    // Live mainnet Clock sysvar response captured at slot 439039691 on 2026-08-13. The
+    // digest was independently taken with zstd 1.5.7, so this cannot pass by treating
+    // the frame as plain base64.
+    final var zstdJson = """
+        ["KLUv/QBYJQEA4Ms2KxoAAAAALgt9agAAAAD4AwD5YNt9agAAAAACACsptiAM","base64+zstd"]""";
+    final var missingDecoder = assertThrows(IllegalStateException.class, () ->
+        JsonUtil.parseEncodedData(ji(zstdJson))
+    );
+    assertEquals("No ZstdDecompressor was provided for base64+zstd account data", missingDecoder.getMessage());
+    final var zstdDecoded = JsonUtil.parseEncodedData(ji(zstdJson), ZSTD);
+    assertEquals(40, zstdDecoded.length);
+    assertEquals(
+        "0dea41b53f277588761b326ab8af9e5609933aa8babd4e55324901a121316b45",
+        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zstdDecoded))
+    );
+    final var malformedZstd = assertThrows(UncheckedIOException.class, () ->
+        JsonUtil.parseEncodedData(ji("[\"bm90IGEgenN0ZCBmcmFtZQ==\",\"base64+zstd\"]"), ZSTD)
+    );
+    assertEquals("Failed to decompress base64+zstd account data", malformedZstd.getMessage());
     assertArrayEquals(new byte[0], JsonUtil.parseEncodedData(ji("42")));
-    // the single-element-array branch is unreachable from real providers (agave always
-    // sends [data, encoding] pairs) and throws: the cursor is already past the element
-    // when decodeBase64String runs
-    assertThrows(systems.comodal.jsoniter.JsonException.class,
+    final var missingEncoding = assertThrows(systems.comodal.jsoniter.JsonException.class,
         () -> JsonUtil.parseEncodedData(ji("[\"aGVsbG8=\"]")));
+    assertEquals("Encoded account data array is missing its encoding", missingEncoding.getMessage());
+  }
+
+  @Test
+  void jsonUtilZstdAccountDataLimit() {
+    // These zstd CLI-generated run-length frames expand to exactly Solana's account
+    // limit and one byte beyond it. Their tiny compressed size makes the second one a
+    // deterministic decompression-bomb regression without a large checked-in fixture.
+    final var atLimit = parseZstd(ji("""
+        ["KLUv/QBYVAAAEAAAAQD7/znAAgIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAEQAAAABAP3/zQsQAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAADABAA","base64+zstd"]"""));
+    assertEquals(10 * 1024 * 1024, atLimit.length);
+
+    final var tooLarge = assertThrows(UncheckedIOException.class, () -> parseZstd(ji("""
+        ["KLUv/QBYVAAAEAAAAQD7/znAAgIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAEQAAAABAP3/zQsQAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAAAgAQAAIAEAACABAACQAAAA==","base64+zstd"]""")));
+    assertEquals(
+        "base64+zstd account data exceeds Solana's 10 MiB limit",
+        tooLarge.getCause().getMessage()
+    );
+  }
+
+  @Test
+  void jsonUtilNormalizesZstdProviderFailures() {
+    final var encoded = "[\"aGVsbG8=\",\"base64+zstd\"]";
+    final var ioFailure = assertThrows(UncheckedIOException.class, () ->
+        JsonUtil.parseEncodedData(ji(encoded), _ -> {
+          throw new IOException("decoder unavailable");
+        })
+    );
+    assertEquals("decoder unavailable", ioFailure.getCause().getMessage());
+
+    final var nullStream = assertThrows(UncheckedIOException.class, () ->
+        JsonUtil.parseEncodedData(ji(encoded), _ -> null)
+    );
+    assertEquals("ZstdDecompressor returned null", nullStream.getCause().getMessage());
   }
 
   @Test

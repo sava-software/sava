@@ -21,6 +21,7 @@ import java.util.Base64;
 import java.util.List;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static software.sava.core.crypto.Hash.sha256Digest;
 import static software.sava.core.crypto.SunCrypto.ED_25519_KEY_FACTORY;
 
@@ -58,12 +59,13 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
+  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
   static boolean verifySignature(final java.security.PublicKey publicKey,
                                  final String msg,
                                  final byte[] signature) {
     return verifySignature(
         publicKey,
-        msg.getBytes(),
+        msg.getBytes(UTF_8),
         signature
     );
   }
@@ -113,7 +115,7 @@ public interface PublicKey extends Comparable<PublicKey> {
                                          final byte[] signature) {
     return verifySignature(
         publicKeyParameters,
-        msg.getBytes(),
+        msg.getBytes(UTF_8),
         signature
     );
   }
@@ -132,30 +134,32 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
+  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
   static boolean verifySignature(final byte[] publicKey,
                                  final int publicKeyOffset,
                                  final String msg,
                                  final byte[] signature) {
-    return verifySignature(
-        publicKey, publicKeyOffset,
-        msg.getBytes(), 0, msg.length(),
-        signature
-    );
+    final byte[] msgBytes = msg.getBytes(UTF_8);
+    return verifySignature(publicKey, publicKeyOffset, msgBytes, 0, msgBytes.length, signature);
   }
 
+  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
   static boolean verifySignature(final byte[] publicKey, final String msg, final byte[] signature) {
-    return verifySignature(
-        publicKey, 0,
-        msg.getBytes(), 0, msg.length(),
-        signature
-    );
+    return verifySignature(publicKey, 0, msg, signature);
   }
 
+  /**
+   * Verifies UTF-8 encodings of both arguments.
+   *
+   * @deprecated Ed25519 signatures are arbitrary bytes and cannot generally be represented
+   *             losslessly as a {@link String}; use {@link #verifySignature(byte[], String, byte[])}.
+   */
+  @Deprecated(forRemoval = true)
   static boolean verifySignature(final byte[] publicKey, final String msg, final String signature) {
     return verifySignature(
         publicKey, 0,
         msg,
-        signature.getBytes()
+        signature.getBytes(UTF_8)
     );
   }
 
@@ -242,6 +246,17 @@ public interface PublicKey extends Comparable<PublicKey> {
     return PublicKeyBytes.findProgramAddress(seeds, programId, Ed25519Util::isNotOnCurve);
   }
 
+  /**
+   * Derives an off-curve account from a base key, an ASCII seed, and a program id.
+   *
+   * <p>The returned {@link AccountWithSeed#asciiSeed()} contains the US-ASCII encoding of
+   * {@code baseSeed} followed by the selected nonce byte. Non-ASCII characters use Java's
+   * standard US-ASCII replacement byte. Nonces are tried from 127 through 0.</p>
+   *
+   * @throws IllegalArgumentException if the ASCII-encoded seed exceeds
+   *                                  {@link #MAX_SEED_LENGTH} bytes
+   * @throws RuntimeException if no off-curve address exists in the nonce range
+   */
   static AccountWithSeed createOffCurveAccountWithAsciiSeed(final PublicKey base,
                                                             final String baseSeed,
                                                             final PublicKey programId) {
@@ -252,42 +267,45 @@ public interface PublicKey extends Comparable<PublicKey> {
           baseSeed, MAX_SEED_LENGTH
       ));
     }
-    final byte[] buffer = new byte[PUBLIC_KEY_LENGTH + baseSeedBytes.length + 1 + PUBLIC_KEY_LENGTH];
-    base.write(buffer, 0);
-    System.arraycopy(baseSeedBytes, 0, buffer, PUBLIC_KEY_LENGTH, baseSeedBytes.length);
-    programId.write(buffer, buffer.length - PUBLIC_KEY_LENGTH);
-
-    final int nonceOffset = PUBLIC_KEY_LENGTH + baseSeedBytes.length;
-    final var sha256 = Hash.sha256Digest();
-    for (int nonce = 127; nonce >= 0; --nonce) {
-      buffer[nonceOffset] = (byte) nonce;
-      final byte[] hash = sha256.digest(buffer);
-      if (Ed25519Util.isNotOnCurve(hash)) {
-        final byte[] bumpSeedBytes = Arrays.copyOfRange(
-            buffer,
-            PUBLIC_KEY_LENGTH,
-            PUBLIC_KEY_LENGTH + baseSeedBytes.length + 1
-        );
-        return new AccountWithSeedRecord(base, PublicKey.createPubKey(hash), bumpSeedBytes, programId);
-      }
-    }
-    throw new RuntimeException("Unable to find a viable program derived address nonce");
+    return PublicKeyBytes.createOffCurveAccountWithAsciiSeed(
+        base,
+        baseSeedBytes,
+        programId,
+        Ed25519Util::isNotOnCurve
+    );
   }
 
+  /**
+   * Derives a system-program address from a base, UTF-8 seed, and owner program id.
+   *
+   * <p>This follows Solana's {@code Address::create_with_seed}: the seed limit is measured
+   * in UTF-8 bytes, and an owner ending in the program-derived-address marker is illegal.</p>
+   *
+   * @throws IllegalArgumentException if the seed exceeds {@link #MAX_SEED_LENGTH} UTF-8 bytes
+   *                                  or the owner ends in the program-derived-address marker
+   */
   static PublicKey createWithSeed(final PublicKey base,
                                   final String seed,
                                   final PublicKey programId) {
-    final byte[] seedBytes = seed.getBytes(US_ASCII);
+    final byte[] seedBytes = seed.getBytes(UTF_8);
     if (seedBytes.length > MAX_SEED_LENGTH) {
       throw new IllegalArgumentException(String.format(
           "Seed [%s] exceeds maximum length of [%d].",
           seed, MAX_SEED_LENGTH
       ));
     }
+    final byte[] programIdBytes = programId.toByteArray();
+    final byte[] marker = PublicKeyBytes.PDA_BYTES;
+    if (Arrays.equals(
+        programIdBytes, programIdBytes.length - marker.length, programIdBytes.length,
+        marker, 0, marker.length
+    )) {
+      throw new IllegalArgumentException("Owner cannot end with the program derived address marker.");
+    }
     final var digest = sha256Digest();
     digest.update(base.toByteArray());
     digest.update(seedBytes);
-    digest.update(programId.toByteArray());
+    digest.update(programIdBytes);
     return PublicKey.createPubKey(digest.digest());
   }
 
@@ -328,12 +346,20 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
+  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
   default boolean verifySignature(final String msg, final byte[] signature) {
     return verifySignature(toByteArray(), msg, signature);
   }
 
+  /**
+   * Verifies UTF-8 encodings of both arguments.
+   *
+   * @deprecated Ed25519 signatures are arbitrary bytes and cannot generally be represented
+   *             losslessly as a {@link String}; use {@link #verifySignature(String, byte[])}.
+   */
+  @Deprecated(forRemoval = true)
   default boolean verifySignature(final String msg, final String signature) {
-    return verifySignature(msg, signature.getBytes());
+    return verifySignature(msg, signature.getBytes(UTF_8));
   }
 
   default java.security.PublicKey toJavaPublicKey() {

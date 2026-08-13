@@ -316,6 +316,30 @@ final class ExtensionEdgeCaseTests {
     final var account = new Token2022Account(tokenAccount, AccountType.Account, Set.of(new CpiGuard(false)));
     out = new byte[5 + account.l()];
     assertEquals(account.l(), account.write(out, 5));
+
+    final var feeConfig = new ConfidentialTransferFeeConfig(
+        key(9),
+        key(10),
+        true,
+        bytes(ElGamal.ELGAMAL_CIPHERTEXT_LEN, 11)
+    );
+    out = new byte[3 + feeConfig.l()];
+    assertEquals(feeConfig.l(), feeConfig.write(out, 3));
+
+    final var metadata = new TokenMetadata(
+        key(12),
+        key(13),
+        "name",
+        "symbol",
+        "uri",
+        Map.of("key", "value")
+    );
+    out = new byte[4 + metadata.l()];
+    assertEquals(metadata.l(), metadata.write(out, 4));
+
+    final var unknown = new UnknownTokenExtension(999, bytes(3, 14));
+    out = new byte[2 + unknown.l()];
+    assertEquals(unknown.l(), unknown.write(out, 2));
   }
 
   @Test
@@ -353,6 +377,53 @@ final class ExtensionEdgeCaseTests {
     final byte[] data = new byte[Integer.BYTES + tokenMetadata.l()];
     TokenExtension.write(tokenMetadata, data, 0);
     assertEquals(Set.of(tokenMetadata), Token2022.parseExtensions(data, 0));
+  }
+
+  @Test
+  void extensionWriterEnforcesTheRustTlvUnsignedShortFields() {
+    final var largestMetadata = new TokenMetadata(
+        PublicKey.NONE,
+        PublicKey.NONE,
+        "a".repeat(65_455),
+        "",
+        "",
+        Map.of()
+    );
+    assertEquals(65_535, largestMetadata.l());
+    final byte[] largestTlv = new byte[Integer.BYTES + largestMetadata.l()];
+    assertEquals(largestTlv.length, TokenExtension.write(largestMetadata, largestTlv, 0));
+    assertEquals(65_535, ByteUtil.getUInt16LE(largestTlv, Short.BYTES));
+
+    final var oversizedMetadata = new TokenMetadata(
+        PublicKey.NONE,
+        PublicKey.NONE,
+        "a".repeat(65_456),
+        "",
+        "",
+        Map.of()
+    );
+    assertEquals(65_536, oversizedMetadata.l());
+    final byte[] untouched = new byte[Integer.BYTES + oversizedMetadata.l()];
+    final var lengthError = assertThrows(
+        IllegalArgumentException.class,
+        () -> TokenExtension.write(oversizedMetadata, untouched, 0)
+    );
+    assertEquals("Extension value length exceeds unsigned-short range: 65536", lengthError.getMessage());
+    assertArrayEquals(new byte[untouched.length], untouched, "the range check must precede writing");
+
+    final var typeError = assertThrows(
+        IllegalArgumentException.class,
+        () -> TokenExtension.write(new UnknownTokenExtension(65_536, new byte[0]), new byte[4], 0)
+    );
+    assertEquals("Extension type exceeds unsigned-short range: 65536", typeError.getMessage());
+
+    final byte[] negativeTypeBuffer = new byte[4];
+    final var negativeTypeError = assertThrows(
+        IllegalArgumentException.class,
+        () -> TokenExtension.write(new UnknownTokenExtension(-1, new byte[0]), negativeTypeBuffer, 0)
+    );
+    assertEquals("Extension type exceeds unsigned-short range: -1", negativeTypeError.getMessage());
+    assertArrayEquals(new byte[4], negativeTypeBuffer, "the lower range check must precede writing");
   }
 
   @Test

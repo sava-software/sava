@@ -111,6 +111,33 @@ final class SysvarTests {
   }
 
   @Test
+  void epochRewardsTotalPointsIsTheUnsignedRustU128Domain() {
+    final byte[] data = new byte[EpochRewards.BYTES];
+    final int totalPointsOffset = Long.BYTES + Long.BYTES + 32;
+    java.util.Arrays.fill(data, totalPointsOffset, totalPointsOffset + 16, (byte) 0xFF);
+
+    final var expected = BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE);
+    final var rewards = EpochRewards.read(data);
+    assertEquals(expected, rewards.totalPoints());
+
+    final byte[] written = new byte[EpochRewards.BYTES];
+    assertEquals(EpochRewards.BYTES, rewards.write(written, 0));
+    assertArrayEquals(data, written);
+
+    final var negative = new EpochRewards(
+        PublicKey.NONE,
+        0,
+        0,
+        new byte[32],
+        BigInteger.ONE.negate(),
+        0,
+        0,
+        false
+    );
+    assertThrows(IllegalArgumentException.class, () -> negative.write(new byte[EpochRewards.BYTES], 0));
+  }
+
+  @Test
   void rent() {
     final byte[] data = Base64.getDecoder().decode("MBsAAAAAAAAAAAAAAADwPzI=");
     assertEquals(Rent.BYTES, data.length);
@@ -126,6 +153,24 @@ final class SysvarTests {
     final byte[] written = new byte[Rent.BYTES];
     assertEquals(Rent.BYTES, rent.write(written, 0));
     assertArrayEquals(data, written);
+  }
+
+  @Test
+  void rentMatchesCurrentSolanaIntegerPathsAndBounds() {
+    final var simd0194 = new Rent(null, 6_960L, 1.0, 50);
+    final var current = new Rent(null, 6_960L, 2.0, 50);
+    assertEquals((128L + Rent.MAX_PERMITTED_DATA_LENGTH) * 6_960L,
+        simd0194.minimumBalance(Rent.MAX_PERMITTED_DATA_LENGTH));
+    assertEquals(2 * (128L + Rent.MAX_PERMITTED_DATA_LENGTH) * 6_960L,
+        current.minimumBalance(Rent.MAX_PERMITTED_DATA_LENGTH));
+
+    assertThrows(IllegalArgumentException.class, () -> current.minimumBalance(-1));
+    assertThrows(IllegalArgumentException.class,
+        () -> current.minimumBalance(Rent.MAX_PERMITTED_DATA_LENGTH + 1));
+    assertThrows(IllegalArgumentException.class,
+        () -> new Rent(null, 1_759_197_129_868L, 1.0, 50).minimumBalance(0));
+    assertThrows(IllegalArgumentException.class,
+        () -> new Rent(null, 879_598_564_934L, 2.0, 50).minimumBalance(0));
   }
 
   @Test

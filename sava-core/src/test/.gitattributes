@@ -3,3 +3,13 @@
 /solana/ed25519-vectors/rust-toolchain.toml text eol=lf
 /solana/ed25519-vectors/src/*.rs text eol=lf
 /resources/ed25519/solana-curve-vectors.tsv text eol=lf
+/solana/legacy-message-vectors/Cargo.lock text eol=lf
+/solana/legacy-message-vectors/Cargo.toml text eol=lf
+/solana/legacy-message-vectors/rust-toolchain.toml text eol=lf
+/solana/legacy-message-vectors/src/*.rs text eol=lf
+/resources/tx/solana-legacy-message-vectors.tsv text eol=lf
+/solana/upstream-layout-vectors/Cargo.lock text eol=lf
+/solana/upstream-layout-vectors/Cargo.toml text eol=lf
+/solana/upstream-layout-vectors/rust-toolchain.toml text eol=lf
+/solana/upstream-layout-vectors/src/*.rs text eol=lf
+/resources/upstream/*.tsv text eol=lf

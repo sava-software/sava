@@ -2,7 +2,11 @@ package software.sava.core.accounts.token.extensions;
 
 import java.util.Arrays;
 
+import static software.sava.core.zk.ElGamal.ELGAMAL_CIPHERTEXT_LEN;
+
 public record ConfidentialTransferFeeAmount(byte[] withheldAmount) implements AccountTokenExtension {
+
+  public static final int BYTES = ELGAMAL_CIPHERTEXT_LEN;
 
   public static ConfidentialTransferFeeAmount read(final byte[] data, final int offset, final int to) {
     if (data == null || data.length == 0) {

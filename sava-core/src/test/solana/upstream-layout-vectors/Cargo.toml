@@ -1,0 +1,21 @@
+[package]
+name = "sava-solana-upstream-layout-vectors"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+bytemuck = "=1.25.2"
+sha2 = "=0.10.9"
+solana-address = "=2.7.0"
+solana-epoch-schedule = { version = "=3.3.0", features = ["wincode"] }
+solana-epoch-rewards = { version = "=3.2.0", features = ["wincode"] }
+solana-hash = "=4.6.0"
+solana-rent = { version = "=4.4.0", features = ["wincode"] }
+spl-token-2022-interface = "=3.1.1"
+spl-token-group-interface = "=0.7.2"
+spl-token-metadata-interface = "=1.0.1"
+spl-type-length-value = "=0.9.1"
+wincode = { version = "=0.6.1", features = ["derive"] }

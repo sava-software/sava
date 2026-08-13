@@ -725,3 +725,95 @@ Property: Sava's `isNotOnCurve` is the logical negation of Solana's PDA curve-me
 predicate for every pinned encoding | Oracle: `solana-pubkey` 4.2.0 and Agave v4.2.0's
 locked `solana-curve25519` 4.0.1 Edwards backend | Outcome: missing direct upstream
 conformance coverage closed without changing production behavior.
+
+### Direct legacy transaction and signing conformance — 2026-08-13
+
+`LegacyMessageConformanceTests` consumes eleven committed vectors emitted by the locked
+Rust generator under `sava-core/src/test/solana/legacy-message-vectors`. The executable
+oracles are `solana-message` 4.5.0 `Message::new_with_blockhash`,
+`solana-transaction` 4.2.0 `VersionedTransaction::try_new`, its wincode round trip, and
+fixed-seed Solana Ed25519 signatures, all from the crate versions in the current local
+solana-sdk checkout at `7e8f4a52f044e7729406bd24ae7c586de92e7f58`. The fixture also
+records the official Kit v7.0.0 release commit and functions reviewed through read-only
+GitHub source access; Kit was not executed and is not represented as a byte oracle.
+
+Public Sava compilation is compared semantically because its published equal-category
+account order follows HashMap encounter order, Rust uses BTreeMap address-byte order, and
+Kit uses its address comparator. The already-ordered Sava compiler overload is separately
+checked byte for byte, preserving valid existing transaction IDs while still covering
+promotion, header roles, duplicate instruction indexes, ShortU16 127/128 boundaries,
+exactly 256 indexed accounts, and raw account index 255. Zero-lookup v0 vectors also pin
+the shared signature discriminator boundary and raw-u8 program-index parser without
+exercising lookup-table semantics.
+
+Property: a signer overload that promises key matching never writes an unrelated slot,
+and a collection rejected during assignment validation leaves every signature untouched |
+Oracle: Solana `VersionedTransaction::try_new` key-to-slot reordering plus fixed Rust Ed25519 bytes |
+Outcome: production bugs fixed for singleton matching and complete collection prevalidation;
+the published `SequencedCollection` positional contract remains pinned.
+
+Property: the fixture makes Solana's account/header and 127/128-signature validity
+boundaries visible without turning Sava's published transaction builder into a validator |
+Oracle: Solana `CompiledKeys::try_into_message_components` u8 conversions and the current
+`VersionedTransaction` wincode reader's discriminator contract, executed for legacy and
+zero-lookup v0 at 127/128 by the generator | Outcome: Sava's existing permissive narrowing
+behavior is pinned deliberately so callers can construct invalid transactions for analysis;
+the RPC remains the submission-validity authority.
+
+Property: compiled instruction program IDs are raw unsigned bytes, not ShortU16 values |
+Oracle: Solana `CompiledInstruction { program_id_index: u8 }` and the committed Rust
+index-255 message | Outcome: production parser bug fixed across skeleton traversal and all
+instruction accessors.
+
+### Direct Token-2022 and sysvar layout conformance — 2026-08-13
+
+The locked generator under `sava-core/src/test/solana/upstream-layout-vectors` resolves
+the exact Token-2022, sysvar, and wincode versions selected by the current local Agave and
+solana-sdk checkouts. Four committed TSVs cover all 29 extension ordinals and fixed sizes,
+short/long TLV verdicts, non-default values, TokenMetadata's largest `u16` value and first
+overflow, nine zero-copy Bool fields, unsigned EpochRewards `u128`, strict wincode bools,
+and Rent's checked integer and unsigned-u64/f64 boundaries. The Java tests hash the
+generator, manifest, lock, and toolchain; the generator checks the semantic crates'
+checksums and reproduces the fixtures byte for byte with `--locked --check`.
+
+Property: a TLV value is confined to its declared slice and fixed extensions have their
+canonical Rust size | Oracle: `spl-token-2022-interface` 3.1.1
+`BaseStateWithExtensions::get_extension` | Outcome: malformed known extensions could read
+the following entry or accept the wrong size; production parser and writer fixed.
+
+Property: every nonzero Token-2022 zero-copy Bool byte means true | Oracle:
+`solana-zero-copy`'s `unaligned::Bool` through nine pinned Rust values | Outcome: Java had
+treated only byte `1` as true; all affected readers fixed.
+
+Property: EpochRewards points span unsigned `u128`, and wincode Bool accepts only bytes
+0/1 | Oracle: pinned `solana-epoch-rewards`, `solana-epoch-schedule`, and wincode 0.6.1 |
+Outcome: signed high-bit points and permissive bool decoding were production bugs; fixed.
+
+Property: Rent minimum-balance validation and fallback preserve Rust's wrapped `u64`,
+`f64`, and saturating cast domains | Oracle: `solana-rent` 4.4.0
+`try_minimum_balance`, including zero, 2^63, and 2^64 boundaries | Outcome: negative and
+oversized data/rates were unchecked and a high-bit wrapped product widened as a negative
+Java double; production fixed.
+
+### RPC compressed accounts and current response fields — 2026-08-13
+
+`base64+zstd` account data is now decoded before factories receive it and expansion is
+bounded at Solana's 10 MiB account-data maximum. Sava defines a streaming
+`ZstdDecompressor` SPI instead of imposing a runtime zstd dependency; program-account
+requests reject the compressed encoding before HTTP dispatch unless an implementation was
+supplied. An offline test replays a live finalized `getProgramAccounts` capture and asserts
+the exact public builder selector plus an independently decompressed SHA-256 digest.
+Malformed frames, missing decoders, and a 10 MiB + 1 expansion probe pin the failure paths.
+
+Property: compressed account payloads produce the same bounded bytes as Agave's account
+decoder without forcing a zstd library on every consumer | Oracle: live RPC capture, zstd
+1.5.7 verification, and Agave's 10 MiB account limit | Outcome: Java previously returned
+compressed frame bytes as account data; production fixed through an explicit caller-supplied
+decoder.
+
+Property: full block requests accept the transaction versions this library models, and
+rewards retain current variants/fields | Oracle: Agave `RpcBlockConfig`, transaction-status
+client types, and Solana SDK `RewardType` | Outcome: full blocks omitted
+`maxSupportedTransactionVersion: 0`, while `DeactivatedStake` and basis-point commissions were
+dropped; production fixed with the old `TxReward` constructor retained and the same value-plus-unit
+representation used by `InflationReward`.

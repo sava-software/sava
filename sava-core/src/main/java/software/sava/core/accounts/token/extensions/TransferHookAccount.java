@@ -8,7 +8,7 @@ public record TransferHookAccount(boolean transferring) implements AccountTokenE
     if (data == null || data.length == 0) {
       return null;
     }
-    return new TransferHookAccount(data[offset] == 1);
+    return new TransferHookAccount(data[offset] != 0);
   }
 
   @Override

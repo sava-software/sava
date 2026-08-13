@@ -8,7 +8,7 @@ public record CpiGuard(boolean lockCPI) implements AccountTokenExtension {
     if (data == null || data.length == 0) {
       return null;
     }
-    return new CpiGuard(data[offset] == 1);
+    return new CpiGuard(data[offset] != 0);
   }
 
   @Override

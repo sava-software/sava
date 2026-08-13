@@ -11,6 +11,7 @@ import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Properties;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 import static software.sava.core.accounts.Signer.KEY_LENGTH;
 
@@ -82,6 +83,31 @@ final class SignerTest {
     final var publicKey = signer.publicKey().toJavaPublicKey();
     final boolean verified = PublicKey.verifySignature(publicKey, msg, signature);
     assertTrue(verified);
+  }
+
+  /** The JDK Ed25519 verifier is independent of Sava's raw-key Bouncy Castle path. */
+  @Test
+  void stringVerificationUsesTheEntireUtf8Message() {
+    final var msg = "é";
+    final byte[] utf8 = msg.getBytes(UTF_8);
+    assertTrue(utf8.length > msg.length(), "the regression requires byte and UTF-16 lengths to differ");
+
+    final var signer = Signer.createFromPrivateKey(new byte[KEY_LENGTH]);
+    final var publicKey = signer.publicKey();
+    final byte[] signature = signer.sign(utf8);
+
+    assertTrue(publicKey.verifySignature(utf8, signature));
+    assertTrue(PublicKey.verifySignature(publicKey.toJavaPublicKey(), msg, signature));
+    assertTrue(PublicKey.verifySignature(publicKey.toByteArray(), 0, msg, signature));
+    assertTrue(PublicKey.verifySignature(publicKey.toByteArray(), msg, signature));
+    assertTrue(publicKey.verifySignature(msg, signature));
+
+    final byte[] prefixSignature = signer.sign(Arrays.copyOf(utf8, msg.length()));
+    assertFalse(publicKey.verifySignature(utf8, prefixSignature));
+    assertFalse(PublicKey.verifySignature(publicKey.toJavaPublicKey(), msg, prefixSignature));
+    assertFalse(PublicKey.verifySignature(publicKey.toByteArray(), 0, msg, prefixSignature));
+    assertFalse(PublicKey.verifySignature(publicKey.toByteArray(), msg, prefixSignature));
+    assertFalse(publicKey.verifySignature(msg, prefixSignature));
   }
 
   private static void verifySigner(final byte[] keyPair, final Signer signer) {

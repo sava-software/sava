@@ -160,7 +160,6 @@ public interface Transaction {
         ++numReadonlyUnsignedAccounts;
       }
     }
-
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int numInstructions = instructions.size();
     final int bufferSize = sigLen
@@ -273,7 +272,6 @@ public interface Transaction {
     for (int a = numIncludedAccounts; a < numAccounts; ++a) {
       accountIndexLookupTable.put(sortedAccounts[a].publicKey(), a);
     }
-
     final int numTableIndexedAccounts = numLookupReads + numLookupWrites;
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
@@ -450,7 +448,6 @@ public interface Transaction {
         ++numTablesWithIndexedAccounts;
       }
     }
-
     final int sigLen = 1 + (numRequiredSignatures << 6);
     final int bufferSize = sigLen
         + TransactionRecord.VERSIONED_MSG_HEADER_LENGTH
@@ -586,6 +583,11 @@ public interface Transaction {
     return Base64.getEncoder().encodeToString(serialized());
   }
 
+  /**
+   * Signs the slot whose required signer address matches {@link Signer#publicKey()}.
+   *
+   * @throws IllegalArgumentException if this transaction does not require that signer
+   */
   void sign(final Signer signer);
 
   void sign(final int index, final Signer signer);
@@ -613,8 +615,19 @@ public interface Transaction {
     return signAndBase64Encode(Base58.decode(recentBlockHash), signer);
   }
 
+  /**
+   * Validates the complete required-signer assignment, then signs each slot by public key; input
+   * order is irrelevant. Assignment-validation failures leave every signature untouched.
+   * Because {@link List} binds to {@link #sign(SequencedCollection)}, cast a list to
+   * {@link Collection} to select this by-key overload.
+   */
   void sign(final Collection<Signer> signers);
 
+  /**
+   * Signs each required slot positionally. The first signer writes the first signature slot,
+   * regardless of its public key. Use {@link #sign(Collection)} when order is not already the
+   * message's required-signer order.
+   */
   void sign(final SequencedCollection<Signer> signers);
 
   default String signAndBase64Encode(final SequencedCollection<Signer> signers) {

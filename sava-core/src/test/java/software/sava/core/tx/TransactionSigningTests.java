@@ -79,10 +79,69 @@ final class TransactionSigningTests {
     final byte[] expected = individually.tx().serialized().clone();
 
     final var bulk = new Fixture(rebuild(individually), individually.feePayer(), individually.authority());
-    // the SequencedCollection overload signs positionally, so order is the contract
+    // The sequenced overload is the published positional path: message order is required.
     bulk.tx().sign((java.util.SequencedCollection<Signer>) List.of(bulk.feePayer(), bulk.authority()));
 
     assertArrayEquals(expected, bulk.tx().serialized(), "sequenced bulk signing must equal individual signing");
+  }
+
+  @Test
+  void sequencedCollectionRemainsPositional() {
+    final var fixture = twoSignerTx();
+    fixture.tx().sign((java.util.SequencedCollection<Signer>) List.of(
+        fixture.authority(), fixture.feePayer()
+    ));
+
+    fixture.assertSignedBy(fixture.authority(), 0);
+    fixture.assertSignedBy(fixture.feePayer(), 1);
+  }
+
+  @Test
+  void singleSignerMustMatchTheRequiredPublicKey() {
+    final var required = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var wrong = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var tx = Transaction.createTx(
+        required.publicKey(),
+        // Put the wrong signer's key immediately after the required signer region. Matching must
+        // stop at the header count rather than accepting a non-signer program account.
+        Instruction.createInstruction(wrong.publicKey(), List.of(), new byte[]{1})
+    );
+    final byte[] before = tx.serialized().clone();
+
+    final var exception = assertThrows(IllegalArgumentException.class, () -> tx.sign(wrong));
+    assertTrue(exception.getMessage().contains(wrong.publicKey().toString()));
+    assertArrayEquals(before, tx.serialized(), "rejected signer must not alter the transaction");
+  }
+
+  @Test
+  void collectionSigningIsOrderIndependentAndPrevalidatesTheAssignment() {
+    final var fixture = twoSignerTx();
+    // Rebuild with the fixture's actual keys so deterministic Ed25519 signatures are comparable.
+    final var expectedFixture = new Fixture(rebuild(fixture), fixture.feePayer(), fixture.authority());
+    expectedFixture.tx().sign(expectedFixture.feePayer());
+    expectedFixture.tx().sign(expectedFixture.authority());
+
+    fixture.tx().sign((Collection<Signer>) List.of(fixture.authority(), fixture.feePayer()));
+    assertArrayEquals(expectedFixture.tx().serialized(), fixture.tx().serialized());
+
+    final var rejected = twoSignerTx();
+    final var unknown = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> rejected.tx().sign((Collection<Signer>) List.of(rejected.feePayer(), unknown))
+    );
+    assertArrayEquals(new byte[Transaction.SIGNATURE_LENGTH], rejected.signature(0));
+    assertArrayEquals(new byte[Transaction.SIGNATURE_LENGTH], rejected.signature(1));
+
+    final var duplicateFixture = twoSignerTx();
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> duplicateFixture.tx().sign((Collection<Signer>) List.of(
+            duplicateFixture.feePayer(), duplicateFixture.feePayer()
+        ))
+    );
+    assertArrayEquals(new byte[Transaction.SIGNATURE_LENGTH], duplicateFixture.signature(0));
+    assertArrayEquals(new byte[Transaction.SIGNATURE_LENGTH], duplicateFixture.signature(1));
   }
 
   @Test

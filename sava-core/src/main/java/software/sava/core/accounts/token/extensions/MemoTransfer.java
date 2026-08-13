@@ -12,7 +12,7 @@ public record MemoTransfer(boolean requireIncomingTransferAmount) implements Acc
     if (data == null || data.length == 0) {
       return null;
     }
-    return new MemoTransfer(data[offset] == 1);
+    return new MemoTransfer(data[offset] != 0);
   }
 
   @Override

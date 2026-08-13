@@ -45,7 +45,7 @@ public record ConfidentialTransferAccount(boolean approved,
     if (data == null || data.length == 0) {
       return null;
     }
-    final boolean approved = data[offset] == 1;
+    final boolean approved = data[offset] != 0;
     int i = offset + 1;
     final var elgamalPubkey = PublicKey.readPubKey(data, i);
     i += ELGAMAL_PUBKEY_LEN;
@@ -66,9 +66,9 @@ public record ConfidentialTransferAccount(boolean approved,
     System.arraycopy(data, i, decryptableAvailableBalance, 0, decryptableAvailableBalance.length);
     i += decryptableAvailableBalance.length;
 
-    final boolean allowConfidentialCredits = data[i] == 1;
+    final boolean allowConfidentialCredits = data[i] != 0;
     ++i;
-    final boolean allowNonConfidentialCredits = data[i] == 1;
+    final boolean allowNonConfidentialCredits = data[i] != 0;
     ++i;
 
     final long pendingBalanceCreditCounter = ByteUtil.getInt64LE(data, i);

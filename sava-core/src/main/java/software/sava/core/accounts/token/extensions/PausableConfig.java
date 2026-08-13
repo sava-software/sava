@@ -14,7 +14,7 @@ public record PausableConfig(PublicKey authority, boolean paused) implements Min
       return null;
     }
     final var authority = readPubKey(data, offset);
-    final boolean paused = data[offset + PUBLIC_KEY_LENGTH] == 1;
+    final boolean paused = data[offset + PUBLIC_KEY_LENGTH] != 0;
     return new PausableConfig(authority, paused);
   }
 

@@ -17,7 +17,7 @@ public record ConfidentialTransferMint(PublicKey authority,
       return null;
     }
     final var authority = readPubKey(data, offset);
-    final boolean autoApproveNewAccounts = data[offset + PUBLIC_KEY_LENGTH] == 1;
+    final boolean autoApproveNewAccounts = data[offset + PUBLIC_KEY_LENGTH] != 0;
     final var auditorElGamalKey = readPubKey(data, offset + PUBLIC_KEY_LENGTH + 1);
     return new ConfidentialTransferMint(
         authority,

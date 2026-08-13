@@ -34,7 +34,11 @@ record EpochSchedule(PublicKey address,
     offset += Long.BYTES;
     final long leaderScheduleSlotOffset = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;
-    final boolean warmup = data[offset] == 1;
+    final int warmupValue = data[offset] & 0xFF;
+    if (warmupValue > 1) {
+      throw new IllegalArgumentException("Invalid EpochSchedule warmup boolean encoding: " + warmupValue);
+    }
+    final boolean warmup = warmupValue == 1;
     ++offset;
     final long firstNormalEpoch = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;

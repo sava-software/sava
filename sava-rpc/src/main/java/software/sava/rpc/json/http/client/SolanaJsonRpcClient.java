@@ -284,9 +284,13 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                            final long slot,
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
+    final var maxSupportedTransactionVersion = blockTxDetails == BlockTxDetails.full
+        ? ",\"maxSupportedTransactionVersion\":0"
+        : "";
     return sendPostRequest(BLOCK, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b}]}""",
-            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards
+                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b%s}]}""",
+            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards,
+            maxSupportedTransactionVersion
         )
     );
   }
@@ -1064,17 +1068,24 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
         filters,
         length, offset,
         RpcEncoding.base64,
-        factory
+        factory,
+        null
     );
     return getProgramAccounts(request);
   }
 
   @Override
   public <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final ProgramAccountsRequest<T> request) {
+    final var zstdDecompressor = request.zstdDecompressor();
+    if (request.encoding() == RpcEncoding.base64_zstd && zstdDecompressor == null) {
+      throw ProgramAccountsRequest.Builder.missingZstdDecompressor();
+    }
     final var body = request.toJson(id.incrementAndGet(), this.defaultCommitment);
     final var responseFactory = request.factory();
     return sendPostRequest(
-        applyGenericResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, responseFactory)),
+        applyGenericResponseValue(
+            (ji, context) -> AccountInfo.parseAccounts(ji, context, responseFactory, zstdDecompressor)
+        ),
         requireNonNullElse(request.requestTimeout(), PROGRAM_ACCOUNTS_TIMEOUT),
         body
     );

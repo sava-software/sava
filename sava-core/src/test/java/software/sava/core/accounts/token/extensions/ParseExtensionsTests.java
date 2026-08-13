@@ -7,7 +7,6 @@ import software.sava.core.accounts.token.Token2022;
 import software.sava.core.accounts.token.Token2022Account;
 import software.sava.core.encoding.ByteUtil;
 
-import java.time.Duration;
 import java.util.Base64;
 import java.util.Set;
 
@@ -27,17 +26,13 @@ final class ParseExtensionsTests {
 
   @Test
   void unsignedTypeAndLength() {
-    // type and length are u16 on-chain; read as signed i16 a length of 0xFFFC walked the
-    // TLV cursor backwards and looped forever, and a type >= 0x8000 indexed the
-    // ExtensionType values with a negative ordinal instead of falling back to
-    // UnknownTokenExtension
-    final var looped = assertTimeoutPreemptively(
-        Duration.ofSeconds(5),
-        // ImmutableOwner claiming length 0xFFFC: the claim overshoots the end of the data,
-        // which ends the walk after the extension parses
+    // Type and length are u16 on-chain. A type >= 0x8000 must reach the unknown-extension
+    // escape hatch, while an unsigned length that exceeds the remaining TLV data is corrupt.
+    final var oversized = assertThrows(
+        IndexOutOfBoundsException.class,
         () -> Token2022.parseExtensions(new byte[]{7, 0, (byte) 0xFC, (byte) 0xFF}, 0)
     );
-    assertEquals(Set.of(ImmutableOwner.INSTANCE), looped);
+    assertEquals("Extension 7 claims 65532 bytes, but only 0 remain.", oversized.getMessage());
 
     final var unknown = Token2022.parseExtensions(new byte[]{0, (byte) 0x80, 2, 0, (byte) 0xAB, (byte) 0xCD}, 0);
     assertEquals(1, unknown.size());
@@ -53,7 +48,28 @@ final class ParseExtensionsTests {
     // extensions do, not fabricate a zero-padded tail via copyOfRange
     final byte[] data = {0, (byte) 0x80, 3, 0, (byte) 0xAB, (byte) 0xCD};
     final var exception = assertThrows(IndexOutOfBoundsException.class, () -> Token2022.parseExtensions(data, 0));
-    assertEquals("Unknown extension 32768 claims 3 bytes, but only 2 remain.", exception.getMessage());
+    assertEquals("Extension 32768 claims 3 bytes, but only 2 remain.", exception.getMessage());
+  }
+
+  @Test
+  void knownExtensionLengthMustMatchItsRustLayout() {
+    final var longImmutableOwner = new byte[]{7, 0, 1, 0, 42};
+    final var longError = assertThrows(
+        IllegalArgumentException.class,
+        () -> Token2022.parseExtensions(longImmutableOwner, 0)
+    );
+    assertEquals("Extension ImmutableOwner claims 1 bytes, expected 0.", longError.getMessage());
+
+    // A short fixed-size value must not borrow bytes from the following TLV entry.
+    final var shortMintCloseAuthority = new byte[4 + 31 + 4];
+    shortMintCloseAuthority[0] = 3;
+    shortMintCloseAuthority[2] = 31;
+    shortMintCloseAuthority[4 + 31] = 7;
+    final var shortError = assertThrows(
+        IllegalArgumentException.class,
+        () -> Token2022.parseExtensions(shortMintCloseAuthority, 0)
+    );
+    assertEquals("Extension MintCloseAuthority claims 31 bytes, expected 32.", shortError.getMessage());
   }
 
   @Test

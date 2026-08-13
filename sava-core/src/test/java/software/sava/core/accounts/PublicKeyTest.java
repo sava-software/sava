@@ -1,13 +1,16 @@
 package software.sava.core.accounts;
 
 import org.junit.jupiter.api.Test;
+import software.sava.core.crypto.ed25519.Ed25519Util;
 
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.junit.jupiter.api.Assertions.*;
 import static software.sava.core.accounts.SolanaAccounts.MAIN_NET;
 
@@ -217,5 +220,149 @@ final class PublicKeyTest {
             MAIN_NET.systemProgram()
         )
     );
+  }
+
+  /// Vectors and boundaries generated with solana-address 2.7.0 at commit
+  /// 7e8f4a52f044e7729406bd24ae7c586de92e7f58 (`Address::create_with_seed`).
+  @Test
+  void createWithSeedUsesUtf8BytesAndTheirLength() {
+    assertEquals(
+        "EFAeyNPdBbGap5t7Y8MP3gZkiaLe8Mk8SqZ6GTUkjLq2",
+        PublicKey.createWithSeed(PublicKey.NONE, "☉", PublicKey.NONE).toBase58()
+    );
+    assertEquals(
+        "ASACxL8kA3p7wF3GGjAipDD5XpjW4Rjsh3Qm1o9zFjAJ",
+        PublicKey.createWithSeed(PublicKey.NONE, "é", PublicKey.NONE).toBase58()
+    );
+
+    final String eightMaximumCodePoints = "\uDBFF\uDFFF".repeat(8);
+    assertEquals(
+        "HH9C1nu8NqC8Z7SoqGg6vzmoNCzCSSxNMVBc65yz2kub",
+        PublicKey.createWithSeed(PublicKey.NONE, eightMaximumCodePoints, PublicKey.NONE).toBase58()
+    );
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> PublicKey.createWithSeed(PublicKey.NONE, "x" + eightMaximumCodePoints, PublicKey.NONE)
+    );
+  }
+
+  /// solana-address rejects owners ending in the program-derived-address domain marker.
+  @Test
+  void createWithSeedRejectsIllegalOwnerMarker() {
+    final byte[] marker = "ProgramDerivedAddress".getBytes(US_ASCII);
+    final byte[] ownerBytes = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    System.arraycopy(marker, 0, ownerBytes, ownerBytes.length - marker.length, marker.length);
+    final var illegalOwner = PublicKey.createPubKey(ownerBytes);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> PublicKey.createWithSeed(PublicKey.NONE, "seed", illegalOwner)
+    );
+
+    final byte[] legalOwnerBytes = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    System.arraycopy(marker, 1, legalOwnerBytes, legalOwnerBytes.length - marker.length + 1, marker.length - 1);
+    assertDoesNotThrow(() -> PublicKey.createWithSeed(
+        PublicKey.NONE,
+        "seed",
+        PublicKey.createPubKey(legalOwnerBytes)
+    ));
+  }
+
+  @Test
+  void createOffCurveAccountWithAsciiSeedDerivesTheReturnedSeedMetadata() throws Exception {
+    final var account = PublicKey.createOffCurveAccountWithAsciiSeed(
+        PublicKey.NONE,
+        "sava",
+        MAIN_NET.systemProgram()
+    );
+
+    assertEquals(PublicKey.NONE, account.baseKey());
+    assertEquals(MAIN_NET.systemProgram(), account.program());
+    assertEquals("3PbbfN46p4JGPHAaqb9yvEhKZ7wTNHusxcGRPhVgkYZp", account.publicKey().toBase58());
+    assertArrayEquals(new byte[]{'s', 'a', 'v', 'a', 125}, account.asciiSeed());
+
+    final var digest = MessageDigest.getInstance("SHA-256");
+    digest.update(account.baseKey().toByteArray());
+    digest.update(account.asciiSeed());
+    digest.update(account.program().toByteArray());
+    assertArrayEquals(digest.digest(), account.publicKey().toByteArray());
+    assertTrue(Ed25519Util.isNotOnCurve(account.publicKey().toByteArray()));
+  }
+
+  @Test
+  void createOffCurveAccountWithAsciiSeedEnforcesTheEncodedSeedLimit() {
+    assertDoesNotThrow(() -> PublicKey.createOffCurveAccountWithAsciiSeed(
+        PublicKey.NONE,
+        "a".repeat(PublicKey.MAX_SEED_LENGTH),
+        MAIN_NET.systemProgram()
+    ));
+
+    final var exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> PublicKey.createOffCurveAccountWithAsciiSeed(
+            PublicKey.NONE,
+            "a".repeat(PublicKey.MAX_SEED_LENGTH + 1),
+            MAIN_NET.systemProgram()
+        )
+    );
+    assertEquals(
+        "Seed [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] exceeds maximum length of [32].",
+        exception.getMessage()
+    );
+
+    final var nonAscii = PublicKey.createOffCurveAccountWithAsciiSeed(
+        PublicKey.NONE,
+        "é",
+        MAIN_NET.systemProgram()
+    );
+    final var replacement = PublicKey.createOffCurveAccountWithAsciiSeed(
+        PublicKey.NONE,
+        "?",
+        MAIN_NET.systemProgram()
+    );
+    assertEquals(replacement.publicKey(), nonAscii.publicKey());
+    assertArrayEquals(replacement.asciiSeed(), nonAscii.asciiSeed());
+  }
+
+  @Test
+  void createOffCurveAccountWithAsciiSeedTriesEveryNonceFrom127ThroughZero() {
+    final var firstClassification = new AtomicInteger();
+    final var first = PublicKeyBytes.createOffCurveAccountWithAsciiSeed(
+        PublicKey.NONE,
+        new byte[0],
+        MAIN_NET.systemProgram(),
+        ignored -> firstClassification.incrementAndGet() == 1
+    );
+    assertEquals(1, firstClassification.get());
+    assertArrayEquals(new byte[]{127}, first.asciiSeed());
+
+    final var lastClassification = new AtomicInteger();
+    final var last = PublicKeyBytes.createOffCurveAccountWithAsciiSeed(
+        PublicKey.NONE,
+        new byte[0],
+        MAIN_NET.systemProgram(),
+        ignored -> lastClassification.incrementAndGet() == 128
+    );
+    assertEquals(128, lastClassification.get());
+    assertArrayEquals(new byte[]{0}, last.asciiSeed());
+
+    final var exhaustedClassifications = new AtomicInteger();
+    final var exception = assertThrows(
+        RuntimeException.class,
+        () -> PublicKeyBytes.createOffCurveAccountWithAsciiSeed(
+            PublicKey.NONE,
+            new byte[0],
+            MAIN_NET.systemProgram(),
+            ignored -> {
+              assertTrue(
+                  exhaustedClassifications.incrementAndGet() <= 128,
+                  "nonce search exceeded its finite 127-through-0 domain"
+              );
+              return false;
+            }
+        )
+    );
+    assertEquals(128, exhaustedClassifications.get());
+    assertEquals("Unable to find a viable program derived address nonce", exception.getMessage());
   }
 }

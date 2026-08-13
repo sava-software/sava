@@ -1,6 +1,19 @@
 plugins {
+  id("org.gradlex.extra-java-module-info")
   id("software.sava.build.feature.hardening")
   id("sava.docs-in-sync")
+}
+
+extraJavaModuleInfo {
+  // Test-only module metadata for the reference decoder used by live fixture replays.
+  module("io.airlift:aircompressor-v3", "aircompressor.v3") {
+    requires("jdk.unsupported")
+    exports("io.airlift.compress.v3.zstd")
+  }
+}
+
+dependencies {
+  testImplementation("io.airlift:aircompressor-v3:3.7")
 }
 
 testModuleInfo {
@@ -9,6 +22,7 @@ testModuleInfo {
   // capture System.Logger output through its JUL backend: the check loop's
   // failure funnel is pinned as "never silent", not just "closes the socket"
   requires("java.logging")
+  requires("aircompressor.v3")
   runtimeOnly("org.junit.jupiter.engine")
 }
 

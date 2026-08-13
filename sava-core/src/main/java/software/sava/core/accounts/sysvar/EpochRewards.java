@@ -52,12 +52,16 @@ public record EpochRewards(PublicKey address,
     final byte[] parentBlockHash = new byte[32];
     System.arraycopy(data, offset, parentBlockHash, 0, 32);
     offset += 32;
-    final var totalPoints = ByteUtil.getInt128LE(data, offset);
+    final var totalPoints = ByteUtil.getUInt128LE(data, offset);
     offset += (Long.BYTES << 1);
     final long totalRewards = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;
     final long distributedRewards = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;
+    final int active = data[offset] & 0xFF;
+    if (active > 1) {
+      throw new IllegalArgumentException("Invalid EpochRewards active boolean encoding: " + active);
+    }
     return new EpochRewards(
         address,
         distributionStartingBlockHeight,
@@ -66,7 +70,7 @@ public record EpochRewards(PublicKey address,
         totalPoints,
         totalRewards,
         distributedRewards,
-        data[offset] == 1
+        active == 1
     );
   }
 
@@ -79,7 +83,7 @@ public record EpochRewards(PublicKey address,
     i += Long.BYTES;
     System.arraycopy(parentBlockHash, 0, data, i, 32);
     i += 32;
-    ByteUtil.putInt128LE(data, i, totalPoints);
+    ByteUtil.putUIntLE(data, i, totalPoints, Long.BYTES << 1);
     i += (Long.BYTES << 1);
     ByteUtil.putInt64LE(data, i, totalRewards);
     i += Long.BYTES;

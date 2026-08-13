@@ -19,9 +19,20 @@ public sealed interface TokenExtension extends Serializable permits
   }
 
   static int write(final TokenExtension extension, final byte[] data, final int offset) {
-    ByteUtil.putInt16LE(data, offset, extension.ordinal());
-    final int length = extension.write(data, offset + 4);
-    ByteUtil.putInt16LE(data, offset + 2, length);
-    return 4 + length;
+    final int ordinal = extension.ordinal();
+    requireUnsignedShort("Extension type", ordinal);
+    final int expectedLength = extension.l();
+    requireUnsignedShort("Extension value length", expectedLength);
+
+    ByteUtil.putInt16LE(data, offset, ordinal);
+    extension.write(data, offset + 4);
+    ByteUtil.putInt16LE(data, offset + 2, expectedLength);
+    return 4 + expectedLength;
+  }
+
+  private static void requireUnsignedShort(final String field, final int value) {
+    if (value < 0 || value > 0xFFFF) {
+      throw new IllegalArgumentException(field + " exceeds unsigned-short range: " + value);
+    }
   }
 }

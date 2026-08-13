@@ -66,8 +66,7 @@ public interface TransactionSkeleton {
     if (version >= 0) {
       final int[] invokedIndexes = new int[numInstructions];
       for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
-        invokedIndexes[i] = decode(data, o);
-        o += getByteLen(data, o);
+        invokedIndexes[i] = data[o++] & 0xFF;
 
         numAccounts = decode(data, o);
         o += getByteLen(data, o);
@@ -139,7 +138,7 @@ public interface TransactionSkeleton {
       }
     } else {
       for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
-        o += getByteLen(data, o); // program index
+        ++o; // raw u8 program index
 
         numAccounts = decode(data, o);
         o += getByteLen(data, o);

@@ -4,6 +4,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.RpcEncoding;
+import software.sava.rpc.json.http.response.ZstdDecompressor;
 
 import java.math.BigInteger;
 import java.time.Duration;
@@ -21,7 +22,8 @@ record ProgramAccountsRequestRecord<T>(Duration requestTimeout,
                                        int dataSliceLength,
                                        int dataSliceOffset,
                                        RpcEncoding encoding,
-                                       BiFunction<PublicKey, byte[], T> factory)
+                                       BiFunction<PublicKey, byte[], T> factory,
+                                       ZstdDecompressor zstdDecompressor)
     implements ProgramAccountsRequest<T> {
 
   @Override

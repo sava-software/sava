@@ -5,6 +5,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.RpcEncoding;
+import software.sava.rpc.json.http.response.ZstdDecompressor;
 
 import java.math.BigInteger;
 import java.time.Duration;
@@ -138,6 +139,7 @@ final class ProgramAccountsRequestTests {
   void allOptionalsTogetherProduceWellFormedJson() {
     final var body = json(builder()
         .encoding(RpcEncoding.base64_zstd)
+        .zstdDecompressor(in -> in)
         .commitment(Commitment.PROCESSED)
         .minContextSlot(BigInteger.ONE)
         .dataSliceLength(4, 16)
@@ -171,8 +173,10 @@ final class ProgramAccountsRequestTests {
 
   @Test
   void builderRoundTripsItsAccessors() {
+    final ZstdDecompressor zstdDecompressor = in -> in;
     final var request = builder()
         .encoding(RpcEncoding.base64)
+        .zstdDecompressor(zstdDecompressor)
         .commitment(Commitment.FINALIZED)
         .minContextSlot(BigInteger.TEN)
         .dataSliceLength(2, 8)
@@ -185,6 +189,18 @@ final class ProgramAccountsRequestTests {
     assertEquals(8, request.dataSliceLength());
     assertEquals(2, request.dataSliceOffset());
     assertEquals(RpcEncoding.base64, request.encoding());
+    assertSame(zstdDecompressor, request.zstdDecompressor());
     assertEquals(Duration.ofSeconds(45), request.requestTimeout());
+  }
+
+  @Test
+  void base64ZstdCannotBeBuiltWithoutADecompressor() {
+    final var exception = assertThrows(IllegalStateException.class, () ->
+        builder().encoding(RpcEncoding.base64_zstd).createRequest()
+    );
+    assertEquals(
+        "base64+zstd requires ProgramAccountsRequest.Builder.zstdDecompressor(...)",
+        exception.getMessage()
+    );
   }
 }

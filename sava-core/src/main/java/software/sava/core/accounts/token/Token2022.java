@@ -28,15 +28,13 @@ public record Token2022(Mint mint,
       i += Short.BYTES;
       final int length = ByteUtil.getUInt16LE(data, i);
       i += Short.BYTES;
+      if (i + length > data.length) {
+        throw new IndexOutOfBoundsException(String.format(
+            "Extension %d claims %d bytes, but only %d remain.",
+            extensionType, length, data.length - i
+        ));
+      }
       if (extensionType >= extensionTypes.length) {
-        if (i + length > data.length) {
-          // copyOfRange would silently zero-pad the fabricated tail; corrupt lengths must
-          // throw here the same as they do for known extensions
-          throw new IndexOutOfBoundsException(String.format(
-              "Unknown extension %d claims %d bytes, but only %d remain.",
-              extensionType, length, data.length - i
-          ));
-        }
         // Extension released after ExtensionType was last synced, pass the raw data back
         // to the user.
         extensions.add(new UnknownTokenExtension(extensionType, Arrays.copyOfRange(data, i, i + length)));
@@ -61,10 +59,18 @@ public record Token2022(Mint mint,
         case NonTransferableAccount -> NonTransferableAccount.INSTANCE;
         case TransferHook -> TransferHook.read(data, i);
         case TransferHookAccount -> TransferHookAccount.read(data, i);
-        case ConfidentialTransferFeeConfig -> ConfidentialTransferFeeConfig.read(data, i, i + length);
-        case ConfidentialTransferFeeAmount -> ConfidentialTransferFeeAmount.read(data, i, i + length);
+        case ConfidentialTransferFeeConfig -> {
+          requireLength(type, length, ConfidentialTransferFeeConfig.BYTES);
+          yield ConfidentialTransferFeeConfig.read(data, i, i + length);
+        }
+        case ConfidentialTransferFeeAmount -> {
+          requireLength(type, length, ConfidentialTransferFeeAmount.BYTES);
+          yield ConfidentialTransferFeeAmount.read(data, i, i + length);
+        }
         case MetadataPointer -> MetadataPointer.read(data, i);
-        case TokenMetadata -> TokenMetadata.read(data, i);
+        // Bound the variable-length Borsh reader to the declared TLV value. Without the
+        // slice, malformed string/count fields can consume bytes from the next extension.
+        case TokenMetadata -> TokenMetadata.read(Arrays.copyOfRange(data, i, i + length), 0);
         case GroupPointer -> GroupPointer.read(data, i);
         case TokenGroup -> TokenGroup.read(data, i);
         case GroupMemberPointer -> GroupMemberPointer.read(data, i);
@@ -76,11 +82,27 @@ public record Token2022(Mint mint,
         case PermissionedBurn -> PermissionedBurnConfig.read(data, i);
       };
       if (extensionData != null) {
+        if (extensionData.l() != length) {
+          throw new IllegalArgumentException(String.format(
+              "Extension %s claims %d bytes, expected %d.",
+              type, length, extensionData.l()
+          ));
+        }
         extensions.add(extensionData);
       }
       i += length;
     }
     return extensions;
+  }
+
+  private static void requireLength(final ExtensionType type,
+                                    final int actual,
+                                    final int expected) {
+    if (actual != expected) {
+      throw new IllegalArgumentException(String.format(
+          "Extension %s claims %d bytes, expected %d.", type, actual, expected
+      ));
+    }
   }
 
   /// Deprecated with [ExtensionType], use [#parseExtensions] which includes

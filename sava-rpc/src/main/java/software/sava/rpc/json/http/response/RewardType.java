@@ -4,5 +4,6 @@ public enum RewardType {
   FEE,
   RENT,
   VOTING,
-  STAKING
+  STAKING,
+  DEACTIVATED_STAKE
 }

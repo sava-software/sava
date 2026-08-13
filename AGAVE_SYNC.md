@@ -90,7 +90,7 @@ Agave/SPL canonical sources:
 Optional-pubkey semantics: Rust maps all-zero to `None`; the Java records keep the raw
 32-byte key. This is intentional — callers defensively check `null` and `PublicKey.NONE`.
 
-Tests: `sava-core/src/test/java/software/sava/core/token/extensions/`
+Tests: `sava-core/src/test/java/software/sava/core/accounts/token/extensions/`
 - `ExtensionRoundTripTests.java` — write→read round trips for all 29 types through
   `Token2022`/`Token2022Account`, asserting `write(data, 0) == l()`; plus UTF-8 metadata and
   trailing-padding behavior. **Add every new extension here.**
@@ -102,6 +102,15 @@ Tests: `sava-core/src/test/java/software/sava/core/token/extensions/`
   reader, boolean-polarity round trips, per-field equals/hashCode variants for the five
   hand-written-equality classes, enum-boundary ordinals, option-gated fields, dirty-buffer
   writes, `TokenAccount` filters.
+- `SolanaUpstreamToken2022ConformanceTests.java` — committed output from the locked Rust
+  generator under `src/test/solana/upstream-layout-vectors`: all 29 ordinals and exact
+  fixed sizes, short/long acceptance, the TokenMetadata TLV `u16` boundary, and all nine
+  `solana_zero_copy::Bool` fields with byte `2` (every nonzero value is true). Gradle
+  replays the TSVs offline; Rust is only needed to regenerate or verify them.
+
+The 2026-08-13 direct pass also made the TLV declaration authoritative: a value may not
+borrow bytes from the next extension, fixed-size values must match their Rust size, and
+writers reject type/value lengths outside `u16` before touching the destination buffer.
 
 ## HTTP RPC API
 
@@ -131,6 +140,15 @@ Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
 - Golden fixtures: `sava-rpc/src/test/resources/rpc_response_data/*.json(.zip)` — real
   agave responses (getBlock, getProgramAccounts, getVoteAccounts, …). These detect response
   shape drift; refresh them from a live node when agave changes a shape.
+- `getProgramAccountsBase64Zstd.json` is a live-mainnet capture replayed end to end through
+  the public `ProgramAccountsRequest.Builder.encoding(base64_zstd)` selector, including
+  request JSON, envelope fields, bounded zstd decompression, and an independently verified
+  byte digest. Applications supply their preferred streaming implementation through
+  `zstdDecompressor`; sava has no runtime zstd dependency, and rejects `base64+zstd` when
+  no implementation was supplied. Tests use Aircompressor only as a fixture decoder.
+  Other account convenience methods deliberately continue to request base64; measured
+  StakeHistory data saved only about 9% beyond HTTP gzip, which did not justify widening
+  the public client interface.
 - `./gradlew :sava-rpc:pitestResponses` — PIT over the response package (sava-rpc has its
   own `hardening {}` block). Baseline 2026-07-18: 524 mutations (down from 903 after the
   deprecated-accessor removals), **98% detected, 1 without coverage**;
@@ -199,9 +217,12 @@ static `parse(JsonIterator ji)` plus a `FieldBufferPredicate` switching on
 record components and its parser predicate by hand, then covering it via a fixture in
 `rpc_response_data/`.
 
-Enum mirrors in this package: `RewardType` and the confirmation status strings map to
+Enum mirrors in this package: `RewardType` (including `DeactivatedStake`) and the
+confirmation status strings map to
 `agave:transaction-status-client-types/src/lib.rs` (`RewardType`, `TransactionConfirmationStatus`,
-`UiTransactionEncoding`).
+`UiTransactionEncoding`). Like `InflationReward`, `TxReward` stores the effective commission
+value and flags when that value came from the canonical `commissionBps` field. Full `getBlock` requests send
+`maxSupportedTransactionVersion: 0`, matching this client's legacy/v0 transaction model.
 
 ## Other sync surfaces (sava-core)
 
@@ -210,14 +231,16 @@ Enum mirrors in this package: `RewardType` and the confirmation status strings m
 | `accounts/SolanaAccounts.java` | native/builtin program IDs, SPL program IDs, all sysvar addresses | `agave:reserved-account-keys/src/lib.rs` (`RESERVED_ACCOUNTS`); IDs originate in `solana-sdk:sdk-ids/` |
 | `accounts/lookup/AddressLookupTable.java` (+ overlay/root variants) | ALT account layout: 56-byte meta, 256 max addresses, `deactivationSlot == u64::MAX` = active | `solana-sdk:address-lookup-table-interface/`; `agave:account-decoder/src/parse_address_lookup_table.rs` |
 | `accounts/sysvar/Clock.java` | Clock sysvar (40 bytes) | `solana-sdk:clock/`; `agave:account-decoder/src/parse_sysvar.rs` `UiClock` |
+| `accounts/sysvar/EpochSchedule.java` | EpochSchedule sysvar; strict wincode bool | `solana-sdk:epoch-schedule/`; `wincode` |
 | `accounts/sysvar/EpochRewards.java` | EpochRewards sysvar (has in-source sync link) | `solana-sdk:epoch-rewards/`; `agave:account-decoder/src/parse_sysvar.rs` `UiEpochRewards` |
+| `accounts/sysvar/Rent.java` | Rent sysvar and checked `minimum_balance` integer/f64 paths | `solana-sdk:rent/` |
 | `accounts/token/Mint.java` | SPL Mint, 82-byte packed layout with u32-tag COptions | `spl-token-interface` `state::Mint`; `agave:account-decoder/src/parse_token.rs` |
 | `accounts/token/TokenAccount.java`, `AccountState.java` | SPL Account, 165 bytes, explicit memcmp offsets used for `getProgramAccounts` filters | `spl-token-interface` `state::Account`/`AccountState` |
 | `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest in-agave parser: `agave:transaction-view/` |
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
-| `accounts/PublicKey.java` | PDA derivation (32-byte seeds; 16 total seeds including the bump, so canonical find accepts 15 caller seeds; bump search 255..1; `"ProgramDerivedAddress"` marker; off-curve check) | `solana-sdk:address/src/syscalls.rs` |
+| `accounts/PublicKey.java`, `accounts/PublicKeyBytes.java` | PDA derivation (32-byte seeds; 16 total seeds including the bump, so canonical find accepts 15 caller seeds; bump search 255..1; `"ProgramDerivedAddress"` marker; off-curve check); system create-with-seed UTF-8 byte limit and illegal-owner marker guard | `solana-sdk:address/src/lib.rs` (`create_program_address`, `create_with_seed`); `address/src/syscalls.rs` |
 | `crypto/ed25519/Ed25519Util.java` | ed25519 decompression verdict backing the PDA off-curve check, plus public-key derivation for `Signer` | TweetNaCl/curve25519-dalek `decompress` semantics per `solana-sdk:pubkey/` `is_on_curve` — see Ed25519 hardening below |
 | `borsh/Borsh.java`, `borsh/RustEnum.java` | borsh spec: u32-prefixed strings/vecs, 1-byte Option tags, enum discriminants — see Borsh hardening below | `borsh` crate spec as used by agave/SPL |
 | `programs/Discriminator.java` | 8-byte Anchor sighash, 4-byte native enum tags | Anchor framework convention (not agave) |
@@ -269,11 +292,30 @@ Tests: `TransactionSerializationTests` (round trips against real main-net transa
 `parseAccounts`/`parseInstructions` views), `InstructionBuildingTests` (account appends,
 `beginsWith` including slice bounds, instruction splicing, size limit),
 `TransactionSigningTests` (bulk and indexed signing cross-checked against one-by-one
-signing). Prefer extending these over adding new fixtures — the cross-method invariant is
+signing), and `LegacyMessageConformanceTests` (locked current Solana Rust legacy-message
+and signature vectors: role promotion, header counts, raw-u8 account indexes through 255,
+ShortU16 boundaries, and signer-slot matching). Its generator lives under
+`src/test/solana/legacy-message-vectors`; normal Gradle tests consume only the committed
+TSV. The fixture records the Kit v7.0.0 source functions reviewed at its release commit,
+but its executable byte/signature oracle is Rust. Prefer extending these over adding
+unprovenanced fixtures — the cross-method invariant is
 what catches offset bugs, and it has found two real ones: `serializedInstructionsLength`
 skipping the program-index byte, and `CompactU16Encoding.decode` sign-extending a
 three-byte length into a negative value that no bounds check ever caught (both fixed
 2026-07-16).
+
+The direct conformance pass on 2026-08-13 fixed three non-lookup-table defects: a lone
+`sign(Signer)` no longer signs the only slot without checking its public key;
+`sign(Collection)` now validates a complete, duplicate-free by-key assignment before
+mutating any signature; and every skeleton instruction accessor reads the program account
+index as the protocol's raw `u8` rather than CompactU16 (the old parser lost alignment for
+valid indexes 128..255). The locked Rust generator also records that current Solana
+`VersionedTransaction` decoding accepts 127 legacy/v0 signatures but rejects 128 because
+the high first byte is reserved for version discrimination. Sava deliberately retains its
+published permissive builder behavior at that boundary and for overflowing account/header
+counts: it emits narrowed bytes so callers can construct and analyze invalid transactions,
+leaving submission validation to the RPC. No v1 behavior, address-lookup-table selection
+rule, or within-category account tie-break changed.
 
 ## Token-2022 hardening (sava-core `accounts/token/`)
 

@@ -6,11 +6,18 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
+import static software.sava.core.zk.ElGamal.ELGAMAL_CIPHERTEXT_LEN;
+import static software.sava.core.zk.ElGamal.ELGAMAL_PUBKEY_LEN;
 
 public record ConfidentialTransferFeeConfig(PublicKey authority,
                                             PublicKey withdrawWithheldAuthorityElgamalPubkey,
                                             boolean harvestToMintEnabled,
                                             byte[] withheldAmount) implements MintTokenExtension {
+
+  public static final int BYTES = PUBLIC_KEY_LENGTH
+      + ELGAMAL_PUBKEY_LEN
+      + 1
+      + ELGAMAL_CIPHERTEXT_LEN;
 
   public static ConfidentialTransferFeeConfig read(final byte[] data, final int offset, final int to) {
     if (data == null || data.length == 0) {
@@ -20,7 +27,7 @@ public record ConfidentialTransferFeeConfig(PublicKey authority,
     int i = offset + PUBLIC_KEY_LENGTH;
     final var withdrawWithheldAuthorityElgamalPubkey = PublicKey.readPubKey(data, i);
     i += PUBLIC_KEY_LENGTH;
-    final boolean harvestToMintEnabled = data[i] == 1;
+    final boolean harvestToMintEnabled = data[i] != 0;
     ++i;
     final byte[] withheldAmount = new byte[to - i];
     System.arraycopy(data, i, withheldAmount, 0, withheldAmount.length);
