@@ -1,0 +1,5 @@
+/solana/ed25519-vectors/Cargo.lock text eol=lf
+/solana/ed25519-vectors/Cargo.toml text eol=lf
+/solana/ed25519-vectors/rust-toolchain.toml text eol=lf
+/solana/ed25519-vectors/src/*.rs text eol=lf
+/resources/ed25519/solana-curve-vectors.tsv text eol=lf

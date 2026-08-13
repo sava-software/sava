@@ -225,6 +225,15 @@ hardening {
     // signature for coverage to steer by, only differential disagreement at depth
     seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/ed25519")
   }
+  fuzz.register("ed25519Jdk") {
+    targetClass = "software.sava.core.crypto.ed25519.Ed25519JdkFuzz"
+    // the complete input domain is one RFC 8032 private-key seed
+    maxLen = 32
+    // Keep this corpus independent from fuzzEd25519 so minimizing either target
+    // cannot remove a seed that only contributes to the other's oracle paths.
+    // SunEC owns key derivation, not Solana's PDA membership predicate.
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/ed25519-jdk")
+  }
   fuzz.register("txSkeleton") {
     targetClass = "software.sava.core.tx.TransactionSkeletonFuzz"
     // transactions cap at 1232 bytes on-chain; a little headroom lets the fuzzer probe

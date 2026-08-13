@@ -14,11 +14,11 @@ Two different jobs are collected here, and the distinction decides whether a
 seed earns its place. `token2022` and `txSkeleton` are **bootstrap** corpora:
 their formats (TLV chains, header/offset/length agreement) are ones a mutator
 starting from nothing would take a long time to assemble, so the seeds buy
-coverage. `base58` and `borsh` are **regression** corpora: those formats are
-reachable from scratch in seconds, so the seeds buy no coverage — they exist
-so a finding has somewhere to land, and so the harness runs deterministically
-inside `check` instead of only during a campaign. Judge a proposed seed
-against the job its corpus does.
+coverage. `base58`, `borsh`, `ed25519`, and `ed25519-jdk` are **regression**
+corpora: those input spaces are reachable from scratch in seconds, so the seeds
+buy no coverage — they exist so a finding has somewhere to land, and so the
+harness runs deterministically inside `check` instead of only during a campaign.
+Judge a proposed seed against the job its corpus does.
 
 ## `base58` — [Base58Fuzz](../../java/software/sava/core/encoding/Base58Fuzz.java)
 
@@ -63,7 +63,8 @@ consume exactly the promised `len*` bytes and re-read equal:
 ## `ed25519` — [Ed25519Fuzz](../../java/software/sava/core/crypto/ed25519/Ed25519Fuzz.java)
 
 Regression corpus. Every input is one 32-byte point encoding and one keygen
-seed at once, and the harness is differential — sava must agree with
+seed at once, and the harness is differential over Solana's PDA membership and
+keygen semantics — sava must agree with
 BouncyCastle where BouncyCastle has a verdict, with a BigInteger decompression
 reference where it does not, and with itself under a sign-bit flip — so each
 seed pins one oracle path:
@@ -84,6 +85,17 @@ seed pins one oracle path:
   pinned known answer.
 - `all_zero` — 32 zero bytes: y = 0 (reject-set path) and the degenerate
   keygen seed.
+
+## `ed25519-jdk` — [Ed25519JdkFuzz](../../java/software/sava/core/crypto/ed25519/Ed25519JdkFuzz.java)
+
+Regression corpus. Every input is an RFC 8032 seed. Sava's compressed public
+key must exactly match SunEC's after the harness verifies that SunEC consumed
+that exact seed. This target deliberately makes no JDK/Solana curve-membership
+comparison, and its corpus is separate so minimizing it cannot remove a seed
+needed by `Ed25519Fuzz`'s PDA oracle paths:
+
+- `ascii_seed` — 31 printable ASCII bytes plus a line feed: one deterministic,
+  full-length seed; Ed25519 seeds have no structural validity constraints.
 
 ## `token2022` — [Token2022Fuzz](../../java/software/sava/core/accounts/token/Token2022Fuzz.java)
 

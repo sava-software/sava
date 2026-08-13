@@ -352,7 +352,7 @@ with the result:
 ```
 
 `-PmaxFuzzTime` bounds each target's depth; `-PmaxParallelFuzzTargets` bounds how many run
-at once, which matters here because seven targets at full width is what turns this machine
+at once, which matters here because eight targets at full width is what turns this machine
 over — and the load-sensitive failure this repo keeps meeting is a PIT `RUN_ERROR`, whose
 whole diagnosis is whether a coordinate repeats on a *quiet* re-run. An unbounded width
 makes that diagnosis harder to trust. Pick a width deliberately rather than inheriting the

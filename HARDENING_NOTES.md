@@ -680,3 +680,48 @@ always-bump-patch ships it as a patch — but every implementor of `Builder`
 is one we develop, so the additive form buys nothing over the plain
 abstract declaration. Treat `Builder` as sava-implemented: if that ever
 stops being true, this is the decision to revisit.
+
+### JDK Ed25519 differential target — 2026-08-12
+
+`fuzzEd25519Jdk` is a separate 32-byte target for RFC 8032 public-key
+derivation interoperability. It supplies each fuzz input to SunEC's Ed25519
+key-pair generator as its random seed, then refuses to trust the result unless
+the provider requested exactly 32 bytes once and the generated
+`EdECPrivateKey` exposes exactly the same seed. Sava's compressed public key
+must then equal the encoded SunEC `EdECPoint` byte for byte.
+
+It is separate from `fuzzEd25519` because the predicates are different:
+SunEC implements RFC 8032's canonical point-decoding rules, while Solana PDA
+membership uses curve25519-dalek decompression semantics. A JDK point parser is
+therefore not an oracle for `isNotOnCurve`. The targets also use separate
+committed corpora so either minimize task can rewrite its own corpus without
+discarding seeds that only exercise the other's oracle paths. The manual fuzz
+workflow and its timeout budget now cover eight targets.
+
+Property: every 32-byte RFC 8032 seed derives the same compressed public key in
+Sava and SunEC | Oracle: SunEC key generation, conditioned on exact seed
+consumption and private-seed readback | Outcome: missing JDK differential
+coverage closed without changing production behavior.
+
+### Direct Solana Ed25519 curve conformance — 2026-08-13
+
+`SolanaEd25519CurveConformanceTests` consumes a committed 1,364-row fixture generated
+from the semantic versions pinned by Agave v4.2.0: `solana-pubkey` 4.2.0's host
+`bytes_are_curve_point` and `solana-curve25519` 4.0.1's `validate_edwards`, which is the
+Edwards backend called by Agave's `SyscallCurvePointValidation`. The locked generator is
+kept under `sava-core/src/test/solana/ed25519-vectors`; Gradle consumes only its TSV and
+therefore adds neither Rust nor network access to `check`.
+
+The fixture covers the base point and all-`ff` sentinels, all eight dalek torsion
+encodings, both sign bits for reduced y values 0..18 and non-canonical y values
+p..p+18, low and high field boundaries, every one-hot y bit, and 512 fixed-domain
+SHA-256 encodings. Generation fails if the SDK predicate and Agave runtime backend
+disagree. Both wrappers currently use the same pinned dalek decompressor; their equality
+checks wrapper parity, while the existing `BigInteger` oracle remains the independent
+mathematical differential. This is semantic backend conformance, not an SBF ABI,
+memory-translation, compute-metering, or feature-activation integration test.
+
+Property: Sava's `isNotOnCurve` is the logical negation of Solana's PDA curve-membership
+predicate for every pinned encoding | Oracle: `solana-pubkey` 4.2.0 and Agave v4.2.0's
+locked `solana-curve25519` 4.0.1 Edwards backend | Outcome: missing direct upstream
+conformance coverage closed without changing production behavior.
