@@ -263,6 +263,53 @@ final class TransactionSkeletonParseTests {
         software.sava.core.programs.Discriminator.createDiscriminator(noMatch, 0, 4)).length);
   }
 
+  /// Agave's legacy and v0 message sanitizers require `program_id_index` to resolve
+  /// within the statically included account keys. Sava deliberately permits structural
+  /// analysis of unsanitized messages, but every public instruction view must reject the
+  /// same invalid index instead of interpreting the following blockhash bytes as a key.
+  @Test
+  void outOfRangeProgramIndexIsRejectedByEveryInstructionView() {
+    final byte[] data = new byte[
+        1 + Transaction.SIGNATURE_LENGTH
+            + 3
+            + 1 + PublicKey.PUBLIC_KEY_LENGTH
+            + Transaction.BLOCK_HASH_LENGTH
+            + 1 + 4
+    ];
+    int o = 0;
+    data[o++] = 1;                            // one signature
+    o += Transaction.SIGNATURE_LENGTH;
+    data[o++] = 1;                            // one required signature
+    data[o++] = 0;                            // no read-only signers
+    data[o++] = 0;                            // no read-only unsigned accounts
+    data[o++] = 1;                            // one included account: index 0 only
+    o += PublicKey.PUBLIC_KEY_LENGTH;
+    Arrays.fill(data, o, o + Transaction.BLOCK_HASH_LENGTH, (byte) 0xA5);
+    o += Transaction.BLOCK_HASH_LENGTH;
+    data[o++] = 1;                            // one instruction
+    data[o++] = 1;                            // invalid program index == account count
+    data[o++] = 0;                            // no instruction accounts
+    data[o++] = 1;                            // one instruction data byte
+    data[o++] = 42;
+    assertEquals(data.length, o);
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    final var accounts = skeleton.parseAccounts();
+    final var expandedAccounts = Arrays.copyOf(accounts, 2);
+    expandedAccounts[1] = AccountMeta.createInvoked(PublicKey.NONE);
+    final var discriminator = software.sava.core.programs.Discriminator.toDiscriminator(42);
+
+    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.parseInstructions(accounts));
+    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.parseInstructions(expandedAccounts));
+    assertThrows(IndexOutOfBoundsException.class, skeleton::parseLegacyInstructions);
+    assertThrows(IndexOutOfBoundsException.class, skeleton::parseProgramAccounts);
+    assertThrows(IndexOutOfBoundsException.class, skeleton::parseInstructionsWithoutAccounts);
+    assertThrows(IndexOutOfBoundsException.class, skeleton::parseInstructionsWithoutTableAccounts);
+    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.filterInstructions(accounts, discriminator));
+    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.filterInstructionsWithoutTableAccounts(discriminator));
+    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.filterInstructionsWithoutAccounts(discriminator));
+  }
+
   @Test
   void readOnlySignersParseAsReadOnly() {
     // no real fixture here has a read-only signer, so build one: the split between

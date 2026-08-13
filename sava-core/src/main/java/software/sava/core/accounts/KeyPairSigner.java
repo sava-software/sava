@@ -35,9 +35,9 @@ final class KeyPairSigner implements Signer {
     }
   }
 
-  private KeyPairSigner(final PublicKey publicKey,
-                        final PrivateKey privateKey,
-                        final Signature signature) {
+  KeyPairSigner(final PublicKey publicKey,
+                final PrivateKey privateKey,
+                final Signature signature) {
     this.publicKey = publicKey;
     this.privateKey = privateKey;
     this.signature = signature;
@@ -74,8 +74,8 @@ final class KeyPairSigner implements Signer {
       signature.update(message, msgOffset, msgLen);
       signature.sign(message, outPos, Transaction.SIGNATURE_LENGTH);
       return outPos + Transaction.SIGNATURE_LENGTH;
-    } catch (final SignatureException ex) {
-      throw new RuntimeException(ex);
+    } catch (final Exception ex) {
+      throw resetAfterFailure(ex);
     }
   }
 
@@ -84,9 +84,20 @@ final class KeyPairSigner implements Signer {
     try {
       signature.update(message, msgOffset, msgLen);
       return signature.sign();
-    } catch (final SignatureException ex) {
-      throw new RuntimeException(ex);
+    } catch (final Exception ex) {
+      throw resetAfterFailure(ex);
     }
+  }
+
+  private RuntimeException resetAfterFailure(final Exception failure) {
+    try {
+      signature.initSign(privateKey);
+    } catch (final InvalidKeyException resetFailure) {
+      throw new IllegalStateException("Failed to reset Ed25519 signer after a signing failure", resetFailure);
+    }
+    return failure instanceof RuntimeException runtimeException
+        ? runtimeException
+        : new RuntimeException(failure);
   }
 
   @Override

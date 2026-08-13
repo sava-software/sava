@@ -81,15 +81,18 @@ public record Token2022(Mint mint,
         case PausableAccount -> PausableAccount.INSTANCE;
         case PermissionedBurn -> PermissionedBurnConfig.read(data, i);
       };
-      if (extensionData != null) {
-        if (extensionData.l() != length) {
-          throw new IllegalArgumentException(String.format(
-              "Extension %s claims %d bytes, expected %d.",
-              type, length, extensionData.l()
-          ));
-        }
-        extensions.add(extensionData);
+      if (extensionData == null) {
+        throw new IllegalArgumentException(String.format(
+            "Extension %s claims %d bytes, but contains no value.", type, length
+        ));
       }
+      if (extensionData.l() != length) {
+        throw new IllegalArgumentException(String.format(
+            "Extension %s claims %d bytes, expected %d.",
+            type, length, extensionData.l()
+        ));
+      }
+      extensions.add(extensionData);
       i += length;
     }
     return extensions;

@@ -5,6 +5,7 @@ use {
     solana_epoch_rewards::EpochRewards,
     solana_epoch_schedule::EpochSchedule,
     solana_hash::Hash,
+    solana_program_option::COption,
     solana_rent::Rent,
     spl_token_2022_interface::{
         extension::{
@@ -29,9 +30,10 @@ use {
             scaled_ui_amount::ScaledUiAmountConfig,
             transfer_fee::{TransferFeeAmount, TransferFeeConfig},
             transfer_hook::{TransferHook, TransferHookAccount},
-            BaseStateWithExtensions, Extension, ExtensionType, Length,
+            BaseStateWithExtensions, BaseStateWithExtensionsMut, Extension, ExtensionType, Length,
+            StateWithExtensions, StateWithExtensionsMut,
         },
-        state::{Account, Mint},
+        state::{Account, AccountState, Mint},
     },
     spl_token_group_interface::state::{TokenGroup, TokenGroupMember},
     spl_token_metadata_interface::state::TokenMetadata,
@@ -70,6 +72,8 @@ const SOLANA_ADDRESS_CHECKSUM: &str =
     "01332a01c0a3098404d55a724c8d9a92aed4a50fe40a7dd0c7a51e29274c14de";
 const SOLANA_HASH_CHECKSUM: &str =
     "0df9b01495ed31100aca97a7f5862d5e19ab1636d60d1a9f02391408dd9dec84";
+const SOLANA_PROGRAM_OPTION_CHECKSUM: &str =
+    "7a88006a9b8594088cec9027ab77caaaa258a2aaa2083d3f086c44b42e50aeab";
 const BYTEMUCK_CHECKSUM: &str = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797";
 const SHA2_CHECKSUM: &str = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283";
 
@@ -170,6 +174,11 @@ fn main() -> Result<(), String> {
         ("wincode", "0.6.1", WINCODE_CHECKSUM),
         ("solana-address", "2.7.0", SOLANA_ADDRESS_CHECKSUM),
         ("solana-hash", "4.6.0", SOLANA_HASH_CHECKSUM),
+        (
+            "solana-program-option",
+            "3.1.0",
+            SOLANA_PROGRAM_OPTION_CHECKSUM,
+        ),
         ("bytemuck", "1.25.2", BYTEMUCK_CHECKSUM),
         ("sha2", "0.10.9", SHA2_CHECKSUM),
     ] {
@@ -180,11 +189,16 @@ fn main() -> Result<(), String> {
     let resources = manifest_dir.join("../../resources/upstream");
     let token = generate_token_fixture(&provenance)?;
     let token_bools = generate_token_bool_fixture(&provenance)?;
+    let token_accounts = generate_token_account_fixture(&provenance)?;
     let metadata = generate_metadata_fixture(&provenance)?;
     let sysvars = generate_sysvar_fixture(&provenance)?;
     let fixtures = [
         (resources.join("solana-token2022-extensions.tsv"), token),
         (resources.join("solana-token2022-bools.tsv"), token_bools),
+        (
+            resources.join("solana-token2022-accounts.tsv"),
+            token_accounts,
+        ),
         (resources.join("solana-token2022-metadata.tsv"), metadata),
         (resources.join("solana-sysvars.tsv"), sysvars),
     ];
@@ -196,6 +210,198 @@ fn main() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn generate_token_account_fixture(provenance: &str) -> Result<String, String> {
+    let rows = [full_mint_fixture()?, full_token_account_fixture()?];
+    let mut output = header(
+        provenance,
+        "full Token-2022 Mint and Account bytes pack and unpack through pinned SPL Rust APIs",
+        rows.len(),
+    );
+    writeln!(
+        output,
+        "id\tkind\taddress_fill\tdata_length\tdata_sha256\tdata_hex"
+    )
+    .unwrap();
+    for (id, kind, address_fill, data) in rows {
+        writeln!(
+            output,
+            "{id}\t{kind}\t{address_fill}\t{}\t{}\t{}",
+            data.len(),
+            sha256_hex(&data),
+            encode_hex(&data),
+        )
+        .unwrap();
+    }
+    Ok(output)
+}
+
+fn full_mint_fixture() -> Result<(&'static str, &'static str, u8, Vec<u8>), String> {
+    let extension_types = [
+        ExtensionType::MintCloseAuthority,
+        ExtensionType::InterestBearingConfig,
+        ExtensionType::PermanentDelegate,
+        ExtensionType::TransferHook,
+        ExtensionType::ScaledUiAmount,
+        ExtensionType::Pausable,
+        ExtensionType::PermissionedBurn,
+    ];
+    let length = ExtensionType::try_calculate_account_len::<Mint>(&extension_types)
+        .map_err(|error| format!("failed to size full mint fixture: {error:?}"))?;
+    let mut data = vec![0_u8; length];
+    let base = Mint {
+        mint_authority: COption::Some(Address::new_from_array([0x11; 32])),
+        supply: 0x0102_0304_0506_0708,
+        decimals: 9,
+        is_initialized: true,
+        freeze_authority: COption::Some(Address::new_from_array([0x12; 32])),
+    };
+    {
+        let mut state = StateWithExtensionsMut::<Mint>::unpack_uninitialized(&mut data)
+            .map_err(|error| format!("failed to create full mint fixture: {error:?}"))?;
+        state.base = base;
+        state.pack_base();
+        state
+            .init_account_type()
+            .map_err(|error| format!("failed to set full mint account type: {error:?}"))?;
+
+        state
+            .init_extension::<MintCloseAuthority>(true)
+            .map_err(|error| format!("failed to add mint-close-authority: {error:?}"))?
+            .close_authority = Address::new_from_array([0x31; 32]).into();
+
+        *state
+            .init_extension::<InterestBearingConfig>(true)
+            .map_err(|error| format!("failed to add interest-bearing config: {error:?}"))? =
+            InterestBearingConfig {
+                rate_authority: Address::new_from_array([0x32; 32]).into(),
+                initialization_timestamp: (-1_700_000_000_i64).into(),
+                pre_update_average_rate: (-321_i16).into(),
+                last_update_timestamp: 1_700_000_000_i64.into(),
+                current_rate: 456_i16.into(),
+            };
+
+        state
+            .init_extension::<PermanentDelegate>(true)
+            .map_err(|error| format!("failed to add permanent delegate: {error:?}"))?
+            .delegate = Address::new_from_array([0x34; 32]).into();
+
+        *state
+            .init_extension::<TransferHook>(true)
+            .map_err(|error| format!("failed to add transfer hook: {error:?}"))? = TransferHook {
+            authority: Address::new_from_array([0x35; 32]).into(),
+            program_id: Address::new_from_array([0x36; 32]).into(),
+        };
+
+        *state
+            .init_extension::<ScaledUiAmountConfig>(true)
+            .map_err(|error| format!("failed to add scaled-ui-amount config: {error:?}"))? =
+            ScaledUiAmountConfig {
+                authority: Address::new_from_array([0x33; 32]).into(),
+                multiplier: 1.25_f64.into(),
+                new_multiplier_effective_timestamp: 1_800_000_000_i64.into(),
+                new_multiplier: 2.5_f64.into(),
+            };
+
+        *state
+            .init_extension::<PausableConfig>(true)
+            .map_err(|error| format!("failed to add pausable config: {error:?}"))? =
+            PausableConfig {
+                authority: Address::new_from_array([0x37; 32]).into(),
+                paused: true.into(),
+            };
+
+        state
+            .init_extension::<PermissionedBurnConfig>(true)
+            .map_err(|error| format!("failed to add permissioned-burn config: {error:?}"))?
+            .authority = Address::new_from_array([0x38; 32]).into();
+    }
+
+    let unpacked = StateWithExtensions::<Mint>::unpack(&data)
+        .map_err(|error| format!("Rust rejected full mint fixture: {error:?}"))?;
+    if unpacked.base != base {
+        return Err("full mint base did not round trip through Rust".into());
+    }
+    let unpacked_types = unpacked
+        .get_extension_types()
+        .map_err(|error| format!("failed to list full mint extensions: {error:?}"))?;
+    if unpacked_types != extension_types {
+        return Err(format!(
+            "full mint extension order changed: {unpacked_types:?}"
+        ));
+    }
+    Ok(("agave_multi_extension_mint", "Mint", 0xa1, data))
+}
+
+fn full_token_account_fixture() -> Result<(&'static str, &'static str, u8, Vec<u8>), String> {
+    let extension_types = [
+        ExtensionType::ImmutableOwner,
+        ExtensionType::MemoTransfer,
+        ExtensionType::CpiGuard,
+        ExtensionType::TransferHookAccount,
+        ExtensionType::TransferFeeAmount,
+        ExtensionType::PausableAccount,
+    ];
+    let length = ExtensionType::try_calculate_account_len::<Account>(&extension_types)
+        .map_err(|error| format!("failed to size full token-account fixture: {error:?}"))?;
+    let mut data = vec![0_u8; length];
+    let base = Account {
+        mint: Address::new_from_array([0x41; 32]),
+        owner: Address::new_from_array([0x42; 32]),
+        amount: 0x1112_1314_1516_1718,
+        delegate: COption::Some(Address::new_from_array([0x43; 32])),
+        state: AccountState::Frozen,
+        is_native: COption::Some(0x191a_1b1c_1d1e_1f20),
+        delegated_amount: 0x2122_2324_2526_2728,
+        close_authority: COption::Some(Address::new_from_array([0x44; 32])),
+    };
+    {
+        let mut state = StateWithExtensionsMut::<Account>::unpack_uninitialized(&mut data)
+            .map_err(|error| format!("failed to create full token-account fixture: {error:?}"))?;
+        state.base = base;
+        state.pack_base();
+        state
+            .init_account_type()
+            .map_err(|error| format!("failed to set token-account type: {error:?}"))?;
+        state
+            .init_extension::<ImmutableOwner>(true)
+            .map_err(|error| format!("failed to add immutable-owner: {error:?}"))?;
+        state
+            .init_extension::<MemoTransfer>(true)
+            .map_err(|error| format!("failed to add memo-transfer: {error:?}"))?
+            .require_incoming_transfer_memos = true.into();
+        state
+            .init_extension::<CpiGuard>(true)
+            .map_err(|error| format!("failed to add CPI guard: {error:?}"))?
+            .lock_cpi = true.into();
+        state
+            .init_extension::<TransferHookAccount>(true)
+            .map_err(|error| format!("failed to add transfer-hook account: {error:?}"))?
+            .transferring = true.into();
+        state
+            .init_extension::<TransferFeeAmount>(true)
+            .map_err(|error| format!("failed to add transfer-fee amount: {error:?}"))?
+            .withheld_amount = 0x3132_3334_3536_3738_u64.into();
+        state
+            .init_extension::<PausableAccount>(true)
+            .map_err(|error| format!("failed to add pausable account: {error:?}"))?;
+    }
+
+    let unpacked = StateWithExtensions::<Account>::unpack(&data)
+        .map_err(|error| format!("Rust rejected full token-account fixture: {error:?}"))?;
+    if unpacked.base != base {
+        return Err("full token-account base did not round trip through Rust".into());
+    }
+    let unpacked_types = unpacked
+        .get_extension_types()
+        .map_err(|error| format!("failed to list full token-account extensions: {error:?}"))?;
+    if unpacked_types != extension_types {
+        return Err(format!(
+            "full token-account extension order changed: {unpacked_types:?}"
+        ));
+    }
+    Ok(("agave_multi_extension_account", "Account", 0xa2, data))
 }
 
 fn generate_token_fixture(provenance: &str) -> Result<String, String> {
@@ -991,6 +1197,12 @@ fn provenance(lock: &str, manifest: &[u8], generator: &[u8], toolchain: &[u8]) -
     writeln!(
         output,
         "# solana-epoch-schedule-crate-checksum: {EPOCH_SCHEDULE_CHECKSUM}"
+    )
+    .unwrap();
+    writeln!(output, "# solana-program-option: 3.1.0").unwrap();
+    writeln!(
+        output,
+        "# solana-program-option-crate-checksum: {SOLANA_PROGRAM_OPTION_CHECKSUM}"
     )
     .unwrap();
     writeln!(output, "# solana-rent: 4.4.0").unwrap();

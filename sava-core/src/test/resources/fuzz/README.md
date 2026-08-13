@@ -102,8 +102,20 @@ needed by `Ed25519Fuzz`'s PDA oracle paths:
 Bootstrap corpus. Real TLV chains that from-scratch tests don't assemble,
 giving PIT's mutants the same round-trip oracle as the fuzzer:
 
-- `pyusd_mint` — the PYUSD mint, 8 extensions including TokenMetadata.
-- `confidential_account` — a confidential token account.
+- `pyusd_mint` — raw 866-byte mainnet account data for the PYUSD mint
+  `2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo`, captured from RPC. It has
+  8 non-default extensions including embedded TokenMetadata and is replayed by the
+  named PYUSD parser regression as well as the fuzz harness.
+- `confidential_account` — raw 469-byte mainnet account data for
+  `A9JXuXgm62QG3kTT5waRdEMiGw1w7TY2ovs8MoFWetmZ`, captured from RPC. It has
+  ImmutableOwner and a populated ConfidentialTransferAccount and is replayed by the
+  named confidential-account regression as well as the fuzz harness.
+
+These bootstrap captures predate slot/date metadata. The PYUSD address, complete 866-byte
+layout, and embedded metadata are independently pinned as real mainnet data by
+[Wormhole at e3e9e696](https://github.com/wormhole-foundation/wormhole/blob/e3e9e69686b668ee00b58b676081ae2c10f7babd/solana/modules/token_bridge/token_metadata_parser/src/lib.rs#L584)
+and by a full RPC envelope in
+[marginfi-v2 at 4bd57850](https://github.com/mrgnlabs/marginfi-v2/blob/4bd57850e689447fdd7bd300c6e2a8553cd9c25f/tests/fixtures/pyusd_mint.json).
 
 ## `txSkeleton` — [TransactionSkeletonFuzz](../../java/software/sava/core/tx/TransactionSkeletonFuzz.java)
 

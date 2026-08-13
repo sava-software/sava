@@ -5,9 +5,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import software.sava.core.accounts.pbkdf.KeyDerivation;
 import software.sava.core.encoding.Base58;
+import software.sava.core.tx.Transaction;
 
 import javax.crypto.AEADBadTagException;
 import java.io.StringReader;
+import java.security.InvalidKeyException;
+import java.security.PrivateKey;
+import java.security.Signature;
+import java.security.SignatureException;
 import java.util.Arrays;
 import java.util.Properties;
 
@@ -108,6 +113,131 @@ final class SignerTest {
     assertFalse(PublicKey.verifySignature(publicKey.toByteArray(), 0, msg, prefixSignature));
     assertFalse(PublicKey.verifySignature(publicKey.toByteArray(), msg, prefixSignature));
     assertFalse(publicKey.verifySignature(msg, prefixSignature));
+  }
+
+  @Test
+  void failedOutputWriteDoesNotPoisonTheSigner() {
+    final var signer = Signer.createFromPrivateKey(new byte[KEY_LENGTH]);
+    final byte[] rejectedMessage = "rejected signing attempt".getBytes(UTF_8);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> signer.sign(rejectedMessage, 0, rejectedMessage.length, -1)
+    );
+
+    final byte[] nextMessage = "independent next message".getBytes(UTF_8);
+    final byte[] signature = signer.sign(nextMessage);
+    assertTrue(PublicKey.verifySignature(signer.publicKey().toJavaPublicKey(), nextMessage, signature));
+  }
+
+  @Test
+  void failedReturningSignDoesNotPoisonTheSigner() {
+    final var signer = Signer.createFromPrivateKey(new byte[KEY_LENGTH]);
+    final byte[] rejectedMessage = "rejected returning-sign attempt".getBytes(UTF_8);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> signer.sign(rejectedMessage, 0, rejectedMessage.length + 1)
+    );
+
+    final byte[] nextMessage = "next message after returning-sign failure".getBytes(UTF_8);
+    final byte[] signature = signer.sign(nextMessage);
+    assertTrue(PublicKey.verifySignature(signer.publicKey().toJavaPublicKey(), nextMessage, signature));
+  }
+
+  @Test
+  void providerFailureAfterUpdateDoesNotPoisonTheSigner() throws InvalidKeyException {
+    final PrivateKey privateKey = KeyPairSigner.generatePrivateKey(new byte[KEY_LENGTH]);
+    final var signature = new ResetSensitiveSignature();
+    signature.initSign(privateKey);
+    final var signer = new KeyPairSigner(PublicKey.NONE, privateKey, signature);
+    final byte[] message = "provider failure".getBytes(UTF_8);
+
+    final var failure = assertThrows(RuntimeException.class, () -> signer.sign(message));
+    assertInstanceOf(SignatureException.class, failure.getCause());
+    assertArrayEquals(new byte[Transaction.SIGNATURE_LENGTH], signer.sign(message));
+  }
+
+  @Test
+  void outputBufferSigningCoversTheRequestedMessage() {
+    final var signer = Signer.createFromPrivateKey(new byte[KEY_LENGTH]);
+    final byte[] message = "output-buffer message".getBytes(UTF_8);
+    final byte[] signed = new byte[Transaction.SIGNATURE_LENGTH + message.length];
+    System.arraycopy(message, 0, signed, Transaction.SIGNATURE_LENGTH, message.length);
+
+    assertEquals(
+        Transaction.SIGNATURE_LENGTH,
+        signer.sign(signed, Transaction.SIGNATURE_LENGTH, message.length, 0)
+    );
+    assertTrue(PublicKey.verifySignature(
+        signer.publicKey().toJavaPublicKey(),
+        message,
+        Arrays.copyOf(signed, Transaction.SIGNATURE_LENGTH)
+    ));
+  }
+
+  private static final class ResetSensitiveSignature extends Signature {
+
+    private boolean initialized;
+    private boolean failNextSign = true;
+
+    private ResetSensitiveSignature() {
+      super("test-reset-sensitive-ed25519");
+    }
+
+    @Override
+    protected void engineInitVerify(final java.security.PublicKey publicKey) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void engineInitSign(final PrivateKey privateKey) {
+      initialized = true;
+    }
+
+    @Override
+    protected void engineUpdate(final byte b) throws SignatureException {
+      if (!initialized) {
+        throw new SignatureException("signature was not reset");
+      }
+    }
+
+    @Override
+    protected void engineUpdate(final byte[] data, final int offset, final int length) throws SignatureException {
+      if (!initialized) {
+        throw new SignatureException("signature was not reset");
+      }
+    }
+
+    @Override
+    protected byte[] engineSign() throws SignatureException {
+      if (failNextSign) {
+        failNextSign = false;
+        initialized = false;
+        throw new SignatureException("deterministic provider failure after update");
+      }
+      if (!initialized) {
+        throw new SignatureException("signature was not reset");
+      }
+      return new byte[Transaction.SIGNATURE_LENGTH];
+    }
+
+    @Override
+    protected boolean engineVerify(final byte[] signature) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void engineSetParameter(final String parameter, final Object value) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected Object engineGetParameter(final String parameter) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private static void verifySigner(final byte[] keyPair, final Signer signer) {

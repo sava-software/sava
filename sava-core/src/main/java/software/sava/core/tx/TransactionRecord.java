@@ -168,6 +168,11 @@ record TransactionRecord(AccountMeta feePayer,
 
   @Override
   public void sign(final int index, final Signer signer) {
+    if (index < 0 || index >= numSigners) {
+      throw new IllegalArgumentException(String.format(
+          "Invalid signer index %d for transaction with %d required signers.", index, numSigners
+      ));
+    }
     Transaction.sign(
         signer,
         this.data,

@@ -7,12 +7,20 @@ import software.sava.core.accounts.token.Token2022;
 import software.sava.core.accounts.token.Token2022Account;
 import software.sava.core.encoding.ByteUtil;
 
+import java.io.IOException;
 import java.util.Base64;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ParseExtensionsTests {
+
+  private static byte[] mainnetFixture(final String name) throws IOException {
+    try (final var input = ParseExtensionsTests.class.getResourceAsStream("/fuzz/token2022/" + name)) {
+      assertNotNull(input, "missing Token-2022 mainnet fixture " + name);
+      return input.readAllBytes();
+    }
+  }
 
   // extensions are keyed by their sealed type now that the ExtensionType map is deprecated
   private static <T extends TokenExtension> T assertExtension(final Set<TokenExtension> extensions, final Class<T> type) {
@@ -72,6 +80,25 @@ final class ParseExtensionsTests {
     assertEquals("Extension MintCloseAuthority claims 31 bytes, expected 32.", shortError.getMessage());
   }
 
+  /// SPL's variable-length TLV path passes the declared value slice to
+  /// `TokenMetadata::unpack_from_slice`; an empty slice cannot decode the required Borsh
+  /// fields and is rejected. It is not an absent extension once its TLV header is present.
+  @Test
+  @SuppressWarnings("removal") // the wire ordinal is owned by the deprecated compatibility enum until its removal
+  void zeroLengthTokenMetadataIsRejected() {
+    final byte[] data = new byte[Integer.BYTES];
+    ByteUtil.putInt16LE(data, 0, ExtensionType.TokenMetadata.ordinal());
+
+    final var exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> Token2022.parseExtensions(data, 0)
+    );
+    assertEquals(
+        "Extension TokenMetadata claims 0 bytes, but contains no value.",
+        exception.getMessage()
+    );
+  }
+
   @Test
   void unsignedTransferFeeBasisPoints() {
     // PodU16 on the wire: read as signed i16, a value with the top bit set came back
@@ -115,10 +142,11 @@ final class ParseExtensionsTests {
   }
 
   @Test
-  void confidentialTokenAccount() {
+  void confidentialTokenAccount() throws IOException {
     final byte[] data = Base64.getDecoder().decode("""
         RxdtkYpXhCDhXf92mJjxs3oZ3ex+alJvU1LnfB+xzfxhoty+GQ/aYo6Ekj8G1Njo9gjTTa9EWq9e338fGgvWKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcAAAAFACcBASSV8fcw/nQLyJBayJHB+UCYPPPoNkClfQLx/iFBqvQVAmXmv7UFCY11M7oWWvTE/0mEsdyVHE3tkaMweLfcQFFEB5pvlUiDRJIiIijWYBxatPJAihLSrmvMypcRrCDCCC4mK0ztqaB12QEFnjXJkSvFIHVAsMcR8gIvEke8w3xPjEzQLztO6GgsHghnlrlLSF6lAOvS1NlIbW+Qlh+wlEX6oDJPu4alTqmSccdS4kDNLEOlkK/xR6CvDLcuskcDUfT1b9LH7qUJe2HcQsUi6f6xQ16KSVvXbfltklVYjx5+RWcFUwYZ+XswiBOuPy2ZjKHbPBY1fahZCigCqTg2IcrV7X8xAQEBAAAAAAAAAAAAAQAAAAAAAQAAAAAAAAABAAAAAAAAAA==
         """.stripTrailing());
+    assertArrayEquals(mainnetFixture("confidential_account"), data);
 
     final var address = PublicKey.fromBase58Encoded("A9JXuXgm62QG3kTT5waRdEMiGw1w7TY2ovs8MoFWetmZ");
     final var account = Token2022Account.read(address, data);
@@ -178,10 +206,11 @@ final class ParseExtensionsTests {
   }
 
   @Test
-  void payPalExtensionsTest() {
+  void payPalExtensionsTest() throws IOException {
     final byte[] data = Base64.getDecoder().decode("""
         AQAAAN1MSGyQ+LbwB8ME7ySB+AUYa+j9X1Ks0QJct5ufZ/8hLuljgmRzAAAGAQEAAAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQMAIAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKwwAIAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKwEAbAAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKxeFMmHvarhTKmfwU4ZarTEpP88HzxIKtbmhVwZUjcArAAAAAAAAAABdAgAAAAAAAAAAAAAAAAAAAABdAgAAAAAAAAAAAAAAAAAAAAAEAEEAF4UyYe9quFMqZ/BThlqtMSk/zwfPEgq1uaFXBlSNwCsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAIEAF4UyYe9quFMqZ/BThlqtMSk/zwfPEgq1uaFXBlSNwCscN+ZDO3ME3YJzeuQNm4vzxJ9bDmxJqNUzKLPlBpAcVwEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgBAABeFMmHvarhTKmfwU4ZarTEpP88HzxIKtbmhVwZUjcArAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASAEAAF4UyYe9quFMqZ/BThlqtMSk/zwfPEgq1uaFXBlSNwCsXkkg7bIoqh7dHHYFPlZH5OVyECpzj2fTVun06S4p0nhMArgAXhTJh72q4Uypn8FOGWq0xKT/PB88SCrW5oVcGVI3AKxeSSDtsiiqHt0cdgU+Vkfk5XIQKnOPZ9NW6fTpLinSeCgAAAFBheVBhbCBVU0QFAAAAUFlVU0RPAAAAaHR0cHM6Ly90b2tlbi1tZXRhZGF0YS5wYXhvcy5jb20vcHl1c2RfbWV0YWRhdGEvcHJvZC9zb2xhbmEvcHl1c2RfbWV0YWRhdGEuanNvbgAAAAA=
         """.stripTrailing());
+    assertArrayEquals(mainnetFixture("pyusd_mint"), data);
 
     final var token2022 = Token2022.read(
         PublicKey.fromBase58Encoded("2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo"),

@@ -726,6 +726,19 @@ predicate for every pinned encoding | Oracle: `solana-pubkey` 4.2.0 and Agave v4
 locked `solana-curve25519` 4.0.1 Edwards backend | Outcome: missing direct upstream
 conformance coverage closed without changing production behavior.
 
+### Seeded-account compatibility follow-up — 2026-08-13
+
+Property: the seed bytes carried in `AccountWithSeed` match the UTF-8 bytes hashed by
+Solana's `create_with_seed` | Oracle: `solana-address::Address::create_with_seed` and the
+already-pinned Rust Unicode vectors | Outcome: the String metadata factory still used
+lossy US-ASCII after derivation moved to UTF-8; production fixed.
+
+Property: the off-curve ASCII helper returns a seed the System Program can accept |
+Oracle: Solana's 32-byte complete-seed limit and `IllegalOwner` PDA-marker guard |
+Outcome: the helper allowed a 32-byte base plus its nonce and marker-suffixed owners;
+production now reserves the nonce byte, accepts at most 31 caller bytes, and applies the
+same owner guard while retaining its documented ASCII encoding and 127..0 search.
+
 ### Direct legacy transaction and signing conformance — 2026-08-13
 
 `LegacyMessageConformanceTests` consumes eleven committed vectors emitted by the locked
@@ -752,6 +765,13 @@ Oracle: Solana `VersionedTransaction::try_new` key-to-slot reordering plus fixed
 Outcome: production bugs fixed for singleton matching and complete collection prevalidation;
 the published `SequencedCollection` positional contract remains pinned.
 
+Property: positional signing accepts exactly the required-signature slots, and a failed
+signing attempt cannot contaminate the next signature from the same signer | Oracle: the
+transaction header's required-signature count plus an independent JDK Ed25519 verifier |
+Outcome: out-of-range positions could overwrite later transaction bytes, and SunEC retained
+an updated message after an output-write failure; both production paths now fail without
+poisoning transaction or signer state.
+
 Property: the fixture makes Solana's account/header and 127/128-signature validity
 boundaries visible without turning Sava's published transaction builder into a validator |
 Oracle: Solana `CompiledKeys::try_into_message_components` u8 conversions and the current
@@ -765,21 +785,37 @@ Oracle: Solana `CompiledInstruction { program_id_index: u8 }` and the committed 
 index-255 message | Outcome: production parser bug fixed across skeleton traversal and all
 instruction accessors.
 
+Property: every public instruction view either resolves a program index from the statically
+included account keys or rejects it | Oracle: Agave legacy/v0 message sanitization and the
+existing broad `parseInstructions` bounds behavior | Outcome: narrow skeleton views could
+assemble an attacker-selected public key from later message bytes for an out-of-range index;
+all views now agree. Program index zero remains parseable deliberately for offline analysis
+of unsanitized messages.
+
 ### Direct Token-2022 and sysvar layout conformance — 2026-08-13
 
 The locked generator under `sava-core/src/test/solana/upstream-layout-vectors` resolves
 the exact Token-2022, sysvar, and wincode versions selected by the current local Agave and
-solana-sdk checkouts. Four committed TSVs cover all 29 extension ordinals and fixed sizes,
+solana-sdk checkouts. Five committed TSVs cover all 29 extension ordinals and fixed sizes,
 short/long TLV verdicts, non-default values, TokenMetadata's largest `u16` value and first
 overflow, nine zero-copy Bool fields, unsigned EpochRewards `u128`, strict wincode bools,
-and Rent's checked integer and unsigned-u64/f64 boundaries. The Java tests hash the
+Rent's checked integer and unsigned-u64/f64 boundaries, and complete SPL-packed Mint and
+Account images with thirteen extension instances and non-default values in every valued
+extension. The Java tests hash the
 generator, manifest, lock, and toolchain; the generator checks the semantic crates'
 checksums and reproduces the fixtures byte for byte with `--locked --check`.
 
 Property: a TLV value is confined to its declared slice and fixed extensions have their
 canonical Rust size | Oracle: `spl-token-2022-interface` 3.1.1
 `BaseStateWithExtensions::get_extension` | Outcome: malformed known extensions could read
-the following entry or accept the wrong size; production parser and writer fixed.
+the following entry or accept the wrong size, while a zero-length TokenMetadata entry was
+silently dropped; production parser and writer fixed.
+
+Property: Sava parses and reproduces complete extended Mint and Account state, not only
+isolated TLV payloads | Oracle: Agave's account-decoder test construction pattern executed
+through pinned SPL `StateWithExtensionsMut`/`StateWithExtensions`, plus captured mainnet
+PYUSD and confidential-account bytes | Outcome: added full base-header, account-type,
+multi-extension ordering/value, digest, and byte-for-byte serialization coverage.
 
 Property: every nonzero Token-2022 zero-copy Bool byte means true | Oracle:
 `solana-zero-copy`'s `unaligned::Bool` through nine pinned Rust values | Outcome: Java had
@@ -810,6 +846,20 @@ decoder without forcing a zstd library on every consumer | Oracle: live RPC capt
 1.5.7 verification, and Agave's 10 MiB account limit | Outcome: Java previously returned
 compressed frame bytes as account data; production fixed through an explicit caller-supplied
 decoder.
+
+Direct parser users can provide the same SPI through
+`AccountInfo.parseAccounts(ji, context, factory, zstdDecompressor)`; the three-argument
+overload and `JsonUtil.parseEncodedData` intentionally have no decoder and reject
+`base64+zstd`. A pass-through decoder preserves the old raw-frame behavior for callers
+which need it. The client still rejects a missing decoder synchronously before constructing
+its `CompletableFuture`; that fail-fast timing is part of the request-validation contract.
+
+Release-note requirement for this cluster: the release-please PR must state that
+`TxReward.commission()` contains basis points when `commissionBps()` is true (rather than
+the prior percentage unit), and that `RewardType.DEACTIVATED_STAKE` is a new enum constant
+which already-compiled exhaustive switches may need to handle. The repository's
+`always-bump-patch` policy does not make those compatibility notes optional; it only keeps
+the resulting release version at patch granularity.
 
 Property: full block requests accept the transaction versions this library models, and
 rewards retain current variants/fields | Oracle: Agave `RpcBlockConfig`, transaction-status

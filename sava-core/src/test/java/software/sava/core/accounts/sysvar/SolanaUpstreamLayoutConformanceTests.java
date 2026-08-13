@@ -2,12 +2,28 @@ package software.sava.core.accounts.sysvar;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.token.AccountState;
 import software.sava.core.accounts.token.Token2022;
+import software.sava.core.accounts.token.Token2022Account;
+import software.sava.core.accounts.token.extensions.AccountType;
 import software.sava.core.accounts.token.extensions.AccountTokenExtension;
+import software.sava.core.accounts.token.extensions.CpiGuard;
 import software.sava.core.accounts.token.extensions.ExtensionType;
+import software.sava.core.accounts.token.extensions.ImmutableOwner;
+import software.sava.core.accounts.token.extensions.InterestBearingConfig;
+import software.sava.core.accounts.token.extensions.MemoTransfer;
+import software.sava.core.accounts.token.extensions.MintCloseAuthority;
 import software.sava.core.accounts.token.extensions.MintTokenExtension;
+import software.sava.core.accounts.token.extensions.PausableAccount;
+import software.sava.core.accounts.token.extensions.PausableConfig;
+import software.sava.core.accounts.token.extensions.PermanentDelegate;
+import software.sava.core.accounts.token.extensions.PermissionedBurnConfig;
+import software.sava.core.accounts.token.extensions.ScaledUiAmountConfig;
 import software.sava.core.accounts.token.extensions.TokenExtension;
 import software.sava.core.accounts.token.extensions.TokenMetadata;
+import software.sava.core.accounts.token.extensions.TransferFeeAmount;
+import software.sava.core.accounts.token.extensions.TransferHook;
+import software.sava.core.accounts.token.extensions.TransferHookAccount;
 import software.sava.core.encoding.ByteUtil;
 
 import java.io.BufferedReader;
@@ -37,6 +53,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
 
   private static final String EXTENSIONS_RESOURCE = "/upstream/solana-token2022-extensions.tsv";
   private static final String TOKEN_BOOLS_RESOURCE = "/upstream/solana-token2022-bools.tsv";
+  private static final String TOKEN_ACCOUNTS_RESOURCE = "/upstream/solana-token2022-accounts.tsv";
   private static final String METADATA_RESOURCE = "/upstream/solana-token2022-metadata.tsv";
   private static final String SYSVARS_RESOURCE = "/upstream/solana-sysvars.tsv";
   private static final String EXTENSION_COLUMNS =
@@ -48,6 +65,8 @@ public final class SolanaUpstreamLayoutConformanceTests {
           + "value_hex\ttlv_u16_fits\trust_round_trip";
   private static final String TOKEN_BOOL_COLUMNS =
       "ordinal\tname\tfield\tbool_offset\tvalue_hex\trust_value";
+  private static final String TOKEN_ACCOUNT_COLUMNS =
+      "id\tkind\taddress_fill\tdata_length\tdata_sha256\tdata_hex";
   private static final String EPOCH_COLUMNS =
       "id\tdistribution_starting_block_height\tnum_partitions\tparent_blockhash_hex\t"
           + "total_points\ttotal_rewards\tdistributed_rewards\tactive\twire_hex";
@@ -74,13 +93,15 @@ public final class SolanaUpstreamLayoutConformanceTests {
       Map.entry("solana-epoch-rewards-crate-checksum", "0788d74ee15778deecaa15ed1a1e37727ba954f86cbc35225450a1f2b5012969"),
       Map.entry("solana-epoch-schedule", "3.3.0"),
       Map.entry("solana-epoch-schedule-crate-checksum", "a1633cfd10cde127f2caf8f12021b4f8e9a425e7e4eea4326e428c422376d6fd"),
+      Map.entry("solana-program-option", "3.1.0"),
+      Map.entry("solana-program-option-crate-checksum", "7a88006a9b8594088cec9027ab77caaaa258a2aaa2083d3f086c44b42e50aeab"),
       Map.entry("solana-rent", "4.4.0"),
       Map.entry("solana-rent-crate-checksum", "dc016b348926395ba01f8288cdf5da25fc30f5a0806028b32d5e5b3147b10bf9"),
       Map.entry("wincode", "0.6.1"),
       Map.entry("wincode-crate-checksum", "bfc6339f1ba427bf7ad7c42403b28e524832ba2ddb5eef1bb2cc3b85db6b7b75"),
-      Map.entry("cargo-lock-sha256", "657a3ed0f2c4779e4c815f17ce0242cfbe0f50d68658f26f4f97b20f0723694c"),
-      Map.entry("cargo-manifest-sha256", "6303dc808132f97d2fe265869a5eede9b9689ab9e08bfc0b8fe35c0f73af3023"),
-      Map.entry("generator-source-sha256", "3647f24b62d1eb8cd1f75c13aa6b7e1a01a9004204351f956f1b19c3baf6b535"),
+      Map.entry("cargo-lock-sha256", "c68880c52e3faefefe48544e061650df0faa00b636f2dab2ead43d4e214f1406"),
+      Map.entry("cargo-manifest-sha256", "1cd46c2c2ecb27d7cd89ffc8c97ce9a30e16b4d49cccdaae5d12bd3245c6bebd"),
+      Map.entry("generator-source-sha256", "33d6770501fbb66239267d3afc0971e11ccdb17b30e49a12285bb631799b8ff2"),
       Map.entry("rust-toolchain", "1.97.1"),
       Map.entry("rust-toolchain-sha256", "5d959dfcc98b53886ee772ba216c4f9a1b31f093b46b5b263c0d084af54e821d")
   );
@@ -226,6 +247,115 @@ public final class SolanaUpstreamLayoutConformanceTests {
     }
   }
 
+  public static void assertToken2022FullAccountsMatchRust() throws IOException {
+    final var fixture = loadFlatFixture(
+        TOKEN_ACCOUNTS_RESOURCE,
+        TOKEN_ACCOUNT_COLUMNS,
+        "full Token-2022 Mint and Account bytes pack and unpack through pinned SPL Rust APIs",
+        2
+    );
+    for (final var row : fixture.rows()) {
+      final var fields = fields(row, 6);
+      final String id = fields[0];
+      final String kind = fields[1];
+      final var address = key(Integer.parseInt(fields[2]));
+      final byte[] data = HEX.parseHex(fields[5]);
+      assertEquals(Integer.parseInt(fields[3]), data.length, () -> "wire length for " + id);
+      assertEquals(fields[4], sha256Hex(data), () -> "wire hash for " + id);
+
+      switch (id) {
+        case "agave_multi_extension_mint" -> assertFullMint(kind, address, data);
+        case "agave_multi_extension_account" -> assertFullTokenAccount(kind, address, data);
+        default -> fail("unknown full Token-2022 fixture: " + id);
+      }
+    }
+  }
+
+  private static void assertFullMint(final String kind, final PublicKey address, final byte[] data) {
+    assertEquals("Mint", kind);
+    final var token = Token2022.read(address, data);
+    assertEquals(AccountType.Mint, token.accountType());
+
+    final var mint = token.mint();
+    assertEquals(address, mint.address());
+    assertEquals(key(0x11), mint.mintAuthority());
+    assertEquals(0x0102_0304_0506_0708L, mint.supply());
+    assertEquals(9, mint.decimals());
+    assertTrue(mint.initialized());
+    assertEquals(key(0x12), mint.freezeAuthority());
+
+    final var extensions = token.tokenExtensions();
+    assertEquals(7, extensions.size());
+    assertEquals(key(0x31), extension(extensions, MintCloseAuthority.class).closeAuthority());
+
+    final var interest = extension(extensions, InterestBearingConfig.class);
+    assertEquals(key(0x32), interest.rateAuthority());
+    assertEquals(-1_700_000_000L, interest.initializationTimestamp());
+    assertEquals(-321, interest.preUpdateAverageRate());
+    assertEquals(1_700_000_000L, interest.lastUpdateTimestamp());
+    assertEquals(456, interest.currentRate());
+
+    assertEquals(key(0x34), extension(extensions, PermanentDelegate.class).delegate());
+    final var hook = extension(extensions, TransferHook.class);
+    assertEquals(key(0x35), hook.authority());
+    assertEquals(key(0x36), hook.programId());
+
+    final var scaled = extension(extensions, ScaledUiAmountConfig.class);
+    assertEquals(key(0x33), scaled.authority());
+    assertEquals(1.25, scaled.multiplier());
+    assertEquals(1_800_000_000L, scaled.newMultiplierEffectiveTimestamp());
+    assertEquals(2.5, scaled.newMultiplier());
+
+    final var pausable = extension(extensions, PausableConfig.class);
+    assertEquals(key(0x37), pausable.authority());
+    assertTrue(pausable.paused());
+    assertEquals(key(0x38), extension(extensions, PermissionedBurnConfig.class).authority());
+
+    final byte[] written = new byte[token.l()];
+    assertEquals(data.length, token.write(written, 0));
+    assertArrayEquals(data, written, "Java must reproduce the complete SPL-packed mint");
+  }
+
+  private static void assertFullTokenAccount(
+      final String kind,
+      final PublicKey address,
+      final byte[] data
+  ) {
+    assertEquals("Account", kind);
+    final var account = Token2022Account.read(address, data);
+    assertEquals(AccountType.Account, account.type());
+
+    final var base = account.tokenAccount();
+    assertEquals(address, base.address());
+    assertEquals(key(0x41), base.mint());
+    assertEquals(key(0x42), base.owner());
+    assertEquals(0x1112_1314_1516_1718L, base.amount());
+    assertEquals(1, base.delegateOption());
+    assertEquals(key(0x43), base.delegate());
+    assertEquals(AccountState.Frozen, base.state());
+    assertEquals(1, base.isNativeOption());
+    assertEquals(0x191a_1b1c_1d1e_1f20L, base.isNative());
+    assertEquals(0x2122_2324_2526_2728L, base.delegatedAmount());
+    assertEquals(1, base.closeAuthorityOption());
+    assertEquals(key(0x44), base.closeAuthority());
+
+    final var extensions = account.tokenExtensions();
+    assertEquals(6, extensions.size());
+    extension(extensions, ImmutableOwner.class);
+    assertTrue(extension(extensions, MemoTransfer.class).requireIncomingTransferMemos());
+    assertTrue(extension(extensions, CpiGuard.class).lockCPI());
+    assertTrue(extension(extensions, TransferHookAccount.class).transferring());
+    assertEquals(
+        0x3132_3334_3536_3738L,
+        extension(extensions, TransferFeeAmount.class).withHeldAmount()
+    );
+    extension(extensions, PausableAccount.class);
+
+    final byte[] written = new byte[account.l()];
+    assertEquals(data.length, account.write(written, 0));
+    assertArrayEquals(data, written, "Java must reproduce the complete SPL-packed token account");
+  }
+
   @Test
   void epochRewardsUnsignedU128AndWincodeLayoutMatchRust() throws IOException {
     final var fixture = loadSysvarFixture();
@@ -327,9 +457,16 @@ public final class SolanaUpstreamLayoutConformanceTests {
         "every nonzero solana-zero-copy Bool byte in Token-2022 decodes as true",
         9
     );
+    final var tokenAccounts = loadFlatFixture(
+        TOKEN_ACCOUNTS_RESOURCE,
+        TOKEN_ACCOUNT_COLUMNS,
+        "full Token-2022 Mint and Account bytes pack and unpack through pinned SPL Rust APIs",
+        2
+    );
     final var sysvars = loadSysvarFixture();
     assertEquals(extensions.metadata().get("cargo-lock-sha256"), metadata.metadata().get("cargo-lock-sha256"));
     assertEquals(extensions.metadata().get("cargo-lock-sha256"), tokenBools.metadata().get("cargo-lock-sha256"));
+    assertEquals(extensions.metadata().get("cargo-lock-sha256"), tokenAccounts.metadata().get("cargo-lock-sha256"));
     assertEquals(extensions.metadata().get("cargo-lock-sha256"), sysvars.metadata().get("cargo-lock-sha256"));
     assertFileSha256(extensions.metadata(), "cargo-lock-sha256", "Cargo.lock");
     assertFileSha256(extensions.metadata(), "cargo-manifest-sha256", "Cargo.toml");
@@ -348,6 +485,18 @@ public final class SolanaUpstreamLayoutConformanceTests {
   private static TokenExtension onlyExtension(final Set<TokenExtension> extensions) {
     assertEquals(1, extensions.size());
     return extensions.iterator().next();
+  }
+
+  private static <T extends TokenExtension> T extension(
+      final Set<TokenExtension> extensions,
+      final Class<T> type
+  ) {
+    for (final var extension : extensions) {
+      if (type.isInstance(extension)) {
+        return type.cast(extension);
+      }
+    }
+    return fail("missing extension " + type.getSimpleName());
   }
 
   private static void assertAcceptance(
@@ -487,6 +636,10 @@ public final class SolanaUpstreamLayoutConformanceTests {
     final byte[] bytes = new byte[PublicKey.PUBLIC_KEY_LENGTH];
     Arrays.fill(bytes, (byte) value);
     return bytes;
+  }
+
+  private static PublicKey key(final int value) {
+    return PublicKey.createPubKey(fill(value));
   }
 
   private static byte[] littleEndian(final long value) {

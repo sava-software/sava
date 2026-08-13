@@ -590,6 +590,12 @@ public interface Transaction {
    */
   void sign(final Signer signer);
 
+  /**
+   * Signs a required-signature slot by its zero-based position.
+   *
+   * @throws IllegalArgumentException if {@code index} is negative or is not less than
+   *                                  {@link #numSigners()}
+   */
   void sign(final int index, final Signer signer);
 
   default String signAndBase64Encode(final Signer signer) {

@@ -240,8 +240,11 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public Instruction[] parseInstructions(final AccountMeta[] accounts) {
     final var instructions = new Instruction[numInstructions];
-    for (int i = 0, o = instructionsOffset, numIxAccounts, accountIndex; i < numInstructions; ++i) {
-      final var programAccount = invokedProgramAccount(accounts[data[o++] & 0xFF]);
+    for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, accountIndex;
+         i < numInstructions; ++i) {
+      programAccountIndex = data[o++] & 0xFF;
+      requireIncludedProgramAccount(programAccountIndex);
+      final var programAccount = invokedProgramAccount(accounts[programAccountIndex]);
 
       numIxAccounts = decode(data, o);
       final var ixAccounts = new AccountMeta[numIxAccounts];
@@ -264,7 +267,17 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   private PublicKey getAccount(final int accountIndex) {
+    requireIncludedProgramAccount(accountIndex);
     return PublicKey.readPubKey(data, accountOffset(accountIndex));
+  }
+
+  private void requireIncludedProgramAccount(final int accountIndex) {
+    if (accountIndex >= numIncludedAccounts) {
+      throw new IndexOutOfBoundsException(String.format(
+          "Program account index %d is outside the %d included accounts.",
+          accountIndex, numIncludedAccounts
+      ));
+    }
   }
 
   @Override

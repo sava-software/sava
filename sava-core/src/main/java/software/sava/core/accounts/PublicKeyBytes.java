@@ -81,6 +81,13 @@ final class PublicKeyBytes implements PublicKey {
                                                             final byte[] baseSeed,
                                                             final PublicKey programId,
                                                             final Predicate<byte[]> isNotOnCurve) {
+    final byte[] programIdBytes = programId.toByteArray();
+    if (Arrays.equals(
+        programIdBytes, programIdBytes.length - PDA_BYTES.length, programIdBytes.length,
+        PDA_BYTES, 0, PDA_BYTES.length
+    )) {
+      throw new IllegalArgumentException("Owner cannot end with the program derived address marker.");
+    }
     final byte[] buffer = new byte[PUBLIC_KEY_LENGTH + baseSeed.length + 1 + PUBLIC_KEY_LENGTH];
     base.write(buffer, 0);
     System.arraycopy(baseSeed, 0, buffer, PUBLIC_KEY_LENGTH, baseSeed.length);

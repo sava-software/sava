@@ -1,6 +1,6 @@
 package software.sava.core.accounts;
 
-import java.nio.charset.StandardCharsets;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public interface AccountWithSeed {
 
@@ -11,6 +11,7 @@ public interface AccountWithSeed {
     return new AccountWithSeedRecord(baseKey, publicKey, asciiSeed, program);
   }
 
+  /** Creates account metadata carrying the UTF-8 encoding of {@code seed}. */
   static AccountWithSeed createAccount(final PublicKey baseKey,
                                        final PublicKey publicKey,
                                        final String seed,
@@ -18,7 +19,7 @@ public interface AccountWithSeed {
     return createAccount(
         baseKey,
         publicKey,
-        seed.getBytes(StandardCharsets.US_ASCII),
+        seed.getBytes(UTF_8),
         program
     );
   }

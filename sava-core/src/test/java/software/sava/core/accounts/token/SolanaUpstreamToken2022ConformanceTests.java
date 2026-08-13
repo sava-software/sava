@@ -26,4 +26,10 @@ final class SolanaUpstreamToken2022ConformanceTests {
     SolanaUpstreamLayoutConformanceTests
         .assertToken2022NonzeroBoolBytesMatchRust();
   }
+
+  @Test
+  void fullToken2022MintAndAccountBytesMatchRust() throws IOException {
+    SolanaUpstreamLayoutConformanceTests
+        .assertToken2022FullAccountsMatchRust();
+  }
 }

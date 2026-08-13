@@ -1,5 +1,4 @@
 !sava-hardening-baseline-schema,1
-software.sava.core.accounts.token.Token2022,parseExtensions,RemoveConditionalMutator_EQUAL_IF,SURVIVED # extension null guard # line 78
 software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # hash mixing # line 81
 software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # hash mixing # line 82
 software.sava.core.accounts.token.extensions.ConfidentialMintBurn,hashCode,MathMutator,SURVIVED # hash mixing # line 83
@@ -15,8 +14,8 @@ software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCod
 software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 170
 software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 171
 software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCode,MathMutator,SURVIVED # hash mixing # line 172
-software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 69
-software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 70
-software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 71
+software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 76
+software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 77
+software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 78
 software.sava.core.accounts.token.extensions.TokenMetadata,read,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # slow path routing # line 54
 software.sava.core.accounts.token.extensions.UnknownTokenExtension,hashCode,MathMutator,SURVIVED # hash mixing # line 42

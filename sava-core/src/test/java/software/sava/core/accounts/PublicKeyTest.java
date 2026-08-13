@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 import static software.sava.core.accounts.SolanaAccounts.MAIN_NET;
 
@@ -269,6 +270,18 @@ final class PublicKeyTest {
   }
 
   @Test
+  void accountWithSeedStringFactoryUsesUtf8() {
+    final var account = AccountWithSeed.createAccount(
+        PublicKey.NONE,
+        PublicKey.NONE,
+        "☉",
+        MAIN_NET.systemProgram()
+    );
+
+    assertArrayEquals("☉".getBytes(UTF_8), account.asciiSeed());
+  }
+
+  @Test
   void createOffCurveAccountWithAsciiSeedDerivesTheReturnedSeedMetadata() throws Exception {
     final var account = PublicKey.createOffCurveAccountWithAsciiSeed(
         PublicKey.NONE,
@@ -291,22 +304,23 @@ final class PublicKeyTest {
 
   @Test
   void createOffCurveAccountWithAsciiSeedEnforcesTheEncodedSeedLimit() {
-    assertDoesNotThrow(() -> PublicKey.createOffCurveAccountWithAsciiSeed(
+    final var maximumSeed = assertDoesNotThrow(() -> PublicKey.createOffCurveAccountWithAsciiSeed(
         PublicKey.NONE,
-        "a".repeat(PublicKey.MAX_SEED_LENGTH),
+        "a".repeat(PublicKey.MAX_SEED_LENGTH - 1),
         MAIN_NET.systemProgram()
     ));
+    assertEquals(PublicKey.MAX_SEED_LENGTH, maximumSeed.asciiSeed().length);
 
     final var exception = assertThrows(
         IllegalArgumentException.class,
         () -> PublicKey.createOffCurveAccountWithAsciiSeed(
             PublicKey.NONE,
-            "a".repeat(PublicKey.MAX_SEED_LENGTH + 1),
+            "a".repeat(PublicKey.MAX_SEED_LENGTH),
             MAIN_NET.systemProgram()
         )
     );
     assertEquals(
-        "Seed [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] exceeds maximum length of [32].",
+        "Seed [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] plus nonce exceeds maximum length of [32].",
         exception.getMessage()
     );
 
@@ -322,6 +336,31 @@ final class PublicKeyTest {
     );
     assertEquals(replacement.publicKey(), nonAscii.publicKey());
     assertArrayEquals(replacement.asciiSeed(), nonAscii.asciiSeed());
+  }
+
+  @Test
+  void createOffCurveAccountWithAsciiSeedRejectsIllegalOwnerMarker() {
+    final byte[] marker = "ProgramDerivedAddress".getBytes(US_ASCII);
+    final byte[] ownerBytes = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    System.arraycopy(marker, 0, ownerBytes, ownerBytes.length - marker.length, marker.length);
+
+    final var exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> PublicKey.createOffCurveAccountWithAsciiSeed(
+            PublicKey.NONE,
+            "seed",
+            PublicKey.createPubKey(ownerBytes)
+        )
+    );
+    assertEquals("Owner cannot end with the program derived address marker.", exception.getMessage());
+
+    final byte[] legalOwnerBytes = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    System.arraycopy(marker, 1, legalOwnerBytes, legalOwnerBytes.length - marker.length + 1, marker.length - 1);
+    assertDoesNotThrow(() -> PublicKey.createOffCurveAccountWithAsciiSeed(
+        PublicKey.NONE,
+        "seed",
+        PublicKey.createPubKey(legalOwnerBytes)
+    ));
   }
 
   @Test

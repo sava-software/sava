@@ -449,6 +449,7 @@ dependencies = [
  "solana-epoch-rewards",
  "solana-epoch-schedule",
  "solana-hash",
+ "solana-program-option",
  "solana-rent",
  "spl-token-2022-interface",
  "spl-token-group-interface",

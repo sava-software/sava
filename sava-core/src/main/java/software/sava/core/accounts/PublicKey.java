@@ -250,20 +250,23 @@ public interface PublicKey extends Comparable<PublicKey> {
    * Derives an off-curve account from a base key, an ASCII seed, and a program id.
    *
    * <p>The returned {@link AccountWithSeed#asciiSeed()} contains the US-ASCII encoding of
-   * {@code baseSeed} followed by the selected nonce byte. Non-ASCII characters use Java's
-   * standard US-ASCII replacement byte. Nonces are tried from 127 through 0.</p>
+   * {@code baseSeed} followed by the selected nonce byte. Because the nonce is part of the
+   * on-chain seed, the caller's base seed may encode to at most
+   * {@code MAX_SEED_LENGTH - 1} bytes. Non-ASCII characters use Java's standard US-ASCII
+   * replacement byte. Nonces are tried from 127 through 0.</p>
    *
-   * @throws IllegalArgumentException if the ASCII-encoded seed exceeds
-   *                                  {@link #MAX_SEED_LENGTH} bytes
+   * @throws IllegalArgumentException if the ASCII-encoded base seed plus nonce exceeds
+   *                                  {@link #MAX_SEED_LENGTH} bytes or the owner ends in the
+   *                                  program-derived-address marker
    * @throws RuntimeException if no off-curve address exists in the nonce range
    */
   static AccountWithSeed createOffCurveAccountWithAsciiSeed(final PublicKey base,
                                                             final String baseSeed,
                                                             final PublicKey programId) {
     final byte[] baseSeedBytes = baseSeed.getBytes(US_ASCII);
-    if (baseSeedBytes.length > MAX_SEED_LENGTH) {
+    if (baseSeedBytes.length >= MAX_SEED_LENGTH) {
       throw new IllegalArgumentException(String.format(
-          "Seed [%s] exceeds maximum length of [%d].",
+          "Seed [%s] plus nonce exceeds maximum length of [%d].",
           baseSeed, MAX_SEED_LENGTH
       ));
     }

@@ -105,8 +105,11 @@ Tests: `sava-core/src/test/java/software/sava/core/accounts/token/extensions/`
 - `SolanaUpstreamToken2022ConformanceTests.java` — committed output from the locked Rust
   generator under `src/test/solana/upstream-layout-vectors`: all 29 ordinals and exact
   fixed sizes, short/long acceptance, the TokenMetadata TLV `u16` boundary, and all nine
-  `solana_zero_copy::Bool` fields with byte `2` (every nonzero value is true). Gradle
-  replays the TSVs offline; Rust is only needed to regenerate or verify them.
+  `solana_zero_copy::Bool` fields with byte `2` (every nonzero value is true). The same
+  generator packs and re-unpacks a complete Mint and Account, following Agave's
+  account-decoder test construction, with thirteen extension instances across the two
+  full wire images and non-default values in every valued extension. Gradle replays the
+  TSVs offline; Rust is only needed to regenerate or verify them.
 
 The 2026-08-13 direct pass also made the TLV declaration authoritative: a value may not
 borrow bytes from the next extension, fixed-size values must match their Rust size, and
@@ -240,7 +243,7 @@ value and flags when that value came from the canonical `commissionBps` field. F
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
-| `accounts/PublicKey.java`, `accounts/PublicKeyBytes.java` | PDA derivation (32-byte seeds; 16 total seeds including the bump, so canonical find accepts 15 caller seeds; bump search 255..1; `"ProgramDerivedAddress"` marker; off-curve check); system create-with-seed UTF-8 byte limit and illegal-owner marker guard | `solana-sdk:address/src/lib.rs` (`create_program_address`, `create_with_seed`); `address/src/syscalls.rs` |
+| `accounts/PublicKey.java`, `accounts/PublicKeyBytes.java`, `accounts/AccountWithSeed.java` | PDA derivation (32-byte seeds; 16 total seeds including the bump, so canonical find accepts 15 caller seeds; bump search 255..1; `"ProgramDerivedAddress"` marker; off-curve check); system create-with-seed UTF-8 bytes and illegal-owner marker guard; the ASCII off-curve helper reserves one of the 32 seed bytes for its nonce and applies the same owner guard | `solana-sdk:address/src/lib.rs` (`create_program_address`, `create_with_seed`); `address/src/syscalls.rs` |
 | `crypto/ed25519/Ed25519Util.java` | ed25519 decompression verdict backing the PDA off-curve check, plus public-key derivation for `Signer` | TweetNaCl/curve25519-dalek `decompress` semantics per `solana-sdk:pubkey/` `is_on_curve` — see Ed25519 hardening below |
 | `borsh/Borsh.java`, `borsh/RustEnum.java` | borsh spec: u32-prefixed strings/vecs, 1-byte Option tags, enum discriminants — see Borsh hardening below | `borsh` crate spec as used by agave/SPL |
 | `programs/Discriminator.java` | 8-byte Anchor sighash, 4-byte native enum tags | Anchor framework convention (not agave) |
@@ -309,7 +312,11 @@ The direct conformance pass on 2026-08-13 fixed three non-lookup-table defects: 
 `sign(Collection)` now validates a complete, duplicate-free by-key assignment before
 mutating any signature; and every skeleton instruction accessor reads the program account
 index as the protocol's raw `u8` rather than CompactU16 (the old parser lost alignment for
-valid indexes 128..255). The locked Rust generator also records that current Solana
+valid indexes 128..255). The follow-up review also bounds positional `sign(index, signer)`
+to the required-signature region, restores a cached JDK signer after any failed signing
+attempt, and makes every skeleton instruction view reject a program index outside the
+statically included keys instead of reading a fabricated key from later message bytes.
+The locked Rust generator also records that current Solana
 `VersionedTransaction` decoding accepts 127 legacy/v0 signatures but rejects 128 because
 the high first byte is reserved for version discrimination. Sava deliberately retains its
 published permissive builder behavior at that boundary and for overflowing account/header

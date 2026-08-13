@@ -179,6 +179,27 @@ final class TransactionSigningTests {
     ), "authority's slot must not verify as the fee payer");
   }
 
+  @Test
+  void signIndexRejectsSlotsOutsideTheRequiredSignerRegion() {
+    final var fixture = twoSignerTx();
+    final byte[] before = fixture.tx().serialized().clone();
+
+    final var negative = assertThrows(
+        IllegalArgumentException.class,
+        () -> fixture.tx().sign(-1, fixture.feePayer())
+    );
+    assertTrue(negative.getMessage().contains("-1"));
+    assertArrayEquals(before, fixture.tx().serialized());
+
+    final int firstNonSignerIndex = fixture.tx().numSigners();
+    final var tooHigh = assertThrows(
+        IllegalArgumentException.class,
+        () -> fixture.tx().sign(firstNonSignerIndex, fixture.feePayer())
+    );
+    assertTrue(tooHigh.getMessage().contains(Integer.toString(firstNonSignerIndex)));
+    assertArrayEquals(before, fixture.tx().serialized());
+  }
+
   /// Rebuilds an identical unsigned transaction for the same signers.
   private static Transaction rebuild(final Fixture fixture) {
     final var ix = Instruction.createInstruction(
