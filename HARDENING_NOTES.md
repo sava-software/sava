@@ -291,8 +291,8 @@ previously accepted rows), and `InstructionRecord.toString`'s
   nothing calls `ServiceLoader`. Re-verify when introducing a service; a real one
   then needs the dual declaration (`module-info` **and** `META-INF/services`) per
   the shared HARDENING.md.
-- **JUnit 6.1.2: `@Execution` and `@TestInstance` are both `@Inherited`** —
-  verified in the resolved jar's bytecode, 2026-07-21. `RpcRequestTests`'
+- **JUnit 6.1.3: `@Execution` and `@TestInstance` are both `@Inherited`** —
+  verified in the resolved jar's bytecode, 2026-08-13. `RpcRequestTests`'
   base-level annotations therefore reach its nine concrete subclasses, and
   parallel execution is not enabled in any module, so the abstract-base
   wandering-count cause in the shared casebook does not apply to this repo.
