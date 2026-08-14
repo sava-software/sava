@@ -282,15 +282,18 @@ public interface PublicKey extends Comparable<PublicKey> {
    * Derives a system-program address from a base, UTF-8 seed, and owner program id.
    *
    * <p>This follows Solana's {@code Address::create_with_seed}: the seed limit is measured
-   * in UTF-8 bytes, and an owner ending in the program-derived-address marker is illegal.</p>
+   * in UTF-8 bytes, an owner ending in the program-derived-address marker is illegal, and
+   * Java strings containing unpaired UTF-16 surrogates are rejected because Rust strings
+   * cannot represent them.</p>
    *
    * @throws IllegalArgumentException if the seed exceeds {@link #MAX_SEED_LENGTH} UTF-8 bytes
-   *                                  or the owner ends in the program-derived-address marker
+   *                                  or contains an unpaired UTF-16 surrogate, or the owner
+   *                                  ends in the program-derived-address marker
    */
   static PublicKey createWithSeed(final PublicKey base,
                                   final String seed,
                                   final PublicKey programId) {
-    final byte[] seedBytes = seed.getBytes(UTF_8);
+    final byte[] seedBytes = PublicKeyBytes.encodeUtf8Seed(seed);
     if (seedBytes.length > MAX_SEED_LENGTH) {
       throw new IllegalArgumentException(String.format(
           "Seed [%s] exceeds maximum length of [%d].",

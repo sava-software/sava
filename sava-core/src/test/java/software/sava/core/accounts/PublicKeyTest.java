@@ -1,6 +1,7 @@
 package software.sava.core.accounts;
 
 import org.junit.jupiter.api.Test;
+import software.sava.core.borsh.Borsh;
 import software.sava.core.crypto.ed25519.Ed25519Util;
 
 import java.security.MessageDigest;
@@ -247,6 +248,63 @@ final class PublicKeyTest {
     );
   }
 
+  /// Rust's `Address::create_with_seed` accepts an `&str`, so every accepted seed is valid
+  /// UTF-8. Java strings can additionally contain unpaired UTF-16 surrogates; those must be
+  /// rejected instead of being replaced with `?` and hashed as a different seed.
+  @Test
+  void createWithSeedRejectsStringsRustCannotRepresent() {
+    final List<String> malformedSeeds = List.of(
+        "GOLD 🥇".substring(0, 6),
+        "\uDFFF",
+        "\uDC00\uDC01",
+        "\uD800x"
+    );
+
+    for (final String seed : malformedSeeds) {
+      final var failure = assertThrowsExactly(
+          IllegalArgumentException.class,
+          () -> PublicKey.createWithSeed(PublicKey.NONE, seed, PublicKey.NONE)
+      );
+      assertEquals("Seed contains an unpaired UTF-16 surrogate.", failure.getMessage());
+    }
+  }
+
+  /// Seed derivation and Borsh both encode Java strings as Rust-compatible UTF-8. Exercise
+  /// the same boundary corpus through both validators so their acceptance cannot drift.
+  @Test
+  void seededAccountAndBorshUtf8ValidationAgree() {
+    final List<String> strings = List.of(
+        "",
+        "ASCII",
+        "\uD7FF",
+        "\uE000",
+        "\uD800\uDC00",
+        "\uDBFF\uDFFF",
+        "GOLD 🥇".substring(0, 6),
+        "\uDFFF",
+        "\uDC00\uDC01",
+        "\uD800x"
+    );
+
+    for (final String string : strings) {
+      boolean seedAccepted = true;
+      try {
+        PublicKeyBytes.encodeUtf8Seed(string);
+      } catch (final IllegalArgumentException ignored) {
+        seedAccepted = false;
+      }
+
+      boolean borshAccepted = true;
+      try {
+        Borsh.len(string);
+      } catch (final IllegalArgumentException ignored) {
+        borshAccepted = false;
+      }
+
+      assertEquals(seedAccepted, borshAccepted);
+    }
+  }
+
   /// solana-address rejects owners ending in the program-derived-address domain marker.
   @Test
   void createWithSeedRejectsIllegalOwnerMarker() {
@@ -271,14 +329,41 @@ final class PublicKeyTest {
 
   @Test
   void accountWithSeedStringFactoryUsesUtf8() {
+    // Exercise the scalar values immediately around the surrogate range as well as
+    // valid pairs at both supplementary-plane endpoints. Rust `str` accepts all of
+    // these values, so the Java boundary must preserve their exact UTF-8 bytes.
+    final var seed = new String(new int[]{0x2609, 0xD7FF, 0x10000, 0x10FFFF, 0xE000}, 0, 5);
     final var account = AccountWithSeed.createAccount(
         PublicKey.NONE,
         PublicKey.NONE,
-        "☉",
+        seed,
         MAIN_NET.systemProgram()
     );
 
-    assertArrayEquals("☉".getBytes(UTF_8), account.asciiSeed());
+    assertArrayEquals(seed.getBytes(UTF_8), account.asciiSeed());
+  }
+
+  @Test
+  void accountWithSeedStringFactoryRejectsStringsRustCannotRepresent() {
+    final List<String> malformedSeeds = List.of(
+        "GOLD 🥇".substring(0, 6),
+        "\uDFFF",
+        "\uDC00\uDC01",
+        "\uD800x"
+    );
+
+    for (final String seed : malformedSeeds) {
+      final var failure = assertThrowsExactly(
+          IllegalArgumentException.class,
+          () -> AccountWithSeed.createAccount(
+              PublicKey.NONE,
+              PublicKey.NONE,
+              seed,
+              MAIN_NET.systemProgram()
+          )
+      );
+      assertEquals("Seed contains an unpaired UTF-16 surrogate.", failure.getMessage());
+    }
   }
 
   @Test

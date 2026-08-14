@@ -1,7 +1,5 @@
 package software.sava.core.accounts;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 public interface AccountWithSeed {
 
   static AccountWithSeed createAccount(final PublicKey baseKey,
@@ -11,7 +9,11 @@ public interface AccountWithSeed {
     return new AccountWithSeedRecord(baseKey, publicKey, asciiSeed, program);
   }
 
-  /** Creates account metadata carrying the UTF-8 encoding of {@code seed}. */
+  /**
+   * Creates account metadata carrying the UTF-8 encoding of {@code seed}.
+   *
+   * @throws IllegalArgumentException if {@code seed} contains an unpaired UTF-16 surrogate
+   */
   static AccountWithSeed createAccount(final PublicKey baseKey,
                                        final PublicKey publicKey,
                                        final String seed,
@@ -19,7 +21,7 @@ public interface AccountWithSeed {
     return createAccount(
         baseKey,
         publicKey,
-        seed.getBytes(UTF_8),
+        PublicKeyBytes.encodeUtf8Seed(seed),
         program
     );
   }

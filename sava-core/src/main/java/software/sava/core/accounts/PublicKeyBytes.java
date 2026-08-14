@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.function.Predicate;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 final class PublicKeyBytes implements PublicKey {
 
@@ -20,6 +21,24 @@ final class PublicKeyBytes implements PublicKey {
 
   PublicKeyBytes(final byte[] publicKey) {
     this.publicKey = publicKey;
+  }
+
+  static byte[] encodeUtf8Seed(final String seed) {
+    // Keep this well-formed UTF-16 scan in step with Borsh's UTF-8 string encoder. Scanning
+    // avoids CharsetEncoder.canEncode(CharSequence), which allocates an encoder and performs
+    // a complete throwaway encoding before getBytes encodes the seed again.
+    final int length = seed.length();
+    for (int i = 0; i < length; ++i) {
+      final char c = seed.charAt(i);
+      if (c >= Character.MIN_SURROGATE && c <= Character.MAX_SURROGATE) {
+        if (!Character.isHighSurrogate(c)
+            || ++i >= length
+            || !Character.isLowSurrogate(seed.charAt(i))) {
+          throw new IllegalArgumentException("Seed contains an unpaired UTF-16 surrogate.");
+        }
+      }
+    }
+    return seed.getBytes(UTF_8);
   }
 
   static byte[] createBuffer(final List<byte[]> seeds,

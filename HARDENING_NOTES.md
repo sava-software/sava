@@ -739,10 +739,27 @@ Outcome: the helper allowed a 32-byte base plus its nonce and marker-suffixed ow
 production now reserves the nonce byte, accepts at most 31 caller bytes, and applies the
 same owner guard while retaining its documented ASCII encoding and 127..0 search.
 
+Property: every String seed accepted by Sava's UTF-8 seeded-account factories has the same
+lossless UTF-8 representation as a Rust `str` | Oracle:
+`solana-address::Address::create_with_seed` accepts `&str`, whose valid-UTF-8 invariant
+excludes unpaired UTF-16 surrogates | Outcome: Java's default UTF-8 encoder silently
+replaced an unpaired surrogate with `?`, so `PublicKey.createWithSeed` could hash a different
+seed and `AccountWithSeed.createAccount(..., String, ...)` could carry those substituted
+bytes; `PublicKey.createWithSeed` and `AccountWithSeed.createAccount(..., String, ...)` now
+reject such values.
+
+The remaining length-validation asymmetry also follows upstream: `Address::create_with_seed`
+enforces the 32-byte limit while `solana_system_interface::create_account_with_seed`
+serializes its `&str` without a length check and leaves `MaxSeedLengthExceeded` to the
+System Program's runtime re-derivation. Sava therefore validates in `PublicKey.createWithSeed`
+but deliberately does not add a String-only limit to the metadata factory.
+
 Release-note requirement for this cluster: the release-please PR must state that
 `PublicKey.createWithSeed` and `AccountWithSeed.createAccount(..., String, ...)` now encode
 non-ASCII seeds as UTF-8, so derived addresses and carried seed bytes may change and the
 `createWithSeed` 32-byte limit is measured in UTF-8 bytes. It must also state that
+`PublicKey.createWithSeed` and `AccountWithSeed.createAccount(..., String, ...)` reject
+unpaired UTF-16 surrogates instead of substituting `?`, and that
 `createOffCurveAccountWithAsciiSeed` now accepts at most 31 US-ASCII-encoded base-seed bytes
 because its nonce is part of the complete seed, and rejects owners ending in the PDA marker.
 Its documented ASCII encoding itself did not change.

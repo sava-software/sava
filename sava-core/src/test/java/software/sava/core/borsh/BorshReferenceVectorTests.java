@@ -7,6 +7,7 @@ import software.sava.core.encoding.ByteUtil;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Map;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
@@ -63,6 +64,7 @@ final class BorshReferenceVectorTests {
       expectedLen += Integer.BYTES + s.getBytes(UTF_8).length;
     }
     assertEquals(expectedLen, Borsh.lenVector(strings));
+    assertEquals(expectedLen - Integer.BYTES, Borsh.lenArray(strings));
 
     final byte[] data = dirty(expectedLen);
     assertEquals(expectedLen, Borsh.writeVector(strings, data, 0));
@@ -148,21 +150,117 @@ final class BorshReferenceVectorTests {
           () -> Borsh.getBytes(malformed)
       );
       assertEquals(IllegalArgumentException.class, getBytesFailure.getClass());
-      assertEquals("Invalid UTF-16 Borsh string.", getBytesFailure.getMessage());
+      assertEquals("Unpaired UTF-16 surrogate in Borsh string.", getBytesFailure.getMessage());
 
       final var lenFailure = assertThrows(
           IllegalArgumentException.class,
           () -> Borsh.len(malformed)
       );
       assertEquals(IllegalArgumentException.class, lenFailure.getClass());
-      assertEquals("Invalid UTF-16 Borsh string.", lenFailure.getMessage());
+      assertEquals("Unpaired UTF-16 surrogate in Borsh string.", lenFailure.getMessage());
 
       final var writeFailure = assertThrows(
           IllegalArgumentException.class,
           () -> Borsh.write(malformed, new byte[32], 0)
       );
       assertEquals(IllegalArgumentException.class, writeFailure.getClass());
-      assertEquals("Invalid UTF-16 Borsh string.", writeFailure.getMessage());
+      assertEquals("Unpaired UTF-16 surrogate in Borsh string.", writeFailure.getMessage());
+    }
+  }
+
+  private static byte[] borshString(final byte[] utf8) {
+    final byte[] data = new byte[Integer.BYTES + utf8.length];
+    ByteUtil.putInt32LE(data, 0, utf8.length);
+    System.arraycopy(utf8, 0, data, Integer.BYTES, utf8.length);
+    return data;
+  }
+
+  /// `String::from_utf8` rejects more than a lone continuation byte. These representative
+  /// malformed forms catch several ways a decoder can be too permissive while still rejecting
+  /// `0x80`.
+  @Test
+  void representativeMalformedUtf8ClassesAreRejected() {
+    final var malformed = Map.of(
+        "lone continuation", new byte[]{(byte) 0x80},
+        "overlong two byte", new byte[]{(byte) 0xC0, (byte) 0x80},
+        "overlong three byte", new byte[]{(byte) 0xE0, (byte) 0x80, (byte) 0x80},
+        "overlong four byte", new byte[]{(byte) 0xF0, (byte) 0x80, (byte) 0x80, (byte) 0x80},
+        "CESU-8 surrogate", new byte[]{(byte) 0xED, (byte) 0xA0, (byte) 0x80},
+        "five byte lead", new byte[]{(byte) 0xF8, (byte) 0x88, (byte) 0x80, (byte) 0x80, (byte) 0x80},
+        "above U+10FFFF", new byte[]{(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80},
+        "truncated sequence", new byte[]{(byte) 0xE2, (byte) 0x82}
+    );
+
+    malformed.forEach((name, utf8) -> {
+      final byte[] data = borshString(utf8);
+      final var failure = assertThrows(
+          IllegalArgumentException.class,
+          () -> Borsh.readString(data, 0),
+          () -> name + " must be rejected"
+      );
+      assertEquals(IllegalArgumentException.class, failure.getClass(), name);
+      assertEquals("Invalid UTF-8 Borsh string.", failure.getMessage(), name);
+    });
+  }
+
+  /// U+FFFD is exactly what the previous lossy decoder emitted for malformed input, so a
+  /// replacement-character-sniffing rejection would look like a tightening while actually
+  /// refusing a legitimate scalar Rust writes without complaint.
+  @Test
+  void validUtf8CarryingTheReplacementCharacterIsAccepted() {
+    final String value = "before � after";
+    final byte[] utf8 = value.getBytes(UTF_8);
+    assertArrayEquals(new byte[]{(byte) 0xEF, (byte) 0xBF, (byte) 0xBD}, "�".getBytes(UTF_8));
+
+    assertEquals(value, Borsh.readString(borshString(utf8), 0));
+    assertArrayEquals(utf8, Borsh.getBytes(value));
+    assertEquals(Integer.BYTES + utf8.length, Borsh.len(value));
+  }
+
+  /// Rust strings contain Unicode scalar values, and Java's canonical UTF-8 encoder gives the
+  /// wire length for each one. This exhaustively pins the writer's accepted scalar domain and
+  /// its size calculation; malformed UTF-8 rejection is covered separately.
+  @Test
+  void everyUnicodeScalarHasCanonicalUtf8Length() {
+    int checked = 0;
+    for (int codePoint = 0; codePoint <= Character.MAX_CODE_POINT; ++codePoint) {
+      if (codePoint >= Character.MIN_SURROGATE && codePoint <= Character.MAX_SURROGATE) {
+        continue; // not scalar values; rejected by the writer
+      }
+      final var value = new String(Character.toChars(codePoint));
+      final int wireLength = value.getBytes(UTF_8).length;
+      final int cp = codePoint;
+      assertEquals(
+          wireLength,
+          Borsh.len(value) - Integer.BYTES,
+          () -> "recomputed length differs from the wire for U+" + Integer.toHexString(cp)
+      );
+      ++checked;
+    }
+    assertEquals(Character.MAX_CODE_POINT + 1 - 2048, checked, "every scalar value was covered");
+
+    // Spot-check the encoding-width boundaries through the real reader.
+    for (final int codePoint : new int[]{0, 0x7F, 0x80, 0x7FF, 0x800, 0xFFFF, 0x10000, 0x10FFFF}) {
+      final var value = new String(Character.toChars(codePoint));
+      assertEquals(value, Borsh.readString(borshString(value.getBytes(UTF_8)), 0));
+    }
+  }
+
+  /// Multi-byte rows verify vector-of-vectors framing across the UTF-8 width boundaries.
+  @Test
+  void multiByteStringMatrixRoundTrips() {
+    final var matrix = new String[][]{
+        {"", "a"},
+        {"Café ☕", "GOLD 🥇"},
+        {"�", "ｆｕｌｌｗｉｄｔｈ"}
+    };
+    final byte[] data = dirty(Borsh.lenVector(matrix));
+    assertEquals(data.length, Borsh.writeVector(matrix, data, 0));
+
+    final var reread = Borsh.readMultiDimensionStringVector(data, 0);
+    assertEquals(matrix.length, reread.length);
+    for (int i = 0; i < matrix.length; ++i) {
+      assertArrayEquals(matrix[i], reread[i], "row " + i);
     }
   }
 
@@ -205,7 +303,14 @@ final class BorshReferenceVectorTests {
         arrayLen += Integer.BYTES + s.getBytes(UTF_8).length;
       }
     }
-    final byte[] vectorArray = dirty(Integer.BYTES + arrayLen);
+    assertEquals(arrayLen, Borsh.lenArray(matrix));
+    assertEquals(Integer.BYTES + arrayLen, Borsh.lenVectorArray(matrix));
+    assertEquals(
+        Borsh.lenVector(matrix) - (Integer.BYTES * matrix.length),
+        Borsh.lenVectorArray(matrix),
+        "fixed rows omit each row's vector prefix"
+    );
+    final byte[] vectorArray = dirty(Borsh.lenVectorArray(matrix));
     assertEquals(vectorArray.length, Borsh.writeVectorArray(matrix, vectorArray, 0));
     final var rereadArray = Borsh.readMultiDimensionStringVectorArray(2, vectorArray, 0);
     assertEquals(matrix.length, rereadArray.length);
@@ -503,10 +608,14 @@ final class BorshReferenceVectorTests {
     final var strings = new String[][]{{"a", "bb"}, {"ccc", ""}};
     final byte[] stringVector = dirty(3 + Borsh.lenVector(strings));
     assertEquals(Borsh.lenVector(strings), Borsh.writeVector(strings, stringVector, 3));
-    final byte[] stringArray = dirty(2 + Borsh.lenVector(strings) - Integer.BYTES * 3);
-    assertEquals(stringArray.length - 2, Borsh.writeArray(strings, stringArray, 2));
-    final byte[] stringVectorArray = dirty(3 + Integer.BYTES + stringArray.length - 2);
-    assertEquals(stringVectorArray.length - 3, Borsh.writeVectorArray(strings, stringVectorArray, 3));
+    assertEquals(
+        Borsh.lenVectorArray(strings) + (Integer.BYTES * strings.length),
+        Borsh.lenVector(strings)
+    );
+    final byte[] stringArray = dirty(2 + Borsh.lenArray(strings));
+    assertEquals(Borsh.lenArray(strings), Borsh.writeArray(strings, stringArray, 2));
+    final byte[] stringVectorArray = dirty(3 + Borsh.lenVectorArray(strings));
+    assertEquals(Borsh.lenVectorArray(strings), Borsh.writeVectorArray(strings, stringVectorArray, 3));
 
     final var structs = new TestStruct[][]{
         {new TestStruct(1L, 2), new TestStruct(3L, 4)},

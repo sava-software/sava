@@ -17,10 +17,11 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 /// Borsh serialization helpers.
 ///
-/// String readers accept only valid UTF-8, matching Rust {@code String}. String sizing and
-/// writing helpers accept only well-formed Java UTF-16; an unpaired surrogate cannot be
-/// represented by a Rust string. Every optional, array, vector, and matrix String helper
-/// propagates the corresponding {@link IllegalArgumentException}.
+/// Borsh strings are UTF-8 on the wire, matching Rust {@code String}. Readers reject malformed
+/// UTF-8 bytes. Before producing those bytes, sizing and writing helpers reject unpaired UTF-16
+/// surrogate code units that Java {@link String} can contain but Rust strings cannot represent.
+/// Every optional, array, vector, and matrix String helper propagates the corresponding
+/// {@link IllegalArgumentException}.
 @SuppressWarnings("unchecked")
 public interface Borsh extends Serializable {
 
@@ -45,6 +46,8 @@ public interface Borsh extends Serializable {
     return readString(data, offset);
   }
 
+  /// Returns {@code null} for a null or blank value; otherwise returns its UTF-8 bytes.
+  ///
   /// @throws IllegalArgumentException if {@code str} contains unpaired UTF-16 surrogates
   static byte[] getBytes(final String str) {
     return str == null || str.isBlank() ? null : encodeString(str);
@@ -72,10 +75,24 @@ public interface Borsh extends Serializable {
   }
 
   /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
-  static int lenVector(final String[] array) {
-    int len = Integer.BYTES;
+  static int lenArray(final String[] array) {
+    int len = 0;
     for (final var s : array) {
       len += len(s);
+    }
+    return len;
+  }
+
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
+  static int lenVector(final String[] array) {
+    return Integer.BYTES + lenArray(array);
+  }
+
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
+  static int lenArray(final String[][] array) {
+    int len = 0;
+    for (final var row : array) {
+      len += lenArray(row);
     }
     return len;
   }
@@ -87,6 +104,11 @@ public interface Borsh extends Serializable {
       len += lenVector(a);
     }
     return len;
+  }
+
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
+  static int lenVectorArray(final String[][] array) {
+    return Integer.BYTES + lenArray(array);
   }
 
   /// @throws IllegalArgumentException if an encoded element is not valid UTF-8
@@ -157,12 +179,16 @@ public interface Borsh extends Serializable {
   }
 
   private static byte[] encodeString(final String str) {
-    for (int offset = 0; offset < str.length(); offset = str.offsetByCodePoints(offset, 1)) {
-      final int codePoint = str.codePointAt(offset);
-      // codePointAt combines a valid surrogate pair. A value left in the surrogate range
-      // therefore represents an unpaired UTF-16 code unit, which Rust String cannot hold.
-      if (codePoint >= Character.MIN_SURROGATE && codePoint <= Character.MAX_SURROGATE) {
-        throw new IllegalArgumentException("Invalid UTF-16 Borsh string.");
+    // Scan the Java String's UTF-16 code units once and skip the low half of a recognized
+    // pair. A surrogate is legal only as a high immediately followed by a low; anything
+    // else cannot be represented in the UTF-8 Borsh wire value or a Rust String.
+    final int length = str.length();
+    for (int i = 0; i < length; ++i) {
+      final char c = str.charAt(i);
+      if (c >= Character.MIN_SURROGATE && c <= Character.MAX_SURROGATE) {
+        if (!Character.isHighSurrogate(c) || ++i >= length || !Character.isLowSurrogate(str.charAt(i))) {
+          throw new IllegalArgumentException("Unpaired UTF-16 surrogate in Borsh string.");
+        }
       }
     }
     return str.getBytes(UTF_8);
