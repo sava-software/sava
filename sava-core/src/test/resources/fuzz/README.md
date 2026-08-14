@@ -50,8 +50,9 @@ consume exactly the promised `len*` bytes and re-read equal:
   agreement between the two.
 - `string_vector` — two length-prefixed strings, one empty: the nested prefix
   chain, where outer count and inner lengths must both be honoured.
-- `string_invalid_utf8` — invalid UTF-8, which reads as replacement chars, so
-  the round trip holds on parsed values rather than original bytes.
+- `string_invalid_utf8` — invalid UTF-8 coverage input. Fuzz replay permits its
+  rejection as a malformed-input outcome; `malformedUtf8StringsAreRejected` is
+  the named strict-decoding oracle.
 - `u128_vector` — the `BigInteger` element path, 16 bytes with the high bit set.
 - `oversized_length_prefix` — a `u32` count larger than the remaining bytes can
   back: the allocation guard, the invariant this harness exists for.

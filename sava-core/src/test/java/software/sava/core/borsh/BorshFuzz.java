@@ -119,8 +119,8 @@ public final class BorshFuzz {
         assertState(Arrays.equals(vec, Borsh.readPublicKeyVector(out, 0)), "PublicKey vector");
       },
       (data, _) -> {
-        // invalid UTF-8 collapses to replacement chars on read; the re-serialized form is
-        // canonical, so the round trip is checked on the parsed values
+        // Strict malformed-UTF-8 rejection has a named regression test; fuzz replay treats
+        // any RuntimeException as an allowed malformed-input outcome and checks successful reads.
         final String[] vec = Borsh.readStringVector(data, 0);
         final byte[] out = new byte[Borsh.lenVector(vec)];
         assertConsumed(Borsh.writeVector(vec, out, 0), out.length);

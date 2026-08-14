@@ -22,7 +22,7 @@
 # wincode-crate-checksum: bfc6339f1ba427bf7ad7c42403b28e524832ba2ddb5eef1bb2cc3b85db6b7b75
 # cargo-lock-sha256: c68880c52e3faefefe48544e061650df0faa00b636f2dab2ead43d4e214f1406
 # cargo-manifest-sha256: 1cd46c2c2ecb27d7cd89ffc8c97ce9a30e16b4d49cccdaae5d12bd3245c6bebd
-# generator-source-sha256: 0667df99acee41c018309ae1a66280a01164e853e8a857af8b337023e8404e26
+# generator-source-sha256: 2455aab34f03b03d706eaa914830560c8ca71c855232b82fb6fa76f2762cf1be
 # rust-toolchain: 1.97.1
 # rust-toolchain-sha256: 5d959dfcc98b53886ee772ba216c4f9a1b31f093b46b5b263c0d084af54e821d
 # property: EpochRewards u128, strict wincode bools, and Rent boundaries match current Solana APIs

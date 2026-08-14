@@ -895,6 +895,28 @@ Property: Rent minimum-balance validation and fallback preserve Rust's wrapped `
 oversized data/rates were unchecked and a high-bit wrapped product widened as a negative
 Java double; production fixed.
 
+### Strict Borsh strings and byte-accurate nested-vector cursors — 2026-08-14
+
+Property: a Java value accepted by the Borsh string writers represents a Rust `String`
+without substitution | Oracle: Rust strings contain valid Unicode scalar values and Borsh
+serializes their UTF-8 bytes | Outcome: Java's default encoder silently replaced an
+unpaired UTF-16 surrogate with `?`; `Borsh.getBytes`, `len`, and all string writers now
+throw `IllegalArgumentException` instead. Valid surrogate pairs retain their canonical
+UTF-8 round trip.
+
+Property: Borsh string readers accept exactly valid UTF-8 and nested-vector cursors advance
+by bytes consumed from the input | Oracle: Rust `String::from_utf8` is strict, while Borsh
+container offsets are defined by the encoded length prefixes | Outcome: Java's replacement
+decoder could expand malformed bytes when re-encoded, and
+`readMultiDimensionStringVector` used that expanded length to move its cursor. A crafted
+image could therefore fabricate a later row from bytes outside the actual row boundary.
+String decoding is now strict and the matrix reader advances directly by consumed wire
+bytes.
+
+Release-note requirement for this cluster: the release-please PR must state that Borsh
+string readers now throw on malformed UTF-8, while `Borsh.getBytes`, `len`, and string
+writers throw on unpaired UTF-16 surrogates that were previously replaced with `?`.
+
 ### RPC compressed accounts and current response fields — 2026-08-13
 
 `base64+zstd` account data is now decoded before factories receive it and expansion is

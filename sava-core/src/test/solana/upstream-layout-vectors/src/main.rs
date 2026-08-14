@@ -860,7 +860,9 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
         declared.extend_from_slice(&trailing_bytes);
         let unpacked = TokenMetadata::unpack_from_slice(&declared)
             .map_err(|error| format!("failed to unpack {id}: {error:?}"))?;
-        let accepted_fields = unpacked.name == name
+        let fields_match = unpacked.update_authority == Address::new_from_array([0x11; 32]).into()
+            && unpacked.mint == Address::new_from_array([0x22; 32])
+            && unpacked.name == name
             && unpacked.symbol == symbol
             && unpacked.uri == uri
             && unpacked.additional_metadata
@@ -868,6 +870,11 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
                     .iter()
                     .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
                     .collect::<Vec<_>>();
+        if !fields_match {
+            return Err(format!(
+                "TokenMetadata fields changed during Rust unpack for {id}"
+            ));
+        }
         let repacked_length = unpacked
             .get_packed_len()
             .map_err(|error| format!("failed to size unpacked metadata {id}: {error:?}"))?;
@@ -915,7 +922,7 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             sha256_hex(&declared),
             value_hex,
             fits,
-            accepted_fields,
+            true,
             tlv_accepts.map_or_else(|| "n/a".to_owned(), |value| value.to_string()),
             canonical_repack,
         )

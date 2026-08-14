@@ -6,6 +6,8 @@ import software.sava.core.serial.Serializable;
 
 import java.lang.reflect.Array;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.time.Instant;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
@@ -13,6 +15,12 @@ import java.util.OptionalLong;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+/// Borsh serialization helpers.
+///
+/// String readers accept only valid UTF-8, matching Rust {@code String}. String sizing and
+/// writing helpers accept only well-formed Java UTF-16; an unpaired surrogate cannot be
+/// represented by a Rust string. Every optional, array, vector, and matrix String helper
+/// propagates the corresponding {@link IllegalArgumentException}.
 @SuppressWarnings("unchecked")
 public interface Borsh extends Serializable {
 
@@ -27,19 +35,22 @@ public interface Borsh extends Serializable {
 
   // String
 
+  /// @throws IllegalArgumentException if the encoded value is not valid UTF-8
   static String readString(final byte[] data, final int offset) {
     final int len = ByteUtil.getInt32LE(data, offset);
-    return new String(data, offset + Integer.BYTES, len, UTF_8);
+    return decodeString(data, offset + Integer.BYTES, len);
   }
 
   static String string(final byte[] data, final int offset) {
     return readString(data, offset);
   }
 
+  /// @throws IllegalArgumentException if {@code str} contains unpaired UTF-16 surrogates
   static byte[] getBytes(final String str) {
-    return str == null || str.isBlank() ? null : str.getBytes(UTF_8);
+    return str == null || str.isBlank() ? null : encodeString(str);
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static byte[][] getBytes(final String[] strings) {
     final int len = strings.length;
     final byte[][] bytes = new byte[len][];
@@ -49,15 +60,18 @@ public interface Borsh extends Serializable {
     return bytes;
   }
 
+  /// @throws IllegalArgumentException if {@code val} contains unpaired UTF-16 surrogates
   static int len(final String val) {
-    final int len = val.getBytes(UTF_8).length;
+    final int len = encodeString(val).length;
     return Integer.BYTES + len;
   }
 
+  /// @throws IllegalArgumentException if {@code val} contains unpaired UTF-16 surrogates
   static int lenOptional(final String val) {
     return val == null ? 1 : 1 + len(val);
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int lenVector(final String[] array) {
     int len = Integer.BYTES;
     for (final var s : array) {
@@ -66,6 +80,7 @@ public interface Borsh extends Serializable {
     return len;
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int lenVector(final String[][] array) {
     int len = Integer.BYTES;
     for (final var a : array) {
@@ -74,19 +89,19 @@ public interface Borsh extends Serializable {
     return len;
   }
 
+  /// @throws IllegalArgumentException if an encoded element is not valid UTF-8
   static int readArray(final String[] result, final byte[] data, final int offset) {
     int o = offset;
-    String s;
     for (int i = 0, len; i < result.length; ++i) {
       len = ByteUtil.getInt32LE(data, o);
       o += Integer.BYTES;
-      s = new String(data, o, len, UTF_8);
-      result[i] = s;
+      result[i] = decodeString(data, o, len);
       o += len;
     }
     return o - offset;
   }
 
+  /// @throws IllegalArgumentException if an encoded element is not valid UTF-8
   static int readArray(final String[][] result, final byte[] data, final int offset) {
     int i = offset;
     for (final var out : result) {
@@ -95,6 +110,7 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  /// @throws IllegalArgumentException if an encoded element is not valid UTF-8
   static String[] readStringVector(final byte[] data, final int offset) {
     final int len = readVectorLength(Integer.BYTES, data, offset);
     final var result = new String[len];
@@ -102,18 +118,22 @@ public interface Borsh extends Serializable {
     return result;
   }
 
+  /// @throws IllegalArgumentException if an encoded element is not valid UTF-8
   static String[][] readMultiDimensionStringVector(final byte[] data, int offset) {
     final int len = readVectorLength(Integer.BYTES, data, offset);
     offset += Integer.BYTES;
     final var result = new String[len][];
     for (int i = 0; i < result.length; ++i) {
-      final var instance = readStringVector(data, offset);
-      result[i] = instance;
-      offset += lenVector(instance);
+      final int rowLength = readVectorLength(Integer.BYTES, data, offset);
+      offset += Integer.BYTES;
+      final var row = new String[rowLength];
+      offset += readArray(row, data, offset);
+      result[i] = row;
     }
     return result;
   }
 
+  /// @throws IllegalArgumentException if an encoded element is not valid UTF-8
   static String[][] readMultiDimensionStringVectorArray(final int fixedLength,
                                                         final byte[] data,
                                                         final int offset) {
@@ -123,10 +143,32 @@ public interface Borsh extends Serializable {
     return result;
   }
 
+  /// @throws IllegalArgumentException if {@code str} contains unpaired UTF-16 surrogates
   static int write(final String str, final byte[] data, final int offset) {
-    return writeVector(str.getBytes(UTF_8), data, offset);
+    return writeVector(encodeString(str), data, offset);
   }
 
+  private static String decodeString(final byte[] data, final int offset, final int len) {
+    try {
+      return UTF_8.newDecoder().decode(ByteBuffer.wrap(data, offset, len)).toString();
+    } catch (final CharacterCodingException e) {
+      throw new IllegalArgumentException("Invalid UTF-8 Borsh string.", e);
+    }
+  }
+
+  private static byte[] encodeString(final String str) {
+    for (int offset = 0; offset < str.length(); offset = str.offsetByCodePoints(offset, 1)) {
+      final int codePoint = str.codePointAt(offset);
+      // codePointAt combines a valid surrogate pair. A value left in the surrogate range
+      // therefore represents an unpaired UTF-16 code unit, which Rust String cannot hold.
+      if (codePoint >= Character.MIN_SURROGATE && codePoint <= Character.MAX_SURROGATE) {
+        throw new IllegalArgumentException("Invalid UTF-16 Borsh string.");
+      }
+    }
+    return str.getBytes(UTF_8);
+  }
+
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeArray(final String[] array, final byte[] data, final int offset) {
     int i = offset;
     for (final var a : array) {
@@ -162,6 +204,7 @@ public interface Borsh extends Serializable {
     return len;
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeArrayChecked(final String[] array,
                                final int fixedLength,
                                final byte[] data,
@@ -172,11 +215,13 @@ public interface Borsh extends Serializable {
     return writeArray(array, data, offset);
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeVector(final String[] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeArray(final String[][] array, final byte[] data, final int offset) {
     int i = offset;
     for (final var a : array) {
@@ -185,6 +230,7 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeArrayChecked(final String[][] array,
                                final int fixedLength,
                                final byte[] data,
@@ -196,6 +242,7 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeArrayChecked(final String[][] array,
                                final int firstDimensionLength,
                                final int secondDimensionLength,
@@ -211,6 +258,7 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeVector(final String[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     int i = Integer.BYTES + offset;
@@ -220,6 +268,7 @@ public interface Borsh extends Serializable {
     return i - offset;
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeVectorArrayChecked(final String[][] array,
                                      final int fixedLength,
                                      final byte[] data,
@@ -228,6 +277,7 @@ public interface Borsh extends Serializable {
     return Integer.BYTES + writeArrayChecked(array, fixedLength, data, offset + Integer.BYTES);
   }
 
+  /// @throws IllegalArgumentException if an element contains unpaired UTF-16 surrogates
   static int writeVectorArray(final String[][] array, final byte[] data, final int offset) {
     ByteUtil.putInt32LE(data, offset, array.length);
     return Integer.BYTES + writeArray(array, data, offset + Integer.BYTES);

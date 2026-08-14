@@ -93,6 +93,93 @@ final class BorshReferenceVectorTests {
   }
 
   @Test
+  void malformedUtf8StringsAreRejected() {
+    // Rust String and Borsh strings require valid UTF-8; Java's replacement-character
+    // decoding must not turn a different byte sequence into an apparently valid value.
+    final byte[] scalar = {1, 0, 0, 0, (byte) 0x80};
+    final var scalarFailure = assertThrows(
+        IllegalArgumentException.class,
+        () -> Borsh.readString(scalar, 0)
+    );
+    assertEquals(IllegalArgumentException.class, scalarFailure.getClass());
+    assertEquals("Invalid UTF-8 Borsh string.", scalarFailure.getMessage());
+
+    final byte[] vector = {1, 0, 0, 0, 1, 0, 0, 0, (byte) 0x80};
+    final var vectorFailure = assertThrows(
+        IllegalArgumentException.class,
+        () -> Borsh.readStringVector(vector, 0)
+    );
+    assertEquals(IllegalArgumentException.class, vectorFailure.getClass());
+    assertEquals("Invalid UTF-8 Borsh string.", vectorFailure.getMessage());
+  }
+
+  @Test
+  void malformedStringMatrixIsRejectedBeforeCursorCanDesynchronize() {
+    // These bytes formerly decoded as U+FFFD; the reader then reconstructed the cursor
+    // from their expanded encoding and reached the later "PWNED" bytes as a fabricated row.
+    // Strict decoding is the observable rejection; the reader also no longer derives a
+    // wire cursor by re-encoding parsed values.
+    final byte[] data = {
+        2, 0, 0, 0,
+        2, 0, 0, 0,
+        1, 0, 0, 0, (byte) 0x80,
+        1, 0, 0, 0, (byte) 0x80,
+        (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x7F,
+        1, 0, 0, 0,
+        5, 0, 0, 0, 'P', 'W', 'N', 'E', 'D'
+    };
+
+    final var failure = assertThrows(
+        IllegalArgumentException.class,
+        () -> Borsh.readMultiDimensionStringVector(data, 0)
+    );
+    assertEquals(IllegalArgumentException.class, failure.getClass());
+    assertEquals("Invalid UTF-8 Borsh string.", failure.getMessage());
+  }
+
+  @Test
+  void malformedUtf16StringsAreRejectedBeforeWriting() {
+    // Java permits unpaired surrogates, but Rust String does not. Encoding with replacement
+    // would silently serialize a question mark as different application data.
+    final String splitPair = "GOLD \uD83E\uDD47".substring(0, 6);
+    for (final String malformed : new String[]{"\uD800", "\uDC00", "\uDFFF", "\uD800A", splitPair}) {
+      final var getBytesFailure = assertThrows(
+          IllegalArgumentException.class,
+          () -> Borsh.getBytes(malformed)
+      );
+      assertEquals(IllegalArgumentException.class, getBytesFailure.getClass());
+      assertEquals("Invalid UTF-16 Borsh string.", getBytesFailure.getMessage());
+
+      final var lenFailure = assertThrows(
+          IllegalArgumentException.class,
+          () -> Borsh.len(malformed)
+      );
+      assertEquals(IllegalArgumentException.class, lenFailure.getClass());
+      assertEquals("Invalid UTF-16 Borsh string.", lenFailure.getMessage());
+
+      final var writeFailure = assertThrows(
+          IllegalArgumentException.class,
+          () -> Borsh.write(malformed, new byte[32], 0)
+      );
+      assertEquals(IllegalArgumentException.class, writeFailure.getClass());
+      assertEquals("Invalid UTF-16 Borsh string.", writeFailure.getMessage());
+    }
+  }
+
+  @Test
+  void validSurrogatePairRoundTripsAsCanonicalUtf8() {
+    final String value = "GOLD \uD83E\uDD47";
+    final byte[] utf8 = value.getBytes(UTF_8);
+    final byte[] data = new byte[Integer.BYTES + utf8.length];
+
+    assertArrayEquals(utf8, Borsh.getBytes(value));
+    assertEquals(data.length, Borsh.len(value));
+    assertEquals(data.length, Borsh.write(value, data, 0));
+    assertArrayEquals(utf8, Arrays.copyOfRange(data, Integer.BYTES, data.length));
+    assertEquals(value, Borsh.readString(data, 0));
+  }
+
+  @Test
   void stringMatrixFamily() {
     final var matrix = new String[][]{{"a", "bb"}, {"ccc", ""}};
     int rows = 0;

@@ -9,7 +9,9 @@ import software.sava.core.borsh.Borsh;
 import software.sava.core.encoding.ByteUtil;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -118,6 +120,56 @@ final class ParseExtensionsTests {
         "Extension TokenMetadata claims 0 bytes, but contains no value.",
         exception.getMessage()
     );
+  }
+
+  /// Builds a canonical TokenMetadata value followed by TLV-shaped bytes, under a caller-supplied
+  /// declared length for the metadata entry.
+  @SuppressWarnings("removal") // the wire ordinal is owned by the deprecated compatibility enum until its removal
+  private static byte[] metadataThenPermanentDelegate(final int declaredMetadataLength) {
+    final var metadata = new TokenMetadata(
+        PublicKey.createPubKey(new byte[PublicKey.PUBLIC_KEY_LENGTH]),
+        PublicKey.createPubKey(new byte[PublicKey.PUBLIC_KEY_LENGTH]),
+        "A", "B", "C",
+        Map.of()
+    );
+    final int canonical = metadata.l();
+    final byte[] data = new byte[4 + canonical + 4 + PermanentDelegate.BYTES];
+
+    ByteUtil.putInt16LE(data, 0, ExtensionType.TokenMetadata.ordinal());
+    ByteUtil.putInt16LE(data, 2, declaredMetadataLength);
+    metadata.write(data, 4);
+
+    final int delegateOffset = 4 + canonical;
+    ByteUtil.putInt16LE(data, delegateOffset, ExtensionType.PermanentDelegate.ordinal());
+    ByteUtil.putInt16LE(data, delegateOffset + 2, PermanentDelegate.BYTES);
+    Arrays.fill(data, delegateOffset + 4, data.length, (byte) 0x7E);
+    return data;
+  }
+
+  /// The declared u16 defines the entry's extent, so trailing bytes belong to the metadata entry
+  /// however they happen to be shaped. TokenMetadata is exempt from the `parsedLength != length`
+  /// check because a complete Borsh value may be followed by such bytes; the pinned Rust reader
+  /// applies the same rule. The locked fixture covers a three-byte suffix; this covers a larger,
+  /// TLV-shaped suffix. Both remain bounded by the declared u16 and the available buffer.
+  ///
+  /// Noncanonical: current Token-2022 writers always declare the exact packed length, so this
+  /// shape is not program-produced. It is recorded because the parser accepts it, not because it
+  /// arises.
+  @Test
+  void declaredMetadataLengthOwnsTlvShapedTrailingBytes() {
+    final int canonical = metadataThenPermanentDelegate(0).length - 4 - 4 - PermanentDelegate.BYTES;
+
+    // Declared exactly: the following bytes are outside the entry and parse as their own type.
+    final var exact = Token2022.parseExtensions(metadataThenPermanentDelegate(canonical), 0);
+    assertEquals(2, exact.size());
+    assertNotNull(assertExtension(exact, TokenMetadata.class));
+    assertNotNull(assertExtension(exact, PermanentDelegate.class));
+
+    // Declared over them: the same bytes are trailing content of the metadata entry.
+    final int extended = canonical + 4 + PermanentDelegate.BYTES;
+    final var owned = Token2022.parseExtensions(metadataThenPermanentDelegate(extended), 0);
+    assertEquals(1, owned.size());
+    assertNotNull(assertExtension(owned, TokenMetadata.class));
   }
 
   @Test

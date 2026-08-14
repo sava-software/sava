@@ -103,7 +103,8 @@ changes how much is allocated, never what is computed:
   timeout set. See the note on resource-detected mutants below.
 
 **Slow-path / alternate-path routing** — baseline label `# slow path routing`
-— both paths are result-identical, the mutant only changes which one runs:
+— within the modeled contract described for each case, both paths are
+result-identical and the mutant only changes which one runs:
 - `Base58.toLimbs` (three source variants): disabling the 5-digit chunk
   batching (`numDigits < 5` / `i < to` → false) degrades to per-digit
   `mulAdd` with `POW_58[1]`; same accumulated limbs, more calls.
@@ -111,8 +112,12 @@ changes how much is allocated, never what is computed:
   path routes empty input through the general loop, which produces the same
   empty result.
 - `TokenMetadata.read`: removing the `numExtras == 0` → `Map.of()` fast
-  path builds an empty `LinkedHashMap` and wraps it as unmodifiable; its public
-  contents, iteration, mutation rejection, equality, and serialization are unchanged.
+  path builds an empty `LinkedHashMap` and wraps it as unmodifiable. For parsed,
+  protocol-valid metadata, whose Borsh string keys are non-null, both paths expose
+  the same empty entries, iteration, map equality/hash code and mutation rejection,
+  and produce the same TokenMetadata Borsh length and bytes. The map implementations
+  differ for null queries and Java object serialization; neither behavior is part
+  of the modeled TokenMetadata wire domain.
 
 **Defensive code unreachable in context** (baseline labels `# surplus zero strip`
 for the Base58 encode family, `# extension null guard` for `parseExtensions`,

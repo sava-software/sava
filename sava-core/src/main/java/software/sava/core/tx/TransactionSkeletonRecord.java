@@ -267,7 +267,7 @@ record TransactionSkeletonRecord(byte[] data,
     return accountsOffset + (accountIndex * PUBLIC_KEY_LENGTH);
   }
 
-  private PublicKey getAccount(final int accountIndex) {
+  private PublicKey getProgramAccount(final int accountIndex) {
     requireIncludedProgramAccount(accountIndex);
     return PublicKey.readPubKey(data, accountOffset(accountIndex));
   }
@@ -286,7 +286,7 @@ record TransactionSkeletonRecord(byte[] data,
     final var programs = new PublicKey[numInstructions];
     for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
       programAccountIndex = data[o++] & 0xFF;
-      programs[i] = getAccount(programAccountIndex);
+      programs[i] = getProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -306,7 +306,7 @@ record TransactionSkeletonRecord(byte[] data,
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
       final int programAccountIndex = data[o++] & 0xFF;
-      final var programAccount = getAccount(programAccountIndex);
+      final var programAccount = getProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -342,7 +342,7 @@ record TransactionSkeletonRecord(byte[] data,
           final int accountIndex = data[accountsOffset++] & 0xFF;
           ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
         }
-        instructions[d++] = createInstruction(getAccount(programAccountIndex), Arrays.asList(ixAccounts), data, o, len);
+        instructions[d++] = createInstruction(getProgramAccount(programAccountIndex), Arrays.asList(ixAccounts), data, o, len);
       }
       o += len;
     }
@@ -367,7 +367,7 @@ record TransactionSkeletonRecord(byte[] data,
       o += getByteLen(data, o);
 
       if (discriminator.equals(data, o)) {
-        instructions[d++] = createInstruction(getAccount(programAccountIndex), NO_ACCOUNTS, data, o, len);
+        instructions[d++] = createInstruction(getProgramAccount(programAccountIndex), NO_ACCOUNTS, data, o, len);
       }
       o += len;
     }

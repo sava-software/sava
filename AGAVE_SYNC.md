@@ -81,7 +81,8 @@ Agave/SPL canonical sources:
   `ExtensionType.java` ends.**
 - `spl-token-2022-interface` crate (version pinned in agave `Cargo.toml`) defines the actual
   packed structs. Layout conventions: `OptionalNonZeroPubkey` = 32 bytes with all-zero
-  meaning none; `PodBool` = 1 byte; ElGamal pubkey = 32; ElGamal ciphertext = 64;
+  meaning none; `solana_zero_copy::unaligned::Bool` = 1 byte, with every nonzero value
+  meaning true; ElGamal pubkey = 32; ElGamal ciphertext = 64;
   AE (decryptable) ciphertext = 36; integers little-endian; `f64` for scaled-UI multipliers.
 - `TokenMetadata` fields are borsh (u32 length-prefixed UTF-8 strings) per
   `spl-token-metadata-interface`. Its pinned `VariableLenPack::unpack_from_slice`
@@ -394,6 +395,11 @@ regressions:
   disagreeing with the 17/33 their `write` consumes, so any container sized by `l()`
   disagreed with its own serialization. Fixed; `RustEnumTests` asserts `l() == write()`
   for every variant shape.
+- Java's default UTF-8 conversion replaced malformed input bytes and unpaired UTF-16
+  surrogates. Borsh/Rust strings admit neither: all string readers now decode strictly,
+  and `getBytes`, `len`, and writers reject unpaired surrogates instead of serializing
+  `?`. The nested string-vector reader also advances by bytes consumed from the wire,
+  rather than re-encoding parsed strings to reconstruct its cursor.
 
 Verification tasks:
 
