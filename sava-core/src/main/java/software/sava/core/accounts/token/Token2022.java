@@ -18,12 +18,16 @@ public record Token2022(Mint mint,
 
   public static Set<TokenExtension> parseExtensions(final byte[] data, final int offset) {
     final var extensions = new LinkedHashSet<TokenExtension>();
+    final var seenExtensionTypes = new HashSet<Integer>();
     final var extensionTypes = ExtensionType.values();
     for (int i = offset; i < data.length; ) {
       final int extensionType = ByteUtil.getUInt16LE(data, i);
       if (extensionType == 0) {
         // Trailing zeroed padding, e.g. re-allocated but not yet initialized extension space.
         return extensions.isEmpty() ? Set.of(Uninitialized.INSTANCE) : extensions;
+      }
+      if (!seenExtensionTypes.add(extensionType)) {
+        throw new IllegalArgumentException("Duplicate extension type: " + extensionType);
       }
       i += Short.BYTES;
       final int length = ByteUtil.getUInt16LE(data, i);

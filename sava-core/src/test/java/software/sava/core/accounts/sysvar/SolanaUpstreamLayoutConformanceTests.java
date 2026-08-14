@@ -61,7 +61,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
           + "rust_exact_accepts\trust_short_accepts\trust_long_accepts";
   private static final String METADATA_COLUMNS =
       "id\tname_unit_utf8_hex\tname_repetitions\tsymbol_utf8_hex\turi_utf8_hex\t"
-          + "extra_key_utf8_hex\textra_value_utf8_hex\tpacked_length\tpacked_sha256\t"
+          + "extra_keys_utf8_hex\textra_values_utf8_hex\tpacked_length\tpacked_sha256\t"
           + "value_hex\ttlv_u16_fits\trust_round_trip";
   private static final String TOKEN_BOOL_COLUMNS =
       "ordinal\tname\tfield\tbool_offset\tvalue_hex\trust_value";
@@ -101,7 +101,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
       Map.entry("wincode-crate-checksum", "bfc6339f1ba427bf7ad7c42403b28e524832ba2ddb5eef1bb2cc3b85db6b7b75"),
       Map.entry("cargo-lock-sha256", "c68880c52e3faefefe48544e061650df0faa00b636f2dab2ead43d4e214f1406"),
       Map.entry("cargo-manifest-sha256", "1cd46c2c2ecb27d7cd89ffc8c97ce9a30e16b4d49cccdaae5d12bd3245c6bebd"),
-      Map.entry("generator-source-sha256", "33d6770501fbb66239267d3afc0971e11ccdb17b30e49a12285bb631799b8ff2"),
+      Map.entry("generator-source-sha256", "94fff4bc9fb91fac7b7a42ff87a31e95d9176127c38e88e70e853a36b818ef72"),
       Map.entry("rust-toolchain", "1.97.1"),
       Map.entry("rust-toolchain-sha256", "5d959dfcc98b53886ee772ba216c4f9a1b31f093b46b5b263c0d084af54e821d")
   );
@@ -159,8 +159,8 @@ public final class SolanaUpstreamLayoutConformanceTests {
     final var fixture = loadFlatFixture(
         METADATA_RESOURCE,
         METADATA_COLUMNS,
-        "TokenMetadata Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
-        4
+        "TokenMetadata ordered Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
+        6
     );
     final var updateAuthority = PublicKey.createPubKey(fill(0x11));
     final var mint = PublicKey.createPubKey(fill(0x22));
@@ -172,11 +172,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
       final String name = nameUnit.repeat(Integer.parseInt(fields[2]));
       final String symbol = utf8(fields[3]);
       final String uri = utf8(fields[4]);
-      final String extraKey = utf8(fields[5]);
-      final String extraValue = utf8(fields[6]);
-      final Map<String, String> extras = extraKey.isEmpty()
-          ? Map.of()
-          : Map.of(extraKey, extraValue);
+      final Map<String, String> extras = metadataEntries(fields[5], fields[6]);
       final int packedLength = Integer.parseInt(fields[7]);
       final boolean tlvFits = parseBoolean(fields[10]);
 
@@ -195,7 +191,20 @@ public final class SolanaUpstreamLayoutConformanceTests {
       assertEquals(symbol, parsed.symbol(), () -> "symbol for " + id);
       assertEquals(uri, parsed.uri(), () -> "uri for " + id);
       assertEquals(extras, parsed.additionalMetadata(), () -> "additional metadata for " + id);
+      assertIterableEquals(
+          extras.entrySet(),
+          parsed.additionalMetadata().entrySet(),
+          () -> "additional metadata order for " + id
+      );
+      assertThrows(
+          UnsupportedOperationException.class,
+          () -> parsed.additionalMetadata().put("mutation", "rejected"),
+          () -> "additional metadata immutability for " + id
+      );
       assertEquals(packedLength, parsed.l(), () -> "reparsed length for " + id);
+      final byte[] rewritten = new byte[parsed.l()];
+      assertEquals(rewritten.length, parsed.write(rewritten, 0), () -> "rewrite length for " + id);
+      assertArrayEquals(written, rewritten, () -> "parsed metadata bytes for " + id);
       assertEquals(packedLength <= 0xffff, tlvFits, () -> "Rust TLV u16 boundary for " + id);
 
       if (tlvFits) {
@@ -448,8 +457,8 @@ public final class SolanaUpstreamLayoutConformanceTests {
     final var metadata = loadFlatFixture(
         METADATA_RESOURCE,
         METADATA_COLUMNS,
-        "TokenMetadata Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
-        4
+        "TokenMetadata ordered Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
+        6
     );
     final var tokenBools = loadFlatFixture(
         TOKEN_BOOLS_RESOURCE,
@@ -630,6 +639,22 @@ public final class SolanaUpstreamLayoutConformanceTests {
 
   private static String utf8(final String hex) {
     return new String(HEX.parseHex(hex), StandardCharsets.UTF_8);
+  }
+
+  private static Map<String, String> metadataEntries(final String keysHex, final String valuesHex) {
+    if (keysHex.isEmpty()) {
+      assertTrue(valuesHex.isEmpty(), "metadata values without keys");
+      return Map.of();
+    }
+    final var keys = keysHex.split(",", -1);
+    final var values = valuesHex.split(",", -1);
+    assertEquals(keys.length, values.length, "metadata fixture key/value count");
+    final var entries = new LinkedHashMap<String, String>();
+    for (int index = 0; index < keys.length; ++index) {
+      final var key = utf8(keys[index]);
+      assertNull(entries.put(key, utf8(values[index])), () -> "duplicate fixture metadata key: " + key);
+    }
+    return entries;
   }
 
   private static byte[] fill(final int value) {

@@ -750,6 +750,18 @@ fn tlv(extension_type: ExtensionType, value: &[u8]) -> Vec<u8> {
 }
 
 fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
+    // These paired rows deliberately reuse the exact same key/value set in opposite order.
+    // Their Java String hashes occupy distinct buckets in a four-entry MapN, so the old
+    // Map.ofEntries parser builds the same table for both rows. One per-JVM iteration order
+    // cannot equal both wire orders, making the byte-round-trip regression deterministic.
+    let ordered_extras = vec![
+        ("aaa", "111"),
+        ("bbb", "222"),
+        ("ccc", "333"),
+        ("ddd", "444"),
+    ];
+    let mut reversed_extras = ordered_extras.clone();
+    reversed_extras.reverse();
     let cases = [
         ("empty", "", 0_usize, "", "", Vec::new(), true),
         (
@@ -761,17 +773,35 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             vec![("ключ", "值")],
             true,
         ),
+        (
+            "ordered_forward",
+            "ordered",
+            1,
+            "ORD",
+            "https://example.invalid/ordered",
+            ordered_extras,
+            true,
+        ),
+        (
+            "ordered_reverse",
+            "ordered",
+            1,
+            "ORD",
+            "https://example.invalid/ordered",
+            reversed_extras,
+            true,
+        ),
         ("u16_max", "x", 65_455, "", "", Vec::new(), true),
         ("u16_overflow", "x", 65_456, "", "", Vec::new(), false),
     ];
     let mut output = header(
         provenance,
-        "TokenMetadata Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
+        "TokenMetadata ordered Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
         cases.len(),
     );
     writeln!(
         output,
-        "id\tname_unit_utf8_hex\tname_repetitions\tsymbol_utf8_hex\turi_utf8_hex\textra_key_utf8_hex\textra_value_utf8_hex\tpacked_length\tpacked_sha256\tvalue_hex\ttlv_u16_fits\trust_round_trip"
+        "id\tname_unit_utf8_hex\tname_repetitions\tsymbol_utf8_hex\turi_utf8_hex\textra_keys_utf8_hex\textra_values_utf8_hex\tpacked_length\tpacked_sha256\tvalue_hex\ttlv_u16_fits\trust_round_trip"
     )
     .unwrap();
     for (id, name_unit, repetitions, symbol, uri, extras, expected_fits) in cases {
@@ -794,7 +824,16 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
                 value.len()
             ));
         }
-        let (extra_key, extra_value) = extras.first().copied().unwrap_or(("", ""));
+        let extra_keys = extras
+            .iter()
+            .map(|(key, _)| encode_hex(key.as_bytes()))
+            .collect::<Vec<_>>()
+            .join(",");
+        let extra_values = extras
+            .iter()
+            .map(|(_, value)| encode_hex(value.as_bytes()))
+            .collect::<Vec<_>>()
+            .join(",");
         let value_hex = if value.len() <= 4_096 {
             encode_hex(&value)
         } else {
@@ -808,8 +847,8 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             repetitions,
             encode_hex(symbol.as_bytes()),
             encode_hex(uri.as_bytes()),
-            encode_hex(extra_key.as_bytes()),
-            encode_hex(extra_value.as_bytes()),
+            extra_keys,
+            extra_values,
             value.len(),
             sha256_hex(&value),
             value_hex,

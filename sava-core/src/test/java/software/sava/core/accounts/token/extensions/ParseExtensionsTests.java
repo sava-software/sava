@@ -5,6 +5,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.AccountState;
 import software.sava.core.accounts.token.Token2022;
 import software.sava.core.accounts.token.Token2022Account;
+import software.sava.core.borsh.Borsh;
 import software.sava.core.encoding.ByteUtil;
 
 import java.io.IOException;
@@ -57,6 +58,26 @@ final class ParseExtensionsTests {
     final byte[] data = {0, (byte) 0x80, 3, 0, (byte) 0xAB, (byte) 0xCD};
     final var exception = assertThrows(IndexOutOfBoundsException.class, () -> Token2022.parseExtensions(data, 0));
     assertEquals("Extension 32768 claims 3 bytes, but only 2 remain.", exception.getMessage());
+  }
+
+  @Test
+  void duplicateRawExtensionTypesAreRejectedBeforeSetProjection() {
+    // Identical singleton values used to collapse in the public Set, losing a TLV entry.
+    final byte[] duplicateImmutableOwner = {7, 0, 0, 0, 7, 0, 0, 0};
+    final var known = assertThrows(
+        IllegalArgumentException.class,
+        () -> Token2022.parseExtensions(duplicateImmutableOwner, 0)
+    );
+    assertEquals("Duplicate extension type: 7", known.getMessage());
+
+    // Check the raw u16 before dispatch: unknown entries with the same type are duplicates
+    // even when their values differ and therefore would both fit in the Set.
+    final byte[] duplicateUnknown = {0, (byte) 0x80, 1, 0, 1, 0, (byte) 0x80, 1, 0, 2};
+    final var unknown = assertThrows(
+        IllegalArgumentException.class,
+        () -> Token2022.parseExtensions(duplicateUnknown, 0)
+    );
+    assertEquals("Duplicate extension type: 32768", unknown.getMessage());
   }
 
   @Test
@@ -139,6 +160,28 @@ final class ParseExtensionsTests {
     topBitSet[32 + 32 + 4 + 4 + 4 + 3] = (byte) 0xFF;
     final var thrown = assertThrows(IllegalArgumentException.class, () -> TokenMetadata.read(topBitSet, 0));
     assertEquals("Invalid additional metadata count: -16777216", thrown.getMessage());
+  }
+
+  @Test
+  void duplicateAdditionalMetadataKeyIsRejectedByTheDirectReader() {
+    final int fieldsLength = (PublicKey.PUBLIC_KEY_LENGTH * 2) + (Integer.BYTES * 4);
+    final int entriesLength = (Borsh.len("duplicate") + Borsh.len("first"))
+        + (Borsh.len("duplicate") + Borsh.len("second"));
+    final byte[] data = new byte[fieldsLength + entriesLength];
+    int i = (PublicKey.PUBLIC_KEY_LENGTH * 2) + (Integer.BYTES * 3);
+    ByteUtil.putInt32LE(data, i, 2);
+    i += Integer.BYTES;
+    i += Borsh.write("duplicate", data, i);
+    i += Borsh.write("first", data, i);
+    i += Borsh.write("duplicate", data, i);
+    i += Borsh.write("second", data, i);
+    assertEquals(data.length, i);
+
+    final var duplicate = assertThrows(
+        IllegalArgumentException.class,
+        () -> TokenMetadata.read(data, 0)
+    );
+    assertEquals("Duplicate additional metadata key: duplicate", duplicate.getMessage());
   }
 
   @Test

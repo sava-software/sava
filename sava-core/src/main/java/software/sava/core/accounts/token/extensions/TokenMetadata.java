@@ -4,6 +4,8 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.borsh.Borsh;
 import software.sava.core.encoding.ByteUtil;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -18,7 +20,6 @@ public record TokenMetadata(PublicKey updateAuthority,
                             String uri,
                             Map<String, String> additionalMetadata) implements MintTokenExtension {
 
-  @SuppressWarnings("unchecked")
   public static TokenMetadata read(final byte[] data, final int offset) {
     if (data == null || data.length == 0) {
       return null;
@@ -63,7 +64,7 @@ public record TokenMetadata(PublicKey updateAuthority,
       if (Integer.compareUnsigned(numExtras, (data.length - i) >> 3) > 0) {
         throw new IllegalArgumentException("Invalid additional metadata count: " + numExtras);
       }
-      final var entries = new Map.Entry[numExtras];
+      final var entries = new LinkedHashMap<String, String>();
       for (int m = 0, l; m < numExtras; ++m) {
         l = ByteUtil.getInt32LE(data, i);
         i += Integer.BYTES;
@@ -73,9 +74,12 @@ public record TokenMetadata(PublicKey updateAuthority,
         i += Integer.BYTES;
         final var val = new String(data, i, l, UTF_8);
         i += l;
-        entries[m] = Map.entry(key, val);
+        if (entries.putIfAbsent(key, val) != null) {
+          throw new IllegalArgumentException("Duplicate additional metadata key: " + key);
+        }
       }
-      additionalMetadata = Map.ofEntries(entries);
+      // Map.copyOf may return a salted MapN whose iteration order differs from the Borsh Vec.
+      additionalMetadata = Collections.unmodifiableMap(entries);
     }
     return new TokenMetadata(
         updateAuthority,
