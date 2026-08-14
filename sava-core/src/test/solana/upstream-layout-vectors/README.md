@@ -18,8 +18,12 @@ The extension fixture asks each concrete fixed-size Rust extension type to
 accept its exact TLV value through `BaseStateWithExtensions::get_extension` and
 to reject values one byte short and long. Token metadata is packed and unpacked
 through the public `VariableLenPack` API, including paired forward/reverse
-additional-metadata vectors with the same key set, the largest value that fits
-the TLV `u16` length, and the first value that does not. A separate fixture reads
+additional-metadata vectors with the same key set, a valid value followed by
+trailing bytes that Rust accepts and drops on canonical repack, malformed UTF-8
+in every string field with enough trailing slack to defeat a serialized-length-only
+check, the largest value that fits the TLV `u16` length, and the first value that
+does not. Both the direct metadata reader and Token-2022's real variable-length TLV
+accessor supply each malformed-input verdict. A separate fixture reads
 byte `2` through each Token-2022 `solana_zero_copy::unaligned::Bool` field, whose
 canonical conversion treats every nonzero value as true. Sysvars are serialized
 with their current `wincode` derives, including invalid-bool rejection probes;

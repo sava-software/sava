@@ -90,10 +90,11 @@ public record Token2022(Mint mint,
             "Extension %s claims %d bytes, but contains no value.", type, length
         ));
       }
-      if (extensionData.l() != length) {
+      final int parsedLength = extensionData.l();
+      if (type != ExtensionType.TokenMetadata && parsedLength != length) {
         throw new IllegalArgumentException(String.format(
             "Extension %s claims %d bytes, expected %d.",
-            type, length, extensionData.l()
+            type, length, parsedLength
         ));
       }
       extensions.add(extensionData);

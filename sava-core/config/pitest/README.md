@@ -111,7 +111,8 @@ changes how much is allocated, never what is computed:
   path routes empty input through the general loop, which produces the same
   empty result.
 - `TokenMetadata.read`: removing the `numExtras == 0` → `Map.of()` fast
-  path builds the same empty immutable map via the zero-length entry array.
+  path builds an empty `LinkedHashMap` and wraps it as unmodifiable; its public
+  contents, iteration, mutation rejection, equality, and serialization are unchanged.
 
 **Defensive code unreachable in context** (baseline labels `# surplus zero strip`
 for the Base58 encode family, `# extension null guard` for `parseExtensions`,

@@ -61,8 +61,9 @@ public final class SolanaUpstreamLayoutConformanceTests {
           + "rust_exact_accepts\trust_short_accepts\trust_long_accepts";
   private static final String METADATA_COLUMNS =
       "id\tname_unit_utf8_hex\tname_repetitions\tsymbol_utf8_hex\turi_utf8_hex\t"
-          + "extra_keys_utf8_hex\textra_values_utf8_hex\tpacked_length\tpacked_sha256\t"
-          + "value_hex\ttlv_u16_fits\trust_round_trip";
+          + "extra_keys_utf8_hex\textra_values_utf8_hex\tcanonical_length\tcanonical_sha256\t"
+          + "declared_length\tdeclared_sha256\tvalue_hex\ttlv_u16_fits\trust_unpack_accepts\t"
+          + "rust_tlv_accepts\trust_canonical_repack";
   private static final String TOKEN_BOOL_COLUMNS =
       "ordinal\tname\tfield\tbool_offset\tvalue_hex\trust_value";
   private static final String TOKEN_ACCOUNT_COLUMNS =
@@ -101,7 +102,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
       Map.entry("wincode-crate-checksum", "bfc6339f1ba427bf7ad7c42403b28e524832ba2ddb5eef1bb2cc3b85db6b7b75"),
       Map.entry("cargo-lock-sha256", "c68880c52e3faefefe48544e061650df0faa00b636f2dab2ead43d4e214f1406"),
       Map.entry("cargo-manifest-sha256", "1cd46c2c2ecb27d7cd89ffc8c97ce9a30e16b4d49cccdaae5d12bd3245c6bebd"),
-      Map.entry("generator-source-sha256", "94fff4bc9fb91fac7b7a42ff87a31e95d9176127c38e88e70e853a36b818ef72"),
+      Map.entry("generator-source-sha256", "0667df99acee41c018309ae1a66280a01164e853e8a857af8b337023e8404e26"),
       Map.entry("rust-toolchain", "1.97.1"),
       Map.entry("rust-toolchain-sha256", "5d959dfcc98b53886ee772ba216c4f9a1b31f093b46b5b263c0d084af54e821d")
   );
@@ -159,34 +160,90 @@ public final class SolanaUpstreamLayoutConformanceTests {
     final var fixture = loadFlatFixture(
         METADATA_RESOURCE,
         METADATA_COLUMNS,
-        "TokenMetadata ordered Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
-        6
+        "TokenMetadata ordered Borsh bytes, strict UTF-8, trailing-byte acceptance, and the Token-2022 TLV u16 length boundary match Rust",
+        12
     );
     final var updateAuthority = PublicKey.createPubKey(fill(0x11));
     final var mint = PublicKey.createPubKey(fill(0x22));
 
     for (final var row : fixture.rows()) {
-      final var fields = fields(row, 12);
+      final var fields = fields(row, 16);
       final String id = fields[0];
+      final int declaredLength = Integer.parseInt(fields[9]);
+      final boolean tlvFits = parseBoolean(fields[12]);
+      final boolean rustUnpackAccepts = parseBoolean(fields[13]);
+
+      if (!rustUnpackAccepts) {
+        final String malformedField = switch (id) {
+          case "invalid_utf8_name_with_slack" -> "name";
+          case "invalid_utf8_symbol_with_slack" -> "symbol";
+          case "invalid_utf8_uri_with_slack" -> "uri";
+          case "invalid_utf8_key_with_slack" -> "additional metadata key";
+          case "invalid_utf8_value_with_slack" -> "additional metadata value";
+          default -> fail("unexpected Rust-rejected TokenMetadata fixture: " + id);
+        };
+        assertEquals("n/a", fields[7], "rejected metadata has no canonical length");
+        assertEquals("n/a", fields[8], "rejected metadata has no canonical hash");
+        assertTrue(tlvFits, "malformed UTF-8 fixture must fit the TLV u16 length");
+        assertEquals("false", fields[14], "Rust Token-2022 TLV accessor rejects malformed UTF-8");
+        assertEquals("n/a", fields[15], "rejected metadata cannot be repacked");
+        final byte[] declared = HEX.parseHex(fields[11]);
+        assertEquals(declaredLength, declared.length, "malformed UTF-8 declared length");
+        assertEquals(fields[10], sha256Hex(declared), "malformed UTF-8 declared hash");
+
+        final var direct = assertThrows(
+            IllegalArgumentException.class,
+            () -> TokenMetadata.read(declared, 0),
+            "direct TokenMetadata reader must match Rust Borsh String::from_utf8"
+        );
+        assertEquals(IllegalArgumentException.class, direct.getClass());
+        assertEquals("Invalid UTF-8 in TokenMetadata " + malformedField + '.', direct.getMessage());
+
+        final var throughTlv = assertThrows(
+            IllegalArgumentException.class,
+            () -> parseTlv(ExtensionType.TokenMetadata.ordinal(), declared),
+            "Token-2022 TLV accessor must match the pinned Rust rejection"
+        );
+        assertEquals(IllegalArgumentException.class, throughTlv.getClass());
+        assertEquals("Invalid UTF-8 in TokenMetadata " + malformedField + '.', throughTlv.getMessage());
+        continue;
+      }
+
       final String nameUnit = utf8(fields[1]);
       final String name = nameUnit.repeat(Integer.parseInt(fields[2]));
       final String symbol = utf8(fields[3]);
       final String uri = utf8(fields[4]);
       final Map<String, String> extras = metadataEntries(fields[5], fields[6]);
-      final int packedLength = Integer.parseInt(fields[7]);
-      final boolean tlvFits = parseBoolean(fields[10]);
+      final int canonicalLength = Integer.parseInt(fields[7]);
 
-      assertTrue(parseBoolean(fields[11]), () -> "Rust TokenMetadata round trip for " + id);
+      assertEquals(tlvFits ? "true" : "n/a", fields[14], () -> "Rust TLV acceptance for " + id);
+      assertTrue(parseBoolean(fields[15]), () -> "Rust canonical TokenMetadata repack for " + id);
       final var metadata = new TokenMetadata(updateAuthority, mint, name, symbol, uri, extras);
-      assertEquals(packedLength, metadata.l(), () -> "packed length for " + id);
-      final byte[] written = new byte[packedLength];
-      assertEquals(packedLength, metadata.write(written, 0), () -> "write length for " + id);
+      assertEquals(canonicalLength, metadata.l(), () -> "canonical length for " + id);
+      final byte[] written = new byte[canonicalLength];
+      assertEquals(canonicalLength, metadata.write(written, 0), () -> "write length for " + id);
       assertEquals(fields[8], sha256Hex(written), () -> "Rust/Java metadata bytes for " + id);
-      if (!fields[9].equals("-")) {
-        assertArrayEquals(HEX.parseHex(fields[9]), written, () -> "literal fixture bytes for " + id);
+      final byte[] declared;
+      if (fields[11].equals("-")) {
+        assertEquals(canonicalLength, declaredLength, () -> "omitted literal is canonical for " + id);
+        declared = written;
+      } else {
+        declared = HEX.parseHex(fields[11]);
+      }
+      assertEquals(declaredLength, declared.length, () -> "declared length for " + id);
+      assertEquals(fields[10], sha256Hex(declared), () -> "declared metadata bytes for " + id);
+      assertArrayEquals(
+          written,
+          Arrays.copyOf(declared, canonicalLength),
+          () -> "canonical prefix for " + id
+      );
+      if (id.equals("trailing_bytes")) {
+        assertTrue(declaredLength > canonicalLength, "fixture must contain ignored trailing bytes");
+      } else {
+        assertEquals(canonicalLength, declaredLength, () -> "canonical declaration for " + id);
       }
 
-      final var parsed = TokenMetadata.read(written, 0);
+      final var parsed = TokenMetadata.read(declared, 0);
       assertEquals(name, parsed.name(), () -> "name for " + id);
       assertEquals(symbol, parsed.symbol(), () -> "symbol for " + id);
       assertEquals(uri, parsed.uri(), () -> "uri for " + id);
@@ -201,15 +258,21 @@ public final class SolanaUpstreamLayoutConformanceTests {
           () -> parsed.additionalMetadata().put("mutation", "rejected"),
           () -> "additional metadata immutability for " + id
       );
-      assertEquals(packedLength, parsed.l(), () -> "reparsed length for " + id);
+      assertEquals(canonicalLength, parsed.l(), () -> "reparsed canonical length for " + id);
       final byte[] rewritten = new byte[parsed.l()];
       assertEquals(rewritten.length, parsed.write(rewritten, 0), () -> "rewrite length for " + id);
       assertArrayEquals(written, rewritten, () -> "parsed metadata bytes for " + id);
-      assertEquals(packedLength <= 0xffff, tlvFits, () -> "Rust TLV u16 boundary for " + id);
+      assertEquals(declaredLength <= 0xffff, tlvFits, () -> "Rust TLV u16 boundary for " + id);
 
       if (tlvFits) {
-        final var extension = onlyExtension(parseTlv(ExtensionType.TokenMetadata.ordinal(), written));
-        assertInstanceOf(TokenMetadata.class, extension, () -> "TLV metadata for " + id);
+        final var extension = assertInstanceOf(
+            TokenMetadata.class,
+            onlyExtension(parseTlv(ExtensionType.TokenMetadata.ordinal(), declared)),
+            () -> "TLV metadata for " + id
+        );
+        final byte[] extensionRewrite = new byte[extension.l()];
+        assertEquals(extensionRewrite.length, extension.write(extensionRewrite, 0));
+        assertArrayEquals(written, extensionRewrite, () -> "canonical TLV metadata rewrite for " + id);
       }
     }
   }
@@ -457,8 +520,8 @@ public final class SolanaUpstreamLayoutConformanceTests {
     final var metadata = loadFlatFixture(
         METADATA_RESOURCE,
         METADATA_COLUMNS,
-        "TokenMetadata ordered Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
-        6
+        "TokenMetadata ordered Borsh bytes, strict UTF-8, trailing-byte acceptance, and the Token-2022 TLV u16 length boundary match Rust",
+        12
     );
     final var tokenBools = loadFlatFixture(
         TOKEN_BOOLS_RESOURCE,

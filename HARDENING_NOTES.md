@@ -822,7 +822,8 @@ The locked generator under `sava-core/src/test/solana/upstream-layout-vectors` r
 the exact Token-2022, sysvar, and wincode versions selected by the current local Agave and
 solana-sdk checkouts. Five committed TSVs cover all 29 extension ordinals and fixed sizes,
 short/long TLV verdicts, non-default values, TokenMetadata's paired forward/reverse
-additional-metadata order, largest `u16` value and first overflow, nine zero-copy Bool
+additional-metadata order, accepted trailing bytes and canonical repack, largest `u16`
+value and first overflow, nine zero-copy Bool
 fields, unsigned EpochRewards `u128`, strict wincode bools, Rent's checked integer and
 unsigned-u64/f64 boundaries, and complete SPL-packed Mint and Account images with thirteen
 extension instances and non-default values in every valued extension. The Java tests hash the
@@ -833,7 +834,18 @@ Property: a TLV value is confined to its declared slice and fixed extensions hav
 canonical Rust size | Oracle: `spl-token-2022-interface` 3.1.1
 `BaseStateWithExtensions::get_extension` | Outcome: malformed known extensions could read
 the following entry or accept the wrong size, while a zero-length TokenMetadata entry was
-silently dropped; production parser and writer fixed.
+silently dropped; production parser and writer fixed. TokenMetadata is variable length:
+the pinned `spl-token-metadata-interface` 1.0.1 unchecked Borsh reader accepts a complete
+value followed by bytes inside the declared slice, so Sava now accepts that input and
+canonicalizes it without the ignored suffix when written. This is read-side parity, not
+a newly identified on-chain producer: the reviewed Token-2022 v3.1.1 initialization and reallocation
+paths allocate the exact canonical packed length.
+
+Property: every TokenMetadata string accepted by Sava is valid Borsh UTF-8 | Oracle:
+pinned `borsh` 1.8.0 decodes `String` with strict `String::from_utf8` | Outcome: Java's
+replacement decoder could turn malformed bytes into U+FFFD and, when the TLV declaration
+provided enough trailing space, accept a value Rust rejects; all TokenMetadata strings
+now use strict UTF-8 decoding.
 
 Property: Sava parses and reproduces complete extended Mint and Account state, not only
 isolated TLV payloads | Oracle: Agave's account-decoder test construction pattern executed
@@ -861,8 +873,13 @@ TLV parsing now rejects wrong fixed lengths, empty TokenMetadata values, and dup
 raw extension types that were previously accepted or silently collapsed. It must also state
 that
 parsed TokenMetadata retains the on-wire additional-metadata order, making valid unique-key
-metadata serialization deterministic and byte-preserving. Duplicate metadata keys already
-threw before this change and remain rejected; do not describe that path as newly throwing.
+canonical metadata serialization deterministic and byte-preserving. A complete
+TokenMetadata Borsh value followed by bytes inside its declared TLV slice is now accepted,
+matching the pinned Rust reader, but writing its typed value emits canonical Borsh without
+that suffix. Malformed UTF-8 in any TokenMetadata
+string now throws instead of being replaced with U+FFFD, matching pinned Borsh. Duplicate
+metadata keys already threw before this change and remain rejected; do not describe that
+path as newly throwing.
 
 Property: every nonzero Token-2022 zero-copy Bool byte means true | Oracle:
 `solana-zero-copy`'s `unaligned::Bool` through nine pinned Rust values | Outcome: Java had

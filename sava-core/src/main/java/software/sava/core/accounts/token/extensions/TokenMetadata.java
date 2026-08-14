@@ -4,6 +4,8 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.borsh.Borsh;
 import software.sava.core.encoding.ByteUtil;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -35,17 +37,17 @@ public record TokenMetadata(PublicKey updateAuthority,
 
     final int nameLength = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
-    final var name = new String(data, i, nameLength, UTF_8);
+    final var name = readUtf8(data, i, nameLength, "name");
     i += nameLength;
 
     final int symbolLength = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
-    final var symbol = new String(data, i, symbolLength, UTF_8);
+    final var symbol = readUtf8(data, i, symbolLength, "symbol");
     i += symbolLength;
 
     final int uriLength = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
-    final var uri = new String(data, i, uriLength, UTF_8);
+    final var uri = readUtf8(data, i, uriLength, "uri");
     i += uriLength;
 
     final int numExtras = ByteUtil.getInt32LE(data, i);
@@ -55,12 +57,10 @@ public record TokenMetadata(PublicKey updateAuthority,
     if (numExtras == 0) {
       additionalMetadata = Map.of();
     } else {
-      // each entry needs at least two u32 length prefixes; validating the count against
-      // the bytes actually present bounds the allocation below against a corrupt count.
-      // Compared unsigned because the count is a u32: read into an int, one with the top
-      // bit set is negative, and a signed comparison finds it smaller than the bound
-      // rather than larger, passing it through to the array constructor as a
-      // NegativeArraySizeException
+      // Each entry needs at least two u32 length prefixes, so the remaining bytes bound
+      // the largest possible count before the loop reads any entry. Compare unsigned
+      // because the count is a u32: a top-bit count is negative as a Java int and would
+      // otherwise make the signed loop execute zero times and silently decode as empty.
       if (Integer.compareUnsigned(numExtras, (data.length - i) >> 3) > 0) {
         throw new IllegalArgumentException("Invalid additional metadata count: " + numExtras);
       }
@@ -68,11 +68,11 @@ public record TokenMetadata(PublicKey updateAuthority,
       for (int m = 0, l; m < numExtras; ++m) {
         l = ByteUtil.getInt32LE(data, i);
         i += Integer.BYTES;
-        final var key = new String(data, i, l, UTF_8);
+        final var key = readUtf8(data, i, l, "additional metadata key");
         i += l;
         l = ByteUtil.getInt32LE(data, i);
         i += Integer.BYTES;
-        final var val = new String(data, i, l, UTF_8);
+        final var val = readUtf8(data, i, l, "additional metadata value");
         i += l;
         if (entries.putIfAbsent(key, val) != null) {
           throw new IllegalArgumentException("Duplicate additional metadata key: " + key);
@@ -89,6 +89,19 @@ public record TokenMetadata(PublicKey updateAuthority,
         uri,
         additionalMetadata
     );
+  }
+
+  private static String readUtf8(final byte[] data,
+                                 final int offset,
+                                 final int length,
+                                 final String field) {
+    try {
+      // Borsh's Rust String reader uses String::from_utf8 and rejects malformed bytes;
+      // String(byte[], Charset) would silently replace them with U+FFFD.
+      return UTF_8.newDecoder().decode(ByteBuffer.wrap(data, offset, length)).toString();
+    } catch (final CharacterCodingException exception) {
+      throw new IllegalArgumentException("Invalid UTF-8 in TokenMetadata " + field + '.', exception);
+    }
   }
 
   @Override

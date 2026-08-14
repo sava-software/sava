@@ -84,8 +84,13 @@ Agave/SPL canonical sources:
   meaning none; `PodBool` = 1 byte; ElGamal pubkey = 32; ElGamal ciphertext = 64;
   AE (decryptable) ciphertext = 36; integers little-endian; `f64` for scaled-UI multipliers.
 - `TokenMetadata` fields are borsh (u32 length-prefixed UTF-8 strings) per
-  `spl-token-metadata-interface`; `TokenGroup`/`TokenGroupMember` per
-  `spl-token-group-interface`.
+  `spl-token-metadata-interface`. Its pinned `VariableLenPack::unpack_from_slice`
+  uses unchecked Borsh decoding: strings remain strict UTF-8, but a complete value may
+  have trailing bytes inside its declared TLV slice. Sava matches both properties and
+  returns the typed fields; writing the parsed value emits canonical Borsh without the
+  ignored suffix. This is read-side parity: the reviewed Token-2022 v3.1.1 initialization
+  and reallocation paths size program-produced values to their exact canonical packed length.
+  `TokenGroup`/`TokenGroupMember` come from `spl-token-group-interface`.
 
 Optional-pubkey semantics: Rust maps all-zero to `None`; the Java records keep the raw
 32-byte key. This is intentional — callers defensively check `null` and `PublicKey.NONE`.
@@ -106,7 +111,9 @@ Tests: `sava-core/src/test/java/software/sava/core/accounts/token/extensions/`
   `SolanaUpstreamToken2022ConformanceTests.java` — committed output from the locked Rust
   generator under `src/test/solana/upstream-layout-vectors`: all 29 ordinals and exact
   fixed sizes, short/long acceptance, the TokenMetadata TLV `u16` boundary, paired
-  forward/reverse ordered metadata, and all nine `solana_zero_copy::Bool` fields with byte
+  forward/reverse ordered metadata, accepted trailing metadata bytes with canonical
+  repacking, strict UTF-8 rejection in every metadata string position, and all nine
+  `solana_zero_copy::Bool` fields with byte
   `2` (every nonzero value is true). The same
   generator packs and re-unpacks a complete Mint and Account, following Agave's
   account-decoder test construction, with thirteen extension instances across the two
@@ -115,7 +122,11 @@ Tests: `sava-core/src/test/java/software/sava/core/accounts/token/extensions/`
 
 The 2026-08-13 direct pass also made the TLV declaration authoritative: a value may not
 borrow bytes from the next extension, fixed-size values must match their Rust size,
-repeated nonzero extension types are rejected before known/unknown dispatch, and writers
+and variable-length TokenMetadata follows Rust by accepting a complete Borsh value with
+trailing bytes inside that declaration, rejecting malformed UTF-8, and canonicalizing it
+when written. The trailing-byte rule mirrors the Rust reader; it is not a claim that the
+reviewed program construction paths produce non-canonical suffixes.
+Repeated nonzero extension types are rejected before known/unknown dispatch, and writers
 reject type/value lengths outside `u16` before touching the destination buffer. Parsed
 TokenMetadata retains the ordered, unique key/value pairs carried on the wire.
 
@@ -343,10 +354,10 @@ regression in `ParseExtensionsTests`:
   backwards into an infinite loop, and a type ≥ `0x8000` crashed instead of reaching the
   `UnknownTokenExtension` escape hatch; the `& 0xFFFF` masks in `parseExtensions` are
   load-bearing.
-- `TokenMetadata.read` sized `new Map.Entry[numExtras]` from the wire before any bounds
-  check, and `OutOfMemoryError` is not a `RuntimeException`; counts exceeding the
-  remaining bytes now throw `IllegalArgumentException` (negative counts keep throwing
-  `NegativeArraySizeException` — exception types deliberately unchanged).
+- `TokenMetadata.read` trusted the wire's additional-metadata count before proving that
+  even the pairs' two length prefixes fit. Counts exceeding that byte-derived upper bound,
+  including top-bit-set `u32` values that are negative as Java `int`s, now throw
+  `IllegalArgumentException` before the entry loop.
 - an unknown extension's length overshooting the data end throws
   `IndexOutOfBoundsException` like known extensions do, instead of zero-padding a
   fabricated tail.
@@ -354,8 +365,9 @@ regression in `ParseExtensionsTests`:
 Verification tasks:
 
 - `./gradlew :sava-core:pitestToken2022` — PIT over `software.sava.core.accounts.token.*`
-  against the `software.sava.core.token.*` tests. Baseline 2026-07-16: 688 mutations, 97%
-  detected, 0 without coverage; the 21 survivors are classified equivalent (mostly
+  against the `software.sava.core.accounts.token.*` tests. History-free measurement
+  2026-08-13: 621 mutations, 601 killed, 0 without coverage; the 20 survivors are
+  classified equivalent (mostly
   `31 * h + x` hashCode operator swaps only exact-hash assertions could kill; reasons
   grouped in `sava-core/config/pitest/README.md`).
 - `./gradlew :sava-core:fuzzToken2022 -PmaxFuzzTime=<seconds>` — Jazzer over

@@ -763,7 +763,7 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
     let mut reversed_extras = ordered_extras.clone();
     reversed_extras.reverse();
     let cases = [
-        ("empty", "", 0_usize, "", "", Vec::new(), true),
+        ("empty", "", 0_usize, "", "", Vec::new(), Vec::new(), true),
         (
             "unicode",
             "☉sol",
@@ -771,6 +771,7 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             "Σ",
             "https://例.invalid/☉",
             vec![("ключ", "值")],
+            Vec::new(),
             true,
         ),
         (
@@ -780,6 +781,7 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             "ORD",
             "https://example.invalid/ordered",
             ordered_extras,
+            Vec::new(),
             true,
         ),
         (
@@ -789,27 +791,76 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             "ORD",
             "https://example.invalid/ordered",
             reversed_extras,
+            Vec::new(),
             true,
         ),
-        ("u16_max", "x", 65_455, "", "", Vec::new(), true),
-        ("u16_overflow", "x", 65_456, "", "", Vec::new(), false),
+        (
+            "trailing_bytes",
+            "trailing",
+            1,
+            "TAIL",
+            "https://example.invalid/trailing",
+            vec![("key", "value")],
+            vec![0xa5, 0x5a, 0xff],
+            true,
+        ),
+        ("u16_max", "x", 65_455, "", "", Vec::new(), Vec::new(), true),
+        (
+            "u16_overflow",
+            "x",
+            65_456,
+            "",
+            "",
+            Vec::new(),
+            Vec::new(),
+            false,
+        ),
+    ];
+    let malformed_cases = [
+        (
+            "invalid_utf8_name_with_slack",
+            "name",
+            metadata_bytes_with_slack(&[0x80], b"", b"", None)?,
+        ),
+        (
+            "invalid_utf8_symbol_with_slack",
+            "symbol",
+            metadata_bytes_with_slack(b"n", &[0x80], b"", None)?,
+        ),
+        (
+            "invalid_utf8_uri_with_slack",
+            "uri",
+            metadata_bytes_with_slack(b"n", b"s", &[0x80], None)?,
+        ),
+        (
+            "invalid_utf8_key_with_slack",
+            "additional metadata key",
+            metadata_bytes_with_slack(b"n", b"s", b"u", Some((&[0x80], b"v")))?,
+        ),
+        (
+            "invalid_utf8_value_with_slack",
+            "additional metadata value",
+            metadata_bytes_with_slack(b"n", b"s", b"u", Some((b"k", &[0x80])))?,
+        ),
     ];
     let mut output = header(
         provenance,
-        "TokenMetadata ordered Borsh bytes and the Token-2022 TLV u16 length boundary match Rust",
-        cases.len(),
+        "TokenMetadata ordered Borsh bytes, strict UTF-8, trailing-byte acceptance, and the Token-2022 TLV u16 length boundary match Rust",
+        cases.len() + malformed_cases.len(),
     );
     writeln!(
         output,
-        "id\tname_unit_utf8_hex\tname_repetitions\tsymbol_utf8_hex\turi_utf8_hex\textra_keys_utf8_hex\textra_values_utf8_hex\tpacked_length\tpacked_sha256\tvalue_hex\ttlv_u16_fits\trust_round_trip"
+        "id\tname_unit_utf8_hex\tname_repetitions\tsymbol_utf8_hex\turi_utf8_hex\textra_keys_utf8_hex\textra_values_utf8_hex\tcanonical_length\tcanonical_sha256\tdeclared_length\tdeclared_sha256\tvalue_hex\ttlv_u16_fits\trust_unpack_accepts\trust_tlv_accepts\trust_canonical_repack"
     )
     .unwrap();
-    for (id, name_unit, repetitions, symbol, uri, extras, expected_fits) in cases {
+    for (id, name_unit, repetitions, symbol, uri, extras, trailing_bytes, expected_fits) in cases {
         let name = name_unit.repeat(repetitions);
-        let value = metadata_value(&name, symbol, uri, extras.clone())?;
-        let unpacked = TokenMetadata::unpack_from_slice(&value)
+        let canonical = metadata_value(&name, symbol, uri, extras.clone())?;
+        let mut declared = canonical.clone();
+        declared.extend_from_slice(&trailing_bytes);
+        let unpacked = TokenMetadata::unpack_from_slice(&declared)
             .map_err(|error| format!("failed to unpack {id}: {error:?}"))?;
-        let round_trip = unpacked.name == name
+        let accepted_fields = unpacked.name == name
             && unpacked.symbol == symbol
             && unpacked.uri == uri
             && unpacked.additional_metadata
@@ -817,13 +868,22 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
                     .iter()
                     .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
                     .collect::<Vec<_>>();
-        let fits = Length::try_from(value.len()).is_ok();
+        let repacked_length = unpacked
+            .get_packed_len()
+            .map_err(|error| format!("failed to size unpacked metadata {id}: {error:?}"))?;
+        let mut repacked = vec![0_u8; repacked_length];
+        unpacked
+            .pack_into_slice(&mut repacked)
+            .map_err(|error| format!("failed to repack metadata {id}: {error:?}"))?;
+        let canonical_repack = repacked == canonical;
+        let fits = Length::try_from(declared.len()).is_ok();
         if fits != expected_fits {
             return Err(format!(
                 "unexpected TLV length verdict for {id}: {}",
-                value.len()
+                declared.len()
             ));
         }
+        let tlv_accepts = fits.then(|| accepts(ExtensionType::TokenMetadata, &declared));
         let extra_keys = extras
             .iter()
             .map(|(key, _)| encode_hex(key.as_bytes()))
@@ -834,14 +894,14 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             .map(|(_, value)| encode_hex(value.as_bytes()))
             .collect::<Vec<_>>()
             .join(",");
-        let value_hex = if value.len() <= 4_096 {
-            encode_hex(&value)
+        let value_hex = if declared.len() <= 4_096 {
+            encode_hex(&declared)
         } else {
             "-".into()
         };
         writeln!(
             output,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             id,
             encode_hex(name_unit.as_bytes()),
             repetitions,
@@ -849,15 +909,76 @@ fn generate_metadata_fixture(provenance: &str) -> Result<String, String> {
             encode_hex(uri.as_bytes()),
             extra_keys,
             extra_values,
-            value.len(),
-            sha256_hex(&value),
+            canonical.len(),
+            sha256_hex(&canonical),
+            declared.len(),
+            sha256_hex(&declared),
             value_hex,
             fits,
-            round_trip,
+            accepted_fields,
+            tlv_accepts.map_or_else(|| "n/a".to_owned(), |value| value.to_string()),
+            canonical_repack,
+        )
+        .unwrap();
+    }
+
+    // `try_from_slice_unchecked` permits trailing bytes, but every Borsh string remains
+    // strict UTF-8. Each row contains one invalid byte plus the two suffix bytes needed
+    // to make Java's three-byte U+FFFD replacement fit the declared TLV length. This
+    // distinguishes strict decoding at every string field from a serialized-length-only
+    // guard.
+    for (id, field, malformed_utf8) in malformed_cases {
+        let unpack_accepts = TokenMetadata::unpack_from_slice(&malformed_utf8).is_ok();
+        let tlv_accepts = accepts(ExtensionType::TokenMetadata, &malformed_utf8);
+        if unpack_accepts || tlv_accepts {
+            return Err(format!(
+                "Rust unexpectedly accepted malformed UTF-8 metadata {field}: direct={unpack_accepts}, TLV={tlv_accepts}"
+            ));
+        }
+        writeln!(
+            output,
+            "{id}\t\t0\t\t\t\t\tn/a\tn/a\t{}\t{}\t{}\ttrue\t{}\t{}\tn/a",
+            malformed_utf8.len(),
+            sha256_hex(&malformed_utf8),
+            encode_hex(&malformed_utf8),
+            unpack_accepts,
+            tlv_accepts,
         )
         .unwrap();
     }
     Ok(output)
+}
+
+fn metadata_bytes_with_slack(
+    name: &[u8],
+    symbol: &[u8],
+    uri: &[u8],
+    additional_metadata: Option<(&[u8], &[u8])>,
+) -> Result<Vec<u8>, String> {
+    let mut value = Vec::new();
+    value.extend_from_slice(&[0x11; 32]);
+    value.extend_from_slice(&[0x22; 32]);
+    push_borsh_bytes(&mut value, name)?;
+    push_borsh_bytes(&mut value, symbol)?;
+    push_borsh_bytes(&mut value, uri)?;
+    match additional_metadata {
+        Some((key, metadata_value)) => {
+            value.extend_from_slice(&1_u32.to_le_bytes());
+            push_borsh_bytes(&mut value, key)?;
+            push_borsh_bytes(&mut value, metadata_value)?;
+        }
+        None => value.extend_from_slice(&0_u32.to_le_bytes()),
+    }
+    value.extend_from_slice(&[0xa5, 0x5a]);
+    Ok(value)
+}
+
+fn push_borsh_bytes(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
+    let length = u32::try_from(bytes.len())
+        .map_err(|_| format!("fixture Borsh string has {} bytes", bytes.len()))?;
+    output.extend_from_slice(&length.to_le_bytes());
+    output.extend_from_slice(bytes);
+    Ok(())
 }
 
 fn metadata_value(

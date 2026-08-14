@@ -146,7 +146,7 @@ final class ParseExtensionsTests {
   void corruptAdditionalMetadataCount() {
     // updateAuthority + mint + empty name/symbol/uri, then a count claiming far more
     // entries than the remaining bytes could hold; the reader must reject the count
-    // instead of allocating an entry array sized by attacker-controlled account data
+    // before entering a loop whose bound came from attacker-controlled account data
     final byte[] data = new byte[32 + 32 + 4 + 4 + 4 + 4];
     data[32 + 32 + 4 + 4 + 4] = (byte) 0xFF;
     data[32 + 32 + 4 + 4 + 4 + 1] = (byte) 0xFF;
@@ -155,7 +155,8 @@ final class ParseExtensionsTests {
     assertThrows(IllegalArgumentException.class, () -> TokenMetadata.read(data, 0));
 
     // the count is a u32, so the other half of the range is negative as an int and is
-    // not caught by the upper bound: unguarded it reached `new Map.Entry[-16777216]`
+    // not caught by a signed upper bound: without the unsigned guard the signed loop
+    // executes zero times and silently decodes the metadata as having no extra entries
     final byte[] topBitSet = new byte[32 + 32 + 4 + 4 + 4 + 4];
     topBitSet[32 + 32 + 4 + 4 + 4 + 3] = (byte) 0xFF;
     final var thrown = assertThrows(IllegalArgumentException.class, () -> TokenMetadata.read(topBitSet, 0));
