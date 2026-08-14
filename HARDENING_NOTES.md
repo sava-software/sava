@@ -739,6 +739,14 @@ Outcome: the helper allowed a 32-byte base plus its nonce and marker-suffixed ow
 production now reserves the nonce byte, accepts at most 31 caller bytes, and applies the
 same owner guard while retaining its documented ASCII encoding and 127..0 search.
 
+Release-note requirement for this cluster: the release-please PR must state that
+`PublicKey.createWithSeed` and `AccountWithSeed.createAccount(..., String, ...)` now encode
+non-ASCII seeds as UTF-8, so derived addresses and carried seed bytes may change and the
+`createWithSeed` 32-byte limit is measured in UTF-8 bytes. It must also state that
+`createOffCurveAccountWithAsciiSeed` now accepts at most 31 US-ASCII-encoded base-seed bytes
+because its nonce is part of the complete seed, and rejects owners ending in the PDA marker.
+Its documented ASCII encoding itself did not change.
+
 ### Direct legacy transaction and signing conformance — 2026-08-13
 
 `LegacyMessageConformanceTests` consumes eleven committed vectors emitted by the locked
@@ -770,7 +778,9 @@ signing attempt cannot contaminate the next signature from the same signer | Ora
 transaction header's required-signature count plus an independent JDK Ed25519 verifier |
 Outcome: out-of-range positions could overwrite later transaction bytes, and SunEC retained
 an updated message after an output-write failure; both production paths now fail without
-poisoning transaction or signer state.
+poisoning transaction or signer state. If provider reinitialization also fails, the thrown
+diagnostic retains that reset failure as its cause and the triggering signing failure as
+suppressed evidence.
 
 Property: the fixture makes Solana's account/header and 127/128-signature validity
 boundaries visible without turning Sava's published transaction builder into a validator |
@@ -792,16 +802,30 @@ assemble an attacker-selected public key from later message bytes for an out-of-
 all views now agree. Program index zero remains parseable deliberately for offline analysis
 of unsanitized messages.
 
+Property: a parsed transaction becomes a mutable signing object only when its serialized
+signature slots equal the message header's required-signature count and the count uses the
+one-byte prefix assumed by mutable signing | Oracle: the two wire counts plus Sava's
+`TransactionRecord` layout, whose signing methods address slots from byte one | Outcome:
+deserialization and every read-only skeleton view remain permissive, while all three
+mutable-transaction creation paths now reject mismatches, noncanonical aliases, and counts
+requiring a multi-byte prefix before exposing bytes that signing could overwrite.
+
+Release-note requirement for this cluster: the release-please PR must state that converting a
+malformed `TransactionSkeleton` to a mutable `Transaction` now throws `IllegalStateException`
+when the serialized signature count and message-header signer count differ, or when the count
+does not have the one-byte prefix required by mutable signing. Parsing and read-only analysis
+of the same bytes remain supported.
+
 ### Direct Token-2022 and sysvar layout conformance — 2026-08-13
 
 The locked generator under `sava-core/src/test/solana/upstream-layout-vectors` resolves
 the exact Token-2022, sysvar, and wincode versions selected by the current local Agave and
 solana-sdk checkouts. Five committed TSVs cover all 29 extension ordinals and fixed sizes,
-short/long TLV verdicts, non-default values, TokenMetadata's largest `u16` value and first
-overflow, nine zero-copy Bool fields, unsigned EpochRewards `u128`, strict wincode bools,
-Rent's checked integer and unsigned-u64/f64 boundaries, and complete SPL-packed Mint and
-Account images with thirteen extension instances and non-default values in every valued
-extension. The Java tests hash the
+short/long TLV verdicts, non-default values, TokenMetadata's paired forward/reverse
+additional-metadata order, largest `u16` value and first overflow, nine zero-copy Bool
+fields, unsigned EpochRewards `u128`, strict wincode bools, Rent's checked integer and
+unsigned-u64/f64 boundaries, and complete SPL-packed Mint and Account images with thirteen
+extension instances and non-default values in every valued extension. The Java tests hash the
 generator, manifest, lock, and toolchain; the generator checks the semantic crates'
 checksums and reproduces the fixtures byte for byte with `--locked --check`.
 
@@ -816,6 +840,29 @@ isolated TLV payloads | Oracle: Agave's account-decoder test construction patter
 through pinned SPL `StateWithExtensionsMut`/`StateWithExtensions`, plus captured mainnet
 PYUSD and confidential-account bytes | Outcome: added full base-header, account-type,
 multi-extension ordering/value, digest, and byte-for-byte serialization coverage.
+
+Property: valid TokenMetadata preserves the ordered, unique additional-metadata pairs it
+received on the wire | Oracle: `spl-token-metadata-interface` 1.0.1 models the field as an
+ordered `Vec<(String, String)>`, requires programs to avoid duplicate keys, and updates an
+existing key in place | Outcome: `Map.ofEntries` randomized parsed entry order per JVM;
+parsing now returns an insertion-ordered immutable map and rejects duplicate keys directly.
+
+Property: every canonical Token-2022 account has at most one TLV entry for each nonzero raw
+extension type, and Sava must either represent every input entry or reject the image | Oracle: SPL's
+mutable construction refuses an already-initialized extension, while Sava's published
+`Set<TokenExtension>` cannot losslessly represent duplicate equal entries | Outcome: the
+parser now rejects a repeated nonzero raw `u16` type before known/unknown dispatch. Type zero
+remains the padding/Uninitialized sentinel. This is a
+canonical-construction and lossless-representation rule; SPL's raw read-side parser is not
+claimed to sanitize duplicate entries.
+
+Release-note requirement for this cluster: the release-please PR must state that Token-2022
+TLV parsing now rejects wrong fixed lengths, empty TokenMetadata values, and duplicate nonzero
+raw extension types that were previously accepted or silently collapsed. It must also state
+that
+parsed TokenMetadata retains the on-wire additional-metadata order, making valid unique-key
+metadata serialization deterministic and byte-preserving. Duplicate metadata keys already
+threw before this change and remain rejected; do not describe that path as newly throwing.
 
 Property: every nonzero Token-2022 zero-copy Bool byte means true | Oracle:
 `solana-zero-copy`'s `unaligned::Bool` through nine pinned Rust values | Outcome: Java had

@@ -11,6 +11,7 @@ import javax.crypto.AEADBadTagException;
 import java.io.StringReader;
 import java.security.InvalidKeyException;
 import java.security.PrivateKey;
+import java.security.ProviderException;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.util.Arrays;
@@ -130,21 +131,8 @@ final class SignerTest {
     assertTrue(PublicKey.verifySignature(signer.publicKey().toJavaPublicKey(), nextMessage, signature));
   }
 
-  @Test
-  void failedReturningSignDoesNotPoisonTheSigner() {
-    final var signer = Signer.createFromPrivateKey(new byte[KEY_LENGTH]);
-    final byte[] rejectedMessage = "rejected returning-sign attempt".getBytes(UTF_8);
-
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> signer.sign(rejectedMessage, 0, rejectedMessage.length + 1)
-    );
-
-    final byte[] nextMessage = "next message after returning-sign failure".getBytes(UTF_8);
-    final byte[] signature = signer.sign(nextMessage);
-    assertTrue(PublicKey.verifySignature(signer.publicKey().toJavaPublicKey(), nextMessage, signature));
-  }
-
+  /// This injected post-update provider failure is the sole genuine reset pin for the
+  /// returning-signature overload; invalid update ranges are rejected before buffering.
   @Test
   void providerFailureAfterUpdateDoesNotPoisonTheSigner() throws InvalidKeyException {
     final PrivateKey privateKey = KeyPairSigner.generatePrivateKey(new byte[KEY_LENGTH]);
@@ -156,6 +144,24 @@ final class SignerTest {
     final var failure = assertThrows(RuntimeException.class, () -> signer.sign(message));
     assertInstanceOf(SignatureException.class, failure.getCause());
     assertArrayEquals(new byte[Transaction.SIGNATURE_LENGTH], signer.sign(message));
+  }
+
+  @Test
+  void resetFailureRetainsTheSigningFailureForDiagnosis() throws InvalidKeyException {
+    final PrivateKey privateKey = KeyPairSigner.generatePrivateKey(new byte[KEY_LENGTH]);
+    final var signature = new ResetSensitiveSignature(true);
+    signature.initSign(privateKey);
+    final var signer = new KeyPairSigner(PublicKey.NONE, privateKey, signature);
+
+    final var failure = assertThrowsExactly(
+        IllegalStateException.class,
+        () -> signer.sign("provider failure".getBytes(UTF_8))
+    );
+    final var resetFailure = assertInstanceOf(ProviderException.class, failure.getCause());
+    assertEquals("deterministic provider reset failure", resetFailure.getMessage());
+    assertEquals(1, failure.getSuppressed().length);
+    final var signingFailure = assertInstanceOf(SignatureException.class, failure.getSuppressed()[0]);
+    assertEquals("deterministic provider failure after update", signingFailure.getMessage());
   }
 
   @Test
@@ -178,11 +184,18 @@ final class SignerTest {
 
   private static final class ResetSensitiveSignature extends Signature {
 
+    private final boolean failReset;
     private boolean initialized;
     private boolean failNextSign = true;
+    private int initializationCount;
 
     private ResetSensitiveSignature() {
+      this(false);
+    }
+
+    private ResetSensitiveSignature(final boolean failReset) {
       super("test-reset-sensitive-ed25519");
+      this.failReset = failReset;
     }
 
     @Override
@@ -192,6 +205,9 @@ final class SignerTest {
 
     @Override
     protected void engineInitSign(final PrivateKey privateKey) {
+      if (failReset && initializationCount++ > 0) {
+        throw new ProviderException("deterministic provider reset failure");
+      }
       initialized = true;
     }
 

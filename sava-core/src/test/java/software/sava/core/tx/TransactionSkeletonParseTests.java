@@ -267,6 +267,21 @@ final class TransactionSkeletonParseTests {
   /// within the statically included account keys. Sava deliberately permits structural
   /// analysis of unsanitized messages, but every public instruction view must reject the
   /// same invalid index instead of interpreting the following blockhash bytes as a key.
+  private static void assertEveryInstructionViewRejects(final TransactionSkeleton skeleton,
+                                                        final AccountMeta[] accounts,
+                                                        final software.sava.core.programs.Discriminator discriminator) {
+    assertThrowsExactly(IndexOutOfBoundsException.class, () -> skeleton.parseInstructions(accounts));
+    assertThrowsExactly(IndexOutOfBoundsException.class, skeleton::parseLegacyInstructions);
+    assertThrowsExactly(IndexOutOfBoundsException.class, skeleton::parseProgramAccounts);
+    assertThrowsExactly(IndexOutOfBoundsException.class, skeleton::parseInstructionsWithoutAccounts);
+    assertThrowsExactly(IndexOutOfBoundsException.class, skeleton::parseInstructionsWithoutTableAccounts);
+    assertThrowsExactly(IndexOutOfBoundsException.class, () -> skeleton.filterInstructions(accounts, discriminator));
+    assertThrowsExactly(IndexOutOfBoundsException.class,
+        () -> skeleton.filterInstructionsWithoutTableAccounts(discriminator));
+    assertThrowsExactly(IndexOutOfBoundsException.class,
+        () -> skeleton.filterInstructionsWithoutAccounts(discriminator));
+  }
+
   @Test
   void outOfRangeProgramIndexIsRejectedByEveryInstructionView() {
     final byte[] data = new byte[
@@ -297,17 +312,164 @@ final class TransactionSkeletonParseTests {
     final var accounts = skeleton.parseAccounts();
     final var expandedAccounts = Arrays.copyOf(accounts, 2);
     expandedAccounts[1] = AccountMeta.createInvoked(PublicKey.NONE);
-    final var discriminator = software.sava.core.programs.Discriminator.toDiscriminator(42);
+    // The discriminator deliberately does not match. Filtering must validate every raw
+    // program index rather than hiding malformed instructions that happen not to be selected.
+    final var discriminator = software.sava.core.programs.Discriminator.toDiscriminator(43);
 
-    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.parseInstructions(accounts));
-    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.parseInstructions(expandedAccounts));
-    assertThrows(IndexOutOfBoundsException.class, skeleton::parseLegacyInstructions);
-    assertThrows(IndexOutOfBoundsException.class, skeleton::parseProgramAccounts);
-    assertThrows(IndexOutOfBoundsException.class, skeleton::parseInstructionsWithoutAccounts);
-    assertThrows(IndexOutOfBoundsException.class, skeleton::parseInstructionsWithoutTableAccounts);
-    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.filterInstructions(accounts, discriminator));
-    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.filterInstructionsWithoutTableAccounts(discriminator));
-    assertThrows(IndexOutOfBoundsException.class, () -> skeleton.filterInstructionsWithoutAccounts(discriminator));
+    // The unexpanded array used to throw ArrayIndexOutOfBoundsException by accident; require
+    // the parser's deliberate, consistent exception instead of accepting that subclass.
+    assertThrowsExactly(IndexOutOfBoundsException.class, () -> skeleton.parseInstructions(accounts));
+    assertEveryInstructionViewRejects(skeleton, expandedAccounts, discriminator);
+  }
+
+  @Test
+  void lookupTableProgramIndexIsRejectedByEveryInstructionView() {
+    final byte[] data = Base64.getDecoder().decode(VERSIONED_TX);
+    final var original = TransactionSkeleton.deserializeSkeleton(data);
+    assertTrue(original.numAccounts() > original.numIncludedAccounts(),
+        "fixture must contain lookup-table accounts");
+
+    // A program id must come from the statically included keys, never from the first loaded
+    // lookup-table account. Keep the expanded array populated to prove the static-key bound
+    // is enforced instead of succeeding merely because an array lookup runs out of bounds.
+    data[original.instructionsOffset()] = (byte) original.numIncludedAccounts();
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    final var accounts = Arrays.copyOf(skeleton.parseAccounts(), skeleton.numAccounts());
+    for (int i = skeleton.numIncludedAccounts(); i < accounts.length; ++i) {
+      accounts[i] = AccountMeta.createInvoked(PublicKey.NONE);
+    }
+
+    assertEveryInstructionViewRejects(
+        skeleton,
+        accounts,
+        software.sava.core.programs.Discriminator.toDiscriminator(
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+        )
+    );
+  }
+
+  private static void assertEveryMutableCreationRejects(final TransactionSkeleton skeleton,
+                                                        final List<Instruction> instructions,
+                                                        final String expectedMessage) {
+    final byte[] before = skeleton.data().clone();
+
+    final var withoutTables = assertThrowsExactly(
+        IllegalStateException.class,
+        () -> skeleton.createTransaction(instructions)
+    );
+    assertEquals(expectedMessage, withoutTables.getMessage());
+    assertThrowsExactly(
+        IllegalStateException.class,
+        () -> skeleton.createTransaction(
+            instructions,
+            (software.sava.core.accounts.lookup.AddressLookupTable) null
+        )
+    );
+    assertThrowsExactly(
+        IllegalStateException.class,
+        () -> skeleton.createTransaction(
+            instructions,
+            new software.sava.core.accounts.meta.LookupTableAccountMeta[0]
+        )
+    );
+    assertArrayEquals(before, skeleton.data(), "rejected conversion must not mutate parsed bytes");
+  }
+
+  /// Parsing remains deliberately permissive for offline analysis, but a mutable Transaction
+  /// rewrites signature slots according to the message header. It is therefore unsafe unless
+  /// the serialized slot prefix and required-signature header agree exactly.
+  @Test
+  void mismatchedSignatureLayoutsRemainReadableButCannotBecomeMutableTransactions() {
+    final byte[] tooFewSlots = Base64.getDecoder().decode(LEGACY_TX);
+    final int originalMessageOffset = CompactU16Encoding.getByteLen(tooFewSlots, 0)
+        + (CompactU16Encoding.decode(tooFewSlots, 0) * Transaction.SIGNATURE_LENGTH);
+    tooFewSlots[originalMessageOffset] = 2; // two required signers, one serialized slot
+
+    final var tooFew = TransactionSkeleton.deserializeSkeleton(tooFewSlots);
+    assertEquals(2, tooFew.numSignatures());
+    final var tooFewInstructions = Arrays.asList(tooFew.parseInstructions(tooFew.parseAccounts()));
+    assertEveryMutableCreationRejects(
+        tooFew,
+        tooFewInstructions,
+        "Serialized signature count 1 does not match the message header's required signature count 2."
+    );
+
+    final byte[] original = Base64.getDecoder().decode(LEGACY_TX);
+    final int prefixLength = CompactU16Encoding.getByteLen(original, 0);
+    assertEquals(1, prefixLength, "fixture uses a one-byte signature-count prefix");
+    assertEquals(1, CompactU16Encoding.decode(original, 0));
+    final int messageOffset = prefixLength + Transaction.SIGNATURE_LENGTH;
+    final byte[] extraSlot = new byte[original.length + Transaction.SIGNATURE_LENGTH];
+    extraSlot[0] = 2;
+    System.arraycopy(original, prefixLength, extraSlot, prefixLength, Transaction.SIGNATURE_LENGTH);
+    System.arraycopy(
+        original,
+        messageOffset,
+        extraSlot,
+        prefixLength + (2 * Transaction.SIGNATURE_LENGTH),
+        original.length - messageOffset
+    );
+
+    final var tooMany = TransactionSkeleton.deserializeSkeleton(extraSlot);
+    assertEquals(1, tooMany.numSignatures());
+    final var tooManyInstructions = Arrays.asList(tooMany.parseInstructions(tooMany.parseAccounts()));
+    assertEveryMutableCreationRejects(
+        tooMany,
+        tooManyInstructions,
+        "Serialized signature count 2 does not match the message header's required signature count 1."
+    );
+  }
+
+  @Test
+  void matchingSignatureCountsWithMultiBytePrefixesRemainReadableButCannotBecomeMutable() {
+    final byte[] original = Base64.getDecoder().decode(LEGACY_TX);
+    final byte[] nonCanonicalOne = new byte[original.length + 1];
+    nonCanonicalOne[0] = (byte) 0x81;
+    nonCanonicalOne[1] = 0;
+    System.arraycopy(original, 1, nonCanonicalOne, 2, original.length - 1);
+
+    final var aliased = TransactionSkeleton.deserializeSkeleton(nonCanonicalOne);
+    assertEquals(1, aliased.numSignatures());
+    assertEquals(1, aliased.parseSignerAccounts().length, "read-only analysis remains available");
+    assertEveryMutableCreationRejects(
+        aliased,
+        Arrays.asList(aliased.parseInstructions(aliased.parseAccounts())),
+        "Serialized signature count 1 uses a 2-byte prefix; mutable transactions require a one-byte prefix."
+    );
+
+    final int signatures = 128;
+    final byte[] canonical128 = new byte[
+        2 + (signatures * Transaction.SIGNATURE_LENGTH)
+            + 1 + 3
+            + 2 + (signatures * PublicKey.PUBLIC_KEY_LENGTH)
+            + Transaction.BLOCK_HASH_LENGTH
+            + 1 + 1
+    ];
+    int o = 0;
+    canonical128[o++] = (byte) 0x80;
+    canonical128[o++] = 1;
+    o += signatures * Transaction.SIGNATURE_LENGTH;
+    canonical128[o++] = (byte) 0x80; // versioned marker, version 0
+    canonical128[o++] = (byte) signatures;
+    canonical128[o++] = (byte) (signatures - 1);
+    canonical128[o++] = 0;
+    canonical128[o++] = (byte) 0x80;
+    canonical128[o++] = 1;
+    o += signatures * PublicKey.PUBLIC_KEY_LENGTH;
+    o += Transaction.BLOCK_HASH_LENGTH;
+    canonical128[o++] = 0; // no instructions
+    canonical128[o++] = 0; // no lookup tables
+    assertEquals(canonical128.length, o);
+
+    final var wide = TransactionSkeleton.deserializeSkeleton(canonical128);
+    assertTrue(wide.isVersioned());
+    assertEquals(signatures, wide.numSignatures());
+    assertEquals(signatures, wide.parseSignerAccounts().length, "read-only analysis remains available");
+    assertEveryMutableCreationRejects(
+        wide,
+        List.of(),
+        "Serialized signature count 128 uses a 2-byte prefix; mutable transactions require a one-byte prefix."
+    );
   }
 
   @Test

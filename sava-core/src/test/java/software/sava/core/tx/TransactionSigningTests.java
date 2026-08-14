@@ -1,10 +1,12 @@
 package software.sava.core.tx;
 
 import org.junit.jupiter.api.Test;
+import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.meta.AccountMeta;
 
+import java.security.PrivateKey;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -33,6 +35,53 @@ final class TransactionSigningTests {
           signer.publicKey().verifySignature(data, messageOffset, data.length - messageOffset, signature(index)),
           "signature " + index + " does not verify for " + signer.publicKey()
       );
+    }
+  }
+
+  private static final class InvocationCountingSigner implements Signer {
+
+    private final Signer delegate;
+    private int signInvocations;
+
+    private InvocationCountingSigner(final Signer delegate) {
+      this.delegate = delegate;
+    }
+
+    int signInvocations() {
+      return signInvocations;
+    }
+
+    @Override
+    public PublicKey publicKey() {
+      return delegate.publicKey();
+    }
+
+    @Override
+    public PrivateKey privateKey() {
+      return delegate.privateKey();
+    }
+
+    @Override
+    public Signer createDedicatedSigner() {
+      return new InvocationCountingSigner(delegate.createDedicatedSigner());
+    }
+
+    @Override
+    public int sign(final byte[] message, final int msgOffset, final int msgLen, final int outPos) {
+      ++signInvocations;
+      return delegate.sign(message, msgOffset, msgLen, outPos);
+    }
+
+    @Override
+    public byte[] sign(final byte[] message, final int msgOffset, final int msgLen) {
+      ++signInvocations;
+      return delegate.sign(message, msgOffset, msgLen);
+    }
+
+    @Override
+    public byte[] sign(final byte[] message) {
+      ++signInvocations;
+      return delegate.sign(message);
     }
   }
 
@@ -182,22 +231,29 @@ final class TransactionSigningTests {
   @Test
   void signIndexRejectsSlotsOutsideTheRequiredSignerRegion() {
     final var fixture = twoSignerTx();
+    final var signer = new InvocationCountingSigner(fixture.feePayer());
     final byte[] before = fixture.tx().serialized().clone();
 
-    final var negative = assertThrows(
+    // Integer.MIN_VALUE * SIGNATURE_LENGTH wraps to zero, so an absent lower-bound guard
+    // would turn this invalid index into a successful write to signature slot zero.
+    assertThrowsExactly(
         IllegalArgumentException.class,
-        () -> fixture.tx().sign(-1, fixture.feePayer())
+        () -> fixture.tx().sign(Integer.MIN_VALUE, signer)
     );
-    assertTrue(negative.getMessage().contains("-1"));
+    assertEquals(0, signer.signInvocations(), "the index guard must run before offset arithmetic");
     assertArrayEquals(before, fixture.tx().serialized());
 
     final int firstNonSignerIndex = fixture.tx().numSigners();
-    final var tooHigh = assertThrows(
+    assertThrowsExactly(
         IllegalArgumentException.class,
-        () -> fixture.tx().sign(firstNonSignerIndex, fixture.feePayer())
+        () -> fixture.tx().sign(firstNonSignerIndex, signer)
     );
-    assertTrue(tooHigh.getMessage().contains(Integer.toString(firstNonSignerIndex)));
+    assertEquals(0, signer.signInvocations());
     assertArrayEquals(before, fixture.tx().serialized());
+
+    fixture.tx().sign(0, signer);
+    assertEquals(1, signer.signInvocations());
+    fixture.assertSignedBy(signer, 0);
   }
 
   /// Rebuilds an identical unsigned transaction for the same signers.

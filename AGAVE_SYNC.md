@@ -102,18 +102,22 @@ Tests: `sava-core/src/test/java/software/sava/core/accounts/token/extensions/`
   reader, boolean-polarity round trips, per-field equals/hashCode variants for the five
   hand-written-equality classes, enum-boundary ordinals, option-gated fields, dirty-buffer
   writes, `TokenAccount` filters.
-- `SolanaUpstreamToken2022ConformanceTests.java` — committed output from the locked Rust
+- `SolanaUpstreamLayoutConformanceTests.java`, replayed in the owning Token-2022 suite by
+  `SolanaUpstreamToken2022ConformanceTests.java` — committed output from the locked Rust
   generator under `src/test/solana/upstream-layout-vectors`: all 29 ordinals and exact
-  fixed sizes, short/long acceptance, the TokenMetadata TLV `u16` boundary, and all nine
-  `solana_zero_copy::Bool` fields with byte `2` (every nonzero value is true). The same
+  fixed sizes, short/long acceptance, the TokenMetadata TLV `u16` boundary, paired
+  forward/reverse ordered metadata, and all nine `solana_zero_copy::Bool` fields with byte
+  `2` (every nonzero value is true). The same
   generator packs and re-unpacks a complete Mint and Account, following Agave's
   account-decoder test construction, with thirteen extension instances across the two
   full wire images and non-default values in every valued extension. Gradle replays the
   TSVs offline; Rust is only needed to regenerate or verify them.
 
 The 2026-08-13 direct pass also made the TLV declaration authoritative: a value may not
-borrow bytes from the next extension, fixed-size values must match their Rust size, and
-writers reject type/value lengths outside `u16` before touching the destination buffer.
+borrow bytes from the next extension, fixed-size values must match their Rust size,
+repeated nonzero extension types are rejected before known/unknown dispatch, and writers
+reject type/value lengths outside `u16` before touching the destination buffer. Parsed
+TokenMetadata retains the ordered, unique key/value pairs carried on the wire.
 
 ## HTTP RPC API
 
@@ -316,6 +320,10 @@ valid indexes 128..255). The follow-up review also bounds positional `sign(index
 to the required-signature region, restores a cached JDK signer after any failed signing
 attempt, and makes every skeleton instruction view reject a program index outside the
 statically included keys instead of reading a fabricated key from later message bytes.
+Skeleton deserialization remains permissive for offline analysis, but conversion to a mutable
+`Transaction` now requires the serialized signature-slot count to match the message header's
+required-signature count and to use the one-byte prefix assumed by mutable signing; all three
+concrete creation paths enforce those boundaries before signing can overwrite message bytes.
 The locked Rust generator also records that current Solana
 `VersionedTransaction` decoding accepts 127 legacy/v0 signatures but rejects 128 because
 the high first byte is reserved for version discrimination. Sava deliberately retains its

@@ -33,11 +33,12 @@ final class JavaPublicKeyConversionTests {
   /// The mask is the only thing keeping it there.
   @Test
   void yCoordinateStaysInsideTheFieldForAKeyWithTheSignBitSet() {
-    final var key = javaKeyOf("CiDwVBFgWV9E5MvXWoLgnEgn2hK7rJikbvfWavzAQz3");
+    final var key = javaKeyOf("3gF2KMe9KiC6FNVBmfg9i267aMPvK37FewCip4eGBFcT");
     final var y = key.getPoint().getY();
 
     assertTrue(y.signum() >= 0, "y is unsigned");
     assertTrue(y.bitLength() <= 255, "the sign bit must be cleared, not carried into y — was " + y.bitLength() + " bits");
+    assertTrue(key.getPoint().isXOdd(), "fixture must exercise the encoded x-parity bit");
   }
 
   /// The exact expected point for a fixed key, recomputed here from the encoded bytes by
@@ -45,7 +46,7 @@ final class JavaPublicKeyConversionTests {
   /// mutated mask disagrees numerically rather than merely "looks wrong".
   @Test
   void pointMatchesTheDefinitionForAFixedKey() {
-    final var base58 = "CiDwVBFgWV9E5MvXWoLgnEgn2hK7rJikbvfWavzAQz3";
+    final var base58 = "3gF2KMe9KiC6FNVBmfg9i267aMPvK37FewCip4eGBFcT";
     final byte[] encoded = PublicKey.fromBase58Encoded(base58).toByteArray();
 
     final byte[] reversed = new byte[encoded.length];
@@ -54,6 +55,7 @@ final class JavaPublicKeyConversionTests {
     }
     final int top = reversed[0] & 0xFF;
     final boolean expectedXOdd = (top & 0b1000_0000) != 0;
+    assertTrue(expectedXOdd, "fixture must exercise the encoded x-parity bit");
     reversed[0] = (byte) (top & 0b0111_1111);
     final var expectedY = new BigInteger(1, reversed);
 

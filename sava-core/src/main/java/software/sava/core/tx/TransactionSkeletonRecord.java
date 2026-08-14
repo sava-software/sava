@@ -23,6 +23,7 @@ import static software.sava.core.tx.TransactionRecord.VERSIONED_BIT_MASK;
 record TransactionSkeletonRecord(byte[] data,
                                  int version,
                                  int messageOffset,
+                                 int serializedSignatureCount,
                                  int numSignatures,
                                  int numReadonlySignedAccounts,
                                  int numReadonlyUnsignedAccounts,
@@ -325,6 +326,7 @@ record TransactionSkeletonRecord(byte[] data,
     int d = 0;
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
       final int programAccountIndex = data[o++] & 0xFF;
+      requireIncludedProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -355,6 +357,7 @@ record TransactionSkeletonRecord(byte[] data,
     int d = 0;
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
       final int programAccountIndex = data[o++] & 0xFF;
+      requireIncludedProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -380,8 +383,25 @@ record TransactionSkeletonRecord(byte[] data,
     return parseInstructions(accounts);
   }
 
+  private void requireSignableSignatureLayout() {
+    if (serializedSignatureCount != numSignatures) {
+      throw new IllegalStateException(String.format(
+          "Serialized signature count %d does not match the message header's required signature count %d.",
+          serializedSignatureCount, numSignatures
+      ));
+    }
+    final int signaturePrefixLength = messageOffset - (serializedSignatureCount * Transaction.SIGNATURE_LENGTH);
+    if (signaturePrefixLength != 1) {
+      throw new IllegalStateException(String.format(
+          "Serialized signature count %d uses a %d-byte prefix; mutable transactions require a one-byte prefix.",
+          serializedSignatureCount, signaturePrefixLength
+      ));
+    }
+  }
+
   @Override
   public Transaction createTransaction(final List<Instruction> instructions) {
+    requireSignableSignatureLayout();
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
         instructions,
@@ -398,6 +418,7 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public Transaction createTransaction(final List<Instruction> instructions,
                                        final AddressLookupTable lookupTable) {
+    requireSignableSignatureLayout();
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
         instructions,
@@ -414,6 +435,7 @@ record TransactionSkeletonRecord(byte[] data,
   @Override
   public Transaction createTransaction(final List<Instruction> instructions,
                                        final LookupTableAccountMeta[] tableAccountMetas) {
+    requireSignableSignatureLayout();
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
         instructions,

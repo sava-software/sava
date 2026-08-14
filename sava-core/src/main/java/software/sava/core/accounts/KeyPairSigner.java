@@ -92,8 +92,13 @@ final class KeyPairSigner implements Signer {
   private RuntimeException resetAfterFailure(final Exception failure) {
     try {
       signature.initSign(privateKey);
-    } catch (final InvalidKeyException resetFailure) {
-      throw new IllegalStateException("Failed to reset Ed25519 signer after a signing failure", resetFailure);
+    } catch (final Exception resetFailure) {
+      final var fatal = new IllegalStateException(
+          "Failed to reset Ed25519 signer after a signing failure",
+          resetFailure
+      );
+      fatal.addSuppressed(failure);
+      throw fatal;
     }
     return failure instanceof RuntimeException runtimeException
         ? runtimeException

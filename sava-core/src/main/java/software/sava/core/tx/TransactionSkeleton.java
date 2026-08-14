@@ -31,9 +31,9 @@ public interface TransactionSkeleton {
    */
   static TransactionSkeleton deserializeSkeleton(final byte[] data) {
     int o = 0;
-    final int numSignatures = decode(data, o);
+    final int serializedSignatureCount = decode(data, o);
     o += getByteLen(data, o);
-    o += (numSignatures * SIGNATURE_LENGTH);
+    o += (serializedSignatureCount * SIGNATURE_LENGTH);
     final int messageOffset = o;
 
     int version = data[o++] & 0xFF;
@@ -103,6 +103,7 @@ public interface TransactionSkeleton {
               data,
               version,
               messageOffset,
+              serializedSignatureCount,
               numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
               numIncludedAccounts, accountsOffset,
               recentBlockHashIndex,
@@ -115,6 +116,7 @@ public interface TransactionSkeleton {
               data,
               version,
               messageOffset,
+              serializedSignatureCount,
               numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
               numIncludedAccounts, accountsOffset,
               recentBlockHashIndex,
@@ -128,6 +130,7 @@ public interface TransactionSkeleton {
             data,
             version,
             messageOffset,
+            serializedSignatureCount,
             numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
             numIncludedAccounts, accountsOffset,
             recentBlockHashIndex,
@@ -152,6 +155,7 @@ public interface TransactionSkeleton {
           data,
           version,
           messageOffset,
+          serializedSignatureCount,
           numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
           numIncludedAccounts, accountsOffset,
           recentBlockHashIndex,
@@ -256,48 +260,117 @@ public interface TransactionSkeleton {
 
   Instruction[] filterInstructionsWithoutAccounts(final Discriminator discriminator);
 
+  /**
+   * Creates a mutable transaction from this parsed representation.
+   *
+   * @throws IllegalStateException if the serialized signature-slot count does not match the
+   *                               message header's required-signature count, or its prefix is
+   *                               not representable by a mutable transaction
+   */
   Transaction createTransaction(final List<Instruction> instructions);
 
+  /**
+   * Creates a mutable transaction from the supplied instructions.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction(final Instruction[] instructions) {
     return createTransaction(Arrays.asList(instructions));
   }
 
+  /**
+   * Creates a mutable transaction after parsing instructions against the supplied accounts.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction(final AccountMeta[] accounts) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(instructions);
   }
 
+  /**
+   * Creates a mutable transaction after parsing its accounts and instructions.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction() {
     final var accounts = parseAccounts();
     return createTransaction(accounts);
   }
 
+  /**
+   * Creates a mutable transaction using one lookup table.
+   *
+   * @throws IllegalStateException if the serialized signature-slot count does not match the
+   *                               message header's required-signature count, or its prefix is
+   *                               not representable by a mutable transaction
+   */
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
+  /**
+   * Creates a mutable transaction from the supplied instructions and lookup table.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
     return createTransaction(Arrays.asList(instructions), lookupTable);
   }
 
+  /**
+   * Creates a mutable transaction after parsing instructions against the supplied accounts.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(instructions, lookupTable);
   }
 
+  /**
+   * Creates a mutable transaction after resolving accounts through one lookup table.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
     final var accounts = parseAccounts(lookupTable);
     return createTransaction(accounts, lookupTable);
   }
 
+  /**
+   * Creates a mutable transaction after parsing instructions against the supplied accounts.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction(final AccountMeta[] accounts,
                                         final LookupTableAccountMeta[] tableAccountMetas) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(Arrays.asList(instructions), tableAccountMetas);
   }
 
+  /**
+   * Creates a mutable transaction after resolving accounts through the supplied lookup metadata.
+   *
+   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
+   *                               mutable transaction
+   */
   default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
     final var accounts = parseAccounts(Arrays.stream(tableAccountMetas).map(LookupTableAccountMeta::lookupTable));
     return createTransaction(accounts, tableAccountMetas);
   }
 
+  /**
+   * Creates a mutable transaction using the supplied lookup-table metadata.
+   *
+   * @throws IllegalStateException if the serialized signature-slot count does not match the
+   *                               message header's required-signature count, or its prefix is
+   *                               not representable by a mutable transaction
+   */
   Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);
 }
