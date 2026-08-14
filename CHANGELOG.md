@@ -1,5 +1,19 @@
 # Changelog
 
+## [25.9.1](https://github.com/sava-software/sava/compare/25.9.0...25.9.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* align client behavior with current Solana ([0d68f02](https://github.com/sava-software/sava/commit/0d68f0205d1e5c3936ba3a583f11b48aee39705a))
+* **core:** harden transaction signing boundaries ([7377486](https://github.com/sava-software/sava/commit/73774865a284ffa8cdcbb59ddf41505fc6fa7437))
+* **core:** match Rust TokenMetadata parsing ([e62048c](https://github.com/sava-software/sava/commit/e62048cbd07a5d47e3aa8dbe77b59c0628b1989c))
+* **core:** match Solana PDA derivation limits ([5cbba47](https://github.com/sava-software/sava/commit/5cbba478dac01e077ef659a0efdffa6213035231))
+* **core:** preserve Rust string semantics ([8fc443d](https://github.com/sava-software/sava/commit/8fc443d53906bcab525fd2c048dbbd579f1b0573))
+* **core:** preserve signer state after failures ([91bc814](https://github.com/sava-software/sava/commit/91bc81470f05da06381d99035ad9e2b40561d3d4))
+* **core:** preserve Token-2022 metadata order ([3160f52](https://github.com/sava-software/sava/commit/3160f52dc8d4b9477b4c93307d841c6c9cf642a1))
+* **core:** reject malformed Borsh strings ([5edb2a1](https://github.com/sava-software/sava/commit/5edb2a10c8b00042a536114f9156f1ed4db9d4b7))
+
 ## [25.9.0](https://github.com/sava-software/sava/compare/25.8.3...25.9.0) (2026-08-12)
 
 
