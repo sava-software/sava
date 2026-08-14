@@ -258,7 +258,7 @@ final class TransactionSkeletonParseTests {
 
     // a discriminator that matches nothing selects nothing
     final byte[] noMatch = instructions[0].copyData();
-    noMatch[0] ^= 0xFF;
+    noMatch[0] = (byte) (noMatch[0] ^ 0xFF);
     assertEquals(0, skeleton.filterInstructionsWithoutTableAccounts(
         software.sava.core.programs.Discriminator.createDiscriminator(noMatch, 0, 4)).length);
   }
@@ -417,6 +417,47 @@ final class TransactionSkeletonParseTests {
         tooMany,
         tooManyInstructions,
         "Serialized signature count 2 does not match the message header's required signature count 1."
+    );
+  }
+
+  /// The versioned constructor paths receive the serialized slot count and message-header
+  /// signer count as adjacent ints. Valid transactions normally make them equal, so use a
+  /// deliberate mismatch to keep their order observable in the lookup-table branch.
+  @Test
+  void mismatchedSignatureLayoutWithLookupTablesPreservesCountOrder() {
+    final byte[] data = Base64.getDecoder().decode(VERSIONED_TX);
+    final int messageOffset = CompactU16Encoding.getByteLen(data, 0)
+        + (CompactU16Encoding.decode(data, 0) * Transaction.SIGNATURE_LENGTH);
+    assertEquals((byte) 0x80, data[messageOffset], "fixture must be a v0 transaction");
+    data[messageOffset + 1] = 2; // two required signers, one serialized slot
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    assertTrue(skeleton.lookupTableAccounts().length > 0, "fixture must enter the table branch");
+    assertEquals(2, skeleton.numSignatures());
+    assertEveryMutableCreationRejects(
+        skeleton,
+        List.of(),
+        "Serialized signature count 1 does not match the message header's required signature count 2."
+    );
+  }
+
+  /// The explicit zero-table branch has a separate record-construction site and therefore needs
+  /// its own unequal-count fixture; equality-only fixtures cannot detect argument transposition.
+  @Test
+  void mismatchedSignatureLayoutWithZeroLookupTablesPreservesCountOrder() {
+    final byte[] legacy = Base64.getDecoder().decode(LEGACY_TX);
+    final int messageOffset = CompactU16Encoding.getByteLen(legacy, 0)
+        + (CompactU16Encoding.decode(legacy, 0) * Transaction.SIGNATURE_LENGTH);
+    final byte[] data = toVersionedWithoutTables(legacy, messageOffset);
+    data[messageOffset + 1] = 2; // two required signers, one serialized slot
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    assertEquals(0, skeleton.lookupTableAccounts().length, "fixture must enter the zero-table branch");
+    assertEquals(2, skeleton.numSignatures());
+    assertEveryMutableCreationRejects(
+        skeleton,
+        List.of(),
+        "Serialized signature count 1 does not match the message header's required signature count 2."
     );
   }
 
