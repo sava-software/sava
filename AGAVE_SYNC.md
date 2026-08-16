@@ -375,6 +375,7 @@ deliberately. **These are intentional; do not "fix" them toward the canonical im
 | `TxBuilder` defaults | CU limit `1_400_000`, data size 64MiB, both always serialized; fee and heap unset | unset stays unset | reserves both slots so they can be updated in place after simulating, and keeps the built transaction executable; `0` is the explicit clear |
 | `TransactionSkeleton#prototypeTransaction` on a v1 source | carries `0` through verbatim | n/a | preservation, not construction — a rebuilt transaction must equal its source |
 | `Transaction#setPriorityFeeLamportsFromComputeUnitPrice` on v1 with an absent CU limit | prices against `1_400_000` | no counterpart; v1 fees are absolute lamports, never price × limit | pricing, not preservation — a fee of `0` for a transaction that cannot execute is useless, and `1_400_000` is what `TxBuilder` would have written |
+| an explicit legacy/v0 `SetComputeUnitLimit(0)`, when deriving a priority fee | treated as absent: falls back to the per-instruction default | taken verbatim as a 0-unit budget | same reason. A 0-unit budget cannot execute a single metered instruction, so deriving a fee against it is pointless; the useful reading of an explicit zero is "no limit stated". Note this affects fee *derivation* only — `computeUnitLimit()` still reports the 0 that is on the wire |
 
 The v1 skeleton enforces the equivalent boundary for the SIMD-0385 layout. Because a v1 message
 appends its signatures after the instruction payloads, the split is implied only by the serialized

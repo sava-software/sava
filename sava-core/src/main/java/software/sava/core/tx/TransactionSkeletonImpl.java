@@ -129,7 +129,11 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
           } else if (limitOffset == 0 && data[o] == TransactionRecord.SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR) {
             limitOffset = o + 1;
           }
-          if (priceOffset != 0 && limitOffset != 0) {
+          // A zero limit falls back to the per-instruction default below, and that needs the rest
+          // of the walk, so only a limit that will actually be used lets the scan exit early.
+          if (priceOffset != 0
+              && limitOffset != 0
+              && (ByteUtil.getInt32LE(data, limitOffset) & 0xFFFF_FFFFL) != 0) {
             break;
           }
         }
