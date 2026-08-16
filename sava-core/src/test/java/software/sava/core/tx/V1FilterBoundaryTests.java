@@ -126,18 +126,20 @@ final class V1FilterBoundaryTests {
         inBoundsParsed[0].accounts().get(1).publicKey()
     );
 
-    // ...and the first out-of-bounds index, exactly on the bound, is reported as null rather than
-    // read off the end of the caller's array.
+    // ...and the first out-of-bounds index, exactly on the bound, is refused. SIMD-0385 makes this
+    // a sanitization failure, so the transaction cannot execute; v1 reports that rather than
+    // handing back a null inside the instruction's account list for the caller to trip over.
     final byte[] onTheBound = withFirstInstructionAccountIndex(data, 1, accounts.length);
     final var boundSkeleton = TransactionSkeleton.deserializeSkeleton(onTheBound);
     final var boundAccounts = boundSkeleton.parseAccounts();
     assertEquals(accounts.length, boundAccounts.length);
 
-    final var boundParsed = assertDoesNotThrow(() -> boundSkeleton.parseInstructions(boundAccounts));
-    assertEquals(2, boundParsed[0].accounts().size());
-    assertEquals(signerB, boundParsed[0].accounts().get(0).publicKey());
-    assertNull(boundParsed[0].accounts().get(1),
-        "an index equal to the account count is outside the array and must resolve to null"
+    assertEquals(
+        "Instruction account index 4 is outside the 4 accounts of this transaction.",
+        assertThrowsExactly(
+            IndexOutOfBoundsException.class,
+            () -> boundSkeleton.parseInstructions(boundAccounts)
+        ).getMessage()
     );
   }
 
@@ -194,13 +196,13 @@ final class V1FilterBoundaryTests {
     final var boundSkeleton = TransactionSkeleton.deserializeSkeleton(onTheBound);
     final var boundAccounts = boundSkeleton.parseAccounts();
 
-    final var boundFiltered = assertDoesNotThrow(
-        () -> boundSkeleton.filterInstructions(boundAccounts, discriminator)
-    );
-    assertEquals(1, boundFiltered.length);
-    assertEquals(signerB, boundFiltered[0].accounts().get(0).publicKey());
-    assertNull(boundFiltered[0].accounts().get(1),
-        "an index equal to the account count is outside the array and must resolve to null"
+    assertEquals(
+        "Instruction account index 4 is outside the 4 accounts of this transaction.",
+        assertThrowsExactly(
+            IndexOutOfBoundsException.class,
+            () -> boundSkeleton.filterInstructions(boundAccounts, discriminator)
+        ).getMessage(),
+        "the filter view enforces the same bound as the parse view"
     );
 
     // One below the bound still resolves, so the bound is exclusive rather than absent.

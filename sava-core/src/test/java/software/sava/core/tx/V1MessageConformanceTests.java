@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// byte-oriented builder and analyzer that leaves submission validation to the RPC — the current
 /// behaviour is pinned rather than forced to reject, and the divergence is called out at the
 /// assertion. See [#v1PopulationLimitsAreReportedRatherThanRejected] and
-/// [#v1OutOfRangeInstructionAccountIndexYieldsANullMeta].
+/// [#v1OutOfRangeInstructionAccountIndexIsRejected].
 ///
 /// That permissiveness stops where a message would parse into a plausible-looking WRONG view rather
 /// than an invalid-but-faithful one — see [#v1UnknownConfigMaskBitsAreRejectedAsRustRejectsThem],
@@ -567,21 +567,29 @@ final class V1MessageConformanceTests {
   /// and hands back a **null** element inside the instruction's `List<AccountMeta>` rather than
   /// throwing or omitting it, which is a footgun for every consumer that iterates the list.
   @Test
-  void v1OutOfRangeInstructionAccountIndexYieldsANullMeta() throws IOException {
+  void v1OutOfRangeInstructionAccountIndexIsRejected() throws IOException {
     final var vector = vector(loadFixture().vectors(), "reject_account_index_out_of_bounds");
     assertFalse(vector.rustValidate());
     assertEquals("InvalidInstructionAccountIndex", vector.rustValidateError());
 
+    // The message still parses — the corruption is inside an instruction payload, not the framing.
     final var skeleton = assertDoesNotThrow(() -> TransactionSkeleton.deserializeSkeleton(vector.wire()));
     assertEquals(2, skeleton.numIncludedAccounts());
     final var accounts = skeleton.parseAccounts();
-    final var instruction = skeleton.parseInstructions(accounts)[0];
     final int payloadOffset = vector.offsets().get("instruction_payloads");
     assertEquals(0, vector.wire()[payloadOffset] & 0xFF);
     assertEquals(2, vector.wire()[payloadOffset + 1] & 0xFF, "the second index is past the last address");
-    assertEquals(2, instruction.accounts().size());
-    assertEquals(accounts[0], instruction.accounts().getFirst());
-    assertNull(instruction.accounts().get(1), "Sava currently yields a null meta for an out of range index");
+
+    // Reading the instructions is where it is refused, matching Rust's InvalidInstructionAccountIndex
+    // rather than substituting a null meta the caller would trip over later. Legacy and v0 still
+    // substitute the null — see sava#57; v1 is new, so it does not inherit that.
+    assertEquals(
+        "Instruction account index 2 is outside the 2 accounts of this transaction.",
+        assertThrowsExactly(
+            IndexOutOfBoundsException.class,
+            () -> skeleton.parseInstructions(accounts)
+        ).getMessage()
+    );
   }
 
   /// Every rejection vector must actually be a rejection somewhere in Rust, and every non-rejection
