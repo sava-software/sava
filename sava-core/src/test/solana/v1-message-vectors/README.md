@@ -56,9 +56,17 @@ self-consistent off-by-one in a Sava constant fails the consumer test instead of
 * **Limit violations are semantic, not framing.** Too many signatures, addresses, or
   instructions, a readonly-signed count that swallows the fee payer, an address count
   below `num_required_signatures + num_readonly_unsigned_accounts`, a program id index of
-  zero, an out-of-range account index, and a heap size that is not a 1KiB multiple or is
-  outside `[32KiB, 256KiB]` are all rejected by `validate()` while still deserializing
-  and round-tripping as bytes. Each rejection is paired with an accepted boundary vector.
+  zero, a repeated address, an out-of-range account index, and a heap size that is not a
+  1KiB multiple or is outside `[32KiB, 256KiB]` are all rejected by `validate()` while
+  still deserializing and round-tripping as bytes. Each rejection is paired with an
+  accepted boundary vector.
+* **One `validate()` rule has no rejection vector, because none can exist.** An
+  instruction's account count above `u8::MAX` is rejected as `InstructionAccountsTooLarge`,
+  but the instruction header spends exactly one byte on that count and serialization writes
+  it as `accounts.len() as u8`, so 256 truncates to 0 and becomes a different, well formed
+  message rather than an over-large one. The rule guards messages built in memory and is
+  unreachable through deserialization, so the fixture pins `accept_instruction_accounts_255`
+  — the largest count any byte sequence can express — instead of a rejection.
 
 Rejections carry `rust_validate`/`rust_deserialize` booleans plus the Rust error
 discriminant, mirroring how the legacy fixture carries `rust_wire_round_trip`.

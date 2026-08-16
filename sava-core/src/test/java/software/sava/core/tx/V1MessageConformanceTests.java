@@ -57,7 +57,7 @@ final class V1MessageConformanceTests {
           + "signer_seeds_hex\tsignatures_hex\tsignature_block_offset\ttransaction_hex\t"
           + "rust_validate\trust_validate_error\trust_deserialize\trust_deserialize_error\t"
           + "rust_deserialize_with_prefix\trust_wire_round_trip";
-  private static final int VECTOR_COUNT = 47;
+  private static final int VECTOR_COUNT = 49;
   private static final HexFormat HEX = HexFormat.of();
 
   private static final String PRIORITY_FEE = "priority_fee";
@@ -101,7 +101,7 @@ final class V1MessageConformanceTests {
       Map.entry("v1-message-deserialize-with-prefix-error", "InvalidValue"),
       Map.entry("cargo-lock-sha256", "509d17e74329aae6ee082508b3ddd46205032a4ef49394c9623e03e5f0940bc9"),
       Map.entry("cargo-manifest-sha256", "3a122bd97eab42c5f5fb3c984f9e23d664f366fd3eb0e9a75edba6b25cf18549"),
-      Map.entry("generator-source-sha256", "4a7b20a6b1756b41e5e814372d2015f65cb601b565c721d31cf6efd5af473025"),
+      Map.entry("generator-source-sha256", "c973c5837c161b0bd8719ba02aeac1e3b0228f247f5e604523e92d72a2552404"),
       Map.entry("rust-toolchain", "1.93.0"),
       Map.entry("rust-toolchain-sha256", "92b454c1ccf330de9b94242f73bc3214370fb420d5152baeec12dc82ceef9dcc"),
       Map.entry("vectors", Integer.toString(VECTOR_COUNT))
@@ -270,7 +270,7 @@ final class V1MessageConformanceTests {
       }
       assertEquals(offsets.get("message_end").intValue(), payload, id + " instruction payload walk");
     }
-    assertEquals(41, checked, "vectors with a layout Rust and Sava both accept");
+    assertEquals(43, checked, "vectors with a layout Rust and Sava both accept");
   }
 
   /// All sixteen valid `TransactionConfigMask` combinations, against the values and absolute
@@ -592,6 +592,72 @@ final class V1MessageConformanceTests {
     );
   }
 
+  /// Rust's `validate()` rejects a repeated address with `DuplicateAddresses`, before it inspects a
+  /// single instruction. Sava reads it: the address array is well framed and every index resolves,
+  /// so both slots come back as equal metas and the view is faithful, merely not executable. Pinned
+  /// as current behaviour — the duplicate is a submission-time concern the RPC reports, and sava
+  /// cannot see it as corruption because nothing about the bytes is ambiguous.
+  ///
+  /// Adopted from `solana-sdk` `message/src/versions/v1/message.rs` `sanitize_rejects_duplicate_addresses`.
+  @Test
+  void v1DuplicateAddressesAreReadableButInvalidToRust() throws IOException {
+    final var vector = vector(loadFixture().vectors(), "reject_duplicate_addresses");
+    assertFalse(vector.rustValidate());
+    assertEquals("DuplicateAddresses", vector.rustValidateError());
+    assertTrue(vector.rustDeserialize(), "the bytes still deserialize and round trip");
+
+    final var skeleton = assertDoesNotThrow(() -> TransactionSkeleton.deserializeSkeleton(vector.wire()));
+    assertEquals(2, skeleton.numIncludedAccounts());
+    final var accounts = skeleton.parseAccounts();
+    assertEquals(accounts[0].publicKey(), accounts[1].publicKey(), "the second address repeats the first");
+    assertEquals(skeleton.feePayer(), accounts[0].publicKey());
+
+    // The roles still differ even though the keys do not: slot 0 is the writable signer and slot 1
+    // is the readonly program, so a reader that deduplicated would lose a role the wire encodes.
+    assertTrue(accounts[0].signer() && accounts[0].write(), "fee payer slot");
+    assertFalse(accounts[1].signer() || accounts[1].write(), "program slot");
+    assertDoesNotThrow(() -> skeleton.parseInstructions(accounts));
+  }
+
+  /// The wire ceiling on an instruction's account count. Rust's `validate()` rejects a count above
+  /// `u8::MAX` with `InstructionAccountsTooLarge`, but that rule is **unreachable through
+  /// deserialization**: the v1 instruction header spends exactly one byte on the count and Rust
+  /// serializes it as `accounts.len() as u8`, so 256 truncates to 0 and silently becomes a
+  /// different, well formed message rather than an over-large one. No byte sequence can express the
+  /// rejected side, which is why the fixture pins the largest count that any transaction can carry
+  /// instead of a rejection vector.
+  ///
+  /// Adopted from `solana-sdk` `message/src/versions/v1/message.rs`
+  /// `sanitize_rejects_instruction_with_too_many_accounts`.
+  @Test
+  void v1InstructionAccountCountCeilingIsTheWireMaximum() throws IOException {
+    final var vector = vector(loadFixture().vectors(), "accept_instruction_accounts_255");
+    assertTrue(vector.rustValidate(), "255 is inside Rust's limit");
+    assertEquals("", vector.rustValidateError());
+
+    final var skeleton = assertDoesNotThrow(() -> TransactionSkeleton.deserializeSkeleton(vector.wire()));
+    final int header = skeleton.instructionsOffset();
+    assertEquals(0xFF, vector.wire()[header + 1] & 0xFF, "the count byte is saturated");
+
+    final var instructions = skeleton.parseInstructions(skeleton.parseAccounts());
+    assertEquals(1, instructions.length);
+    final var accounts = instructions[0].accounts();
+    assertEquals(255, accounts.size(), "every account byte is read");
+    assertEquals(skeleton.feePayer(), accounts.getFirst().publicKey());
+    assertEquals(skeleton.feePayer(), accounts.getLast().publicKey());
+
+    // The payload walk still lands on Rust's message end, which is the property a miscounted
+    // account block would break: the accounts and the data share one contiguous payload run, so a
+    // reader that lost a single account byte would take the last of them for the first data byte.
+    final int payloadOffset = vector.offsets().get("instruction_payloads");
+    assertEquals(payloadOffset + 255, instructions[0].offset(), "data begins after all 255 account bytes");
+    assertEquals(
+        vector.offsets().get("message_end").intValue(),
+        instructions[0].offset() + instructions[0].len(),
+        "instruction payload walk"
+    );
+  }
+
   /// Every rejection vector must actually be a rejection somewhere in Rust, and every non-rejection
   /// vector must be clean. Guards the fixture against a regeneration that quietly turns a rejection
   /// row into an accepted one.
@@ -614,7 +680,7 @@ final class V1MessageConformanceTests {
         assertEquals("", vector.rustDeserializeError(), vector.id());
       }
     }
-    assertEquals(14, rejections, "rejection vectors");
+    assertEquals(15, rejections, "rejection vectors");
   }
 
   private static void assertLimit(final List<Vector> vectors,
