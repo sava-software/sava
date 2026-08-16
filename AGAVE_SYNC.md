@@ -387,6 +387,76 @@ the required signature count from the header's `num_required_signatures` rather 
 caller's collection, and rejects a mismatch before mutating. v1 program-id indexes are bounds
 checked for every instruction, including ones a discriminator filter skips.
 
+### v1 sanitization: rule → error mapping
+
+Upstream's own v1 rejection rules, with the exact error each one raises, are in
+`solana-sdk:message/src/versions/v1/message.rs` — `Message::validate` (the rule bodies) and its
+`#[cfg(test)] mod tests` (`sanitize_*`, which pin the rule-to-variant mapping). `Sanitize for
+Message` is just `validate()?`, so every rule surfaces through
+`From<MessageError> for SanitizeError` in `solana-sdk:message/src/versions/v1/error.rs`: that
+conversion, not the rule, decides `InvalidValue` vs `IndexOutOfBounds`. Constants come from
+`v1/mod.rs` (`MAX_SIGNATURES = 12`, `MAX_ADDRESSES = 64`, `MAX_INSTRUCTIONS = 64`,
+`MIN_HEAP_SIZE = 32KiB`, `MAX_HEAP_SIZE = 256KiB`). This mapping is more useful parity evidence
+than any byte vector, because it is the one part of v1 that a wire fixture cannot express.
+
+Note the layering before reading the table: upstream `deserialize` enforces **only** the two config-mask
+rules; every population and index rule below lives in the separate `sanitize`/`validate` pass, which
+decoding never calls. Sava has no `sanitize` entry point at all — it splits the same rules by whether
+a violation still yields a faithful parse (see the paragraph above), so "sava accepts, reports via
+`exceeds*Limit()`" is the deliberate stance for population limits, not an unimplemented check.
+
+Rules are listed in `validate()` evaluation order, then the two deserialization-time rules.
+
+| # | condition rejected | upstream `MessageError` | `SanitizeError` | sava today |
+|---|---|---|---|---|
+| 1 | `num_required_signatures > 12` | `TooManySignatures` | `IndexOutOfBounds` | accepts; reports via `Transaction#exceedsSignatureLimit()`; `TxBuilder` rejects when `strict` |
+| 2 | `instructions.len() > 64` | `TooManyInstructions` | `IndexOutOfBounds` | accepts; reports via `Transaction#exceedsInstructionLimit()`; `TxBuilder` rejects when `strict` |
+| 3 | `account_keys.len() > 64` | `TooManyAddresses` | `IndexOutOfBounds` | accepts; reports via `Transaction#exceedsAccountLimit()`; `TxBuilder` rejects when `strict` |
+| 4 | `num_addresses < num_required_signatures + num_readonly_unsigned` | `NotEnoughAddressesForSignatures` | `IndexOutOfBounds` | **enforced** in `V1TransactionSkeleton.deserialize` (`IllegalStateException`) — it partitions the address array, so violating it mis-assigns privileges |
+| 5 | `num_readonly_signed >= num_required_signatures` (includes `num_required_signatures == 0`) | `ZeroSigners` | `InvalidValue` | **enforced** in `V1TransactionSkeleton.deserialize` (`IllegalStateException`); `V1Transaction.isV1` additionally requires `data[1] != 0`, so a 0-signer message is not even dispatched as v1 |
+| 6 | duplicate addresses in `account_keys` | `DuplicateAddresses` | `InvalidValue` | no check anywhere; parse stays faithful (duplicates appear twice in `parseAccounts`), and `TxBuilder` cannot emit them because it merges metas by key |
+| 7 | `heap_size % 1024 != 0` | `InvalidHeapSize` | `InvalidValue` | `heapSize()` reports the wire value unchecked; `TxBuilder#heapSize` rejects when `strict` (0 clears the request) and `V1Transaction#setHeapSize` rejects unconditionally, both via `TxBuilderImpl.checkHeapSize` |
+| 8 | `heap_size` outside `[32KiB, 256KiB]` | `InvalidHeapSize` | `InvalidValue` | same as 7 — `checkHeapSize` applies both bounds and the 1KiB alignment together |
+| 9 | `account_keys` empty (`len - 1` underflows) | `NotEnoughAccountKeys` | `InvalidValue` | unreachable upstream: rules 4 and 5 already reject every empty-address header. Sava rejects the same inputs transitively through rule 4 |
+| 10 | `program_id_index >= num_addresses` | `InvalidInstructionAccountIndex` | `IndexOutOfBounds` | **enforced** at parse by `requireIncludedProgramAccount` (`IndexOutOfBoundsException`), for every instruction including ones a discriminator filter skips |
+| 11 | `program_id_index == 0` (fee payer invoked as program) | `InvalidInstructionAccountIndex` | `IndexOutOfBounds` | skeleton has no check — index 0 is a real account, so the parse is invalid-but-faithful. `TxBuilderImpl.createTransaction` refuses to emit one, unconditionally, not gated on `strict` |
+| 12 | instruction accounts `> 255` | `InstructionAccountsTooLarge` | `InvalidValue` | unrepresentable on the wire (the `u8` count field), so no parse can observe it; `TxBuilderImpl.createTransaction` rejects unconditionally |
+| 13 | instruction data `> 65535` | `InstructionDataTooLarge` | `InvalidValue` | unrepresentable on the wire (the `u16` length field); `TxBuilderImpl.createTransaction` rejects unconditionally where the field is written |
+| 14 | instruction account index `>= num_addresses` | `InvalidInstructionAccountIndex` | `IndexOutOfBounds` | **enforced** by `requireIncludedInstructionAccount` (`IndexOutOfBoundsException`) in the views that materialize account metas; the `*WithoutAccounts` views step over the index bytes without reading them, so they neither validate nor need to — instruction boundaries come from the fixed-width headers |
+| 15 | any config-mask bit outside bits 0-4 (`has_unknown_bits`) | wincode `invalid_value`, raised in `read` before `validate` ever runs | n/a — never becomes a `SanitizeError` | **enforced** in `V1TransactionSkeleton.deserialize` (`IllegalStateException`): the ConfigValues block is sized from the mask, so an unknown bit shifts every later offset |
+| 16 | exactly one of the two priority-fee bits (`has_invalid_priority_fee_bits`) | wincode `invalid_value`, same path as 15 | n/a | **enforced** in `V1TransactionSkeleton.deserialize` (`IllegalStateException`) |
+
+Boundaries upstream pins on the accept side, and which sava's fixture should keep matching: exactly
+64 addresses, exactly 64 instructions, and heap sizes of exactly `MIN_HEAP_SIZE`, exactly
+`MAX_HEAP_SIZE`, and 65536 are all valid.
+
+Three further observations from that module worth carrying:
+
+- `validate()` deliberately does **not** re-check the config mask. Upstream's comment is explicit: the
+  mask is regenerated from the typed `TransactionConfig` on serialization, so a malformed mask can
+  only exist in raw wire bytes and is a deserialization-layer rule. Sava places rules 15 and 16 at the
+  same layer for the same reason.
+- `MessageError::InvalidProgramIdIndex` is never returned by `validate` — both program-id failures
+  (rules 10 and 11) return `InvalidInstructionAccountIndex`. It would map to `IndexOutOfBounds` either
+  way, so the mapping is unaffected, but do not sync a rule to that variant on name alone.
+- `BufferTooSmall`, `InvalidVersion`, `TrailingData`, `TransactionTooLarge`, `InvalidConfigMask` and
+  `InvalidConfigValue` are declared in `MessageError` but unused in the current solana-sdk tree; they
+  have no upstream rule to mirror. Sava's nearest equivalents are `V1Transaction.isV1`'s exact `0x81`
+  discriminator, the signature-block boundary check quoted above (which is what catches trailing or
+  truncated bytes), and `Transaction#exceedsSizeLimit()` against `MAX_SERIALIZED_LENGTH_V1 = 4096`.
+
+Rules 12 and 13 mark a boundary the builder draws that `strict` does not cross. `strict` decides
+whether a transaction would be acceptable to the network — the 64-account, 64-instruction,
+12-signature and 4096-byte limits are all gated on it, so a caller can switch it off to construct and
+analyze transactions the network would refuse. The wire format's own field widths are not limits of
+that kind. `NumInstructions` and `NumAddresses` are single bytes and an instruction header spends one
+byte on its account count and two on its data length, so a value past those ceilings cannot be
+encoded at all: writing it modulo its field leaves a header block that no longer describes its
+payload block, every later instruction offset moves, and the message cannot be read back. Over-limit
+bytes are the point of a relaxed builder; self-inconsistent bytes are not, so
+`TxBuilderImpl.createTransaction` enforces all four ceilings unconditionally. Under `strict` the
+4096-byte bound makes every one of them unreachable, which is why they only matter once it is off.
+
 ## Token-2022 hardening (sava-core `accounts/token/`)
 
 The TLV walker and 29 extension readers parse untrusted account data fetched over RPC;
