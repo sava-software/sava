@@ -946,6 +946,32 @@ fn rejection_vectors() -> Vec<Vector> {
                 0xde,
             ),
         ),
+        rejected_by_validate("reject_duplicate_addresses", duplicate_address_message(0xe3)),
+        // The wire ceiling on an instruction's account count. `validate()` rejects above
+        // `u8::MAX`, but serialization writes that count as `accounts.len() as u8`, so 256
+        // truncates to 0 and silently becomes a different, well formed message. The rule is
+        // therefore unreachable through deserialization and only guards messages built in
+        // memory; 255 is the largest count any byte sequence can express, so it is the only
+        // side of that boundary a wire vector can pin.
+        accepted(
+            "accept_instruction_accounts_255",
+            "rejection",
+            raw_message(
+                MessageHeader {
+                    num_required_signatures: 1,
+                    num_readonly_signed_accounts: 0,
+                    num_readonly_unsigned_accounts: 1,
+                },
+                TransactionConfig::empty(),
+                2,
+                vec![CompiledInstruction {
+                    program_id_index: 1,
+                    accounts: vec![0u8; u8::MAX as usize],
+                    data: vec![0x15],
+                }],
+                0xe4,
+            ),
+        ),
     ];
 
     // Mask rejections cannot be expressed as a `TransactionConfig`; serialization regenerates
@@ -1131,6 +1157,29 @@ fn signature_boundary_message(num_signatures: u8, blockhash: u8) -> v1::Message 
         }],
         blockhash,
     )
+}
+
+/// Two addresses where the second repeats the first, mirroring upstream's
+/// `sanitize_rejects_duplicate_addresses`. `validate()` tests uniqueness before it reaches any
+/// instruction, so `DuplicateAddresses` is the reported error rather than an index rule.
+fn duplicate_address_message(blockhash: u8) -> v1::Message {
+    let mut message = raw_message(
+        MessageHeader {
+            num_required_signatures: 1,
+            num_readonly_signed_accounts: 0,
+            num_readonly_unsigned_accounts: 1,
+        },
+        TransactionConfig::empty(),
+        2,
+        vec![CompiledInstruction {
+            program_id_index: 1,
+            accounts: vec![0],
+            data: vec![0x16],
+        }],
+        blockhash,
+    );
+    message.account_keys[1] = message.account_keys[0];
+    message
 }
 
 fn raw_message(
