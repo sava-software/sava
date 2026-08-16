@@ -893,25 +893,26 @@ final class TransactionSerializationTests {
     data[maskOffset] = (byte) 0b0000_0010;
     assertThrows(IllegalStateException.class, () -> TransactionSkeleton.deserializeSkeleton(data));
 
-    // Each set mask bit contributes one 4-byte ConfigValue, so unknown bits are skipped rather
-    // than rejected. Splice an unknown config value in after the default compute unit and
-    // accounts data size limits and verify the instructions still parse from their shifted
-    // offsets. Bit 9 also exercises reading the TransactionConfigMask beyond its first byte.
+    // An unknown mask bit is rejected rather than skipped. It cannot be skipped: the ConfigValues
+    // block is sized from the mask, so a slot allocated for a bit whose width this release cannot
+    // know shifts the instruction headers and every offset after them, and the message would parse
+    // into a plausible-looking wrong view. Rust's reader refuses these outright, so no such message
+    // can arrive from a cluster. Bit 9 also exercises reading the mask beyond its first byte.
     data[maskOffset] = (byte) 0b0000_1100;
     data[maskOffset + 1] = (byte) 0b0000_0010;
-    final int unknownValueOffset = V1TransactionSkeleton.V1_ACCOUNTS_OFFSET + (3 << 5) + (2 * Integer.BYTES);
-    final byte[] extended = new byte[data.length + Integer.BYTES];
-    System.arraycopy(data, 0, extended, 0, unknownValueOffset);
-    ByteUtil.putInt32LE(extended, unknownValueOffset, Integer.MAX_VALUE);
-    System.arraycopy(data, unknownValueOffset, extended, unknownValueOffset + Integer.BYTES, data.length - unknownValueOffset);
+    final var unknownBit = assertThrows(
+        IllegalStateException.class,
+        () -> TransactionSkeleton.deserializeSkeleton(data)
+    );
+    assertEquals("Unknown v1 TransactionConfigMask bits: 0x20c", unknownBit.getMessage());
 
-    final var skeleton = TransactionSkeleton.deserializeSkeleton(extended);
-    assertEquals(1, skeleton.version());
-    assertEquals(0b0010_0000_1100, assertInstanceOf(V1TransactionSkeleton.class, skeleton).configMask());
-    final var instructions = skeleton.parseInstructions(skeleton.parseAccounts());
-    assertEquals(1, instructions.length);
-    assertEquals(SolanaAccounts.MAIN_NET.systemProgram(), instructions[0].programId().publicKey());
-    assertArrayEquals(new byte[]{1}, instructions[0].copyData());
+    // Every bit SIMD-0385 defines is still accepted together.
+    data[maskOffset] = (byte) 0b0001_1111;
+    data[maskOffset + 1] = 0;
+    assertEquals(
+        0b0001_1111,
+        assertInstanceOf(V1TransactionSkeleton.class, TransactionSkeleton.deserializeSkeleton(data)).configMask()
+    );
   }
 
   @Test
