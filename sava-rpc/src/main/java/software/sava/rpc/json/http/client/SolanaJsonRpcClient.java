@@ -34,6 +34,8 @@ import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
 final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements SolanaRpcClient {
 
+  static final int MAX_SUPPORTED_TRANSACTION_VERSION = 1;
+
   static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
   static final Duration PROGRAM_ACCOUNTS_TIMEOUT = Duration.ofSeconds(120);
 
@@ -285,7 +287,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
     final var maxSupportedTransactionVersion = blockTxDetails == BlockTxDetails.full
-        ? ",\"maxSupportedTransactionVersion\":0"
+        ? ",\"maxSupportedTransactionVersion\":" + MAX_SUPPORTED_TRANSACTION_VERSION
         : "";
     return sendPostRequest(BLOCK, format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b%s}]}""",
@@ -1425,8 +1427,8 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   @Override
   public CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
     return sendPostRequest(TRANSACTION, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s","maxSupportedTransactionVersion":0,"encoding":"base64"}]}""",
-            id.incrementAndGet(), txSignature, commitment.getValue()
+                {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s","maxSupportedTransactionVersion":%d,"encoding":"base64"}]}""",
+            id.incrementAndGet(), txSignature, commitment.getValue(), MAX_SUPPORTED_TRANSACTION_VERSION
         )
     );
   }

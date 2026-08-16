@@ -22,6 +22,10 @@ comparing.
   crates extracted from agave's old `sdk/`: `transaction-error`, `pubkey`, `message`,
   `transaction`, `clock`, `epoch-rewards`, `short-vec`, `address-lookup-table-interface`,
   `compute-budget-interface`, and friends.
+- **agave-sdk** — `https://github.com/anza-xyz/agave-sdk.git` — the wire-format parsers and
+  sanitizers split out of agave: `transaction-view` (the zero-copy legacy/v0/v1 transaction
+  parser and its `sanitize`), `short-vec`. **`transaction-view` is here, not inside `agave`** —
+  citing `agave:transaction-view/` sends a reader to a path that does not exist.
 - **solana-com** — `https://github.com/solana-foundation/solana-com` — solana.com docs; RPC
   method pages at `apps/docs/content/docs/en/rpc/http/*.mdx` and
   `apps/docs/content/docs/en/rpc/websocket/*.mdx` (canonical request/response examples in
@@ -240,8 +244,15 @@ Enum mirrors in this package: `RewardType` (including `DeactivatedStake`) and th
 confirmation status strings map to
 `agave:transaction-status-client-types/src/lib.rs` (`RewardType`, `TransactionConfirmationStatus`,
 `UiTransactionEncoding`). Like `InflationReward`, `TxReward` stores the effective commission
-value and flags when that value came from the canonical `commissionBps` field. Full `getBlock` requests send
-`maxSupportedTransactionVersion: 0`, matching this client's legacy/v0 transaction model.
+value and flags when that value came from the canonical `commissionBps` field. Full `getBlock`
+requests and all `getTransaction` requests send
+`maxSupportedTransactionVersion: SolanaJsonRpcClient.MAX_SUPPORTED_TRANSACTION_VERSION` (currently
+`1`), matching this client's legacy/v0/v1 transaction model. The parameter is omitted for
+`transactionDetails` of `none` and `signatures`, because agave's
+`ConfirmedBlock::encode_with_options` never version-checks those arms. Note that the
+`== BlockTxDetails.full` condition is only sufficient while sava's `BlockTxDetails` has no
+`accounts` constant; agave's `TransactionDetails::Accounts` arm does version-check via
+`build_json_accounts`.
 
 ## Other sync surfaces (sava-core)
 
@@ -255,7 +266,8 @@ value and flags when that value came from the canonical `commissionBps` field. F
 | `accounts/sysvar/Rent.java` | Rent sysvar and checked `minimum_balance` integer/f64 paths | `solana-sdk:rent/` |
 | `accounts/token/Mint.java` | SPL Mint, 82-byte packed layout with u32-tag COptions | `spl-token-interface` `state::Mint`; `agave:account-decoder/src/parse_token.rs` |
 | `accounts/token/TokenAccount.java`, `AccountState.java` | SPL Account, 165 bytes, explicit memcmp offsets used for `getProgramAccounts` filters | `spl-token-interface` `state::Account`/`AccountState` |
-| `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest in-agave parser: `agave:transaction-view/` |
+| `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest upstream parser: `agave-sdk:transaction-view/` |
+| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/` |
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
@@ -341,8 +353,38 @@ The locked Rust generator also records that current Solana
 the high first byte is reserved for version discrimination. Sava deliberately retains its
 published permissive builder behavior at that boundary and for overflowing account/header
 counts: it emits narrowed bytes so callers can construct and analyze invalid transactions,
-leaving submission validation to the RPC. No v1 behavior, address-lookup-table selection
-rule, or within-category account tie-break changed.
+leaving submission validation to the RPC. No address-lookup-table selection rule or
+within-category account tie-break changed.
+
+### Deliberate divergences: v1 compute budget values
+
+SIMD-0385 makes every unset `TransactionConfigMask` bit mean the minimum value, and agave reads
+them that way (`runtime-transaction/src/runtime_transaction/transaction_view.rs`: `unwrap_or(0)` for
+the priority fee, compute-unit limit and accounts-data-size limit; `unwrap_or(HEAP_LENGTH)` for the
+heap). A 0 compute-unit limit is valid at every validation layer but fatal at the first metered
+instruction — `program-runtime/src/invoke_context.rs` seeds the compute meter with the limit itself,
+with no floor and no upfront allowance, and `consume_checked` fails whenever the meter is below the
+charge. Only an empty or precompile-only transaction can succeed with one. These values are
+therefore correct on the wire and useless as construction defaults, and sava splits the difference
+deliberately. **These are intentional; do not "fix" them toward the canonical implementations.**
+
+| surface | sava | agave / SIMD-0385 | why |
+|---|---|---|---|
+| `TransactionSkeleton` readers for an absent bit | `0` for fee, CU limit and data size | same | faithful to the wire |
+| `TransactionSkeleton#heapSize()` for an absent bit | `0` | `32KiB` (`MIN_HEAP_FRAME_BYTES`) | heap is the only value whose absent and effective readings differ, so the reader must pick one: it reports what was *requested*. Reporting the effective 32KiB would make `prototypeTransaction` write a heap ConfigValue the source never had, and would split v1 from sava's legacy reader, which already returns `0` when no `RequestHeapFrame` instruction is present. An explicit 32KiB and no request behave identically at runtime |
+| `TxBuilder` defaults | CU limit `1_400_000`, data size 64MiB, both always serialized; fee and heap unset | unset stays unset | reserves both slots so they can be updated in place after simulating, and keeps the built transaction executable; `0` is the explicit clear |
+| `TransactionSkeleton#prototypeTransaction` on a v1 source | carries `0` through verbatim | n/a | preservation, not construction — a rebuilt transaction must equal its source |
+| `Transaction#setPriorityFeeLamportsFromComputeUnitPrice` on v1 with an absent CU limit | prices against `1_400_000` | no counterpart; v1 fees are absolute lamports, never price × limit | pricing, not preservation — a fee of `0` for a transaction that cannot execute is useless, and `1_400_000` is what `TxBuilder` would have written |
+
+The v1 skeleton enforces the equivalent boundary for the SIMD-0385 layout. Because a v1 message
+appends its signatures after the instruction payloads, the split is implied only by the serialized
+length, so `V1TransactionSkeleton` requires
+`instructionsOffset + serializedInstructionsLength() == data.length - numSignatures * 64` before a
+parsed message may become a mutable transaction; a truncated or padded payload stays readable but
+cannot be signed. The static `Transaction.sign(SequencedCollection, byte[])` v1 path likewise takes
+the required signature count from the header's `num_required_signatures` rather than from the
+caller's collection, and rejects a mismatch before mutating. v1 program-id indexes are bounds
+checked for every instruction, including ones a discriminator filter skips.
 
 ## Token-2022 hardening (sava-core `accounts/token/`)
 

@@ -1,10 +1,12 @@
 package software.sava.core.tx;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.encoding.Base58;
+import software.sava.core.encoding.ByteUtil;
 import software.sava.core.programs.Discriminator;
 
 import java.util.Arrays;
@@ -12,133 +14,163 @@ import java.util.List;
 import java.util.Map;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
-import static software.sava.core.accounts.PublicKey.readPubKey;
-import static software.sava.core.accounts.meta.AccountMeta.*;
+import static software.sava.core.accounts.meta.AccountMeta.createRead;
+import static software.sava.core.accounts.meta.AccountMeta.createWrite;
 import static software.sava.core.encoding.CompactU16Encoding.decode;
 import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.tx.Instruction.createInstruction;
-import static software.sava.core.tx.Transaction.BLOCK_HASH_LENGTH;
-import static software.sava.core.tx.TransactionRecord.VERSIONED_BIT_MASK;
+import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
 
-record TransactionSkeletonRecord(byte[] data,
-                                 int version,
-                                 int messageOffset,
-                                 int serializedSignatureCount,
-                                 int numSignatures,
-                                 int numReadonlySignedAccounts,
-                                 int numReadonlyUnsignedAccounts,
-                                 int numIncludedAccounts, int accountsOffset,
-                                 int recentBlockHashIndex,
-                                 int numInstructions, int instructionsOffset, int[] invokedIndexes,
-                                 int lookupTablesOffset, PublicKey[] lookupTableAccounts,
-                                 int numAccounts) implements TransactionSkeleton {
+// Skeleton for legacy and v0 transaction messages.
+final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
 
-  static final int[] LEGACY_INVOKED_INDEXES = new int[0];
-  static final PublicKey[] NO_TABLES = new PublicKey[0];
+  private final int messageOffset;
+  private final int serializedSignatureCount;
+  private final int numIncludedAccounts;
+  private final int accountsOffset;
+  private final int recentBlockHashIndex;
+  private final int lookupTablesOffset;
+  private final PublicKey[] lookupTableAccounts;
 
-  @Override
-  public boolean isVersioned() {
-    return version != VERSIONED_BIT_MASK;
+  TransactionSkeletonImpl(final byte[] data,
+                          final int version,
+                          final int messageOffset,
+                          final int serializedSignatureCount,
+                          final int numSignatures,
+                          final int numReadonlySignedAccounts,
+                          final int numReadonlyUnsignedAccounts,
+                          final int numIncludedAccounts,
+                          final int accountsOffset,
+                          final int recentBlockHashIndex,
+                          final int numInstructions,
+                          final int instructionsOffset,
+                          final int[] invokedIndexes,
+                          final int lookupTablesOffset,
+                          final PublicKey[] lookupTableAccounts,
+                          final int numAccounts) {
+    super(
+        data,
+        version,
+        numSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts,
+        numInstructions, instructionsOffset, invokedIndexes,
+        numAccounts
+    );
+    this.messageOffset = messageOffset;
+    this.serializedSignatureCount = serializedSignatureCount;
+    this.numIncludedAccounts = numIncludedAccounts;
+    this.accountsOffset = accountsOffset;
+    this.recentBlockHashIndex = recentBlockHashIndex;
+    this.lookupTablesOffset = lookupTablesOffset;
+    this.lookupTableAccounts = lookupTableAccounts;
   }
 
   @Override
-  public boolean isLegacy() {
-    return version == VERSIONED_BIT_MASK;
+  protected int accountsOffset() {
+    return accountsOffset;
+  }
+
+  @Override
+  public int recentBlockHashIndex() {
+    return recentBlockHashIndex;
   }
 
   @Override
   public String id() {
-    return Base58.encode(data, 1, 1 + Transaction.SIGNATURE_LENGTH);
+    return Base58.encode(data, 1, 1 + SIGNATURE_LENGTH);
   }
 
-  @Override
-  public byte[] blockHash() {
-    return Arrays.copyOfRange(data, recentBlockHashIndex, recentBlockHashIndex + BLOCK_HASH_LENGTH);
-  }
+  // Runtime default compute unit limit granted per non-compute-budget instruction when no
+  // SetComputeUnitLimit instruction is present. An estimate; per SIMD-0170 the runtime only
+  // allocates 3,000 units for each builtin program instruction.
+  static final int DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT = 200_000;
 
-  @Override
-  public String base58BlockHash() {
-    return Base58.encode(data, recentBlockHashIndex, recentBlockHashIndex + BLOCK_HASH_LENGTH);
-  }
+  // Returns the offset of the first matching compute budget instruction value, or 0 if not
+  // present, exiting early on a match; compute budget instructions are conventionally first.
+  private int computeBudgetValueOffset(final byte discriminator, final int valueLength) {
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
+      final var programAccount = getProgramAccount(data[o++] & 0xFF);
+      final int numAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numAccounts;
+      final int numDataBytes = decode(data, o);
+      o += getByteLen(data, o);
 
-  @Override
-  public PublicKey feePayer() {
-    return readPubKey(data, accountsOffset);
-  }
-
-  private int parseSignatureAccounts(final AccountMeta[] accounts) {
-    accounts[0] = createFeePayer(feePayer());
-    int o = accountsOffset + PUBLIC_KEY_LENGTH;
-    int a = 1;
-    for (final int numWriteSigners = numSignatures - numReadonlySignedAccounts; a < numWriteSigners; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createWritableSigner(readPubKey(data, o));
+      // Guard the data length before reading the discriminator and value, a malformed compute
+      // budget instruction must not read into the next instruction or past the message.
+      if (numDataBytes > valueLength
+          && computeBudgetProgram.equals(programAccount)
+          && data[o] == discriminator) {
+        return o + 1;
+      }
+      o += numDataBytes;
     }
-    for (; a < numSignatures; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createReadOnlySigner(readPubKey(data, o));
-    }
-    return o;
+    return 0;
   }
 
   @Override
-  public AccountMeta[] parseSignerAccounts() {
-    final var accounts = new AccountMeta[numSignatures];
-    parseSignatureAccounts(accounts);
-    return accounts;
+  public long priorityFeeLamports() {
+    // A single walk collecting the price and limit, exiting early once both are found; the
+    // non-compute-budget instruction count is only needed when no limit instruction is present.
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    int priceOffset = 0;
+    int limitOffset = 0;
+    int numNonComputeBudgetInstructions = 0;
+    for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
+      final var programAccount = getProgramAccount(data[o++] & 0xFF);
+      final int numAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numAccounts;
+      final int numDataBytes = decode(data, o);
+      o += getByteLen(data, o);
+      if (computeBudgetProgram.equals(programAccount)) {
+        if (numDataBytes > Integer.BYTES) {
+          if (priceOffset == 0
+              && numDataBytes > Long.BYTES
+              && data[o] == TransactionRecord.SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR) {
+            priceOffset = o + 1;
+          } else if (limitOffset == 0 && data[o] == TransactionRecord.SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR) {
+            limitOffset = o + 1;
+          }
+          if (priceOffset != 0 && limitOffset != 0) {
+            break;
+          }
+        }
+      } else {
+        ++numNonComputeBudgetInstructions;
+      }
+      o += numDataBytes;
+    }
+    if (priceOffset == 0) {
+      return 0;
+    }
+    final long microLamportsPerComputeUnit = ByteUtil.getInt64LE(data, priceOffset);
+    long computeUnitLimit = limitOffset == 0 ? 0 : ByteUtil.getInt32LE(data, limitOffset) & 0xFFFF_FFFFL;
+    if (computeUnitLimit == 0) {
+      computeUnitLimit = Math.min(
+          (long) DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions,
+          TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT
+      );
+    }
+    return TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, (int) computeUnitLimit);
   }
 
   @Override
-  public PublicKey[] parseSignerPublicKeys() {
-    final var accounts = new PublicKey[numSignatures];
-    for (int o = accountsOffset, a = 0; a < numSignatures; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = readPubKey(data, o);
-    }
-    return accounts;
+  public int computeUnitLimit() {
+    final int offset = computeBudgetValueOffset(TransactionRecord.SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, Integer.BYTES);
+    return offset == 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
-  public AccountMeta[] parseAccounts() {
-    final var accounts = new AccountMeta[numIncludedAccounts];
-    int o = parseSignatureAccounts(accounts);
-    int a = numSignatures;
-    for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createWrite(readPubKey(data, o));
-    }
-    for (; a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createRead(readPubKey(data, o));
-    }
-    return accounts;
+  public int accountDataSizeLimit() {
+    final int offset = computeBudgetValueOffset(TransactionRecord.SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR, Integer.BYTES);
+    return offset == 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
-  public AccountMeta[] parseNonSignerAccounts() {
-    final int numAccounts = numIncludedAccounts - numSignatures;
-    final var accounts = new AccountMeta[numAccounts];
-    int o = accountsOffset + (numSignatures * PUBLIC_KEY_LENGTH);
-    int a = 0;
-    for (final int to = numAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createWrite(readPubKey(data, o));
-    }
-    for (; a < numAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createRead(readPubKey(data, o));
-    }
-    return accounts;
-  }
-
-  @Override
-  public PublicKey[] parseNonSignerPublicKeys() {
-    final int numAccounts = numIncludedAccounts - numSignatures;
-    final var accounts = new PublicKey[numAccounts];
-    for (int a = 0, o = accountsOffset + (numSignatures * PUBLIC_KEY_LENGTH); a < numAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = readPubKey(data, o);
-    }
-    return accounts;
-  }
-
-  @Override
-  public AccountMeta[] parseAccounts(final AddressLookupTable lookupTable) {
-    return lookupTable == null
-        ? parseAccounts()
-        : parseAccounts(Map.of(lookupTable.address(), lookupTable));
+  public int heapSize() {
+    final int offset = computeBudgetValueOffset(TransactionRecord.REQUEST_HEAP_FRAME_DISCRIMINATOR, Integer.BYTES);
+    return offset == 0 ? 0 : ByteUtil.getInt32LE(data, offset);
   }
 
   @Override
@@ -162,24 +194,38 @@ record TransactionSkeletonRecord(byte[] data,
     return serializedInstructionsLength;
   }
 
-  private AccountMeta parseVersionedReadAccount(final PublicKey pubKey, final int a) {
-    return Arrays.binarySearch(invokedIndexes, a) < 0 ? createRead(pubKey) : createInvoked(pubKey);
+  @Override
+  public int numIncludedAccounts() {
+    return numIncludedAccounts;
   }
 
-  private int parseVersionedIncludedAccounts(final AccountMeta[] accounts) {
-    int o = parseSignatureAccounts(accounts);
-    int a = numSignatures;
-    for (final int to = numIncludedAccounts - numReadonlyUnsignedAccounts; a < to; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = createWrite(readPubKey(data, o));
-    }
-    for (; a < numIncludedAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
-      accounts[a] = parseVersionedReadAccount(readPubKey(data, o), a);
-    }
-    return a;
+  @Override
+  public PublicKey[] lookupTableAccounts() {
+    return lookupTableAccounts;
+  }
+
+  @Override
+  public boolean isVersioned() {
+    return version != BaseTransaction.VERSIONED_BIT_MASK;
+  }
+
+  @Override
+  public boolean isLegacy() {
+    return version == BaseTransaction.VERSIONED_BIT_MASK;
+  }
+
+  @Override
+  public AccountMeta[] parseAccounts(final AddressLookupTable lookupTable) {
+    return isLegacy() || lookupTable == null
+        ? parseAccounts()
+        : parseAccounts(Map.of(lookupTable.address(), lookupTable));
   }
 
   @Override
   public AccountMeta[] parseAccounts(final Map<PublicKey, AddressLookupTable> lookupTables) {
+    if (isLegacy()) {
+      return parseAccounts();
+    }
     final var accounts = new AccountMeta[numAccounts];
     int a = parseVersionedIncludedAccounts(accounts);
 
@@ -218,24 +264,21 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
-  public AccountMeta[] parseAccounts(final List<PublicKey> writableLoaded, final List<PublicKey> readonlyLoaded) {
-    final var accounts = new AccountMeta[numAccounts];
-    int a = parseVersionedIncludedAccounts(accounts);
-    for (final var writeable : writableLoaded) {
-      accounts[a++] = createWrite(writeable);
-    }
-    for (final var readable : readonlyLoaded) {
-      accounts[a++] = createRead(readable);
-    }
-    return accounts;
-  }
+  public PublicKey[] parseProgramAccounts() {
+    final var programs = new PublicKey[numInstructions];
+    for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
+      programAccountIndex = data[o++] & 0xFF;
+      programs[i] = getProgramAccount(programAccountIndex);
 
-  /// An instruction's program is invoked by definition, but a legacy `parseAccounts()` has
-  /// no invoked indexes to consult and types every read-only account as [AccountMeta#createRead];
-  /// mark it here so this agrees with [#filterInstructions]. Any writable use of the same
-  /// account is recovered by [Instruction#mergeAccounts] when a transaction is rebuilt.
-  private static AccountMeta invokedProgramAccount(final AccountMeta account) {
-    return account.invoked() ? account : createInvoked(account.publicKey());
+      numIxAccounts = decode(data, o);
+      o += getByteLen(data, o);
+      o += numIxAccounts;
+
+      len = decode(data, o);
+      o += getByteLen(data, o);
+      o += len;
+    }
+    return programs;
   }
 
   @Override
@@ -263,15 +306,6 @@ record TransactionSkeletonRecord(byte[] data,
     return instructions;
   }
 
-  private int accountOffset(final int accountIndex) {
-    return accountsOffset + (accountIndex * PUBLIC_KEY_LENGTH);
-  }
-
-  private PublicKey getProgramAccount(final int accountIndex) {
-    requireIncludedProgramAccount(accountIndex);
-    return PublicKey.readPubKey(data, accountOffset(accountIndex));
-  }
-
   private void requireIncludedProgramAccount(final int accountIndex) {
     if (accountIndex >= numIncludedAccounts) {
       throw new IndexOutOfBoundsException(String.format(
@@ -281,25 +315,10 @@ record TransactionSkeletonRecord(byte[] data,
     }
   }
 
-  @Override
-  public PublicKey[] parseProgramAccounts() {
-    final var programs = new PublicKey[numInstructions];
-    for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
-      programAccountIndex = data[o++] & 0xFF;
-      programs[i] = getProgramAccount(programAccountIndex);
-
-      numIxAccounts = decode(data, o);
-      o += getByteLen(data, o);
-      o += numIxAccounts;
-
-      len = decode(data, o);
-      o += getByteLen(data, o);
-      o += len;
-    }
-    return programs;
+  private PublicKey getProgramAccount(final int accountIndex) {
+    requireIncludedProgramAccount(accountIndex);
+    return accountKey(accountIndex);
   }
-
-  private static final List<AccountMeta> NO_ACCOUNTS = List.of();
 
   @Override
   public Instruction[] parseInstructionsWithoutAccounts() {
@@ -318,6 +337,13 @@ record TransactionSkeletonRecord(byte[] data,
       o += len;
     }
     return instructions;
+  }
+
+  @Override
+  public Instruction[] parseInstructionsWithoutTableAccounts() {
+    final var accounts = new AccountMeta[numAccounts];
+    parseVersionedIncludedAccounts(accounts);
+    return parseInstructions(accounts);
   }
 
   @Override
@@ -377,29 +403,6 @@ record TransactionSkeletonRecord(byte[] data,
   }
 
   @Override
-  public Instruction[] parseInstructionsWithoutTableAccounts() {
-    final var accounts = new AccountMeta[numAccounts];
-    parseVersionedIncludedAccounts(accounts);
-    return parseInstructions(accounts);
-  }
-
-  private void requireSignableSignatureLayout() {
-    if (serializedSignatureCount != numSignatures) {
-      throw new IllegalStateException(String.format(
-          "Serialized signature count %d does not match the message header's required signature count %d.",
-          serializedSignatureCount, numSignatures
-      ));
-    }
-    final int signaturePrefixLength = messageOffset - (serializedSignatureCount * Transaction.SIGNATURE_LENGTH);
-    if (signaturePrefixLength != 1) {
-      throw new IllegalStateException(String.format(
-          "Serialized signature count %d uses a %d-byte prefix; mutable transactions require a one-byte prefix.",
-          serializedSignatureCount, signaturePrefixLength
-      ));
-    }
-  }
-
-  @Override
   public Transaction createTransaction(final List<Instruction> instructions) {
     requireSignableSignatureLayout();
     return new TransactionRecord(
@@ -413,6 +416,22 @@ record TransactionSkeletonRecord(byte[] data,
         accountsOffset,
         recentBlockHashIndex
     );
+  }
+
+  private void requireSignableSignatureLayout() {
+    if (serializedSignatureCount != numSignatures) {
+      throw new IllegalStateException(String.format(
+          "Serialized signature count %d does not match the message header's required signature count %d.",
+          serializedSignatureCount, numSignatures
+      ));
+    }
+    final int signaturePrefixLength = messageOffset - (serializedSignatureCount * SIGNATURE_LENGTH);
+    if (signaturePrefixLength != 1) {
+      throw new IllegalStateException(String.format(
+          "Serialized signature count %d uses a %d-byte prefix; mutable transactions require a one-byte prefix.",
+          serializedSignatureCount, signaturePrefixLength
+      ));
+    }
   }
 
   @Override

@@ -1,34 +1,32 @@
 package software.sava.core.tx;
 
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.accounts.Signer;
+import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.lookup.AddressLookupTable;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
-import software.sava.core.encoding.Base58;
+import software.sava.core.encoding.ByteUtil;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.function.BiFunction;
 
-import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
-import static software.sava.core.encoding.CompactU16Encoding.signedByte;
+import static software.sava.core.encoding.CompactU16Encoding.*;
 
-record TransactionRecord(AccountMeta feePayer,
-                         List<Instruction> instructions,
-                         AddressLookupTable lookupTable,
-                         LookupTableAccountMeta[] tableAccountMetas,
-                         byte[] data,
-                         int numSigners,
-                         int messageOffset,
-                         int accountsOffset,
-                         int recentBlockHashIndex) implements Transaction {
+// Legacy and v0 transaction formats.
+final class TransactionRecord extends BaseTransaction {
 
+  // static final int MAX_BASE64_V1_SIZE = 5_464;
+  static final int MSG_HEADER_LENGTH = 3;
+  static final int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
+  static final int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
   static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
 
   static final BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
-  // fee payer, sign, write, read
   static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
       return -1;
@@ -61,21 +59,29 @@ record TransactionRecord(AccountMeta feePayer,
     }
   };
 
-  static final int MSG_HEADER_LENGTH = 3;
-  static final int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
-  static final byte VERSIONED_BIT_MASK = (byte) (1 << 7);
-  static final int BASE_LOOKUP_TABLE_LEN = PUBLIC_KEY_LENGTH + 2;
+  private final AddressLookupTable lookupTable;
+  private final LookupTableAccountMeta[] tableAccountMetas;
+  private final int numSigners;
+  private final int messageOffset;
+  private final int accountsOffset;
+  private final int recentBlockHashIndex;
 
-  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, LEGACY_META_COMPARATOR);
-    return accountMetas;
-  }
-
-  static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
-    Arrays.sort(accountMetas, VO_META_COMPARATOR);
-    return accountMetas;
+  TransactionRecord(final AccountMeta feePayer,
+                    final List<Instruction> instructions,
+                    final AddressLookupTable lookupTable,
+                    final LookupTableAccountMeta[] tableAccountMetas,
+                    final byte[] data,
+                    final int numSigners,
+                    final int messageOffset,
+                    final int accountsOffset,
+                    final int recentBlockHashIndex) {
+    super(feePayer, instructions, data);
+    this.lookupTable = lookupTable;
+    this.tableAccountMetas = tableAccountMetas;
+    this.numSigners = numSigners;
+    this.messageOffset = messageOffset;
+    this.accountsOffset = accountsOffset;
+    this.recentBlockHashIndex = recentBlockHashIndex;
   }
 
   static int mergeAccounts(final AccountMeta feePayer,
@@ -100,9 +106,45 @@ record TransactionRecord(AccountMeta feePayer,
     return serializedInstructionLength;
   }
 
-  @Override
-  public List<Instruction> instructions() {
-    return instructions;
+  static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
+    final AccountMeta[] accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    Arrays.sort(accountMetas, VO_META_COMPARATOR);
+    return accountMetas;
+  }
+
+  /// Converts a v1 priority fee, denominated in lamports, into the equivalent legacy/v0
+  /// SetComputeUnitPrice compute budget price in micro-lamports per compute unit for the given
+  /// compute unit limit.
+  ///
+  /// The fee is converted to micro-lamports then divided by the compute unit limit, capped at the
+  /// 1.4 million maximum, rounding up so that the prioritization fee charged by the runtime is at
+  /// least the given lamports. Saturates at {@link Long#MAX_VALUE} if the price overflows.
+  ///
+  /// The inverse of {@link TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)}; converting the
+  /// resulting price back yields the given fee whenever the fee scales to a whole number of
+  /// micro-lamports per compute unit.
+  ///
+  /// @param priorityFeeLamports the priority fee in lamports
+  /// @param computeUnitLimit    the compute unit limit the fee applies to
+  /// @return the equivalent compute unit price in micro-lamports per compute unit
+  static long priorityFeeLamportsToComputeUnitPrice(final long priorityFeeLamports, final int computeUnitLimit) {
+    final long cappedComputeUnitLimit = Math.min(computeUnitLimit & 0xFFFF_FFFFL, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
+    if (cappedComputeUnitLimit == 0 || priorityFeeLamports == 0) {
+      return 0;
+    } else if (priorityFeeLamports < 0
+        || priorityFeeLamports > (Long.MAX_VALUE - (cappedComputeUnitLimit - 1)) / 1_000_000) {
+      // Saturate, guarding the round-up addend below against overflowing as well.
+      return Long.MAX_VALUE;
+    }
+    final long microLamports = priorityFeeLamports * 1_000_000;
+    // Round up so that the fee charged by the runtime is at least the given lamports.
+    return (microLamports + (cappedComputeUnitLimit - 1)) / cappedComputeUnitLimit;
+  }
+
+  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
+    final var accountMetas = mergedAccounts.values().toArray(ACCOUNT_META_ARRAY_GENERATOR);
+    Arrays.sort(accountMetas, LEGACY_META_COMPARATOR);
+    return accountMetas;
   }
 
   @Override
@@ -116,27 +158,202 @@ record TransactionRecord(AccountMeta feePayer,
   }
 
   @Override
-  public void setRecentBlockHash(final byte[] recentBlockHash) {
-    if (recentBlockHash == null || recentBlockHash.length != Transaction.BLOCK_HASH_LENGTH) {
-      throw new IllegalArgumentException("32 byte recent blockHash is required");
+  protected int recentBlockHashIndex() {
+    return recentBlockHashIndex;
+  }
+
+  @Override
+  protected int accountsOffset() {
+    return accountsOffset;
+  }
+
+  @Override
+  public int numSigners() {
+    return numSigners;
+  }
+
+  @Override
+  public int messageOffset() {
+    return messageOffset;
+  }
+
+  @Override
+  protected int messageLength() {
+    return data.length - messageOffset;
+  }
+
+  @Override
+  protected int signatureOffset(final int signerIndex) {
+    return 1 + (signerIndex * SIGNATURE_LENGTH);
+  }
+
+  @Override
+  protected void recordNumSignatures(final int numSignatures) {
+    this.data[0] = (byte) numSignatures;
+  }
+
+  @Override
+  protected Transaction createTransaction(final List<Instruction> instructions) {
+    return Transaction.createTx(feePayer, instructions, lookupTable, tableAccountMetas);
+  }
+
+  static final byte REQUEST_HEAP_FRAME_DISCRIMINATOR = (byte) 1;
+  static final byte SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR = (byte) 2;
+  static final byte SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR = (byte) 3;
+  static final byte SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR = (byte) 4;
+
+  private Transaction setComputeBudgetValue(final byte discriminator, final byte[] ixData) {
+    final var invokedComputeBudgetProgram = SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram();
+    final var ix = Instruction.createInstruction(invokedComputeBudgetProgram, List.of(), ixData);
+    final var computeBudgetProgram = invokedComputeBudgetProgram.publicKey();
+    for (int i = 0, numInstructions = instructions.size(); i < numInstructions; ++i) {
+      final var instruction = instructions.get(i);
+      if (computeBudgetProgram.equals(instruction.programId().publicKey())
+          && instruction.len() > 0
+          && instruction.data()[instruction.offset()] == discriminator) {
+        return replaceInstruction(i, ix);
+      }
     }
-    System.arraycopy(recentBlockHash, 0, this.data, this.recentBlockHashIndex, Transaction.BLOCK_HASH_LENGTH);
+    return prependIx(ix);
+  }
+
+  private static byte[] computeBudgetIxData(final byte discriminator, final int value) {
+    final byte[] ixData = new byte[1 + Integer.BYTES];
+    ixData[0] = discriminator;
+    ByteUtil.putInt32LE(ixData, 1, value);
+    return ixData;
+  }
+
+  private static byte[] computeBudgetIxData(final byte discriminator, final long value) {
+    final byte[] ixData = new byte[1 + Long.BYTES];
+    ixData[0] = discriminator;
+    ByteUtil.putInt64LE(ixData, 1, value);
+    return ixData;
+  }
+
+  private Transaction setComputeBudgetValue(final byte discriminator, final int value) {
+    return setComputeBudgetValue(discriminator, computeBudgetIxData(discriminator, value));
+  }
+
+  private Transaction setComputeBudgetValue(final byte discriminator, final long value) {
+    return setComputeBudgetValue(discriminator, computeBudgetIxData(discriminator, value));
+  }
+
+  /// Replaces or prepends two compute budget instructions in a single pass, rebuilding the
+  /// transaction only once rather than once per instruction.
+  private Transaction setComputeBudgetValues(final byte discriminator1, final byte[] ixData1,
+                                             final byte discriminator2, final byte[] ixData2) {
+    final var invokedComputeBudgetProgram = SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram();
+    final var computeBudgetProgram = invokedComputeBudgetProgram.publicKey();
+    final var ix1 = Instruction.createInstruction(invokedComputeBudgetProgram, List.of(), ixData1);
+    final var ix2 = Instruction.createInstruction(invokedComputeBudgetProgram, List.of(), ixData2);
+
+    final int numInstructions = instructions.size();
+    final var updated = new Instruction[numInstructions];
+    boolean found1 = false;
+    boolean found2 = false;
+    for (int i = 0; i < numInstructions; ++i) {
+      final var instruction = instructions.get(i);
+      if (computeBudgetProgram.equals(instruction.programId().publicKey()) && instruction.len() > 0) {
+        final byte discriminator = instruction.data()[instruction.offset()];
+        if (!found1 && discriminator == discriminator1) {
+          updated[i] = ix1;
+          found1 = true;
+          continue;
+        }
+        if (!found2 && discriminator == discriminator2) {
+          updated[i] = ix2;
+          found2 = true;
+          continue;
+        }
+      }
+      updated[i] = instruction;
+    }
+
+    final int numToPrepend = (found1 ? 0 : 1) + (found2 ? 0 : 1);
+    if (numToPrepend == 0) {
+      return setBlockHash(createTransaction(Arrays.asList(updated)));
+    }
+    final var ixArray = new Instruction[numToPrepend + numInstructions];
+    int i = 0;
+    if (!found1) {
+      ixArray[i++] = ix1;
+    }
+    if (!found2) {
+      ixArray[i++] = ix2;
+    }
+    System.arraycopy(updated, 0, ixArray, i, numInstructions);
+    return setBlockHash(createTransaction(Arrays.asList(ixArray)));
+  }
+
+  private int effectiveComputeUnitLimit() {
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    int numNonComputeBudgetInstructions = 0;
+    for (final var instruction : instructions) {
+      if (computeBudgetProgram.equals(instruction.programId().publicKey())) {
+        if (instruction.len() > 0 && instruction.data()[instruction.offset()] == SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR) {
+          return ByteUtil.getInt32LE(instruction.data(), instruction.offset() + 1);
+        }
+      } else {
+        ++numNonComputeBudgetInstructions;
+      }
+    }
+    return (int) Math.min(
+        (long) TransactionSkeletonImpl.DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions,
+        TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT
+    );
   }
 
   @Override
-  public void setRecentBlockHash(final String recentBlockHash) {
-    setRecentBlockHash(Base58.decode(recentBlockHash));
+  public Transaction setPriorityFeeLamports(final long priorityFeeLamports) {
+    final long microLamportsPerComputeUnit = priorityFeeLamportsToComputeUnitPrice(
+        priorityFeeLamports, effectiveComputeUnitLimit()
+    );
+    return setComputeBudgetValue(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, microLamportsPerComputeUnit);
   }
 
   @Override
-  public byte[] recentBlockHash() {
-    return Arrays.copyOfRange(data, recentBlockHashIndex, recentBlockHashIndex + Transaction.BLOCK_HASH_LENGTH);
+  public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
+    return setComputeBudgetValue(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, microLamportsPerComputeUnit);
+  }
+
+  @Override
+  public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit,
+                                                                final int computeUnitLimit) {
+    return setComputeBudgetValues(
+        SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, computeBudgetIxData(SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, computeUnitLimit),
+        SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, computeBudgetIxData(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, microLamportsPerComputeUnit)
+    );
+  }
+
+  @Override
+  public Transaction setHeapSize(final int heapSize) {
+    TxBuilderImpl.checkHeapSize(heapSize);
+    return setComputeBudgetValue(REQUEST_HEAP_FRAME_DISCRIMINATOR, heapSize);
+  }
+
+  @Override
+  public Transaction setComputeUnitLimit(final int computeUnitLimit) {
+    return setComputeBudgetValue(SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, computeUnitLimit);
+  }
+
+  @Override
+  public Transaction setAccountDataSizeLimit(final int accountDataSizeLimit) {
+    // The runtime rejects a SetLoadedAccountsDataSizeLimit instruction with a value of 0 with
+    // InvalidLoadedAccountsDataSizeLimit. Negative values would serialize as u32 values beyond
+    // the 64MiB maximum.
+    if (accountDataSizeLimit <= 0) {
+      throw new IllegalArgumentException(
+          "A loaded accounts data size limit must be greater than 0, was " + accountDataSizeLimit + '.'
+      );
+    }
+    return setComputeBudgetValue(SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT_DISCRIMINATOR, accountDataSizeLimit);
   }
 
   @Override
   public int version() {
-    int version = data[messageOffset] & 0xFF;
-    return signedByte(version) ? version & 0x7F : VERSIONED_BIT_MASK;
+    final int version = data[messageOffset] & 0xFF;
+    return signedByte(version) ? version & 0x7F : BaseTransaction.VERSIONED_BIT_MASK;
   }
 
   @Override
@@ -145,173 +362,43 @@ record TransactionRecord(AccountMeta feePayer,
   }
 
   @Override
-  public byte[] serialized() {
-    return this.data;
-  }
-
-  @Override
-  public void sign(final Signer signer) {
-    final int signerIndex = signerIndex(signer);
-    this.data[0] = (byte) numSigners;
-    sign(signerIndex, signer);
-  }
-
-  private int signerIndex(final Signer signer) {
-    final byte[] pubKey = signer.publicKey().toByteArray();
-    for (int from = accountsOffset, i = 0; i < numSigners; ++i, from += PUBLIC_KEY_LENGTH) {
-      if (Arrays.equals(pubKey, 0, PUBLIC_KEY_LENGTH, data, from, from + PUBLIC_KEY_LENGTH)) {
-        return i;
+  public int numAccounts() {
+    final boolean versioned = signedByte(data[messageOffset]);
+    int numAccounts = decode(data, messageOffset + (versioned ? 4 : 3));
+    if (versioned) {
+      // Skip over the instructions to the address table lookups and add the indexed account counts.
+      int o = recentBlockHashIndex + Transaction.BLOCK_HASH_LENGTH;
+      final int numInstructions = decode(data, o);
+      o += getByteLen(data, o);
+      for (int i = 0, len; i < numInstructions; ++i) {
+        ++o; // programId index
+        len = decode(data, o);
+        o += getByteLen(data, o) + len;
+        len = decode(data, o);
+        o += getByteLen(data, o) + len;
+      }
+      final int numTables = decode(data, o);
+      o += getByteLen(data, o);
+      for (int t = 0, len; t < numTables; ++t) {
+        o += PublicKey.PUBLIC_KEY_LENGTH;
+        len = decode(data, o);
+        numAccounts += len;
+        o += getByteLen(data, o) + len;
+        len = decode(data, o);
+        numAccounts += len;
+        o += getByteLen(data, o) + len;
       }
     }
-    throw new IllegalArgumentException("Failed to find index for signer " + signer.publicKey());
+    return numAccounts;
   }
 
   @Override
-  public void sign(final int index, final Signer signer) {
-    if (index < 0 || index >= numSigners) {
-      throw new IllegalArgumentException(String.format(
-          "Invalid signer index %d for transaction with %d required signers.", index, numSigners
-      ));
-    }
-    Transaction.sign(
-        signer,
-        this.data,
-        this.messageOffset,
-        this.data.length - this.messageOffset,
-        1 + (index * SIGNATURE_LENGTH)
-    );
+  public boolean exceedsSignatureLimit() {
+    return false;
   }
 
   @Override
-  public void sign(final SequencedCollection<Signer> signers) {
-    final int numSigners = signers.size();
-    if (numSigners != this.numSigners) {
-      throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners, numSigners));
-    }
-    this.data[0] = (byte) numSigners;
-    Transaction.sign(signers, this.data, this.messageOffset, this.data.length - this.messageOffset, 1);
-  }
-
-  @Override
-  public void sign(final Collection<Signer> signers) {
-    final Signer[] signerArray = signers.toArray(Signer[]::new);
-    final int passedSigners = signerArray.length;
-    if (passedSigners != this.numSigners) {
-      throw new IllegalArgumentException(String.format(
-          "Expected %d signers, only passed %d.", this.numSigners, passedSigners
-      ));
-    }
-    final int[] signerIndexes = new int[passedSigners];
-    final boolean[] seenSignerIndexes = new boolean[passedSigners];
-    int i = 0;
-    for (final var signer : signerArray) {
-      final int signerIndex = signerIndex(signer);
-      if (seenSignerIndexes[signerIndex]) {
-        throw new IllegalArgumentException("Duplicate signer " + signer.publicKey());
-      }
-      seenSignerIndexes[signerIndex] = true;
-      signerIndexes[i++] = signerIndex;
-    }
-
-    this.data[0] = (byte) passedSigners;
-    i = 0;
-    for (final var signer : signerArray) {
-      sign(signerIndexes[i++], signer);
-    }
-  }
-
-  @Override
-  public String getBase58Id() {
-    return Transaction.getBase58Id(this.data);
-  }
-
-  @Override
-  public byte[] getId() {
-    return Transaction.getId(this.data);
-  }
-
-  @Override
-  public int size() {
-    return data.length;
-  }
-
-  private Transaction setBlockHash(final Transaction transaction) {
-    if (transaction instanceof TransactionRecord transactionRecord) {
-      System.arraycopy(
-          this.data, this.recentBlockHashIndex,
-          transactionRecord.data, transactionRecord.recentBlockHashIndex,
-          Transaction.BLOCK_HASH_LENGTH
-      );
-    } else {
-      transaction.setRecentBlockHash(recentBlockHash());
-    }
-    return transaction;
-  }
-
-  @Override
-  public Transaction prependIx(final Instruction ix) {
-    final var ixArray = new Instruction[1 + instructions.size()];
-    ixArray[0] = ix;
-    int i = 1;
-    for (final var _ix : instructions) {
-      ixArray[i++] = _ix;
-    }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
-  }
-
-  @Override
-  public Transaction prependInstructions(final Instruction ix1, final Instruction ix2) {
-    final var ixArray = new Instruction[2 + instructions.size()];
-    ixArray[0] = ix1;
-    ixArray[1] = ix2;
-    int i = 2;
-    for (final var _ix : instructions) {
-      ixArray[i++] = _ix;
-    }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
-  }
-
-  @Override
-  public Transaction prependInstructions(final SequencedCollection<Instruction> instructions) {
-    final var ixArray = new Instruction[instructions.size() + this.instructions.size()];
-    int i = 0;
-    for (final var ix : instructions) {
-      ixArray[i++] = ix;
-    }
-    for (final var ix : this.instructions) {
-      ixArray[i++] = ix;
-    }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
-  }
-
-  @Override
-  public Transaction appendIx(final Instruction ix) {
-    final var ixArray = new Instruction[1 + instructions.size()];
-    int i = 0;
-    for (final var _ix : instructions) {
-      ixArray[i++] = _ix;
-    }
-    ixArray[instructions.size()] = ix;
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
-  }
-
-  @Override
-  public Transaction appendInstructions(final SequencedCollection<Instruction> instructions) {
-    final var ixArray = new Instruction[instructions.size() + this.instructions.size()];
-    int i = 0;
-    for (final var ix : this.instructions) {
-      ixArray[i++] = ix;
-    }
-    for (final var ix : instructions) {
-      ixArray[i++] = ix;
-    }
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
-  }
-
-  @Override
-  public Transaction replaceInstruction(final int index, final Instruction instruction) {
-    final var ixArray = instructions.toArray(Instruction[]::new);
-    ixArray[index] = instruction;
-    return setBlockHash(Transaction.createTx(feePayer, Arrays.asList(ixArray), lookupTable, tableAccountMetas));
+  public boolean equals(final Object o) {
+    return (o instanceof final TransactionRecord that) && Arrays.equals(data, that.data);
   }
 }

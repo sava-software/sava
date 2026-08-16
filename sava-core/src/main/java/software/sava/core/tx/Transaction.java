@@ -23,43 +23,53 @@ public interface Transaction {
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
+  int MAX_INSTRUCTIONS = 64;
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
 
   static String getBase58Id(final byte[] signedTransaction) {
-    if (signedTransaction[0] == 0) {
-      throw new IllegalStateException("Transaction has not been signed yet.");
-    } else {
-      return Base58.encode(signedTransaction, 1, 1 + Transaction.SIGNATURE_LENGTH);
-    }
+    final int offset = BaseTransaction.signedIdOffset(signedTransaction);
+    return Base58.encode(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
   }
 
   static byte[] getId(final byte[] signedTransaction) {
-    if (signedTransaction[0] == 0) {
-      throw new IllegalStateException("Transaction has not been signed yet.");
-    } else {
-      return Arrays.copyOfRange(signedTransaction, 1, 1 + Transaction.SIGNATURE_LENGTH);
-    }
+    final int offset = BaseTransaction.signedIdOffset(signedTransaction);
+    return Arrays.copyOfRange(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer, final List<Instruction> instructions) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
     return createTx(instructions, serializedInstructionLength, TransactionRecord.sortLegacyAccounts(accounts));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer, final Instruction instruction) {
     return createTx(feePayer, List.of(instruction));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions) {
     return createTx((AccountMeta) null, instructions);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable) {
@@ -71,12 +81,18 @@ public interface Transaction {
     return createTx(instructions, serializedInstructionLength, TransactionRecord.sortV0Accounts(accounts), lookupTable);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions, lookupTable);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final AddressLookupTable lookupTable,
@@ -90,10 +106,16 @@ public interface Transaction {
     }
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions, final AddressLookupTable lookupTable) {
     return createTx((AccountMeta) null, instructions, lookupTable);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final Instruction... push) {
@@ -103,18 +125,30 @@ public interface Transaction {
     return createTx(feePayer, pushed);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions, final Instruction... push) {
     return createTx(null, instructions, push);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer, final Instruction instruction) {
     return createTx(feePayer, List.of(instruction));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final Instruction instruction) {
     return createTx((AccountMeta) null, instruction);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions, final AccountMeta[] sortedAccountKeys) {
     if (instructions.isEmpty()) {
       throw new IllegalArgumentException("No instructions provided");
@@ -123,16 +157,25 @@ public interface Transaction {
     return createTx(instructions, serializedInstructionLength, sortedAccountKeys);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final Instruction instruction, final AccountMeta[] sortedAccountKeys) {
     return createTx(List.of(instruction), instruction.serializedLength(), sortedAccountKeys);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final Instruction[] instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts) {
     return createTx(Arrays.asList(instructions), serializedInstructionLength, TransactionRecord.sortV0Accounts(mergedAccounts));
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts) {
@@ -206,6 +249,9 @@ public interface Transaction {
     );
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts,
@@ -217,6 +263,9 @@ public interface Transaction {
     }
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,
@@ -349,6 +398,9 @@ public interface Transaction {
     }
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final AccountMeta feePayer,
                               final List<Instruction> instructions,
                               final LookupTableAccountMeta[] tableAccountMetas) {
@@ -357,12 +409,18 @@ public interface Transaction {
     return createTx(instructions, serializedInstructionLength, accounts, tableAccountMetas);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final PublicKey feePayer,
                               final List<Instruction> instructions,
                               final LookupTableAccountMeta[] tableAccountMetas) {
     return createTx(feePayer == null ? null : AccountMeta.createFeePayer(feePayer), instructions, tableAccountMetas);
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final Map<PublicKey, AccountMeta> mergedAccounts,
@@ -374,6 +432,9 @@ public interface Transaction {
     }
   }
 
+  // TODO: deprecate once v1 transactions are active on mainnet
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,
@@ -527,12 +588,17 @@ public interface Transaction {
   }
 
   static void setBlockHash(final byte[] data, final byte[] recentBlockHash) {
-    final int numSigners = Byte.toUnsignedInt(data[0]);
-    final int versionOffset = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
-    final int accountMetaOffset = versionOffset + (signedByte(data[versionOffset]) ? 4 : 3);
-    final int accountMetaByteLen = CompactU16Encoding.getByteLen(data, accountMetaOffset);
-    final int accountMetaLen = CompactU16Encoding.decode(data, accountMetaOffset) * PublicKey.PUBLIC_KEY_LENGTH;
-    final int recentBlockHashOffset = accountMetaOffset + accountMetaByteLen + accountMetaLen;
+    final int recentBlockHashOffset;
+    if (V1Transaction.isV1(data)) {
+      recentBlockHashOffset = V1TransactionSkeleton.V1_RECENT_BLOCK_HASH_INDEX;
+    } else {
+      final int numSigners = Byte.toUnsignedInt(data[0]);
+      final int versionOffset = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
+      final int accountMetaOffset = versionOffset + (signedByte(data[versionOffset]) ? 4 : 3);
+      final int accountMetaByteLen = CompactU16Encoding.getByteLen(data, accountMetaOffset);
+      final int accountMetaLen = CompactU16Encoding.decode(data, accountMetaOffset) * PublicKey.PUBLIC_KEY_LENGTH;
+      recentBlockHashOffset = accountMetaOffset + accountMetaByteLen + accountMetaLen;
+    }
     System.arraycopy(recentBlockHash, 0, data, recentBlockHashOffset, Transaction.BLOCK_HASH_LENGTH);
   }
 
@@ -540,15 +606,24 @@ public interface Transaction {
                    final byte[] out,
                    final int msgOffset,
                    final int msgLen,
-                   int offset) {
-    signer.sign(out, msgOffset, msgLen, offset);
+                   final int sigOffset) {
+    signer.sign(out, msgOffset, msgLen, sigOffset);
   }
 
   static void sign(final Signer signer, final byte[] out) {
-    out[0] = 1;
-    final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;
-    final int msgLen = out.length - sigLen;
-    Transaction.sign(signer, out, sigLen, msgLen, 1);
+    if (V1Transaction.isV1(out)) {
+      // The v1 message spans up to the appended signatures, the fee payer signature is first. The
+      // boundary is only implied by out.length, so corroborate it against the message before
+      // writing: on a padded or truncated buffer the implied slot lands inside the message and
+      // signing would overwrite its tail while signing the wrong span.
+      final int signaturesOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
+      Transaction.sign(signer, out, 0, signaturesOffset, signaturesOffset);
+    } else {
+      out[0] = 1;
+      final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;
+      final int msgLen = out.length - sigLen;
+      Transaction.sign(signer, out, sigLen, msgLen, 1);
+    }
   }
 
   static String signAndBase64Encode(final Signer signer, final byte[] out) {
@@ -560,18 +635,32 @@ public interface Transaction {
                    final byte[] out,
                    final int msgOffset,
                    final int msgLen,
-                   int offset) {
+                   int sigOffset) {
     for (final var signer : signers) {
-      offset = signer.sign(out, msgOffset, msgLen, offset);
+      sigOffset = signer.sign(out, msgOffset, msgLen, sigOffset);
     }
   }
 
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     final int numSigners = signers.size();
-    out[0] = (byte) numSigners;
-    final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
-    final int msgLen = out.length - sigLen;
-    Transaction.sign(signers, out, sigLen, msgLen, 1);
+    if (V1Transaction.isV1(out)) {
+      // A v1 message's signature count is fixed in its header, not implied by the caller's
+      // collection. Deriving the boundary from signers.size() would sign the wrong span and, when
+      // over-supplied, write signature bytes over the tail of the message, so validate first.
+      final int numRequiredSignatures = out[1] & 0xFF;
+      if (numSigners != numRequiredSignatures) {
+        throw new IllegalArgumentException(String.format(
+            "Expected %d signers, only passed %d.", numRequiredSignatures, numSigners
+        ));
+      }
+      final int sigOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
+      Transaction.sign(signers, out, 0, sigOffset, sigOffset);
+    } else {
+      out[0] = (byte) numSigners;
+      final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
+      final int msgLen = out.length - sigLen;
+      Transaction.sign(signers, out, sigLen, msgLen, 1);
+    }
   }
 
   static String signAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
@@ -667,9 +756,41 @@ public interface Transaction {
 
   int size();
 
-  default boolean exceedsSizeLimit() {
-    return size() > Transaction.MAX_SERIALIZED_LENGTH;
+  boolean exceedsSizeLimit();
+
+  /// The number of unique accounts referenced by this transaction, including any which would be
+  /// loaded via an address lookup table.
+  int numAccounts();
+
+  /// Whether the number of unique accounts referenced by this transaction, including any which
+  /// would be loaded via an address lookup table, exceeds the 64 account limit.
+  ///
+  default boolean exceedsAccountLimit() {
+    return numAccounts() > MAX_ACCOUNTS;
   }
+
+  /// The number of top-level instructions.
+  int numInstructions();
+
+  /// Whether the number of top-level instructions exceeds the 64-instruction limit. SIMD-0385
+  /// imposes the limit on the v1 format directly, while legacy and v0 transactions are bound at
+  /// execution by the 64 instruction trace limit.
+  ///
+  default boolean exceedsInstructionLimit() {
+    return numInstructions() > MAX_INSTRUCTIONS;
+  }
+
+  int numSigners();
+
+  /// Whether the number of required signatures exceeds the 12-signature limit imposed on v1
+  /// transactions by SIMD-0385.
+  ///
+  /// Legacy and v0 transactions have no distinct signature count limit, they are only bound by
+  /// the serialized size limit, so this is always false.
+  ///
+  boolean exceedsSignatureLimit();
+
+  AccountMeta feePayer();
 
   List<Instruction> instructions();
 
@@ -685,8 +806,6 @@ public interface Transaction {
 
   int version();
 
-  int numSigners();
-
   byte[] serialized();
 
   Transaction prependIx(final Instruction ix);
@@ -701,5 +820,130 @@ public interface Transaction {
 
   Transaction replaceInstruction(final int index, final Instruction instruction);
 
-  AccountMeta feePayer();
+  /// Sets the priority fee, in lamports, for this transaction.
+  ///
+  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction.
+  ///
+  /// The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports
+  /// per compute unit, not lamports, so legacy and v0 transactions convert the given lamports to
+  /// the equivalent compute unit price against the compute unit limit the runtime will apply:
+  /// the value of the SetComputeUnitLimit instruction if present, otherwise the default limit
+  /// granted per non-compute-budget instruction, capped at the 1.4 million maximum. The price is
+  /// rounded up so that the prioritization fee charged by the runtime is at least the given
+  /// lamports. The instruction is replaced if present, otherwise prepended, and a new
+  /// transaction is returned. Set the compute unit limit before the priority fee so the
+  /// conversion reflects the intended limit.
+  ///
+  /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
+  ///                               transaction are not set, because a priority fee was not
+  ///                               provided to the {@link TxBuilder} or this transaction was
+  ///                               produced elsewhere without one.
+  /// @see TransactionRecord#priorityFeeLamportsToComputeUnitPrice(long, int)
+  Transaction setPriorityFeeLamports(final long priorityFeeLamports);
+
+  /// Sets the compute unit limit for this transaction.
+  ///
+  /// Legacy and v0 transactions replace the existing SetComputeUnitLimit compute budget
+  /// instruction if present, otherwise one is prepended, and a new transaction is returned.
+  ///
+  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
+  /// to the runtime maximum.
+  ///
+  /// @throws IllegalStateException if the compute unit limit TransactionConfigMask bit of this
+  ///                               v1 transaction is not set, because it was explicitly cleared
+  ///                               or this transaction was produced elsewhere without one.
+  Transaction setComputeUnitLimit(final int computeUnitLimit);
+
+  /// Sets the priority fee for this transaction from a legacy/v0 SetComputeUnitPrice compute
+  /// budget price, denominated in micro-lamports per compute unit, by converting it to lamports
+  /// against the compute unit limit currently set on this transaction. If no compute unit limit
+  /// is set, the 1.4 million runtime maximum is used.
+  ///
+  /// The price is multiplied by the compute unit limit, capped at the 1.4 million maximum, then
+  /// converted to lamports, rounding up, mirroring the runtime's prioritization fee calculation.
+  /// For v1 transactions this overwrites the corresponding ConfigValue within the serialized data
+  /// and returns this transaction.
+  ///
+  /// The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports per
+  /// compute unit, not lamports, so legacy and v0 transactions add a SetComputeUnitPrice compute
+  /// budget instruction with the given price directly, replacing an existing one if present,
+  /// otherwise prepending one, and return a new transaction.
+  ///
+  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
+  /// @return the transaction with its priority fee set
+  /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
+  ///                               transaction are not set, because a priority fee was not
+  ///                               provided to the {@link TxBuilder} or this transaction was
+  ///                               produced elsewhere without one.
+  /// @see TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)
+  Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit);
+
+  /// Sets both the compute unit limit and the priority fee for this transaction from a legacy/v0
+  /// SetComputeUnitPrice compute budget price, denominated in micro-lamports per compute unit. The
+  /// given compute unit limit is applied via {@link #setComputeUnitLimit(int)} and the price is
+  /// converted to a lamport priority fee against that limit.
+  ///
+  /// The price is multiplied by the compute unit limit, capped at the 1.4 million maximum, then
+  /// converted to lamports, rounding up, mirroring the runtime's prioritization fee calculation.
+  /// For v1 transactions this overwrites the corresponding ConfigValues within the serialized data
+  /// and returns this transaction.
+  ///
+  /// The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports per
+  /// compute unit, not lamports, so legacy and v0 transactions add SetComputeUnitLimit and
+  /// SetComputeUnitPrice compute budget instructions directly, replacing existing ones if present,
+  /// otherwise prepending them, and return a new transaction.
+  ///
+  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
+  /// @param computeUnitLimit            the compute unit limit to set and convert the price against
+  /// @return the transaction with its compute unit limit and priority fee set
+  /// @throws IllegalStateException if the compute unit limit or priority fee
+  ///                               TransactionConfigMask bits of this v1 transaction are not set,
+  ///                               because they were not provided to the {@link TxBuilder} or this
+  ///                               transaction was produced elsewhere without them.
+  /// @see #setPriorityFeeLamportsFromComputeUnitPrice(long)
+  /// @see TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)
+  default Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit,
+                                                                 final int computeUnitLimit) {
+    return setComputeUnitLimit(computeUnitLimit)
+        .setPriorityFeeLamportsFromComputeUnitPrice(microLamportsPerComputeUnit);
+  }
+
+  /// Sets the loaded accounts data size limit, in bytes, for this transaction. Values above the
+  /// 64MiB maximum are clamped by the runtime rather than rejected.
+  ///
+  /// Legacy and v0 transactions replace the existing SetLoadedAccountsDataSizeLimit compute
+  /// budget instruction if present, otherwise one is prepended, and a new transaction is
+  /// returned. The runtime rejects an instruction with a value of 0, so the limit must be
+  /// greater than 0.
+  ///
+  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
+  /// to the runtime maximum. Unlike legacy and v0 transactions, a value of 0 is valid and per
+  /// SIMD-0385 is equivalent to an unset limit of 0 bytes.
+  ///
+  /// @throws IllegalArgumentException if the limit is not greater than 0 for a legacy or v0
+  ///                                  transaction.
+  /// @throws IllegalStateException    if the account data size limit TransactionConfigMask bit of
+  ///                               this v1 transaction is not set, because it was explicitly
+  ///                               cleared or this transaction was produced elsewhere without one.
+  Transaction setAccountDataSizeLimit(final int accountDataSizeLimit);
+
+  /// Sets the requested heap size, in bytes, for this transaction, which per SIMD-0385 must be
+  /// a multiple of 1KiB in the inclusive range [32KiB,256KiB].
+  ///
+  /// Legacy and v0 transactions replace the existing RequestHeapFrame compute budget instruction
+  /// if present, otherwise one is prepended, and a new transaction is returned.
+  ///
+  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
+  /// return this transaction.
+  ///
+  /// @throws IllegalArgumentException if the heap size is not a multiple of 1KiB in the
+  ///                                  inclusive range [32KiB,256KiB].
+  /// @throws IllegalStateException    if the heap size TransactionConfigMask bit of this v1
+  ///                               transaction is not set, because a heap size was not provided
+  ///                               to the {@link TxBuilder} or this transaction was produced
+  ///                               elsewhere without one.
+  Transaction setHeapSize(final int heapSize);
 }

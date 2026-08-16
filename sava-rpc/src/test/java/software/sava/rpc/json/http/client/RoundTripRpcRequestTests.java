@@ -962,7 +962,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     final var txSignature = "49aroTSh9ehQ4q5WXXwLWorGcJXmpUkf8ty5nWfjXc6HoB1Grq45nRNxi5ngtRhN7zb9fGnVKM8FvKF9gg5hy8ca";
 
     registerRequest("""
-        {"jsonrpc":"2.0","id":911,"method":"getTransaction","params":["%s",{"commitment":"confirmed","maxSupportedTransactionVersion":0,"encoding":"base64"}]}""".formatted(txSignature), """
+        {"jsonrpc":"2.0","id":911,"method":"getTransaction","params":["%s",{"commitment":"confirmed","maxSupportedTransactionVersion":1,"encoding":"base64"}]}""".formatted(txSignature), """
         {"jsonrpc":"2.0","result":{"blockTime":1783958450,"meta":{"computeUnitsConsumed":2100,"costUnits":3465,"err":null,"fee":5000,"innerInstructions":[],"loadedAddresses":{"readonly":[],"writable":[]},"logMessages":["Program Vote111111111111111111111111111111111111111 invoke [1]","Program Vote111111111111111111111111111111111111111 success"],"postBalances":[35696986359,370164402,1],"postTokenBalances":[],"preBalances":[35696991359,370164402,1],"preTokenBalances":[],"rewards":[],"status":{"Ok":null}},"slot":432674372,"transaction":["AZ10DEU4Cx/7Wz0hfgSBv611o/M0IbBBiHEz1+u8Def5X5olVQBPCJwAU7vAe3cHAWgJCBFZlkT5F3y6lqKfjwsBAAEDG/DgbsI0C9boBnk4XisMmoQA7OtSuLN0M3UeIQzH3GTsrOfsoxxvoBrDjsS+XKKxY6f1+u+wvdkfXobqS0TzIwdhSB01dHS7fE12JOvTvbPYNV5z0RBD/A2jU4AAAAAAuBYPDxl6rC7XQsWlhL08FOLnN+4cFCZIP9ZUVS7jJUwBAgIBAJQBDgAAACQWyhkAAAAAHwEfAR4BHQEcARsBGgEZARgBFwEWARUBFAETARIBEQEQAQ8BDgENAQwBCwEKAQkBCAEHAQYBBQEEAQMBAgEBhDS9Ak3W+EXJYB7nN8pC8/9LHbmVTRk2Zw58n7nYC78BswtVagAAAACE2G8ZeCyZEzWLLSFSoYHv4I8HDiH47L/BH7C9cJJg3g==","base64"],"transactionIndex":1981,"version":"legacy"},"id":1}"""
     );
 

@@ -104,8 +104,9 @@ final class TransactionByteHelpersTests {
     final var tx = fixture.newTx();
     tx.setRecentBlockHash(HASH_A);
     final byte[] data = tx.serialized();
-    // a freshly built payload already carries its required-signature count; the
-    // unsigned guard fires only on a zero count byte
+    // a freshly built payload already carries its required-signature count, so the unsigned guard
+    // reads the fee payer's signature bytes rather than that count; zeroing the count byte is one
+    // of the two ways to reach it, the other being an all-zero signature slot (see below)
     final byte[] zeroCount = data.clone();
     zeroCount[0] = 0;
     assertThrows(IllegalStateException.class, () -> Transaction.getBase58Id(zeroCount));
