@@ -23,7 +23,6 @@ public interface Transaction {
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
-  int MAX_INSTRUCTIONS = 64;
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
 
@@ -777,7 +776,7 @@ public interface Transaction {
   /// execution by the 64 instruction trace limit.
   ///
   default boolean exceedsInstructionLimit() {
-    return numInstructions() > MAX_INSTRUCTIONS;
+    return numInstructions() > BaseTransaction.MAX_INSTRUCTIONS;
   }
 
   int numSigners();
@@ -839,7 +838,6 @@ public interface Transaction {
   ///                               transaction are not set, because a priority fee was not
   ///                               provided to the {@link TxBuilder} or this transaction was
   ///                               produced elsewhere without one.
-  /// @see TransactionRecord#priorityFeeLamportsToComputeUnitPrice(long, int)
   Transaction setPriorityFeeLamports(final long priorityFeeLamports);
 
   /// Sets the compute unit limit for this transaction.
@@ -871,6 +869,13 @@ public interface Transaction {
   /// budget instruction with the given price directly, replacing an existing one if present,
   /// otherwise prepending one, and return a new transaction.
   ///
+  /// **For v1 this is a one-time conversion, not an ongoing binding.** The lamport fee is computed
+  /// against this transaction's compute unit limit as it stands now and is then fixed; a limit
+  /// changed afterwards does not move it. Only legacy and v0 keep the price itself, and so keep
+  /// re-deriving the fee from whatever limit is in effect. In the build, simulate, then tighten
+  /// flow this matters: tighten the compute unit limit first and convert afterwards, or call this
+  /// again, if the fee should reflect the tightened limit rather than the one it was sized for.
+  ///
   /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
   /// @return the transaction with its priority fee set
   /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
@@ -894,6 +899,11 @@ public interface Transaction {
   /// compute unit, not lamports, so legacy and v0 transactions add SetComputeUnitLimit and
   /// SetComputeUnitPrice compute budget instructions directly, replacing existing ones if present,
   /// otherwise prepending them, and return a new transaction.
+  ///
+  /// Prefer this overload when tightening a v1 transaction after simulating it: it applies the limit
+  /// before converting, so the fee is sized for the limit you are setting rather than the one the
+  /// transaction was built with. As with the single argument overload the v1 result is a one-time
+  /// conversion — a limit changed after this call does not move the fee.
   ///
   /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
   /// @param computeUnitLimit            the compute unit limit to set and convert the price against
