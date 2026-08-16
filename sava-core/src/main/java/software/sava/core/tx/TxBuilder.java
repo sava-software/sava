@@ -48,8 +48,8 @@ public interface TxBuilder {
 
   TxBuilder addInstruction(final Instruction instruction);
 
-  TxBuilder addInstructions(final List<Instruction> instructions);
-
+  /// Since Java 21 `List` extends `SequencedCollection`, so this one declaration serves both; a
+  /// separate `List` overload would publish a second method that can never behave differently.
   TxBuilder addInstructions(final SequencedCollection<Instruction> instructions);
 
   default TxBuilder addInstructions(final Instruction[] instructions) {
@@ -84,6 +84,14 @@ public interface TxBuilder {
   /// Saturates at {@link Long#MAX_VALUE} if the fee overflows, which far exceeds the total supply
   /// of SOL.
   ///
+  /// **This is a one-time conversion, not an ongoing binding.** On legacy/v0 the fee is derived at
+  /// execution from the price and the effective compute unit limit, so lowering the limit lowered
+  /// the fee. A v1 priority fee is an absolute lamport ConfigValue that the runtime charges
+  /// verbatim, so the number this returns is fixed at the limit passed here and does not track a
+  /// limit changed later. That decoupling is deliberate in SIMD-0385: it lets a caller tighten the
+  /// compute unit request after simulating, improving block-packing odds, without lowering the bid.
+  /// Callers who want the fee to fall with the limit must convert again.
+  ///
   /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
   /// @param computeUnitLimit            the compute unit limit the price applies to
   /// @return the equivalent priority fee in lamports
@@ -105,7 +113,9 @@ public interface TxBuilder {
   /// {@link #computeUnitLimit()}.
   ///
   /// Set the desired compute unit limit before calling this method so the conversion reflects the
-  /// intended limit.
+  /// intended limit. The result is a **one-time conversion, not an ongoing binding**: it is fixed
+  /// at the limit current when this is called, and a limit changed afterwards does not move it. Call
+  /// this again after changing the limit if the fee should follow it.
   ///
   /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
   /// @see #computeUnitPriceToPriorityFeeLamports(long, int)

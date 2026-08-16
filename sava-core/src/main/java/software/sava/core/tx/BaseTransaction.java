@@ -12,6 +12,12 @@ abstract class BaseTransaction implements Transaction {
 
   static final byte VERSIONED_BIT_MASK = (byte) (1 << 7);
 
+  // Version neutral, so it lives here rather than beside the v1-only limits on TxBuilderImpl:
+  // SIMD-0385 imposes it on the v1 format directly, and legacy/v0 transactions are bound at
+  // execution by the same 64-instruction trace limit. Package-private because no caller needs the
+  // number — Transaction#exceedsInstructionLimit is the published way to ask.
+  static final int MAX_INSTRUCTIONS = 64;
+
   protected final AccountMeta feePayer;
   protected final List<Instruction> instructions;
   protected final byte[] data;

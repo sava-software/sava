@@ -39,7 +39,7 @@ final class TxBuilderImpl implements TxBuilder {
   static final int V1_INSTRUCTION_HEADER_LENGTH = 4;
   // Maximum number of instructions and accounts permitted in a v1 transaction, the same limits
   // Transaction#exceedsInstructionLimit and Transaction#exceedsAccountLimit are checked against.
-  static final int MAX_V1_INSTRUCTIONS = Transaction.MAX_INSTRUCTIONS;
+  static final int MAX_V1_INSTRUCTIONS = BaseTransaction.MAX_INSTRUCTIONS;
   static final int MAX_V1_ACCOUNTS = Transaction.MAX_ACCOUNTS;
   // Maximum number of signatures permitted in a v1 transaction.
   static final int MAX_V1_SIGNATURES = 12;
@@ -100,22 +100,12 @@ final class TxBuilderImpl implements TxBuilder {
   }
 
   @Override
-  public TxBuilder addInstructions(final List<Instruction> instructions) {
-    if (this.instructions == null) {
-      // Copy, as the SequencedCollection overload below does. Aliasing the caller's list leaves the
-      // builder unable to accept a later addInstruction/insertInstruction when it was handed a
-      // fixed-size view such as Arrays.asList, and lets setInstruction write through to the
-      // caller's array — reachable from prototypeTransaction, which passes an Instruction[].
-      this.instructions = new ArrayList<>(instructions);
-    } else {
-      this.instructions.addAll(instructions);
-    }
-    return this;
-  }
-
-  @Override
   public TxBuilder addInstructions(final SequencedCollection<Instruction> instructions) {
     if (this.instructions == null) {
+      // Copy rather than alias. Aliasing the caller's collection leaves the builder unable to accept
+      // a later addInstruction/insertInstruction when it was handed a fixed-size view such as
+      // Arrays.asList, and lets setInstruction write through to the caller's array — reachable from
+      // prototypeTransaction, which passes an Instruction[].
       this.instructions = new ArrayList<>(instructions);
     } else {
       this.instructions.addAll(instructions);
