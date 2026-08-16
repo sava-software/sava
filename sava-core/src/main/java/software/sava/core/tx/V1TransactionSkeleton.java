@@ -291,6 +291,22 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     }
   }
 
+  /// SIMD-0385 makes an instruction account index at or beyond NumAddresses a sanitization failure,
+  /// so no such transaction can execute. The legacy and v0 skeletons substitute a null meta for one
+  /// and leave the caller to trip over it; v1 is new, and a null inside a returned
+  /// `List<AccountMeta>` is a footgun worth refusing rather than inheriting — a caller iterating an
+  /// instruction's accounts should not have to null check each element. This also makes the two
+  /// index checks symmetric: an out-of-range program id already throws.
+  private static AccountMeta requireIncludedInstructionAccount(final AccountMeta[] accounts, final int accountIndex) {
+    if (accountIndex >= accounts.length) {
+      throw new IndexOutOfBoundsException(String.format(
+          "Instruction account index %d is outside the %d accounts of this transaction.",
+          accountIndex, accounts.length
+      ));
+    }
+    return accounts[accountIndex];
+  }
+
   private PublicKey getProgramAccount(final int accountIndex) {
     requireIncludedProgramAccount(accountIndex);
     return accountKey(accountIndex);
@@ -336,7 +352,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
       final var ixAccounts = new AccountMeta[numIxAccounts];
       for (int a = 0, accountIndex; a < numIxAccounts; ++a) {
         accountIndex = data[cursor++] & 0xFF;
-        ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
+        ixAccounts[a] = requireIncludedInstructionAccount(accounts, accountIndex);
       }
 
       final int numDataBytes = numDataBytes(header);
@@ -384,7 +400,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
         final var ixAccounts = new AccountMeta[numIxAccounts];
         for (int a = 0, accountIndex; a < numIxAccounts; ++a) {
           accountIndex = data[cursor + a] & 0xFF;
-          ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
+          ixAccounts[a] = requireIncludedInstructionAccount(accounts, accountIndex);
         }
         instructions[d++] = createInstruction(accountKey(programAccountIndex), Arrays.asList(ixAccounts), data, dataOffset, numDataBytes);
       }
