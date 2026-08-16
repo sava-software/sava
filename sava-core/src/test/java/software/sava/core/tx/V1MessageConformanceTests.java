@@ -41,9 +41,12 @@ import static org.junit.jupiter.api.Assertions.*;
 /// Where Sava is deliberately more permissive than Rust's `v1::Message::validate` — it is a
 /// byte-oriented builder and analyzer that leaves submission validation to the RPC — the current
 /// behaviour is pinned rather than forced to reject, and the divergence is called out at the
-/// assertion. See [#v1PopulationLimitsAreReportedRatherThanRejected],
-/// [#v1UnknownConfigMaskBitsAreAcceptedWhereRustRejectsThem] and
+/// assertion. See [#v1PopulationLimitsAreReportedRatherThanRejected] and
 /// [#v1OutOfRangeInstructionAccountIndexYieldsANullMeta].
+///
+/// That permissiveness stops where a message would parse into a plausible-looking WRONG view rather
+/// than an invalid-but-faithful one — see [#v1UnknownConfigMaskBitsAreRejectedAsRustRejectsThem],
+/// which is the same line the two header rules draw.
 final class V1MessageConformanceTests {
 
   private static final String RESOURCE = "/tx/solana-v1-message-vectors.tsv";
@@ -469,7 +472,7 @@ final class V1MessageConformanceTests {
   /// SIMD bit that is not four bytes wide would mis-slice every field after it. Tightening Sava is
   /// a deliberate decision; this test pins Rust's side and Sava's current side either way.
   @Test
-  void v1UnknownConfigMaskBitsAreAcceptedWhereRustRejectsThem() throws IOException {
+  void v1UnknownConfigMaskBitsAreRejectedAsRustRejectsThem() throws IOException {
     int checked = 0;
     for (final var vector : loadFixture().vectors()) {
       if (!vector.id().startsWith("reject_config_mask_unknown_")) {
@@ -477,47 +480,27 @@ final class V1MessageConformanceTests {
       }
       ++checked;
       final var id = vector.id();
+      // Rust's validate() passes — the mask is structurally fine — and its reader is what refuses
+      // the bytes, so the disagreement was only ever visible on the deserialize side.
       assertTrue(vector.rustValidate(), id);
       assertFalse(vector.rustDeserialize(), id + " Rust rejects unknown mask bits");
       assertEquals("InvalidValue", vector.rustDeserializeError(), id);
-      final int unknownBits = Long.bitCount(vector.configMask() & ~0b11111L);
-      assertEquals(1, unknownBits, id);
+      assertEquals(1, Long.bitCount(vector.configMask() & ~0b11111L), id);
 
+      // Sava now refuses them too. It has to: the ConfigValues block is sized from the mask, so a
+      // slot allocated for a bit whose width this release cannot know shifts the instruction
+      // headers and everything after them, and Sava would read the fixed width header out of
+      // payload bytes. That is a plausible-looking wrong view, which deserialize exists to refuse.
       final byte[] wire = vector.wire();
-      final var skeleton = assertDoesNotThrow(
+      final var thrown = assertThrowsExactly(
+          IllegalStateException.class,
           () -> TransactionSkeleton.deserializeSkeleton(wire),
-          id + " Sava currently accepts what Rust rejects"
+          id
       );
       assertEquals(
-          vector.offsets().get("instruction_headers") + (unknownBits << 2),
-          skeleton.instructionsOffset(),
-          id + " the phantom config slot shifts every following field"
-      );
-      // The shift does not merely displace the instruction block, it makes Sava read the fixed
-      // width header out of four bytes that are really the payload, so the derived message end is
-      // arbitrary rather than off by a slot. For reject_config_mask_unknown_bit_5 the real header
-      // at 106 is 01 01 02 00; Sava reads 110 instead and takes numAccounts=0, dataLen=0x005a from
-      // the payload and the first placeholder signature byte, landing on 204 for a 113 byte
-      // message. Pin the disagreement, not the garbage value.
-      assertNotEquals(
-          vector.messageLen(),
-          V1TransactionSkeleton.messageEnd(wire),
-          id + " the misread header block cannot corroborate Rust's message end"
-      );
-      assertThrows(
-          IllegalArgumentException.class,
-          () -> V1TransactionSkeleton.requireSignatureBlockOffset(wire),
-          id + " the signature boundary check still refuses these bytes"
-      );
-      assertThrows(
-          IllegalArgumentException.class,
-          () -> Transaction.getBase58Id(wire),
-          id + " so the raw-byte id helper cannot return the wrong 64 bytes"
-      );
-      assertThrows(
-          IllegalStateException.class,
-          skeleton::createTransaction,
-          id + " and no mutable transaction can be built from them"
+          "Unknown v1 TransactionConfigMask bits: 0x" + Long.toHexString(vector.configMask()),
+          thrown.getMessage(),
+          id
       );
     }
     assertEquals(2, checked, "unknown config mask bit vectors");

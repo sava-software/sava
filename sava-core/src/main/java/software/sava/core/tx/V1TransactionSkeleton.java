@@ -32,12 +32,21 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   static final int COMPUTE_UNIT_LIMIT_MASK = 0b0000_0100;
   static final int ACCOUNT_DATA_SIZE_LIMIT_MASK = 0b0000_1000;
   static final int HEAP_SIZE_MASK = 0b0001_0000;
+  /// Every TransactionConfigMask bit SIMD-0385 defines. Rust's `has_unknown_bits` rejects anything
+  /// outside this, so no transaction carrying one can reach a cluster.
+  static final int KNOWN_CONFIG_MASK_BITS =
+      PRIORITY_FEE_MASK | COMPUTE_UNIT_LIMIT_MASK | ACCOUNT_DATA_SIZE_LIMIT_MASK | HEAP_SIZE_MASK;
 
   /// Returns the offset of the ConfigValue corresponding to the given TransactionConfigMask
   /// bits, or -1 if the bits are not set.
   ///
   /// ConfigValues are serialized by ascending TransactionConfigMask bit position, 4 bytes per
   /// set bit, so the value offset is 4 bytes for each set bit below the target bits.
+  /// The ConfigValues block is four bytes per SET mask bit, which is why counting bits below the
+  /// target gives the offset. That is exact rather than approximate even though the priority fee is
+  /// a u64 while the other three values are u32: the fee is the one field SIMD-0385 gives a TWO bit
+  /// pair, so it contributes exactly two four-byte slots. A future field that is not four bytes per
+  /// bit would break this, which is part of why `deserialize` refuses unknown mask bits.
   static int configValueOffset(final byte[] data, final int maskBits) {
     final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
     if ((configMask & maskBits) != maskBits) {
@@ -142,6 +151,16 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     final int priorityFeeBits = configMask & PRIORITY_FEE_MASK;
     if (priorityFeeBits != 0 && priorityFeeBits != PRIORITY_FEE_MASK) {
       throw new IllegalStateException("Both v1 priority fee TransactionConfigMask bits must be set: 0x" + Integer.toHexString(configMask));
+    }
+    // An unknown bit is not merely an unrecognised request to skip over: the ConfigValues block is
+    // sized from the mask, so allocating a slot for a bit whose width this release cannot know
+    // shifts the instruction headers and every offset after them. That yields a plausible-looking
+    // wrong view rather than an invalid-but-faithful one, which is the same reason the header rules
+    // below are enforced. Rust rejects these outright, so no such message can come from a cluster.
+    if ((configMask & ~KNOWN_CONFIG_MASK_BITS) != 0) {
+      throw new IllegalStateException(
+          "Unknown v1 TransactionConfigMask bits: 0x" + Integer.toHexString(configMask)
+      );
     }
     o += V1_CONFIG_MASK_LENGTH;
 
