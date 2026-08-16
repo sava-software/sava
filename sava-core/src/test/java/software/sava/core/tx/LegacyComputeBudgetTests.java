@@ -254,12 +254,14 @@ final class LegacyComputeBudgetTests {
         programIx(signerB.publicKey(), (byte) 1)
     ));
 
-    // No readable SetComputeUnitLimit instruction, so the single non-compute-budget instruction
-    // is estimated at the 200,000 unit default: 1 lamport over 200,000 units rounds up to 5
+    // No readable SetComputeUnitLimit instruction, so the runtime's per-instruction default
+    // applies. Every instruction here is a builtin — the empty ComputeBudget one, the System
+    // transfer, and the SetComputeUnitPrice about to be prepended — so each is allocated 3,000
+    // rather than 200,000 units: 1 lamport over 3 * 3,000 = 9,000 units rounds up to 112
     // micro-lamports per compute unit.
     final var priced = tx.setPriorityFeeLamports(1L);
     assertEquals(3, priced.numInstructions());
-    assertEquals(5L, computeUnitPrice(priced));
+    assertEquals(112L, computeUnitPrice(priced));
   }
 
   /// The estimated limit scales with the number of non-compute-budget instructions, which is what
@@ -272,18 +274,19 @@ final class LegacyComputeBudgetTests {
     final var oneInstruction = Transaction.createTx(feePayer.publicKey(), List.of(
         programIx(signerB.publicKey(), (byte) 1)
     ));
-    // 1 lamport over 1 * 200,000 units = 5 micro-lamports per compute unit.
-    assertEquals(5L, computeUnitPrice(oneInstruction.setPriorityFeeLamports(1L)));
+    // One System instruction plus the SetComputeUnitPrice about to be prepended, both builtins:
+    // 1 lamport over 2 * 3,000 = 6,000 units rounds up to 167 micro-lamports per compute unit.
+    assertEquals(167L, computeUnitPrice(oneInstruction.setPriorityFeeLamports(1L)));
 
     final var twoInstructions = Transaction.createTx(feePayer.publicKey(), List.of(
         programIx(signerB.publicKey(), (byte) 1),
         programIx(signerB.publicKey(), (byte) 2)
     ));
-    // 1 lamport over 2 * 200,000 units = 2.5, rounded up to 3 micro-lamports per compute unit.
-    assertEquals(3L, computeUnitPrice(twoInstructions.setPriorityFeeLamports(1L)));
+    // 1 lamport over 3 * 3,000 = 9,000 units rounds up to 112 micro-lamports per compute unit.
+    assertEquals(112L, computeUnitPrice(twoInstructions.setPriorityFeeLamports(1L)));
 
-    // Eight instructions would estimate 1.6 million units, which the runtime maximum caps at
-    // 1.4 million: 1 lamport over 1,400,000 units rounds up to 1 micro-lamport per compute unit.
+    // Nine builtins at 3,000 each is 27,000 units, nowhere near the 1.4 million runtime maximum:
+    // 1 lamport over 27,000 units rounds up to 38 micro-lamports per compute unit.
     final var eightInstructions = Transaction.createTx(feePayer.publicKey(), List.of(
         programIx(signerB.publicKey(), (byte) 1),
         programIx(signerB.publicKey(), (byte) 2),
@@ -294,7 +297,7 @@ final class LegacyComputeBudgetTests {
         programIx(signerB.publicKey(), (byte) 7),
         programIx(signerB.publicKey(), (byte) 8)
     ));
-    assertEquals(1L, computeUnitPrice(eightInstructions.setPriorityFeeLamports(1L)));
+    assertEquals(38L, computeUnitPrice(eightInstructions.setPriorityFeeLamports(1L)));
   }
 
   /// A compute unit limit of zero cannot be priced against, so the conversion yields no price
@@ -351,9 +354,10 @@ final class LegacyComputeBudgetTests {
 
     final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
     assertEquals(0, skeleton.computeUnitLimit());
-    // The truncated limit contributes nothing, so the single non-compute-budget instruction is
-    // estimated at 200,000 units: 1,000 * 200,000 micro-lamports = 200 lamports.
-    assertEquals(200L, skeleton.priorityFeeLamports());
+    // The truncated limit contributes no value, but the instruction is still a builtin the runtime
+    // budgets: three builtins at 3,000 each = 9,000 units, so 1,000 * 9,000 micro-lamports
+    // = 9 lamports.
+    assertEquals(9L, skeleton.priorityFeeLamports());
   }
 
   /// A SetComputeUnitPrice instruction whose data is one byte short of its u64 value must be
@@ -394,9 +398,11 @@ final class LegacyComputeBudgetTests {
 
     final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
     assertEquals(0, skeleton.computeUnitLimit());
-    // Only the one instruction preceding the limit was counted before the walk exited, so the
-    // zero limit falls back to a 200,000 unit estimate: 1,000 * 200,000 = 200 lamports.
-    assertEquals(200L, skeleton.priorityFeeLamports());
+    // Only the instructions preceding the limit were counted before the walk exited, so the zero
+    // limit falls back to an estimate over those two builtins: 1,000 * (2 * 3,000) = 6 lamports.
+    // The early exit deliberately under-counts here — an explicit zero limit is indistinguishable
+    // from an absent one on this path, and both fall back to the default.
+    assertEquals(6L, skeleton.priorityFeeLamports());
   }
 
   /// Neither the price nor the limit may end the walk on its own: both orderings must recover
@@ -438,14 +444,16 @@ final class LegacyComputeBudgetTests {
         programIx(signerB.publicKey(), (byte) 1),
         programIx(signerB.publicKey(), (byte) 2)
     ));
-    // 1,000 * (2 * 200,000) micro-lamports = 400 lamports.
+    // Three builtins — the SetComputeUnitPrice and two System instructions — at 3,000 each:
+    // 1,000 * 9,000 micro-lamports = 9 lamports.
     assertEquals(
-        400L,
+        9L,
         TransactionSkeleton.deserializeSkeleton(twoInstructions.serialized()).priorityFeeLamports()
     );
 
-    // Eight instructions estimate 1.6 million units, capped at the 1.4 million runtime maximum:
-    // 1,000 * 1,400,000 micro-lamports = 1,400 lamports.
+    // Nine builtins at 3,000 each is 27,000 units, far below the 1.4 million runtime maximum, so
+    // no cap applies: 1,000 * 27,000 micro-lamports = 27 lamports. Reaching the cap would need
+    // roughly 467 builtin instructions, which the 64-instruction limit forbids.
     final var eightInstructions = Transaction.createTx(feePayer.publicKey(), List.of(
         setComputeUnitPrice(1_000L),
         programIx(signerB.publicKey(), (byte) 1),
@@ -458,8 +466,101 @@ final class LegacyComputeBudgetTests {
         programIx(signerB.publicKey(), (byte) 8)
     ));
     assertEquals(
-        1_400L,
+        27L,
         TransactionSkeleton.deserializeSkeleton(eightInstructions.serialized()).priorityFeeLamports()
     );
+  }
+
+  /// A program that is not one of the runtime's builtins, so the default budget for an instruction
+  /// invoking it is the full 200,000 units rather than 3,000.
+  private static Instruction nonBuiltinIx(final PublicKey account, final byte... data) {
+    return Instruction.createInstruction(
+        PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+        List.of(AccountMeta.createWritableSigner(account)),
+        data
+    );
+  }
+
+  /// Pins the builtin split itself. Every other fixture in this class invokes the System program, so
+  /// a mutant treating every program as a builtin survives all of them; only a non-builtin program
+  /// separates 3,000 from 200,000.
+  @Test
+  void testNonBuiltinProgramsAreBudgetedTheFullDefault() {
+    final var feePayer = signer(51);
+    final var signerB = signer(52);
+
+    // 200,000 for the SPL token instruction plus 3,000 for the SetComputeUnitPrice about to be
+    // prepended: 1 lamport over 203,000 units rounds up to 5 micro-lamports per compute unit.
+    final var tx = Transaction.createTx(feePayer.publicKey(), List.of(nonBuiltinIx(signerB.publicKey(), (byte) 1)));
+    assertEquals(5L, computeUnitPrice(tx.setPriorityFeeLamports(1L)));
+
+    // The same split on the skeleton's read path: 1,000 * (3,000 + 200,000) = 203 lamports.
+    final var priced = Transaction.createTx(feePayer.publicKey(), List.of(
+        setComputeUnitPrice(1_000L),
+        nonBuiltinIx(signerB.publicKey(), (byte) 1)
+    ));
+    assertEquals(203L, TransactionSkeleton.deserializeSkeleton(priced.serialized()).priorityFeeLamports());
+
+    // A builtin alongside it is still budgeted at 3,000, so the two are genuinely distinguished.
+    final var mixed = Transaction.createTx(feePayer.publicKey(), List.of(
+        setComputeUnitPrice(1_000L),
+        nonBuiltinIx(signerB.publicKey(), (byte) 1),
+        programIx(signerB.publicKey(), (byte) 2)
+    ));
+    assertEquals(206L, TransactionSkeleton.deserializeSkeleton(mixed.serialized()).priorityFeeLamports());
+  }
+
+  /// A transaction that already carries a SetComputeUnitPrice instruction gets no extra allowance,
+  /// because nothing is prepended — the existing instruction is replaced in place.
+  @Test
+  void testAnExistingPriceInstructionIsNotDoubleCounted() {
+    final var feePayer = signer(53);
+    final var signerB = signer(54);
+
+    final var alreadyPriced = Transaction.createTx(feePayer.publicKey(), List.of(
+        setComputeUnitPrice(0L),
+        programIx(signerB.publicKey(), (byte) 1)
+    ));
+    final var repriced = alreadyPriced.setPriorityFeeLamports(1L);
+    assertEquals(2, repriced.numInstructions(), "the existing price instruction is replaced, not added");
+    // Two builtins, no prepend: 1 lamport over 6,000 units rounds up to 167.
+    assertEquals(167L, computeUnitPrice(repriced));
+
+    // A compute budget instruction of a DIFFERENT kind is not a price, so one is still prepended:
+    // three builtins, 9,000 units, 112 micro-lamports per compute unit.
+    final var heapOnly = Transaction.createTx(feePayer.publicKey(), List.of(
+        computeBudgetIx(new byte[]{TransactionRecord.REQUEST_HEAP_FRAME_DISCRIMINATOR, 0, 0, 1, 0}),
+        programIx(signerB.publicKey(), (byte) 1)
+    ));
+    final var heapPriced = heapOnly.setPriorityFeeLamports(1L);
+    assertEquals(3, heapPriced.numInstructions());
+    assertEquals(112L, computeUnitPrice(heapPriced));
+  }
+
+  /// A non-compute-budget instruction whose first data byte collides with a compute budget
+  /// discriminator must not be read as one, on either the transaction or the skeleton path.
+  @Test
+  void testDiscriminatorCollisionsInOtherProgramsAreIgnored() {
+    final var feePayer = signer(55);
+    final var signerB = signer(56);
+
+    // Data begins with SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR followed by a zero limit. Read as a
+    // limit it would yield 0, which converts to a price of 0 rather than the correct 167.
+    final var limitCollision = Transaction.createTx(feePayer.publicKey(), List.of(
+        programIx(signerB.publicKey(), TransactionRecord.SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR, (byte) 0, (byte) 0, (byte) 0, (byte) 0)
+    ));
+    assertEquals(167L, computeUnitPrice(limitCollision.setPriorityFeeLamports(1L)));
+
+    // Data begins with SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR and is long enough to hold a u64 price.
+    // Read as one the skeleton would report a fee; the transaction carries no price at all.
+    final var priceCollision = Transaction.createTx(feePayer.publicKey(), List.of(
+        programIx(
+            signerB.publicKey(),
+            TransactionRecord.SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR,
+            (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF,
+            (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF
+        )
+    ));
+    assertEquals(0L, TransactionSkeleton.deserializeSkeleton(priceCollision.serialized()).priorityFeeLamports());
   }
 }

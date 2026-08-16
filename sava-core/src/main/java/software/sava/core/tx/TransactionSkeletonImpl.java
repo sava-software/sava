@@ -79,11 +79,6 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     return Base58.encode(data, 1, 1 + SIGNATURE_LENGTH);
   }
 
-  // Runtime default compute unit limit granted per non-compute-budget instruction when no
-  // SetComputeUnitLimit instruction is present. An estimate; per SIMD-0170 the runtime only
-  // allocates 3,000 units for each builtin program instruction.
-  static final int DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT = 200_000;
-
   // Returns the offset of the first matching compute budget instruction value, or 0 if not
   // present, exiting early on a match; compute budget instructions are conventionally first.
   private int computeBudgetValueOffset(final byte discriminator, final int valueLength) {
@@ -111,11 +106,13 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   @Override
   public long priorityFeeLamports() {
     // A single walk collecting the price and limit, exiting early once both are found; the
-    // non-compute-budget instruction count is only needed when no limit instruction is present.
+    // per-instruction default budget is only needed when no limit instruction is present.
     final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
     int priceOffset = 0;
     int limitOffset = 0;
-    int numNonComputeBudgetInstructions = 0;
+    // The runtime budgets every instruction, builtins at a far lower rate than the rest; compute
+    // budget instructions are themselves builtins and are counted like any other.
+    long defaultComputeUnitLimit = 0;
     for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
       final var programAccount = getProgramAccount(data[o++] & 0xFF);
       final int numAccounts = decode(data, o);
@@ -136,9 +133,8 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
             break;
           }
         }
-      } else {
-        ++numNonComputeBudgetInstructions;
       }
+      defaultComputeUnitLimit += BuiltinPrograms.defaultComputeUnitLimit(programAccount);
       o += numDataBytes;
     }
     if (priceOffset == 0) {
@@ -147,10 +143,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     final long microLamportsPerComputeUnit = ByteUtil.getInt64LE(data, priceOffset);
     long computeUnitLimit = limitOffset == 0 ? 0 : ByteUtil.getInt32LE(data, limitOffset) & 0xFFFF_FFFFL;
     if (computeUnitLimit == 0) {
-      computeUnitLimit = Math.min(
-          (long) DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions,
-          TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT
-      );
+      computeUnitLimit = Math.min(defaultComputeUnitLimit, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
     }
     return TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, (int) computeUnitLimit);
   }
