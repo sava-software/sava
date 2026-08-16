@@ -17,44 +17,15 @@ import static software.sava.core.tx.TransactionRecord.mergeAccounts;
 
 public interface Transaction {
 
-  /// @deprecated no longer valid for all transaction versions
+  /// @deprecated no longer valid for all transaction versions once v1 transactions are activated.
   @Deprecated
   int MAX_SERIALIZED_LENGTH = 1232;
-  /// @deprecated - redundant value, check against the serialized bytes.
-  @Deprecated
-  int MAX_BASE_64_ENCODED_LENGTH = 1683;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
   int MAX_INSTRUCTIONS = 64;
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
-
-  /// @deprecated internal serialization
-  @Deprecated
-  BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = TransactionRecord.MERGE_ACCOUNT_META;
-
-  // fee payer, sign, write, read
-  /// @deprecated internal serialization
-  @Deprecated
-  Comparator<AccountMeta> LEGACY_META_COMPARATOR = TransactionRecord.LEGACY_META_COMPARATOR;
-
-  /// @deprecated internal serialization
-  @Deprecated
-  Comparator<AccountMeta> VO_META_COMPARATOR = TransactionRecord.VO_META_COMPARATOR;
-
-  /// @deprecated internal serialization
-  @Deprecated
-  int MSG_HEADER_LENGTH = TransactionRecord.MSG_HEADER_LENGTH;
-  /// @deprecated internal serialization
-  @Deprecated
-  int VERSIONED_MSG_HEADER_LENGTH = TransactionRecord.VERSIONED_MSG_HEADER_LENGTH;
-  /// @deprecated internal serialization
-  @Deprecated
-  byte VERSIONED_BIT_MASK = TransactionRecord.VERSIONED_BIT_MASK;
-  /// @deprecated internal serialization
-  @Deprecated
-  int BASE_LOOKUP_TABLE_LEN = TransactionRecord.BASE_LOOKUP_TABLE_LEN;
 
   static String getBase58Id(final byte[] signedTransaction) {
     final int offset = BaseTransaction.signedIdOffset(signedTransaction);
@@ -64,12 +35,6 @@ public interface Transaction {
   static byte[] getId(final byte[] signedTransaction) {
     final int offset = BaseTransaction.signedIdOffset(signedTransaction);
     return Arrays.copyOfRange(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
-  }
-
-  /// @deprecated internal serialization
-  @Deprecated
-  static AccountMeta[] sortLegacyAccounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    return TransactionRecord.sortLegacyAccounts(mergedAccounts);
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
@@ -85,7 +50,7 @@ public interface Transaction {
   static Transaction createTx(final AccountMeta feePayer, final List<Instruction> instructions) {
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_ACCOUNTS);
     final int serializedInstructionLength = mergeAccounts(feePayer, accounts, instructions);
-    return createTx(instructions, serializedInstructionLength, sortLegacyAccounts(accounts));
+    return createTx(instructions, serializedInstructionLength, TransactionRecord.sortLegacyAccounts(accounts));
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
@@ -282,12 +247,6 @@ public interface Transaction {
         accountsOffset,
         recentBlockHashIndex
     );
-  }
-
-  /// @deprecated internal serialization
-  @Deprecated
-  static AccountMeta[] sortV0Accounts(final Map<PublicKey, AccountMeta> mergedAccounts) {
-    return TransactionRecord.sortV0Accounts(mergedAccounts);
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
@@ -655,9 +614,11 @@ public interface Transaction {
   ///                                  since one signature cannot fill a wider signature block
   static void sign(final Signer signer, final byte[] out) {
     if (V1Transaction.isV1(out)) {
-      // The v1 message spans up to the appended signatures, the fee payer signature is first.
-      final int numSigners = out[1] & 0xFF;
-      final int signaturesOffset = out.length - (numSigners * Transaction.SIGNATURE_LENGTH);
+      // The v1 message spans up to the appended signatures, the fee payer signature is first. The
+      // boundary is only implied by out.length, so corroborate it against the message before
+      // writing: on a padded or truncated buffer the implied slot lands inside the message and
+      // signing would overwrite its tail while signing the wrong span.
+      final int signaturesOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
       Transaction.sign(signer, out, 0, signaturesOffset, signaturesOffset);
     } else {
       out[0] = 1;
@@ -687,7 +648,16 @@ public interface Transaction {
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     final int numSigners = signers.size();
     if (V1Transaction.isV1(out)) {
-      final int sigOffset = out.length - (numSigners * Transaction.SIGNATURE_LENGTH);
+      // A v1 message's signature count is fixed in its header, not implied by the caller's
+      // collection. Deriving the boundary from signers.size() would sign the wrong span and, when
+      // over-supplied, write signature bytes over the tail of the message, so validate first.
+      final int numRequiredSignatures = out[1] & 0xFF;
+      if (numSigners != numRequiredSignatures) {
+        throw new IllegalArgumentException(String.format(
+            "Expected %d signers, only passed %d.", numRequiredSignatures, numSigners
+        ));
+      }
+      final int sigOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
       Transaction.sign(signers, out, 0, sigOffset, sigOffset);
     } else {
       out[0] = (byte) numSigners;

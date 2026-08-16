@@ -48,6 +48,57 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
         + (Integer.bitCount(configMask & (Integer.lowestOneBit(maskBits) - 1)) << 2);
   }
 
+  /// Walks the fixed-width instruction headers of an unparsed v1 message to the first byte after
+  /// the last instruction payload, i.e. where the appended signature block must begin, or -1 if the
+  /// buffer is too short to hold the headers its own counts declare.
+  ///
+  /// Allocation free, so the raw-byte helpers on [Transaction] can corroborate a length-derived
+  /// signature offset without building a skeleton.
+  static int messageEnd(final byte[] data) {
+    final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
+    final int numInstructions = data[V1_ACCOUNTS_OFFSET - 2] & 0xFF;
+    final int numAddresses = data[V1_ACCOUNTS_OFFSET - 1] & 0xFF;
+    final int instructionsOffset = V1_ACCOUNTS_OFFSET
+        + (numAddresses << 5)
+        + (Integer.bitCount(configMask) << 2);
+    int messageEnd = instructionsOffset + (numInstructions * V1_INSTRUCTION_HEADER_LENGTH);
+    if (messageEnd > data.length) {
+      return -1;
+    }
+    for (int i = 0, header = instructionsOffset; i < numInstructions; ++i, header += V1_INSTRUCTION_HEADER_LENGTH) {
+      messageEnd += (data[header + 1] & 0xFF) + (ByteUtil.getInt16LE(data, header + 2) & 0xFFFF);
+    }
+    return messageEnd;
+  }
+
+  /// Returns the offset of an unparsed v1 message's signature block, verified against the message
+  /// itself rather than trusted from the serialized length alone.
+  ///
+  /// The public statics on [Transaction] take raw bytes, so the length and the header's signature
+  /// count are both untrusted: a padded or truncated buffer moves the implied boundary into the
+  /// message, where signing overwrites the tail and reading the id returns the wrong 64 bytes.
+  ///
+  /// @throws IllegalArgumentException if the buffer cannot hold the signatures its header declares,
+  ///                                  or if the message does not end where they would begin
+  static int requireSignatureBlockOffset(final byte[] data) {
+    final int numSigners = data[1] & 0xFF;
+    final int signaturesOffset = data.length - (numSigners * SIGNATURE_LENGTH);
+    if (signaturesOffset < V1_ACCOUNTS_OFFSET) {
+      throw new IllegalArgumentException(String.format(
+          "A v1 transaction of %d bytes cannot hold the %d signatures its header declares.",
+          data.length, numSigners
+      ));
+    }
+    final int messageEnd = messageEnd(data);
+    if (messageEnd != signaturesOffset) {
+      throw new IllegalArgumentException(String.format(
+          "A v1 message ending at offset %d does not corroborate the %d signature slots a %d byte buffer places at offset %d.",
+          messageEnd, numSigners, data.length, signaturesOffset
+      ));
+    }
+    return signaturesOffset;
+  }
+
   private V1TransactionSkeleton(final byte[] data,
                                 final int numSignatures,
                                 final int numReadonlySignedAccounts,
@@ -72,6 +123,20 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     final int numReadonlySignedAccounts = data[o++] & 0xFF;
     final int numReadonlyUnsignedAccounts = data[o++] & 0xFF;
 
+    // Only the two header rules that account parsing itself depends on are enforced here. Both
+    // partition the address array, so violating either does not yield an invalid-but-faithful
+    // view — it yields a plausible-looking wrong one, with accounts silently carrying the wrong
+    // privileges. The SIMD's remaining constraints are population limits which leave parsing
+    // meaningful, so they stay on the permissive-analysis side of the line: exceedsSignatureLimit,
+    // exceedsAccountLimit and exceedsInstructionLimit report them, and TxBuilder rejects them when
+    // built in strict mode.
+    if (numReadonlySignedAccounts >= numRequiredSignatures) {
+      throw new IllegalStateException(String.format(
+          "A v1 transaction requiring %d signatures may not load %d of them as read-only; the fee payer must be writable.",
+          numRequiredSignatures, numReadonlySignedAccounts
+      ));
+    }
+
     final int configMask = ByteUtil.getInt32LE(data, o);
     // A single priority fee bit is malformed per SIMD-0385, both must be set.
     final int priorityFeeBits = configMask & PRIORITY_FEE_MASK;
@@ -84,6 +149,13 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
 
     final int numInstructions = data[o++] & 0xFF;
     final int numIncludedAccounts = data[o++] & 0xFF;
+
+    if (numIncludedAccounts < numRequiredSignatures + numReadonlyUnsignedAccounts) {
+      throw new IllegalStateException(String.format(
+          "A v1 transaction with %d addresses cannot hold %d signers and %d read-only non-signers.",
+          numIncludedAccounts, numRequiredSignatures, numReadonlyUnsignedAccounts
+      ));
+    }
 
     // Accounts begin at the fixed V1_ACCOUNTS_OFFSET, followed by the ConfigValues, 4 bytes per
     // set TransactionConfigMask bit, including unknown bits.
@@ -146,7 +218,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
 
   @Override
   public String id() {
-    final int signaturesOffset = data.length - (numSignatures * SIGNATURE_LENGTH);
+    final int signaturesOffset = signaturesOffset();
     return Base58.encode(data, signaturesOffset, signaturesOffset + SIGNATURE_LENGTH);
   }
 
@@ -191,6 +263,20 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     return data[header] & 0xFF;
   }
 
+  private void requireIncludedProgramAccount(final int accountIndex) {
+    if (accountIndex >= numAccounts) {
+      throw new IndexOutOfBoundsException(String.format(
+          "Program account index %d is outside the %d included accounts.",
+          accountIndex, numAccounts
+      ));
+    }
+  }
+
+  private PublicKey getProgramAccount(final int accountIndex) {
+    requireIncludedProgramAccount(accountIndex);
+    return accountKey(accountIndex);
+  }
+
   private int numIxAccounts(final int header) {
     return data[header + 1] & 0xFF;
   }
@@ -213,7 +299,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   public PublicKey[] parseProgramAccounts() {
     final var programs = new PublicKey[numInstructions];
     for (int i = 0, header = instructionsOffset; i < numInstructions; ++i, header += V1_INSTRUCTION_HEADER_LENGTH) {
-      programs[i] = accountKey(programIdIndex(header));
+      programs[i] = getProgramAccount(programIdIndex(header));
     }
     return programs;
   }
@@ -223,7 +309,9 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     final var instructions = new Instruction[numInstructions];
     int cursor = firstInstructionCursor();
     for (int i = 0, header = instructionsOffset; i < numInstructions; ++i, header += V1_INSTRUCTION_HEADER_LENGTH) {
-      final var programAccount = accounts[programIdIndex(header)];
+      final int programAccountIndex = programIdIndex(header);
+      requireIncludedProgramAccount(programAccountIndex);
+      final var programAccount = invokedProgramAccount(accounts[programAccountIndex]);
 
       final int numIxAccounts = numIxAccounts(header);
       final var ixAccounts = new AccountMeta[numIxAccounts];
@@ -244,7 +332,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     final var instructions = new Instruction[numInstructions];
     int cursor = firstInstructionCursor();
     for (int i = 0, header = instructionsOffset; i < numInstructions; ++i, header += V1_INSTRUCTION_HEADER_LENGTH) {
-      final var programAccount = accountKey(programIdIndex(header));
+      final var programAccount = getProgramAccount(programIdIndex(header));
       final int numDataBytes = numDataBytes(header);
       cursor += numIxAccounts(header);
       instructions[i] = createInstruction(programAccount, NO_ACCOUNTS, data, cursor, numDataBytes);
@@ -266,6 +354,10 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     int d = 0;
     int cursor = firstInstructionCursor();
     for (int i = 0, header = instructionsOffset; i < numInstructions; ++i, header += V1_INSTRUCTION_HEADER_LENGTH) {
+      // Validated for every instruction, not just the matched ones, so a non-matching filter
+      // cannot hide a malformed program index.
+      final int programAccountIndex = programIdIndex(header);
+      requireIncludedProgramAccount(programAccountIndex);
       final int numIxAccounts = numIxAccounts(header);
       final int numDataBytes = numDataBytes(header);
       final int dataOffset = cursor + numIxAccounts;
@@ -275,7 +367,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
           accountIndex = data[cursor + a] & 0xFF;
           ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
         }
-        instructions[d++] = createInstruction(accountKey(programIdIndex(header)), Arrays.asList(ixAccounts), data, dataOffset, numDataBytes);
+        instructions[d++] = createInstruction(accountKey(programAccountIndex), Arrays.asList(ixAccounts), data, dataOffset, numDataBytes);
       }
       cursor = dataOffset + numDataBytes;
     }
@@ -290,10 +382,14 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     int d = 0;
     int cursor = firstInstructionCursor();
     for (int i = 0, header = instructionsOffset; i < numInstructions; ++i, header += V1_INSTRUCTION_HEADER_LENGTH) {
+      // Validated for every instruction, not just the matched ones, so a non-matching filter
+      // cannot hide a malformed program index.
+      final int programAccountIndex = programIdIndex(header);
+      requireIncludedProgramAccount(programAccountIndex);
       final int numDataBytes = numDataBytes(header);
       final int dataOffset = cursor + numIxAccounts(header);
       if (discriminator.equals(data, dataOffset)) {
-        instructions[d++] = createInstruction(accountKey(programIdIndex(header)), NO_ACCOUNTS, data, dataOffset, numDataBytes);
+        instructions[d++] = createInstruction(accountKey(programAccountIndex), NO_ACCOUNTS, data, dataOffset, numDataBytes);
       }
       cursor = dataOffset + numDataBytes;
     }
@@ -318,13 +414,61 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     return createTransaction(instructions);
   }
 
+  /// A v1 message distinguishes an unset ConfigValue from an explicit zero on the wire: an absent
+  /// TransactionConfigMask bit means the value really is 0, not "no compute budget instruction was
+  /// present, so the runtime default applied". Carry both limits through verbatim rather than
+  /// letting the interface default substitute the builder's runtime maximums, which would silently
+  /// raise a 0/0 transaction to 1.4M units and 64MiB.
+  @Override
+  public TxBuilder prototypeTransaction(final Instruction[] instructions) {
+    return new TxBuilderImpl()
+        .feePayer(feePayer())
+        .addInstructions(TxBuilderImpl.withoutComputeBudgetInstructions(instructions))
+        .priorityFeeLamports(priorityFeeLamports())
+        .heapSize(heapSize())
+        .computeUnitLimit(computeUnitLimit())
+        .accountDataSizeLimit(accountDataSizeLimit());
+  }
+
+  /// A v1 message carries its signatures appended after the instruction payloads, so the boundary
+  /// between the two is only implied by the serialized length. Verify the parsed message ends
+  /// exactly where the signature block must begin: a truncated or padded payload otherwise stays
+  /// readable, but its signature slots are not where the length says they are — signing writes over
+  /// the tail of the message, and reading the transaction id returns the wrong bytes. This is the
+  /// v1 counterpart of [TransactionSkeletonImpl]'s legacy signature-prefix check, which legacy
+  /// gets for free because its signatures lead and its first slot is always at offset 1.
+  ///
+  /// @throws IllegalStateException if the parsed message end does not coincide with the start of
+  ///                               the required signature slots
+  private int signaturesOffset() {
+    final int signaturesOffset = data.length - (numSignatures * SIGNATURE_LENGTH);
+    // Bound the fixed-width header block before walking it: serializedInstructionsLength() reads
+    // three bytes per header that deserialize never touched, so an unchecked walk would raise
+    // ArrayIndexOutOfBoundsException instead of the IllegalStateException documented above.
+    final int headerBlockEnd = instructionsOffset + (numInstructions * V1_INSTRUCTION_HEADER_LENGTH);
+    if (headerBlockEnd > data.length || signaturesOffset < headerBlockEnd) {
+      throw new IllegalStateException(String.format(
+          "A v1 message of %d bytes cannot hold %d instruction headers and %d signature slots.",
+          data.length, numInstructions, numSignatures
+      ));
+    }
+    final int messageEnd = instructionsOffset + serializedInstructionsLength();
+    if (messageEnd != signaturesOffset) {
+      throw new IllegalStateException(String.format(
+          "v1 message ends at offset %d but its %d signature slots begin at offset %d.",
+          messageEnd, numSignatures, signaturesOffset
+      ));
+    }
+    return signaturesOffset;
+  }
+
   @Override
   public Transaction createTransaction(final List<Instruction> instructions) {
     return new V1Transaction(
         AccountMeta.createFeePayer(feePayer()),
         instructions,
         data,
-        data.length - (numSignatures * SIGNATURE_LENGTH)
+        signaturesOffset()
     );
   }
 }

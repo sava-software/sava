@@ -191,7 +191,7 @@ final class ClientDefaultsRpcRequestTests extends RpcRequestTests {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getBlock","params":[11,{"encoding":"base64",\
         "commitment":"confirmed","transactionDetails":"full","rewards":false,\
-        "maxSupportedTransactionVersion":0}]}""", """
+        "maxSupportedTransactionVersion":1}]}""", """
         {"jsonrpc":"2.0","result":{"blockHeight":10,"blockTime":1700000000,"blockhash":\
         "EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N","parentSlot":10,"previousBlockhash":\
         "11111111111111111111111111111111"},"id":1}""");

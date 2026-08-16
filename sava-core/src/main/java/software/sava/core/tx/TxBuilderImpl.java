@@ -1,6 +1,7 @@
 package software.sava.core.tx;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.ByteUtil;
 
@@ -9,6 +10,24 @@ import java.util.*;
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
 
 final class TxBuilderImpl implements TxBuilder {
+
+  // ComputeBudgetProgram instructions configure a legacy/v0 transaction, but a v1 transaction is
+  // configured by its ConfigValues; per SIMD-0385 the v1 runtime processes them as no-ops which
+  // still consume compute units. Prototyping carries their values over as ConfigValues instead,
+  // so the instructions themselves are dropped.
+  static Instruction[] withoutComputeBudgetInstructions(final Instruction[] instructions) {
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    int numRetained = 0;
+    final var retained = new Instruction[instructions.length];
+    for (final var instruction : instructions) {
+      if (!computeBudgetProgram.equals(instruction.programId().publicKey())) {
+        retained[numRetained++] = instruction;
+      }
+    }
+    return numRetained == instructions.length
+        ? instructions
+        : Arrays.copyOfRange(retained, 0, numRetained);
+  }
 
   static final int MAX_SERIALIZED_LENGTH_V1 = 4_096;
   // SIMD-0385 Transaction V1 format.
@@ -83,7 +102,11 @@ final class TxBuilderImpl implements TxBuilder {
   @Override
   public TxBuilder addInstructions(final List<Instruction> instructions) {
     if (this.instructions == null) {
-      this.instructions = instructions;
+      // Copy, as the SequencedCollection overload below does. Aliasing the caller's list leaves the
+      // builder unable to accept a later addInstruction/insertInstruction when it was handed a
+      // fixed-size view such as Arrays.asList, and lets setInstruction write through to the
+      // caller's array — reachable from prototypeTransaction, which passes an Instruction[].
+      this.instructions = new ArrayList<>(instructions);
     } else {
       this.instructions.addAll(instructions);
     }

@@ -68,23 +68,30 @@ public record InflationReward(long amount,
     );
 
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("amount", buf, offset, len)) {
-        amount = ji.readLong();
-      } else if (fieldEquals("effectiveSlot", buf, offset, len)) {
-        effectiveSlot = ji.readLong();
-      } else if (fieldEquals("epoch", buf, offset, len)) {
-        epoch = ji.readLong();
-      } else if (fieldEquals("postBalance", buf, offset, len)) {
-        postBalance = ji.readLong();
-      } else if (fieldEquals("commission", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          commission = ji.readInt();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> amount = ji.readLong();
+        case 1 -> effectiveSlot = ji.readLong();
+        case 2 -> epoch = ji.readLong();
+        case 3 -> postBalance = ji.readLong();
+        case 4 -> {
+          // Nodes serve either the percentage or the basis points, which take precedence regardless
+          // of the order in which they are served.
+          if (commissionBps || ji.whatIsNext() != ValueType.NUMBER) {
+            ji.skip();
+          } else {
+            commission = ji.readInt();
+          }
         }
-      } else {
-        ji.skip();
+        case 5 -> {
+          if (ji.whatIsNext() == ValueType.NUMBER) {
+            commission = ji.readInt();
+            commissionBps = true;
+          } else {
+            ji.skip();
+          }
+        }
+        default -> ji.skip();
       }
       return true;
     }

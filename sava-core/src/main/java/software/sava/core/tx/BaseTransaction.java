@@ -22,16 +22,30 @@ abstract class BaseTransaction implements Transaction {
     this.data = data;
   }
 
-  // Returns the byte offset of the fee payer signature, or -1 if it has not been written yet.
+  /// Returns the byte offset of the fee payer signature, or -1 if it has not been written yet.
+  ///
+  /// A v1 transaction appends its signatures, so their offset is implied by the serialized length
+  /// alone. These bytes are untrusted — this is reachable from the public static
+  /// [Transaction#getBase58Id(byte[])] — so the implied boundary is corroborated against the
+  /// message the buffer actually contains. Without that, padding silently slides the window and the
+  /// caller is handed 64 bytes that are not the transaction's id.
+  ///
+  /// @throws IllegalArgumentException if the buffer cannot hold the signatures its header declares,
+  ///                                  or if the message does not end where they would begin
   static int feePayerSignatureOffset(final byte[] signedTransaction) {
     final int numSigners;
     final int signaturesOffset;
     if (V1Transaction.isV1(signedTransaction)) {
       numSigners = signedTransaction[1] & 0xFF;
-      signaturesOffset = signedTransaction.length - (numSigners * SIGNATURE_LENGTH);
+      signaturesOffset = V1TransactionSkeleton.requireSignatureBlockOffset(signedTransaction);
     } else {
       numSigners = signedTransaction[0];
       signaturesOffset = 1;
+      if (numSigners != 0 && signedTransaction.length < 1 + SIGNATURE_LENGTH) {
+        throw new IllegalArgumentException(String.format(
+            "A transaction of %d bytes cannot hold a signature.", signedTransaction.length
+        ));
+      }
     }
     if (numSigners != 0) {
       for (int i = signaturesOffset, to = signaturesOffset + SIGNATURE_LENGTH; i < to; ++i) {
@@ -126,26 +140,32 @@ abstract class BaseTransaction implements Transaction {
     return Transaction.getId(this.data);
   }
 
+  private int signerIndex(final Signer signer) {
+    final int numSigners = numSigners();
+    final byte[] pubKey = signer.publicKey().toByteArray();
+    for (int from = accountsOffset(), i = 0; i < numSigners; ++i, from += PUBLIC_KEY_LENGTH) {
+      if (Arrays.equals(pubKey, 0, PUBLIC_KEY_LENGTH, data, from, from + PUBLIC_KEY_LENGTH)) {
+        return i;
+      }
+    }
+    throw new IllegalArgumentException("Failed to find index for signer " + signer.publicKey());
+  }
+
   @Override
   public final void sign(final Signer signer) {
-    final int numSigners = numSigners();
-    if (numSigners > 1) {
-      final byte[] pubKey = signer.publicKey().toByteArray();
-      for (int from = accountsOffset(), i = 0; i < numSigners; ++i, from += PUBLIC_KEY_LENGTH) {
-        if (Arrays.equals(pubKey, 0, PUBLIC_KEY_LENGTH, data, from, from + PUBLIC_KEY_LENGTH)) {
-          Transaction.sign(signer, this.data, messageOffset(), messageLength(), signatureOffset(i));
-          return;
-        }
-      }
-      throw new IllegalArgumentException("Failed to find index for signer " + signer.publicKey());
-    } else {
-      recordNumSignatures(1);
-      Transaction.sign(signer, this.data, messageOffset(), messageLength(), signatureOffset(0));
-    }
+    final int signerIndex = signerIndex(signer);
+    recordNumSignatures(numSigners());
+    sign(signerIndex, signer);
   }
 
   @Override
   public final void sign(final int index, final Signer signer) {
+    final int numSigners = numSigners();
+    if (index < 0 || index >= numSigners) {
+      throw new IllegalArgumentException(String.format(
+          "Invalid signer index %d for transaction with %d required signers.", index, numSigners
+      ));
+    }
     Transaction.sign(signer, this.data, messageOffset(), messageLength(), signatureOffset(index));
   }
 
@@ -161,13 +181,30 @@ abstract class BaseTransaction implements Transaction {
 
   @Override
   public final void sign(final Collection<Signer> signers) {
-    final int numSigners = signers.size();
-    if (numSigners != this.numSigners()) {
-      throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners(), numSigners));
+    final Signer[] signerArray = signers.toArray(Signer[]::new);
+    final int passedSigners = signerArray.length;
+    final int numSigners = numSigners();
+    if (passedSigners != numSigners) {
+      throw new IllegalArgumentException(String.format(
+          "Expected %d signers, only passed %d.", numSigners, passedSigners
+      ));
     }
-    recordNumSignatures(numSigners);
-    for (final var signer : signers) {
-      sign(signer);
+    final int[] signerIndexes = new int[passedSigners];
+    final boolean[] seenSignerIndexes = new boolean[passedSigners];
+    int i = 0;
+    for (final var signer : signerArray) {
+      final int signerIndex = signerIndex(signer);
+      if (seenSignerIndexes[signerIndex]) {
+        throw new IllegalArgumentException("Duplicate signer " + signer.publicKey());
+      }
+      seenSignerIndexes[signerIndex] = true;
+      signerIndexes[i++] = signerIndex;
+    }
+
+    recordNumSignatures(passedSigners);
+    i = 0;
+    for (final var signer : signerArray) {
+      sign(signerIndexes[i++], signer);
     }
   }
 

@@ -23,6 +23,17 @@ import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 
 final class TransactionSerializationTests {
 
+  /// AGENTS.md requires randomized tests to use fixed seeds, and this file's fixtures need it for a
+  /// reason beyond reproducibility: several assertions here compare a small integer against a value
+  /// the serialized message stores next to an account key. A randomly generated key can make an
+  /// off-by-one offset read a key byte that happens to equal the asserted number, so a test that
+  /// should fail passes on some runs and not others. Deterministic keys make such a coincidence a
+  /// fixed, checkable property rather than a per-run lottery.
+  ///
+  /// The counter is reset before each test so the keys depend on neither execution order nor how
+  /// many tests ran first. When adding an assertion of this shape, check that the seeded key does
+  /// not itself alias the expected value — a permanent alias hides the defect instead of surfacing
+  /// it intermittently, which is worse.
   private static final AtomicInteger KEY_SEED = new AtomicInteger();
 
   @BeforeEach
@@ -30,16 +41,14 @@ final class TransactionSerializationTests {
     KEY_SEED.set(0);
   }
 
-  /// Fixture signers come from a counter reset before each test, so a key depends on neither
-  /// execution order nor how many tests ran before it. PIT re-runs the suite once per mutant, and a
-  /// freshly generated key pair makes a kill non-reproducible: a mutant that misreads a length or an
-  /// offset can land on a fixture byte that happens to equal an asserted constant, so it survives on
-  /// some runs and dies on others. Identity is never the property under test here — only that the
-  /// keys differ — so a counter serves the fixtures just as well and reproducibly.
   private static Signer nextSigner() {
     final byte[] privateKey = new byte[Signer.KEY_LENGTH];
     Arrays.fill(privateKey, (byte) KEY_SEED.incrementAndGet());
     return Signer.createFromPrivateKey(privateKey);
+  }
+
+  private static PublicKey nextPublicKey() {
+    return nextSigner().publicKey();
   }
 
   @Test
@@ -307,6 +316,17 @@ final class TransactionSerializationTests {
     assertEquals(instructions.length - 1, v1Tx.numInstructions());
     assertEquals(43, v1Tx.numAccounts());
     assertFalse(v1Tx.exceedsAccountLimit());
+
+    // the skeleton's table-aware createTransaction overloads must land on the same
+    // transaction as building it by hand from the parsed instructions
+    final var fromTableMetas = skeleton.createTransaction(lookupTableMetas);
+    assertEquals(feePayer.publicKey(), fromTableMetas.feePayer().publicKey());
+    assertEquals(transaction.instructions(), fromTableMetas.instructions());
+    assertArrayEquals(skeleton.data(), fromTableMetas.serialized());
+    assertArrayEquals(
+        fromTableMetas.serialized(),
+        skeleton.createTransaction(accountMetas, lookupTableMetas).serialized()
+    );
 
     final var instructions2 = transaction.instructions();
     assertEquals(instructions.length, instructions2.size());
@@ -639,8 +659,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1Serialization() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
     assertNotEquals(signerA.publicKey(), signerB.publicKey());
 
     final byte[] ixData = {1, 2, 3, 4, 5};
@@ -721,7 +741,7 @@ final class TransactionSerializationTests {
         Arrays.copyOfRange(data, signaturesOffset + Transaction.SIGNATURE_LENGTH, signaturesOffset + (2 * Transaction.SIGNATURE_LENGTH))
     ));
 
-    final var signerC = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerC = nextSigner();
     assertThrows(IllegalArgumentException.class, () -> tx.sign(signerC));
 
     assertArrayEquals(
@@ -732,8 +752,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1SerializationWithConfig() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
     assertNotEquals(signerA.publicKey(), signerB.publicKey());
 
     final byte[] ixData = {1, 2, 3, 4, 5};
@@ -830,8 +850,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1InvalidHeapSize() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
@@ -853,8 +873,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1InvalidConfigMask() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(createWritableSigner(signerB.publicKey())),
@@ -896,11 +916,11 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1TooManySignatures() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var feePayer = nextPublicKey();
     // 12 signers plus the fee payer exceeds the 12 signature maximum.
     final var signers = new ArrayList<AccountMeta>(12);
     for (int s = 0; s < 12; ++s) {
-      signers.add(createWritableSigner(Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey()));
+      signers.add(createWritableSigner(nextPublicKey()));
     }
     final var ix = Instruction.createInstruction(SolanaAccounts.MAIN_NET.systemProgram(), signers, new byte[]{1});
     assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
@@ -910,8 +930,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testLegacyProgramMayNotBeFeePayer() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextPublicKey();
+    final var signerB = nextSigner();
     final var ix = Instruction.createInstruction(
         feePayer,
         List.of(createWritableSigner(signerB.publicKey())),
@@ -922,8 +942,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1ProgramMayNotBeFeePayer() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextPublicKey();
+    final var signerB = nextSigner();
     final var ix = Instruction.createInstruction(
         feePayer,
         List.of(createWritableSigner(signerB.publicKey())),
@@ -936,8 +956,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1TooManyInstructionAccounts() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
-    final var account = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var feePayer = nextPublicKey();
+    final var account = nextPublicKey();
     // Account indices may repeat within an instruction, exceeding the u8 count without exceeding 64 unique accounts.
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -951,8 +971,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1TransactionTooLarge() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
-    final var account = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var feePayer = nextPublicKey();
+    final var account = nextPublicKey();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(createRead(account)),
@@ -965,10 +985,10 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1SkeletonDeserialization() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var readOnlyAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
-    final var secondProgram = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
+    final var readOnlyAccount = nextPublicKey();
+    final var secondProgram = nextPublicKey();
 
     final byte[] ixData1 = {1, 2, 3, 4, 5};
     final byte[] ixData2 = {9, 8, 7};
@@ -1108,8 +1128,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testLegacySkeletonComputeBudgetConfigValues() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
 
     final long microLamportsPerComputeUnit = 25_000L;
     final int computeUnitLimit = 200_000;
@@ -1217,8 +1237,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1SetPriorityFeeLamportsFromComputeUnitPrice() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
 
     final byte[] ixData = {1, 2, 3, 4, 5};
     final var ix = Instruction.createInstruction(
@@ -1251,13 +1271,18 @@ final class TransactionSerializationTests {
     // 25,000 * 300,000 micro-lamports = 7,500 lamports.
     assertEquals(7_500L, skeleton2.priorityFeeLamports());
 
-    // With no compute unit limit set, the 1.4 million runtime maximum is used.
+    // A cleared compute unit limit reads back as 0, matching SIMD-0385 and agave. Pricing is the one
+    // place this library deliberately does NOT use that 0: a 0 budget cannot execute a single
+    // metered instruction, so a derived fee of 0 would be useless. An unset limit is priced at the
+    // 1.4 million runtime maximum, which is what TxBuilder writes unless the caller clears it.
     final var tx3 = TxBuilder.createBuilder()
         .feePayer(signerA.publicKey())
         .addInstruction(ix)
         .priorityFeeLamports(1)
         .computeUnitLimit(0)
         .createTransaction();
+    final var skeleton3 = TransactionSkeleton.deserializeSkeleton(tx3.serialized());
+    assertEquals(0, skeleton3.computeUnitLimit(), "the cleared limit must not be serialized");
     tx3.setPriorityFeeLamportsFromComputeUnitPrice(1L);
     // 1 * 1,400,000 micro-lamports = 1.4 lamports, rounded up to 2.
     assertEquals(2L, TransactionSkeleton.deserializeSkeleton(tx3.serialized()).priorityFeeLamports());
@@ -1282,8 +1307,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testLegacyPriorityFeeDefaultComputeUnitLimit() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1303,8 +1328,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testLegacySkeletonWithoutComputeBudget() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1345,8 +1370,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testLegacySetComputeBudgetValuesReplacesExisting() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1397,8 +1422,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testLegacySetComputeBudgetValuesPrepends() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1448,8 +1473,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1SetComputeBudgetValuesInPlace() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1508,7 +1533,7 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1SetComputeBudgetValuesWithoutPriorityFee() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1535,7 +1560,7 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1SetComputeBudgetValuesWithoutMaskBits() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1581,8 +1606,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testV1DerivedTransactionPreservesConfigValues() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1637,7 +1662,7 @@ final class TransactionSerializationTests {
 
   @Test
   void testExceedsLimits() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
 
     // 65 instructions, each referencing a unique read account, exceeds both the 64 instruction
     // and 64 account limits.
@@ -1645,7 +1670,7 @@ final class TransactionSerializationTests {
     for (int i = 0; i < 65; ++i) {
       instructions.add(Instruction.createInstruction(
           SolanaAccounts.MAIN_NET.systemProgram(),
-          List.of(AccountMeta.createRead(Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey())),
+          List.of(AccountMeta.createRead(nextPublicKey())),
           new byte[]{(byte) i}
       ));
     }
@@ -1674,7 +1699,7 @@ final class TransactionSerializationTests {
     // 13 required signatures exceeds the 12 signature v1 limit.
     final var signerMetas = new ArrayList<AccountMeta>(12);
     for (int i = 0; i < 12; ++i) {
-      signerMetas.add(AccountMeta.createWritableSigner(Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey()));
+      signerMetas.add(AccountMeta.createWritableSigner(nextPublicKey()));
     }
     final var multiSignerIx = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(), List.copyOf(signerMetas), new byte[]{1}
@@ -1699,12 +1724,12 @@ final class TransactionSerializationTests {
     final byte[] tableData = new byte[AddressLookupTable.LOOKUP_TABLE_META_SIZE + (70 * PublicKey.PUBLIC_KEY_LENGTH)];
     final var tableAccountMetas = new ArrayList<AccountMeta>(70);
     for (int i = 0, o = AddressLookupTable.LOOKUP_TABLE_META_SIZE; i < 70; ++i, o += PublicKey.PUBLIC_KEY_LENGTH) {
-      final var key = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+      final var key = nextPublicKey();
       key.write(tableData, o);
       tableAccountMetas.add(AccountMeta.createRead(key));
     }
     final var lookupTable = AddressLookupTable.read(
-        Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey(), tableData
+        nextPublicKey(), tableData
     );
     final var tableIx = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(), List.copyOf(tableAccountMetas), new byte[]{1}
@@ -1742,7 +1767,7 @@ final class TransactionSerializationTests {
 
   @Test
   void testTxBuilderSetInstruction() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
 
     final var builder = TxBuilder.createBuilder()
         .addInstruction(markerInstruction(1))
@@ -1773,7 +1798,7 @@ final class TransactionSerializationTests {
 
   @Test
   void testTxBuilderInsertInstruction() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
 
     // Inserting at index 0 on an empty builder behaves like addInstruction.
     final var builder = TxBuilder.createBuilder();
@@ -1797,8 +1822,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testMultiSignerSignedCheck() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
     assertNotEquals(signerA.publicKey(), signerB.publicKey());
 
     final var ix = Instruction.createInstruction(
@@ -1858,8 +1883,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testStaticSetBlockHash() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
 
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
@@ -1903,7 +1928,7 @@ final class TransactionSerializationTests {
 
   @Test
   void testMalformedComputeBudgetInstructions() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
 
     // A truncated SetComputeUnitPrice with no u64 payload, and an empty data instruction as the
     // final instruction so that an unguarded discriminator read would index past the message.
@@ -1924,8 +1949,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testSkeletonReflectsInPlaceConfigUpdates() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var readAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var feePayer = nextSigner();
+    final var readAccount = nextPublicKey();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(), List.of(AccountMeta.createRead(readAccount)), new byte[]{1}
     );
@@ -1948,8 +1973,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testCreateTransactionSnapshotsInstructions() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var readAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var feePayer = nextSigner();
+    final var readAccount = nextPublicKey();
     final var ix1 = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(), List.of(AccountMeta.createRead(readAccount)), new byte[]{1}
     );
@@ -1969,8 +1994,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testUnsignedToString() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var readAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var feePayer = nextSigner();
+    final var readAccount = nextPublicKey();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(), List.of(AccountMeta.createRead(readAccount)), new byte[]{1}
     );
@@ -1992,8 +2017,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testStaticSign() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var readOnlyAccount = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes()).publicKey();
+    final var signerA = nextSigner();
+    final var readOnlyAccount = nextPublicKey();
 
     // A single-signer transaction: the fee payer is the only signer.
     final var ix = Instruction.createInstruction(
@@ -2030,7 +2055,7 @@ final class TransactionSerializationTests {
 
     // V1 multi-signer: the message excludes every appended signature slot and the fee payer
     // signature occupies the first slot.
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerB = nextSigner();
     final var multiSignerIx = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
@@ -2061,8 +2086,8 @@ final class TransactionSerializationTests {
 
   @Test
   void testStaticSignSigners() {
-    final var signerA = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
     assertNotEquals(signerA.publicKey(), signerB.publicKey());
 
     // Two required signers: the fee payer and a writable signer, ordered as they are serialized.

@@ -82,40 +82,7 @@ public record Block(long blockHeight,
           }
           this.transactions = transactions;
         }
-      } else if (fieldEquals("blockTime", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          blockTime = ji.readLong();
-        } else {
-          ji.skip();
-        }
-      } else if (fieldEquals("numRewardPartitions", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          numRewardPartitions = ji.readLong();
-        } else {
-          ji.skip();
-        }
-      } else if (fieldEquals("blockhash", buf, offset, len)) {
-        blockHash = ji.readString();
-      } else if (fieldEquals("previousBlockhash", buf, offset, len)) {
-        previousBlockHash = ji.readString();
-      } else if (fieldEquals("parentSlot", buf, offset, len)) {
-        parentSlot = ji.readLong();
-      } else if (fieldEquals("rewards", buf, offset, len)) {
-        rewards = TxReward.parseRewards(ji);
-      } else if (fieldEquals("signatures", buf, offset, len)) {
-        final var signatures = new ArrayList<String>(2_048);
-        while (ji.readArray()) {
-          signatures.add(ji.readString());
-        }
-        this.signatures = signatures;
-      } else if (fieldEquals("transactions", buf, offset, len)) {
-        final var transactions = new ArrayList<BlockTx>(2_048);
-        while (ji.readArray()) {
-          transactions.add(BlockTx.parse(ji));
-        }
-        this.transactions = transactions;
-      } else {
-        ji.skip();
+        default -> ji.skip();
       }
       return true;
     }

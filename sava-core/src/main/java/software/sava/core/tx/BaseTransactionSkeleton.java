@@ -101,6 +101,15 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
     return Base58.encode(data, recentBlockHashIndex, recentBlockHashIndex + BLOCK_HASH_LENGTH);
   }
 
+  /// An instruction's program is invoked by definition, but a `parseAccounts()` that has no
+  /// invoked indexes to consult types every read-only account as [AccountMeta#createRead];
+  /// mark it here so this agrees with [TransactionSkeleton#filterInstructions] and with
+  /// [TransactionSkeleton#parseInstructionsWithoutTableAccounts]. Any writable use of the same
+  /// account is recovered by [Instruction#mergeAccounts] when a transaction is rebuilt.
+  protected static AccountMeta invokedProgramAccount(final AccountMeta account) {
+    return account.invoked() ? account : createInvoked(account.publicKey());
+  }
+
   // Returns the byte offset of the first account (the fee payer) within the serialized message.
   protected abstract int accountsOffset();
 

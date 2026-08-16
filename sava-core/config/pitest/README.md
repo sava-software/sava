@@ -229,14 +229,10 @@ same technique twice would prove nothing.
 The `ed25519` subpackage is excluded here — it has its own suite, and the
 `crypto.*` wildcard spans dots.
 
-## vanity suite — the former Subsequence-only phase (closed 2026-08-04)
+## vanity suite — no accepted mutants
 
-Everything in this section describes the suite's earlier life, when its target
-list was the `Subsequence*` allowlist: in that phase `vanity-accepted.csv` was
-empty and the narrow suite ran at 100%. The 2026-08-04 ownership closure widened
-the suite to the whole package, and its current state — 63 seeded `# untriaged`
-rows and the audited timeout set — is recorded in the seeded-debt table at the
-top of this file, not here.
+`vanity-accepted.csv` is empty and the suite runs at 100%. Keep it that way:
+any new survivor here is a real gap, not debt.
 
 It was briefly seeded 2026-07-20 with 9 entries, all from the "Character
 options:" table that `Subsequence.create` printed to `System.out` while
@@ -301,7 +297,7 @@ widening the suite to the full `tx` and `accounts.lookup` packages. A
 kill pass the same day (`AccountIndexLookupTableTests`,
 `TransactionByteHelpersTests`, `TransactionFactoryTests`,
 `TransactionRecordPlumbingTests`) removed 142 of them; the 27 keys below
-are accepted equivalents, and the 13 skeleton keys under Untriaged debt
+are accepted equivalents, and the seven skeleton keys under Untriaged debt
 are all that remain unclassified.
 
 **Shadowed defaults / single-implementation dispatch** — baseline label
@@ -325,19 +321,6 @@ are all that remain unclassified.
   general join path yields an equal record; only the allocation differs.
 - `TransactionRecord.sign` 154: the multi-signer scan resolves a single
   signer to the same slot the fast path uses.
-- `TransactionSkeletonRecord.filterInstructions` and
-  `filterInstructionsWithoutAccounts`, the trailing
-  `d == numInstructions ? instructions : Arrays.copyOfRange(...)`: when
-  every instruction matched the discriminator, `d` equals the array's
-  length and the copy is the same content. Only the allocation differs,
-  and callers receive an array either way. Forcing the copy branch is
-  observable only by identity, which nothing asserts and nothing should.
-- `TransactionSkeleton.deserializeSkeleton`, the zero-table guard
-  `numLookupTables > 0`: at zero tables `>` → `>=` builds an empty
-  `PublicKey[]` where the guard returns the shared
-  `TransactionSkeletonRecord.NO_TABLES`. Same emptiness, same behaviour
-  from every reader of `lookupTableAccounts`; the constant exists to
-  avoid the allocation, not because an empty array would be wrong.
 
 **No-op displacement boundaries** — baseline label `# displacement boundary`
 (`createTx` 253/427, 255/429): at
@@ -373,52 +356,122 @@ shapes in `TransactionFactoryTests`.
   2026-07-18, owner-approved and fixed 2026-07-21, cross-table ordering
   pinned by `viewCompareToReadsTheOtherViewsBackingTable`.)
 
+### SIMD-0385 v1 transactions — triaged 2026-08-15
+
+Merging the v1 transaction work brought seven previously unbaselined classes
+(`BaseTransaction`, `BaseTransactionSkeleton`, `TransactionSkeletonImpl`,
+`TxBuilder{,Impl}`, `V1Transaction`, `V1TransactionSkeleton`) into scope, 118
+unkilled mutants on first measurement. A kill pass took that to 29 —
+`TransactionEqualityTests`, `LegacyComputeBudgetTests`, `TxBuilderValidationTests`,
+`SigningCountTests`, `V1ConfigValueTests`, `V1FilterBoundaryTests` and
+`LegacyInstructionViewTests`, 63 tests — and the families below are the
+remainder, accepted as equivalent.
+
+**Config value offset codomain excludes 0** — baseline label
+`# config value offset codomain excludes 0` (`V1Transaction.configValueOffset`,
+`.createTransaction` ×4, `.setPriorityFeeLamportsFromComputeUnitPrice`,
+`V1TransactionSkeleton.priorityFeeLamports` / `.computeUnitLimit` /
+`.accountDataSizeLimit` / `.heapSize`): every one of these tests an offset
+returned by `V1TransactionSkeleton.configValueOffset`, whose only outcomes are
+the literal `-1` when the mask bits are clear, or
+`V1_ACCOUNTS_OFFSET + (numAddresses << 5) + (bitCount << 2)`. `V1_ACCOUNTS_OFFSET`
+is 42, so the codomain is `{-1} ∪ [42, 8330]`. `< 0` and `<= 0` (likewise `>= 0`
+and `> 0`) can only differ at exactly 0, which is not in it. Both arms of each
+guard are exercised — the mutants are the boundary alone.
+
+**Signature offset codomain excludes 0** — baseline label
+`# signature offset codomain excludes 0` (`BaseTransaction.signedIdOffset`,
+`.toString`): the same argument one level up. `feePayerSignatureOffset` returns
+`-1`, or the legacy literal `1`, or a v1 offset that
+`V1TransactionSkeleton.requireSignatureBlockOffset` has already forced to be
+`>= V1_ACCOUNTS_OFFSET`. Never 0.
+
+**A v1 buffer always carries signatures** — baseline label
+`# a v1 buffer always carries signatures` (`V1TransactionSkeleton.messageEnd`,
+`.signaturesOffset`): both boundaries compare a header-block end against
+`data.length`, and equality would mean the buffer ends exactly where the
+instruction headers do — no payloads and no signature block. `V1Transaction.isV1`
+requires `data[1] != 0`, i.e. at least one required signature, so at least 64
+bytes always follow. The reachable half of each guard is killed by
+`aPayloadTruncatedInsideTheInstructionHeadersIsDiagnosed` and
+`aTransactionWhoseInstructionsHaveNoAccountsOrDataSitsExactlyOnTheHeaderBound`,
+which sits a legal transaction exactly on the bound.
+
+**Array identity only** — baseline label `# array identity only`
+(`TransactionSkeletonImpl.filterInstructions` / `.filterInstructionsWithoutAccounts`
+and their `V1TransactionSkeleton` twins): the
+`d == numInstructions ? instructions : Arrays.copyOfRange(instructions, 0, d)`
+tail. Forcing the equality false always takes the copy arm, which at
+`d == numInstructions` copies the full range — same component type, length and
+element references. `instructions` is a local that is never published, so the
+only difference is an array identity no caller can hold. The `EQUAL_IF` siblings,
+which would return the null-padded array when `d < numInstructions`, are
+genuinely observable and are killed.
+
+**Short circuit already returned** — baseline label
+`# short circuit already returned` (`TxBuilder.computeUnitPriceToPriorityFeeLamports`
+boundary, `TransactionRecord.priorityFeeLamportsToComputeUnitPrice` ×2): the
+`< 0` guards differ from `<= 0` only at exactly 0, and the preceding `== 0` fast
+return has already left the method for that input. Note the *other* operand of
+that same fast return is **not** equivalent and is killed by
+`testAZeroComputeUnitLimitShortCircuitsBeforeTheOverflowGuardDivides`: skipping
+it with a zero limit divides by zero in the overflow guard below.
+
+**Legacy parse routes converge** — baseline label
+`# legacy parse routes converge` (`TransactionSkeletonImpl.parseAccounts` ×2):
+`deserializeSkeleton`'s legacy branch always supplies empty invoked indexes and
+no lookup tables with `numAccounts == numIncludedAccounts`, so the versioned
+parse degenerates to the legacy one — same length, same metas, `binarySearch`
+against an empty array always missing. Pinned by
+`testLegacyParseAccountsIgnoresLookupTables`.
+
+**Redundant guard operand** — baseline label `# redundant guard operand` — the
+mutant disables one operand of a compound condition whose remaining path
+reaches the identical result:
+- `TxBuilder.computeUnitPriceToPriorityFeeLamports`, the
+  `microLamportsPerComputeUnit == 0` half of the fast return. Skipping it for a
+  zero price falls through the overflow guard (`0 < 0` and
+  `0 > (Long.MAX_VALUE - 999_999) / limit` are both false) into the general
+  arithmetic, which computes `(0 * limit + 999_999) / 1_000_000` — integer
+  division yielding the same 0. The **other** half of that same condition,
+  `cappedComputeUnitLimit == 0`, is *not* equivalent: skipping it divides by
+  zero in the overflow guard, and it is killed by
+  `testAZeroComputeUnitLimitShortCircuitsBeforeTheOverflowGuardDivides`.
+  Sibling mutants on one condition are not interchangeable — this pair is the
+  worked example.
+- `V1TransactionSkeleton.signaturesOffset`, the `headerBlockEnd > data.length`
+  half of `headerBlockEnd > data.length || signaturesOffset < headerBlockEnd`.
+  Removing that operand's early exit leaves the second one, which is strictly
+  stronger: a v1 message always carries at least one 64-byte signature
+  (`V1Transaction.isV1` requires `data[1] != 0`, and `deserialize` additionally
+  rejects `num_readonly_signed >= num_required_signatures`), so
+  `signaturesOffset = data.length - numSignatures * 64 <= data.length - 64 < data.length`.
+  Whenever `headerBlockEnd > data.length` holds, `headerBlockEnd > signaturesOffset`
+  follows, so the second operand catches every input the first would have.
+
+**Locally unreachable guards** — assorted labels.
+`# v1 guard makes the read unreachable`
+(`BaseTransaction.feePayerSignatureOffset` — the line is reached
+only when `isV1` already proved `data[1] != 0`, and the value is dead
+afterwards); `# both arms write the same bytes` (`BaseTransaction.setBlockHash` —
+the else arm routes through the `final` `setRecentBlockHash`, copying the same 32
+bytes to the same offset); `# mergeAccounts rejects it identically`
+(`TxBuilderImpl.createTransaction` — skipping the empty-instruction throw falls
+into `mergeAccounts`, whose first statement throws for the same input);
+`# prepend path is a no-op when nothing is prepended`
+(`TransactionRecord.setComputeBudgetValues` — bypassing the fast return enters a
+loop that iterates zero times when both values were already found).
+
 ## Untriaged debt (tx suite)
 
-Triaged 2026-08-17. Three of the seven were equivalent and are argued
-above under their labels; one was killed the same day once its blocking
-decision landed; the rest are kill candidates, recorded here because the
-work is not done rather than because it is accepted.
-
-- `TransactionSkeletonRecord.invokedProgramAccount`
-  `RemoveConditionalMutator_EQUAL_ELSE` — **killable, not equivalent.**
-  The branches are not result-identical: rebuilding an already-invoked
-  meta through `createInvoked` preserves `AccountMetaInvoked` (whose
-  `equals` is value-based on the public key, which is why the current
-  assertions cannot see it) but downgrades an
-  `AccountMetaInvokedAndWrite` to read-only. A program account that is
-  also writable distinguishes them.
-- `TransactionSkeletonRecord.parseInstructions`
-  `ConditionalsBoundaryMutator` — **killed 2026-08-18** once sava#57
-  resolved the read-side contract as two bounds in `instructionAccount`,
-  neither of them a format split: an index at or past the transaction's
-  own declared total (`numAccounts`, included plus table-loaded) is
-  corruption in every format and throws the diagnosed rejection
-  transaction v1 already uses, while a declared index the supplied array
-  cannot resolve reads as the documented null — reachable through
-  sava's own parsers only for a v0 message parsed without its lookup
-  tables. Both bounds are revert-verified and pinned at their exact
-  boundaries by
-  `TransactionSkeletonParseTests#declaredButUnresolvedV0InstructionAccountIndicesReadAsNull`
-  and `#undeclaredInstructionAccountIndicesAreRejectedInEveryFormat`,
-  the latter including the oversized-caller-array case, since the
-  caller's array must not widen what the wire declares.
-- `TransactionSkeleton.deserializeSkeleton`
-  `RemoveConditionalMutator_ORDER_IF` — **killable, awkwardly.** Forcing
-  the versioned walk for a legacy message leaves `version` untouched, so
-  `isLegacy()` still agrees; what differs is that `invokedIndexes`
-  becomes populated instead of `LEGACY_INVOKED_INDEXES`. That is only
-  observable through `parseVersionedReadAccount`, reached by calling a
-  versioned-path parser on a legacy skeleton.
-- `TransactionSkeleton.deserializeSkeleton`
-  `RemoveConditionalMutator_ORDER_ELSE` (legacy instruction walk) —
-  **owner decision.** Whether the walk is dead for well-formed input
-  depends on whether eager validation of the legacy instruction section
-  is wanted; unlike the precedents above it reads `data`.
-
-The remaining long-standing skeleton survivors are offset arithmetic and
-parse boundaries a length assertion cannot distinguish (see the
-Transaction hardening section of `AGENTS.md`).
+- `TransactionSkeleton.deserializeSkeleton` (3 keys) and
+  `TransactionSkeletonRecord` (4 keys): the long-standing skeleton
+  survivors — offset arithmetic and parse boundaries a length assertion
+  cannot distinguish (see the Transaction hardening section of
+  `AGENTS.md`). Equivalence-triage candidates rather than kill candidates.
+  The `TransactionSkeletonRecord` keys name a class the v1 merge renamed to
+  `TransactionSkeletonImpl`; they are stale on identity and should be pruned
+  on the next refresh rather than argued.
 
 Packages without a suite are deliberate scope decisions (see
 `build.gradle.kts`), not omissions.

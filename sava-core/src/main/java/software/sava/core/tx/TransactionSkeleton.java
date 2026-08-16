@@ -29,9 +29,19 @@ public interface TransactionSkeleton {
    * <p>For versioned messages, account parsing marks every included read-only account referenced
    * by an instruction's {@code program_id_index} as invoked. This also holds when the address-table
    * lookup count is zero or the data ends immediately after the instruction section.</p>
+   *
+   * <p>A message whose first byte is the SIMD-0385 v1 version byte is dispatched to the v1
+   * skeleton instead; v1 transactions carry no address lookup tables and expose their compute
+   * budget as config values.</p>
    */
   static TransactionSkeleton deserializeSkeleton(final byte[] data) {
-    if ((data[0] & 0xFF) == (V1_VERSION_BYTE & 0xFF)) {
+    // The v1 version byte 0x81 also opens a legacy message's compact-u16 signature count: 0x81 0x01
+    // is 129 signatures, and 0x81 0x00 is the non-canonical encoding of 1. Only the latter is
+    // reachable — 129 signatures cannot fit the 1232 byte packet limit — and it cannot be a v1
+    // message, because byte one is a v1 message's num_required_signatures and SIMD-0385 sanitizes
+    // that to at least one. Leaving it to the legacy walk keeps such messages readable, so the
+    // signature layout check rejects them where a mutable transaction is actually built.
+    if ((data[0] & 0xFF) == (V1_VERSION_BYTE & 0xFF) && data[1] != 0) {
       return V1TransactionSkeleton.deserialize(data);
     }
     int o = 0;
@@ -45,7 +55,7 @@ public interface TransactionSkeleton {
     if (signedByte(version)) {
       // the three message header counts are u8 on the wire like the version byte above;
       // read as signed bytes, a value past 0x7F is a negative count that inflates the
-      // signer loops in TransactionSkeletonRecord instead of being rejected as malformed
+      // signer loops in TransactionSkeletonImpl instead of being rejected as malformed
       numRequiredSignatures = data[o++] & 0xFF;
       version &= 0x7F;
     } else {
@@ -103,7 +113,6 @@ public interface TransactionSkeleton {
             o += numReadIndexes;
             numAccounts += numReadIndexes;
           }
-          Arrays.sort(invokedIndexes);
           return new TransactionSkeletonImpl(
               data,
               version,
@@ -229,13 +238,27 @@ public interface TransactionSkeleton {
   /// @return 0 if no priority fee ConfigValue or SetComputeUnitPrice instruction is present.
   long priorityFeeLamports();
 
-  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  /// @return 0 if not explicitly set via Config Value or Compute Budget. A v1 transaction that
+  ///         requests no compute unit limit really is budgeted 0 units, and cannot execute a single
+  ///         metered instruction; it is not given the runtime default.
   int computeUnitLimit();
 
-  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  /// @return 0 if not explicitly set via Config Value or Compute Budget. Per SIMD-0385 a v1
+  ///         transaction that requests no accounts data size limit really is limited to 0 bytes,
+  ///         rather than the 64MiB legacy transactions default to.
   int accountDataSizeLimit();
 
-  /// @return 0 if not explicitly set via Config Value or Compute Budget.
+  /// Reports the heap size this transaction *requests*, not the heap it will run with.
+  ///
+  /// Heap is the one compute budget value whose absent and effective values differ: a transaction
+  /// requesting no heap runs with 32KiB (`MIN_HEAP_FRAME_BYTES`), the minimum legal request, so an
+  /// explicit 32KiB and no request at all behave identically. This returns 0 for both formats when
+  /// nothing was requested, so that a transaction rebuilt from these values — see
+  /// {@link #prototypeTransaction} — carries exactly the ConfigValues its source did rather than
+  /// gaining a heap request it never had.
+  ///
+  /// @return 0 if no heap size ConfigValue or RequestHeapFrame instruction is present, in which
+  ///         case the runtime applies 32KiB.
   int heapSize();
 
   AccountMeta[] parseAccounts();
@@ -388,30 +411,24 @@ public interface TransactionSkeleton {
   /// ConfigValues instead; per SIMD-0385 the v1 runtime ignores them for configuration and
   /// processes them as no-ops which still consume compute units.
   ///
-  /// {@link #computeUnitLimit()} and {@link #accountDataSizeLimit()} return 0 when not
-  /// explicitly set, which a {@link TxBuilder} treats as clearing the ConfigValue, a 0 unit and
-  /// 0 byte budget per SIMD-0385. To mirror the runtime defaults such transactions actually
-  /// executed with, unset values are not carried over so that the builder defaults of the
-  /// runtime maximums are retained, which also reserves the ConfigValues for in-place updates.
+  /// For a legacy/v0 source {@link #computeUnitLimit()} and {@link #accountDataSizeLimit()} return
+  /// 0 when no SetComputeUnitLimit or SetLoadedAccountsDataSizeLimit instruction is present, which
+  /// a {@link TxBuilder} would treat as clearing the ConfigValue, a 0 unit and 0 byte budget per
+  /// SIMD-0385. To mirror the runtime defaults such transactions actually executed with, an unset
+  /// value is not carried over so that the builder defaults of the runtime maximums are retained,
+  /// which also reserves the ConfigValues for in-place updates.
+  ///
+  /// A v1 source distinguishes unset from zero on the wire, so
+  /// {@link V1TransactionSkeleton} overrides this to carry 0 through verbatim.
   ///
   /// The legacy/v0 {@link #priorityFeeLamports()} carried over is derived from the
   /// SetComputeUnitPrice instruction and, when no SetComputeUnitLimit instruction is present, an
   /// estimated compute unit limit; prefer re-pricing the created transaction via
   /// {@link Transaction#setPriorityFeeLamports(long)} after simulating it.
   default TxBuilder prototypeTransaction(final Instruction[] instructions) {
-    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
-    int numRetained = 0;
-    final var retained = new Instruction[instructions.length];
-    for (final var instruction : instructions) {
-      if (!computeBudgetProgram.equals(instruction.programId().publicKey())) {
-        retained[numRetained++] = instruction;
-      }
-    }
     final var builder = new TxBuilderImpl()
         .feePayer(feePayer())
-        .addInstructions(numRetained == instructions.length
-            ? instructions
-            : Arrays.copyOfRange(retained, 0, numRetained))
+        .addInstructions(TxBuilderImpl.withoutComputeBudgetInstructions(instructions))
         .priorityFeeLamports(priorityFeeLamports())
         .heapSize(heapSize());
     final int computeUnitLimit = computeUnitLimit();
@@ -426,17 +443,26 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// Creates a mutable transaction using one lookup table.
+  ///
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
+  /// @throws IllegalStateException if the serialized signature-slot count does not match the
+  ///                               message header's required-signature count, or its prefix is
+  ///                               not representable by a mutable transaction
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// Creates a mutable transaction from the supplied instructions and lookup table.
+  ///
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
+  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
+  ///                               mutable transaction
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
@@ -444,9 +470,13 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// Creates a mutable transaction after parsing instructions against the supplied accounts.
+  ///
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
+  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
+  ///                               mutable transaction
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
@@ -455,9 +485,13 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// Creates a mutable transaction after resolving accounts through one lookup table.
+  ///
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
+  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
+  ///                               mutable transaction
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
@@ -466,9 +500,13 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// Creates a mutable transaction after parsing instructions against the supplied accounts.
+  ///
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
+  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
+  ///                               mutable transaction
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final AccountMeta[] accounts,
@@ -478,9 +516,13 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// Creates a mutable transaction after resolving accounts through the supplied lookup metadata.
+  ///
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
+  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
+  ///                               mutable transaction
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
@@ -489,9 +531,14 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// Creates a mutable transaction using the supplied lookup-table metadata.
+  ///
   /// **Note:** for V1 transactions the provided lookup table will be ignored
   /// because V1 transactions do not support address lookup tables.
   ///
+  /// @throws IllegalStateException if the serialized signature-slot count does not match the
+  ///                               message header's required-signature count, or its prefix is
+  ///                               not representable by a mutable transaction
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);

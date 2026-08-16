@@ -25,6 +25,7 @@ import static software.sava.core.tx.Transaction.SIGNATURE_LENGTH;
 final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
 
   private final int messageOffset;
+  private final int serializedSignatureCount;
   private final int numIncludedAccounts;
   private final int accountsOffset;
   private final int recentBlockHashIndex;
@@ -34,6 +35,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   TransactionSkeletonImpl(final byte[] data,
                           final int version,
                           final int messageOffset,
+                          final int serializedSignatureCount,
                           final int numSignatures,
                           final int numReadonlySignedAccounts,
                           final int numReadonlyUnsignedAccounts,
@@ -54,6 +56,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
         numAccounts
     );
     this.messageOffset = messageOffset;
+    this.serializedSignatureCount = serializedSignatureCount;
     this.numIncludedAccounts = numIncludedAccounts;
     this.accountsOffset = accountsOffset;
     this.recentBlockHashIndex = recentBlockHashIndex;
@@ -86,8 +89,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   private int computeBudgetValueOffset(final byte discriminator, final int valueLength) {
     final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
     for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
-      final var programAccount = super.accountKey(decode(data, o));
-      o += getByteLen(data, o);
+      final var programAccount = getProgramAccount(data[o++] & 0xFF);
       final int numAccounts = decode(data, o);
       o += getByteLen(data, o);
       o += numAccounts;
@@ -115,8 +117,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     int limitOffset = 0;
     int numNonComputeBudgetInstructions = 0;
     for (int i = 0, o = instructionsOffset; i < numInstructions; ++i) {
-      final var programAccount = super.accountKey(decode(data, o));
-      o += getByteLen(data, o);
+      final var programAccount = getProgramAccount(data[o++] & 0xFF);
       final int numAccounts = decode(data, o);
       o += getByteLen(data, o);
       o += numAccounts;
@@ -177,6 +178,8 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     int serializedInstructionsLength = 0;
     int o = instructionsOffset;
     for (int i = 0, numAccounts, len; i < numInstructions; ++i) {
+      ++o; // raw u8 program index
+
       numAccounts = decode(data, o);
       o += getByteLen(data, o);
       o += numAccounts;
@@ -264,9 +267,8 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   public PublicKey[] parseProgramAccounts() {
     final var programs = new PublicKey[numInstructions];
     for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, len; i < numInstructions; ++i) {
-      programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
-      programs[i] = accountKey(programAccountIndex);
+      programAccountIndex = data[o++] & 0xFF;
+      programs[i] = getProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -282,9 +284,11 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   @Override
   public Instruction[] parseInstructions(final AccountMeta[] accounts) {
     final var instructions = new Instruction[numInstructions];
-    for (int i = 0, o = instructionsOffset, numIxAccounts, accountIndex; i < numInstructions; ++i) {
-      final var programAccount = accounts[decode(data, o)];
-      o += getByteLen(data, o);
+    for (int i = 0, o = instructionsOffset, programAccountIndex, numIxAccounts, accountIndex;
+         i < numInstructions; ++i) {
+      programAccountIndex = data[o++] & 0xFF;
+      requireIncludedProgramAccount(programAccountIndex);
+      final var programAccount = invokedProgramAccount(accounts[programAccountIndex]);
 
       numIxAccounts = decode(data, o);
       final var ixAccounts = new AccountMeta[numIxAccounts];
@@ -302,13 +306,26 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     return instructions;
   }
 
+  private void requireIncludedProgramAccount(final int accountIndex) {
+    if (accountIndex >= numIncludedAccounts) {
+      throw new IndexOutOfBoundsException(String.format(
+          "Program account index %d is outside the %d included accounts.",
+          accountIndex, numIncludedAccounts
+      ));
+    }
+  }
+
+  private PublicKey getProgramAccount(final int accountIndex) {
+    requireIncludedProgramAccount(accountIndex);
+    return accountKey(accountIndex);
+  }
+
   @Override
   public Instruction[] parseInstructionsWithoutAccounts() {
     final var instructions = new Instruction[numInstructions];
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
-      final var programAccount = accountKey(programAccountIndex);
+      final int programAccountIndex = data[o++] & 0xFF;
+      final var programAccount = getProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -334,8 +351,8 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     final var instructions = new Instruction[numInstructions];
     int d = 0;
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
+      final int programAccountIndex = data[o++] & 0xFF;
+      requireIncludedProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -351,7 +368,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
           final int accountIndex = data[accountsOffset++] & 0xFF;
           ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
         }
-        instructions[d++] = createInstruction(accountKey(programAccountIndex), Arrays.asList(ixAccounts), data, o, len);
+        instructions[d++] = createInstruction(getProgramAccount(programAccountIndex), Arrays.asList(ixAccounts), data, o, len);
       }
       o += len;
     }
@@ -365,8 +382,8 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     final var instructions = new Instruction[numInstructions];
     int d = 0;
     for (int i = 0, o = instructionsOffset, numIxAccounts, len; i < numInstructions; ++i) {
-      final int programAccountIndex = decode(data, o);
-      o += getByteLen(data, o);
+      final int programAccountIndex = data[o++] & 0xFF;
+      requireIncludedProgramAccount(programAccountIndex);
 
       numIxAccounts = decode(data, o);
       o += getByteLen(data, o);
@@ -376,7 +393,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
       o += getByteLen(data, o);
 
       if (discriminator.equals(data, o)) {
-        instructions[d++] = createInstruction(accountKey(programAccountIndex), NO_ACCOUNTS, data, o, len);
+        instructions[d++] = createInstruction(getProgramAccount(programAccountIndex), NO_ACCOUNTS, data, o, len);
       }
       o += len;
     }
@@ -386,8 +403,41 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   }
 
   @Override
+  public Transaction createTransaction(final List<Instruction> instructions) {
+    requireSignableSignatureLayout();
+    return new TransactionRecord(
+        AccountMeta.createFeePayer(feePayer()),
+        instructions,
+        null,
+        TransactionRecord.NO_TABLES,
+        data,
+        numSignatures,
+        messageOffset,
+        accountsOffset,
+        recentBlockHashIndex
+    );
+  }
+
+  private void requireSignableSignatureLayout() {
+    if (serializedSignatureCount != numSignatures) {
+      throw new IllegalStateException(String.format(
+          "Serialized signature count %d does not match the message header's required signature count %d.",
+          serializedSignatureCount, numSignatures
+      ));
+    }
+    final int signaturePrefixLength = messageOffset - (serializedSignatureCount * SIGNATURE_LENGTH);
+    if (signaturePrefixLength != 1) {
+      throw new IllegalStateException(String.format(
+          "Serialized signature count %d uses a %d-byte prefix; mutable transactions require a one-byte prefix.",
+          serializedSignatureCount, signaturePrefixLength
+      ));
+    }
+  }
+
+  @Override
   public Transaction createTransaction(final List<Instruction> instructions,
                                        final AddressLookupTable lookupTable) {
+    requireSignableSignatureLayout();
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
         instructions,
@@ -404,26 +454,12 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   @Override
   public Transaction createTransaction(final List<Instruction> instructions,
                                        final LookupTableAccountMeta[] tableAccountMetas) {
+    requireSignableSignatureLayout();
     return new TransactionRecord(
         AccountMeta.createFeePayer(feePayer()),
         instructions,
         null,
         tableAccountMetas,
-        data,
-        numSignatures,
-        messageOffset,
-        accountsOffset,
-        recentBlockHashIndex
-    );
-  }
-
-  @Override
-  public Transaction createTransaction(final List<Instruction> instructions) {
-    return new TransactionRecord(
-        AccountMeta.createFeePayer(feePayer()),
-        instructions,
-        null,
-        TransactionRecord.NO_TABLES,
         data,
         numSignatures,
         messageOffset,

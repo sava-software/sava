@@ -286,9 +286,13 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                            final long slot,
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
+    final var maxSupportedTransactionVersion = blockTxDetails == BlockTxDetails.full
+        ? ",\"maxSupportedTransactionVersion\":" + MAX_SUPPORTED_TRANSACTION_VERSION
+        : "";
     return sendPostRequest(BLOCK, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","maxSupportedTransactionVersion":%d,"rewards":%b}]}""",
-            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, MAX_SUPPORTED_TRANSACTION_VERSION, rewards
+                {"jsonrpc":"2.0","id":%d,"method":"getBlock","params":[%d,{"encoding":"base64","commitment":"%s","transactionDetails":"%s","rewards":%b%s}]}""",
+            id.incrementAndGet(), slot, commitment.getValue(), blockTxDetails, rewards,
+            maxSupportedTransactionVersion
         )
     );
   }

@@ -172,26 +172,18 @@ public record AccountInfo<T>(PublicKey pubKey,
     );
 
     @Override
-    public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
-      if (fieldEquals("data", buf, offset, len)) {
-        final var next = ji.whatIsNext();
-        data = parseEncodedData(ji, next);
-      } else if (fieldEquals("executable", buf, offset, len)) {
-        executable = ji.readBoolean();
-      } else if (fieldEquals("lamports", buf, offset, len)) {
-        lamports = ji.readLong();
-      } else if (fieldEquals("owner", buf, offset, len)) {
-        owner = PublicKeyEncoding.parseBase58Encoded(ji);
-      } else if (fieldEquals("rentEpoch", buf, offset, len)) {
-        rentEpoch = ji.readBigInteger();
-      } else if (fieldEquals("space", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          space = ji.readInt();
-        } else {
-          ji.skip();
+    public boolean test(final int fieldIndex, final JsonIterator ji) {
+      switch (fieldIndex) {
+        case 0 -> {
+          final var next = ji.whatIsNext();
+          data = parseEncodedData(ji, next, zstdDecompressor);
         }
-      } else {
-        ji.skip();
+        case 1 -> executable = ji.readBoolean();
+        case 2 -> lamports = ji.readLong();
+        case 3 -> owner = PublicKeyEncoding.parseBase58Encoded(ji);
+        case 4 -> rentEpoch = ji.readBigInteger();
+        case 5 -> space = ji.readIntOr(space);
+        default -> ji.skip();
       }
       return true;
     }

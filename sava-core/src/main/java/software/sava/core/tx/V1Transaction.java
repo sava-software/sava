@@ -23,8 +23,12 @@ final class V1Transaction extends BaseTransaction {
     this.signaturesOffset = signaturesOffset;
   }
 
+  // Must match the discriminator TransactionSkeleton#deserializeSkeleton dispatches on: the exact
+  // SIMD-0385 version byte, not every byte with the versioned bit set — a legacy message needing
+  // 128 or more signature slots also leads with a high-bit byte (compact-u16 0x80 0x01) — and a
+  // non-zero num_required_signatures, which rules out the non-canonical legacy prefix 0x81 0x00.
   static boolean isV1(final byte[] txData) {
-    return (txData[0] & VERSIONED_BIT_MASK) == VERSIONED_BIT_MASK;
+    return (txData[0] & 0xFF) == (TxBuilderImpl.V1_VERSION_BYTE & 0xFF) && txData[1] != 0;
   }
 
   @Override
@@ -107,6 +111,21 @@ final class V1Transaction extends BaseTransaction {
     return this;
   }
 
+  /// **Deliberate divergence from agave — do not "correct" this to 0.** An absent compute-unit-limit
+  /// ConfigValue reads as 0 everywhere else in this library, matching SIMD-0385 and agave's
+  /// `compute_unit_limit().unwrap_or(0)`, and [TransactionSkeleton#prototypeTransaction] preserves
+  /// that 0 exactly. Pricing is a different operation from preservation, and 0 is not a value any
+  /// usable transaction can carry: the compute meter *is* the limit, so a 0 budget fails on the
+  /// first metered instruction, and only an empty or precompile-only transaction can succeed with
+  /// one. Deriving a fee of 0 for a transaction that cannot execute is useless, so an unset limit is
+  /// priced at the runtime maximum instead — which is also what [TxBuilder] itself writes into the
+  /// slot unless the caller explicitly clears it, so this prices an absent slot at exactly what this
+  /// library would have put there.
+  ///
+  /// agave has no counterpart to this conversion for v1: a v1 priority fee is an absolute lamport
+  /// ConfigValue, never price × limit. The only related agave function is the inverse,
+  /// `compute_unit_price_in_microlamports()`, which returns 0 on a 0 limit purely because that is
+  /// what the division degenerates to.
   @Override
   public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
     final int offset = V1TransactionSkeleton.configValueOffset(data, COMPUTE_UNIT_LIMIT_MASK);

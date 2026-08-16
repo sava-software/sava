@@ -2,7 +2,6 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
@@ -29,11 +28,7 @@ public record Version(long featureSet, String version) {
     @Override
     public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
       if (fieldEquals("feature-set", buf, offset, len)) {
-        if (ji.whatIsNext() == ValueType.NUMBER) {
-          featureSet = ji.readLong();
-        } else {
-          ji.skip();
-        }
+        featureSet = ji.readLongOr(featureSet);
       } else if (fieldEquals("solana-core", buf, offset, len)) {
         version = ji.readString();
       } else {
