@@ -43,8 +43,19 @@ final class TxBuilderImpl implements TxBuilder {
   static final int MAX_V1_ACCOUNTS = Transaction.MAX_ACCOUNTS;
   // Maximum number of signatures permitted in a v1 transaction.
   static final int MAX_V1_SIGNATURES = 12;
+  // Wire-field ceilings, distinct from the network limits above. `strict` decides whether a
+  // transaction is acceptable to the network; these decide whether the bytes can be written at all,
+  // so they hold either way. Truncating one of these counts would emit a header block that no longer
+  // describes its own payload block — every later instruction offset moves, and the message cannot
+  // be read back — which is a worse outcome than the over-limit-but-coherent bytes a relaxed builder
+  // is meant to produce.
   // Per-instruction limit imposed by the u8 account count header field.
   private static final int MAX_V1_INSTRUCTION_ACCOUNTS = 0xFF;
+  // Limits imposed by the u8 NumInstructions and NumAddresses fields.
+  private static final int MAX_ENCODABLE_V1_INSTRUCTIONS = 0xFF;
+  private static final int MAX_ENCODABLE_V1_ACCOUNTS = 0xFF;
+  // Per-instruction limit imposed by the u16 data length header field.
+  private static final int MAX_V1_INSTRUCTION_DATA_LENGTH = 0xFFFF;
   private static final int MIN_HEAP_SIZE = 32 * 1_024;
   private static final int MAX_HEAP_SIZE = 256 * 1_024;
   static final int MAX_COMPUTE_UNIT_LIMIT = 1_400_000;
@@ -215,6 +226,8 @@ final class TxBuilderImpl implements TxBuilder {
       } else if (numInstructions > MAX_V1_INSTRUCTIONS) {
         throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_INSTRUCTIONS + " instructions.");
       }
+    } else if (numInstructions > MAX_ENCODABLE_V1_INSTRUCTIONS) {
+      throw new IllegalStateException("A v1 NumInstructions field cannot encode more than " + MAX_ENCODABLE_V1_INSTRUCTIONS + " instructions.");
     }
 
     final var accounts = HashMap.<PublicKey, AccountMeta>newHashMap(MAX_V1_ACCOUNTS);
@@ -222,8 +235,12 @@ final class TxBuilderImpl implements TxBuilder {
     final var sortedAccounts = TransactionRecord.sortLegacyAccounts(accounts);
 
     final int numAccounts = sortedAccounts.length;
-    if (strict && numAccounts > MAX_V1_ACCOUNTS) {
-      throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_ACCOUNTS + " accounts.");
+    if (strict) {
+      if (numAccounts > MAX_V1_ACCOUNTS) {
+        throw new IllegalStateException("A v1 transaction may not reference more than " + MAX_V1_ACCOUNTS + " accounts.");
+      }
+    } else if (numAccounts > MAX_ENCODABLE_V1_ACCOUNTS) {
+      throw new IllegalStateException("A v1 NumAddresses field cannot encode more than " + MAX_ENCODABLE_V1_ACCOUNTS + " accounts.");
     }
 
     final var feePayer = sortedAccounts[0];
@@ -281,7 +298,9 @@ final class TxBuilderImpl implements TxBuilder {
         + (numInstructions * V1_INSTRUCTION_HEADER_LENGTH) // InstructionHeaders
         + instructionPayloadLength; // InstructionPayloads
     final int bufferSize = messageLength + (numRequiredSignatures << 6);
-    // Bounding the serialized size also guarantees instruction data lengths fit the u16 header field.
+    // This bound is policy, not encodability — it is gated on `strict`, so it cannot be what keeps
+    // instruction data lengths inside the u16 header field. That is checked where the field is
+    // written.
     if (strict && bufferSize > MAX_SERIALIZED_LENGTH_V1) {
       throw new IllegalStateException("A v1 transaction may not exceed " + MAX_SERIALIZED_LENGTH_V1 + " bytes.");
     }
@@ -346,6 +365,9 @@ final class TxBuilderImpl implements TxBuilder {
       }
       out[i++] = (byte) numInstructionAccounts;
       final int dataLength = instruction.len();
+      if (dataLength > MAX_V1_INSTRUCTION_DATA_LENGTH) {
+        throw new IllegalStateException("A v1 instruction data length field cannot encode more than " + MAX_V1_INSTRUCTION_DATA_LENGTH + " bytes.");
+      }
       out[i++] = (byte) dataLength;
       out[i++] = (byte) (dataLength >> 8);
     }

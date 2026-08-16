@@ -319,6 +319,71 @@ final class TxBuilderValidationTests {
     );
   }
 
+  /// The three count fields a relaxed builder could otherwise truncate. Turning `strict` off lifts
+  /// the network's limits, but the wire format's own field widths are not limits a caller can opt
+  /// out of: a `NumInstructions`, `NumAddresses` or instruction data length written modulo its field
+  /// leaves a header block that no longer describes its payload block, so every later instruction
+  /// offset moves and the message cannot be read back at all. Over-limit bytes are the point of a
+  /// relaxed builder; self-inconsistent bytes are not.
+  ///
+  /// Each is checked at its exact ceiling and one past it, so a `>=` boundary would fail here.
+  @Test
+  void testEncodabilityCeilingsHoldWithoutStrict() {
+    final var account = newKey();
+
+    // u8 NumInstructions.
+    assertEquals(
+        0xFF,
+        laxBuilder(newKey())
+            .addInstructions(sharedAccountInstructions(0xFF, account))
+            .createTransaction()
+            .numInstructions()
+    );
+    final var tooManyInstructions = laxBuilder(newKey()).addInstructions(sharedAccountInstructions(0x100, account));
+    assertEquals(
+        "A v1 NumInstructions field cannot encode more than 255 instructions.",
+        assertThrows(IllegalStateException.class, tooManyInstructions::createTransaction).getMessage()
+    );
+
+    // u8 NumAddresses. The instruction's distinct accounts sit alongside the fee payer and the
+    // system program, so 253 references make 255 addresses.
+    assertEquals(
+        0xFF,
+        laxBuilder(newKey())
+            .addInstruction(instructionWithReadAccounts(0xFF - 2))
+            .createTransaction()
+            .numAccounts()
+    );
+    final var tooManyAccounts = laxBuilder(newKey()).addInstruction(instructionWithReadAccounts(0x100 - 2));
+    assertEquals(
+        "A v1 NumAddresses field cannot encode more than 255 accounts.",
+        assertThrows(IllegalStateException.class, tooManyAccounts::createTransaction).getMessage()
+    );
+
+    // u16 instruction data length. This is the one the strict-only size bound was documented as
+    // covering; it is checked where the field is written, so relaxing strict cannot reach it.
+    final var atLimit = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(),
+        new byte[0xFFFF]
+    );
+    final var wide = laxBuilder(newKey()).addInstruction(atLimit).createTransaction();
+    final var readBack = TransactionSkeleton.deserializeSkeleton(wide.serialized()).parseInstructionsWithoutAccounts();
+    assertEquals(1, readBack.length);
+    assertEquals(0xFFFF, readBack[0].len(), "the widest encodable instruction must survive a round trip");
+
+    final var overLimit = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(),
+        new byte[0x1_0000]
+    );
+    final var tooWide = laxBuilder(newKey()).addInstruction(overLimit);
+    assertEquals(
+        "A v1 instruction data length field cannot encode more than 65535 bytes.",
+        assertThrows(IllegalStateException.class, tooWide::createTransaction).getMessage()
+    );
+  }
+
   /// The fee payer must sort to index 0. It is the builder's own fee payer which carries the flag,
   /// so a builder left without one produces a first account that is merely a writable signer, and
   /// the transaction must be rejected instead of silently promoting that signer to fee payer.
