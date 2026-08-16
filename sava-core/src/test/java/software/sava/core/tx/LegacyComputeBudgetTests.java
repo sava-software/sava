@@ -6,6 +6,7 @@ import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.ByteUtil;
+import software.sava.core.encoding.CompactU16Encoding;
 
 import java.util.Arrays;
 import java.util.List;
@@ -398,11 +399,11 @@ final class LegacyComputeBudgetTests {
 
     final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
     assertEquals(0, skeleton.computeUnitLimit());
-    // Only the instructions preceding the limit were counted before the walk exited, so the zero
-    // limit falls back to an estimate over those two builtins: 1,000 * (2 * 3,000) = 6 lamports.
-    // The early exit deliberately under-counts here — an explicit zero limit is indistinguishable
-    // from an absent one on this path, and both fall back to the default.
-    assertEquals(6L, skeleton.priorityFeeLamports());
+    // An explicit zero limit falls back to the per-instruction default, which needs every
+    // instruction counted, so the scan does NOT exit early here: all four builtins contribute
+    // 3,000 each and 1,000 * 12,000 micro-lamports = 12 lamports. The early exit applies only when
+    // the limit found is one the fee will actually be derived against.
+    assertEquals(12L, skeleton.priorityFeeLamports());
   }
 
   /// Neither the price nor the limit may end the walk on its own: both orderings must recover
@@ -562,5 +563,49 @@ final class LegacyComputeBudgetTests {
         )
     ));
     assertEquals(0L, TransactionSkeleton.deserializeSkeleton(priceCollision.serialized()).priorityFeeLamports());
+  }
+
+
+  /// The fee scan exits as soon as it holds a price and a limit it will actually use, so it never
+  /// reads the instructions after them. That is observable: a corrupt program index in the tail is
+  /// rejected by every other view but not by this one.
+  ///
+  /// The exit is conditional on the limit being usable — a zero limit falls back to the
+  /// per-instruction default, which needs the whole walk — so this pins the "usable" half.
+  @Test
+  void testTheFeeScanStopsOnceAUsableLimitIsFound() {
+    final var feePayer = signer(57);
+    final var signerB = signer(58);
+
+    final var tx = Transaction.createTx(feePayer.publicKey(), List.of(
+        setComputeUnitPrice(1_000L),
+        setComputeUnitLimit(200_000),
+        programIx(signerB.publicKey(), (byte) 1)
+    ));
+    final byte[] data = tx.serialized();
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    // The explicit limit is used verbatim: 1,000 * 200,000 micro-lamports = 200 lamports.
+    assertEquals(200L, skeleton.priorityFeeLamports());
+
+    // Corrupt the third instruction's program index, past where the scan stops.
+    final byte[] corrupt = data.clone();
+    corrupt[programIdIndexOffset(skeleton, 2)] = (byte) 200;
+    final var corruptSkeleton = TransactionSkeleton.deserializeSkeleton(corrupt);
+    assertEquals(200L, corruptSkeleton.priorityFeeLamports(), "the scan never reaches the corrupt tail");
+    assertThrows(IndexOutOfBoundsException.class, corruptSkeleton::parseProgramAccounts);
+  }
+
+  /// Byte offset of the given instruction's u8 program id index within the serialized message.
+  private static int programIdIndexOffset(final TransactionSkeleton skeleton, final int instructionIndex) {
+    final byte[] data = skeleton.data();
+    int o = skeleton.instructionsOffset();
+    for (int i = 0; i < instructionIndex; ++i) {
+      ++o; // program id index
+      final int numAccounts = CompactU16Encoding.decode(data, o);
+      o += CompactU16Encoding.getByteLen(data, o) + numAccounts;
+      final int numDataBytes = CompactU16Encoding.decode(data, o);
+      o += CompactU16Encoding.getByteLen(data, o) + numDataBytes;
+    }
+    return o;
   }
 }
