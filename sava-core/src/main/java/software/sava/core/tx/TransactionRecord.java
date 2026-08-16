@@ -286,30 +286,51 @@ final class TransactionRecord extends BaseTransaction {
     return setBlockHash(createTransaction(Arrays.asList(ixArray)));
   }
 
-  private int effectiveComputeUnitLimit() {
+  /// The compute unit limit this transaction will actually execute against: the value of an explicit
+  /// SetComputeUnitLimit instruction, otherwise the sum the runtime allocates per instruction.
+  ///
+  /// @param prependsComputeBudgetInstruction whether the caller is about to add a compute budget
+  ///                                         instruction this transaction does not yet carry, which
+  ///                                         the runtime will budget as one more builtin
+  private int effectiveComputeUnitLimit(final boolean prependsComputeBudgetInstruction) {
     final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
-    int numNonComputeBudgetInstructions = 0;
+    long computeUnitLimit = prependsComputeBudgetInstruction ? BuiltinPrograms.BUILTIN_COMPUTE_UNIT_LIMIT : 0;
     for (final var instruction : instructions) {
-      if (computeBudgetProgram.equals(instruction.programId().publicKey())) {
-        if (instruction.len() > 0 && instruction.data()[instruction.offset()] == SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR) {
-          return ByteUtil.getInt32LE(instruction.data(), instruction.offset() + 1);
-        }
-      } else {
-        ++numNonComputeBudgetInstructions;
+      final var programId = instruction.programId().publicKey();
+      if (computeBudgetProgram.equals(programId)
+          && instruction.len() > 0
+          && instruction.data()[instruction.offset()] == SET_COMPUTE_UNIT_LIMIT_DISCRIMINATOR) {
+        return ByteUtil.getInt32LE(instruction.data(), instruction.offset() + 1);
       }
+      // Every instruction counts, compute budget instructions included — they are builtins the
+      // runtime budgets like any other, not free scaffolding.
+      computeUnitLimit += BuiltinPrograms.defaultComputeUnitLimit(programId);
     }
-    return (int) Math.min(
-        (long) TransactionSkeletonImpl.DEFAULT_INSTRUCTION_COMPUTE_UNIT_LIMIT * numNonComputeBudgetInstructions,
-        TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT
-    );
+    return (int) Math.min(computeUnitLimit, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
   }
 
   @Override
   public Transaction setPriorityFeeLamports(final long priorityFeeLamports) {
+    // When no SetComputeUnitPrice instruction is present one is prepended below, so the transaction
+    // the runtime sees carries one more builtin instruction than this one does. Budgeting for it
+    // here keeps the derived price from overshooting the limit it will actually execute against.
     final long microLamportsPerComputeUnit = priorityFeeLamportsToComputeUnitPrice(
-        priorityFeeLamports, effectiveComputeUnitLimit()
+        priorityFeeLamports,
+        effectiveComputeUnitLimit(!hasComputeBudgetInstruction(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR))
     );
     return setComputeBudgetValue(SET_COMPUTE_UNIT_PRICE_DISCRIMINATOR, microLamportsPerComputeUnit);
+  }
+
+  private boolean hasComputeBudgetInstruction(final byte discriminator) {
+    final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
+    for (final var instruction : instructions) {
+      if (computeBudgetProgram.equals(instruction.programId().publicKey())
+          && instruction.len() > 0
+          && instruction.data()[instruction.offset()] == discriminator) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Override

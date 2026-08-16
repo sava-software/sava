@@ -1292,9 +1292,9 @@ final class TransactionSerializationTests {
     final var legacyTx = Transaction.createTx(signerA.publicKey(), List.of(ix));
     final var legacyPriced = legacyTx.setPriorityFeeLamportsFromComputeUnitPrice(25_000L);
     final var legacySkeleton = TransactionSkeleton.deserializeSkeleton(legacyPriced.serialized());
-    // With no SetComputeUnitLimit instruction, the default of 200,000 units for the single
-    // non-compute-budget instruction applies: 25,000 * 200,000 micro-lamports = 5,000 lamports.
-    assertEquals(5_000L, legacySkeleton.priorityFeeLamports());
+    // With no SetComputeUnitLimit instruction the runtime's per-instruction default applies. Both
+    // instructions are builtins at 3,000 units each: 25,000 * 6,000 micro-lamports = 150 lamports.
+    assertEquals(150L, legacySkeleton.priorityFeeLamports());
     assertEquals(0, legacySkeleton.computeUnitLimit());
 
     // The two-arg overload also sets the compute unit limit via a SetComputeUnitLimit instruction.
@@ -1316,12 +1316,13 @@ final class TransactionSerializationTests {
         new byte[]{1, 2, 3}
     );
 
-    // Without a SetComputeUnitLimit instruction, the runtime default of 200,000 units for the
-    // single non-compute-budget instruction applies: 1,000 * 200,000 micro-lamports = 200 lamports.
+    // Without a SetComputeUnitLimit instruction the runtime's per-instruction default applies, and
+    // both instructions are builtins — ComputeBudget and System — so each is allocated 3,000 units
+    // rather than 200,000: 1,000 * (2 * 3,000) micro-lamports = 6 lamports.
     final var tx = Transaction.createTx(feePayer.publicKey(), List.of(setComputeUnitPrice(1_000L), ix));
-    assertEquals(200L, TransactionSkeleton.deserializeSkeleton(tx.serialized()).priorityFeeLamports());
+    assertEquals(6L, TransactionSkeleton.deserializeSkeleton(tx.serialized()).priorityFeeLamports());
 
-    // Fractional lamports are rounded up: 3 * 200,000 micro-lamports = 0.6 lamports.
+    // Fractional lamports are rounded up: 3 * 6,000 micro-lamports = 0.018 lamports.
     final var roundedUp = Transaction.createTx(feePayer.publicKey(), List.of(setComputeUnitPrice(3L), ix));
     assertEquals(1L, TransactionSkeleton.deserializeSkeleton(roundedUp.serialized()).priorityFeeLamports());
   }
@@ -1439,13 +1440,16 @@ final class TransactionSerializationTests {
     }
     tx.setRecentBlockHash(blockHash);
 
-    // Without a SetComputeUnitLimit instruction, the lamports are converted against the
-    // 200,000 unit default limit for the single non-compute-budget instruction.
+    // Without a SetComputeUnitLimit instruction the lamports are converted against the runtime's
+    // per-instruction default: the System transfer plus the SetComputeUnitPrice being prepended,
+    // both builtins, so 2 * 3,000 = 6,000 units. Rounding the derived price up overshoots the
+    // request by one lamport, which is the direction the method promises — at least the lamports
+    // asked for, never fewer.
     final var lamportsPriced = tx.setPriorityFeeLamports(10_000L);
-    assertEquals(
-        10_000L,
-        TransactionSkeleton.deserializeSkeleton(lamportsPriced.serialized()).priorityFeeLamports()
-    );
+    final long pricedLamports =
+        TransactionSkeleton.deserializeSkeleton(lamportsPriced.serialized()).priorityFeeLamports();
+    assertEquals(10_001L, pricedLamports);
+    assertTrue(pricedLamports >= 10_000L, "the derived price must never underpay the request");
     // The heap size values are validated before creating a new transaction.
     assertThrows(IllegalArgumentException.class, () -> tx.setHeapSize(33_000));
     // The runtime rejects a SetLoadedAccountsDataSizeLimit instruction with a value of 0.
