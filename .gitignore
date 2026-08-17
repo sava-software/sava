@@ -53,6 +53,12 @@ keys
 Integ.*
 integ.*
 
+# Cargo build output for the Rust conformance-vector generators under
+# sava-core/src/test/solana/. Kept here rather than in a per-crate .gitignore so the rule
+# survives a branch switch: a crate-local ignore file is itself tracked, so checking out a
+# branch without the crate takes the rule away and strands its build output as untracked.
+target/
+
 # arcmutate incremental-analysis state — machine local, survives clean
 .pitest-history/
 
