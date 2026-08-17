@@ -220,13 +220,16 @@ final class LegacyMessageConformanceTests {
     ];
     final int messageOffset = 1 + (128 * Transaction.SIGNATURE_LENGTH);
     System.arraycopy(rejected.message(), 0, output, messageOffset, rejected.message().length);
+    // A buffer assembled by hand declares its own signature count, exactly as every createTx path
+    // does at allocation. The helper reads that byte rather than overwriting it, so that a count
+    // disagreeing with the caller cannot relocate the message and write a signature over it.
+    output[0] = (byte) 128;
     assertDoesNotThrow(
         () -> Transaction.sign(java.util.Collections.nCopies(128, signer), output),
         "the static signing helper retains its permissive byte-oriented contract"
     );
     assertEquals((byte) 0x80, output[0]);
-    assertArrayEquals(rejected.message(), Arrays.copyOfRange(output, messageOffset, output.length));
-  }
+    assertArrayEquals(rejected.message(), Arrays.copyOfRange(output, messageOffset, output.length));  }
 
   @Test
   void accountAndHeaderUnsignedByteBoundariesRemainPermissiveForAnalysis() throws IOException {

@@ -14,6 +14,7 @@ import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 import static software.sava.core.tx.TransactionRecord.mergeAccounts;
+import static software.sava.core.tx.TransactionRecord.requireSignerCount;
 
 public interface Transaction {
 
@@ -544,8 +545,10 @@ public interface Transaction {
     signer.sign(out, msgOffset, msgLen, offset);
   }
 
+  /// @throws IllegalArgumentException if `out` declares a required signature count other than one,
+  ///                                  since one signature cannot fill a wider signature block
   static void sign(final Signer signer, final byte[] out) {
-    out[0] = 1;
+    requireSignerCount(out, 1);
     final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;
     final int msgLen = out.length - sigLen;
     Transaction.sign(signer, out, sigLen, msgLen, 1);
@@ -566,9 +569,11 @@ public interface Transaction {
     }
   }
 
+  /// @throws IllegalArgumentException if `signers` does not match the required signature count that
+  ///                                  `out` declares
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     final int numSigners = signers.size();
-    out[0] = (byte) numSigners;
+    requireSignerCount(out, numSigners);
     final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
     final int msgLen = out.length - sigLen;
     Transaction.sign(signers, out, sigLen, msgLen, 1);
