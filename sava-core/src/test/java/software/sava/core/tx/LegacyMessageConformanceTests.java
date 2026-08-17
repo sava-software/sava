@@ -229,7 +229,34 @@ final class LegacyMessageConformanceTests {
         "the static signing helper retains its permissive byte-oriented contract"
     );
     assertEquals((byte) 0x80, output[0]);
-    assertArrayEquals(rejected.message(), Arrays.copyOfRange(output, messageOffset, output.length));  }
+    assertArrayEquals(rejected.message(), Arrays.copyOfRange(output, messageOffset, output.length));
+
+    // Every slot must be written, not just the first. All 128 elements are the same signer, so each
+    // correct signature is the same 64 bytes — which makes this a cheap full-stride oracle rather
+    // than a weakness, but only once the slots are actually read. Asserting no-throw and an intact
+    // message region alone would pass a helper that wrote slot 0 and stopped, or one that wrote
+    // every signature over slot 0, since neither disturbs the message.
+    final byte[] firstSlot = Arrays.copyOfRange(output, 1, 1 + Transaction.SIGNATURE_LENGTH);
+    assertFalse(
+        Arrays.equals(firstSlot, new byte[Transaction.SIGNATURE_LENGTH]),
+        "the first slot must carry a signature"
+    );
+    for (int i = 1; i < 128; ++i) {
+      final int from = 1 + (i * Transaction.SIGNATURE_LENGTH);
+      assertArrayEquals(
+          firstSlot,
+          Arrays.copyOfRange(output, from, from + Transaction.SIGNATURE_LENGTH),
+          "signature slot " + i
+      );
+    }
+    assertTrue(
+        signer.publicKey().verifySignature(
+            output, messageOffset, output.length - messageOffset,
+            Arrays.copyOfRange(output, 1 + (127 * Transaction.SIGNATURE_LENGTH), messageOffset)
+        ),
+        "the last slot must verify over the message the header implies"
+    );
+  }
 
   @Test
   void accountAndHeaderUnsignedByteBoundariesRemainPermissiveForAnalysis() throws IOException {

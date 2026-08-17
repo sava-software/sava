@@ -98,6 +98,70 @@ final class TransactionByteHelpersTests {
     return new Fixture(List.of(feePayer, authority), List.of(ix));
   }
 
+  /// Three distinct signers, ordered by the slot each actually occupies rather than by the order
+  /// they were merged in — account sorting decides that, and assuming it would make this test
+  /// assert its own fixture rather than the signing.
+  private static List<Signer> orderedBySlot(final byte[] data, final List<Signer> signers) {
+    final var slotKeys = TransactionSkeleton.deserializeSkeleton(data).parseSignerPublicKeys();
+    final var ordered = new java.util.ArrayList<Signer>(slotKeys.length);
+    for (final var key : slotKeys) {
+      signers.stream()
+          .filter(signer -> signer.publicKey().equals(key))
+          .findFirst()
+          .ifPresent(ordered::add);
+    }
+    assertEquals(signers.size(), ordered.size(), "every signer must map to a slot");
+    return List.copyOf(ordered);
+  }
+
+  /// Every static multi-signer test in this repo used exactly two signers, so the per-slot advance
+  /// `offset = signer.sign(out, msgOffset, msgLen, offset)` ran only once — from slot 0 to slot 1.
+  /// A stride that is right for the first step and wrong afterwards was therefore invisible, as was
+  /// a later signature overwriting an earlier one. Three signers exercise the advance twice.
+  ///
+  /// Each slot is checked against its own signer *and* against the other two: verifying slot i for
+  /// signer i alone would still pass if two slots were swapped, since each signature verifies fine
+  /// where it landed.
+  @Test
+  void staticSequencedSigningWalksEverySlotAtThreeSigners() {
+    final var feePayer = nextSigner();
+    final var second = nextSigner();
+    final var third = nextSigner();
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(
+            AccountMeta.createWritableSigner(second.publicKey()),
+            AccountMeta.createWritableSigner(third.publicKey())
+        ),
+        new byte[]{1, 2, 3, 4}
+    );
+    final var tx = Transaction.createTx(feePayer.publicKey(), ix);
+    tx.setRecentBlockHash(HASH_A);
+    final byte[] data = tx.serialized();
+    assertEquals(3, data[0], "three required signatures");
+
+    final var signers = orderedBySlot(data, List.of(feePayer, second, third));
+    Transaction.sign(signers, data);
+
+    final int msgOffset = 1 + (3 * Transaction.SIGNATURE_LENGTH);
+    final int msgLen = data.length - msgOffset;
+    for (int i = 0; i < 3; ++i) {
+      final int from = 1 + (i * Transaction.SIGNATURE_LENGTH);
+      final byte[] signature = Arrays.copyOfRange(data, from, from + Transaction.SIGNATURE_LENGTH);
+      assertFalse(
+          Arrays.equals(signature, new byte[Transaction.SIGNATURE_LENGTH]),
+          "slot " + i + " was never written"
+      );
+      for (int j = 0; j < 3; ++j) {
+        assertEquals(
+            i == j,
+            signers.get(j).publicKey().verifySignature(data, msgOffset, msgLen, signature),
+            "slot " + i + " against signer " + j
+        );
+      }
+    }
+  }
+
   private static void assertSignedWithHash(final Transaction tx, final byte[] expectedHash, final List<Signer> signers) {
     assertSignedWithHash(tx.serialized(), expectedHash, signers);
   }

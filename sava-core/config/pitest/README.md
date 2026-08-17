@@ -321,6 +321,19 @@ are all that remain unclassified.
   general join path yields an equal record; only the allocation differs.
 - `TransactionRecord.sign` 154: the multi-signer scan resolves a single
   signer to the same slot the fast path uses.
+- `TransactionSkeletonRecord.filterInstructions` and
+  `filterInstructionsWithoutAccounts`, the trailing
+  `d == numInstructions ? instructions : Arrays.copyOfRange(...)`: when
+  every instruction matched the discriminator, `d` equals the array's
+  length and the copy is the same content. Only the allocation differs,
+  and callers receive an array either way. Forcing the copy branch is
+  observable only by identity, which nothing asserts and nothing should.
+- `TransactionSkeleton.deserializeSkeleton`, the zero-table guard
+  `numLookupTables > 0`: at zero tables `>` → `>=` builds an empty
+  `PublicKey[]` where the guard returns the shared
+  `TransactionSkeletonRecord.NO_TABLES`. Same emptiness, same behaviour
+  from every reader of `lookupTableAccounts`; the constant exists to
+  avoid the allocation, not because an empty array would be wrong.
 
 **No-op displacement boundaries** — baseline label `# displacement boundary`
 (`createTx` 253/427, 255/429): at
@@ -358,11 +371,43 @@ shapes in `TransactionFactoryTests`.
 
 ## Untriaged debt (tx suite)
 
-- `TransactionSkeleton.deserializeSkeleton` (7 keys) and
-  `TransactionSkeletonRecord` (6 keys): the long-standing skeleton
-  survivors — offset arithmetic and parse boundaries a length assertion
-  cannot distinguish (see the Transaction hardening section of
-  `AGENTS.md`). Equivalence-triage candidates rather than kill candidates.
+Triaged 2026-08-17. Three of the seven were equivalent and are argued
+above under their labels; the rest are kill candidates, recorded here
+because the work is not done rather than because it is accepted.
+
+- `TransactionSkeletonRecord.invokedProgramAccount`
+  `RemoveConditionalMutator_EQUAL_ELSE` — **killable, not equivalent.**
+  The branches are not result-identical: rebuilding an already-invoked
+  meta through `createInvoked` preserves `AccountMetaInvoked` (whose
+  `equals` is value-based on the public key, which is why the current
+  assertions cannot see it) but downgrades an
+  `AccountMetaInvokedAndWrite` to read-only. A program account that is
+  also writable distinguishes them.
+- `TransactionSkeletonRecord.parseInstructions`
+  `ConditionalsBoundaryMutator` — **killable.** `<` to `<=` changes
+  behaviour at exactly `accountIndex == accounts.length`, which is the
+  first table-loaded account of a v0 message parsed against an
+  unresolved array: the ternary stores `null` there and the mutant
+  throws. Nothing asserts a null instruction-account slot today. Held
+  pending the open decision on whether that null is the contract at all
+  (see `TransactionSkeleton#parseInstructionsWithoutTableAccounts`) —
+  killing it would pin behaviour that may be changing.
+- `TransactionSkeleton.deserializeSkeleton`
+  `RemoveConditionalMutator_ORDER_IF` — **killable, awkwardly.** Forcing
+  the versioned walk for a legacy message leaves `version` untouched, so
+  `isLegacy()` still agrees; what differs is that `invokedIndexes`
+  becomes populated instead of `LEGACY_INVOKED_INDEXES`. That is only
+  observable through `parseVersionedReadAccount`, reached by calling a
+  versioned-path parser on a legacy skeleton.
+- `TransactionSkeleton.deserializeSkeleton`
+  `RemoveConditionalMutator_ORDER_ELSE` (legacy instruction walk) —
+  **owner decision.** Whether the walk is dead for well-formed input
+  depends on whether eager validation of the legacy instruction section
+  is wanted; unlike the precedents above it reads `data`.
+
+The remaining long-standing skeleton survivors are offset arithmetic and
+parse boundaries a length assertion cannot distinguish (see the
+Transaction hardening section of `AGENTS.md`).
 
 Packages without a suite are deliberate scope decisions (see
 `build.gradle.kts`), not omissions.
