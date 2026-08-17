@@ -63,7 +63,30 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public PublicKey feePayer() {
+    requireAddressesCoverSigners();
     return readPubKey(data, accountsOffset);
+  }
+
+  /// The signature count and the address count are two independently read compact-u16 fields, so
+  /// `numIncludedAccounts < numSignatures` is representable on the wire even though no valid
+  /// transaction has it — every signer is an address. Every account-parsing entry point sizes its
+  /// array from the address count and then fills signer slots from the signature count, so the
+  /// mismatch used to surface as a bare `ArrayIndexOutOfBoundsException` (or a
+  /// `NegativeArraySizeException` from [#parseNonSignerAccounts], which subtracts the two).
+  ///
+  /// This narrows *how* such a header fails, not *whether* it does: the same inputs threw before.
+  /// Over-limit-but-coherent headers stay readable, as they must — narrowing a count to its wire
+  /// byte is a documented analysis affordance. A header that contradicts itself is a different
+  /// thing, because no reading of it is faithful.
+  ///
+  /// @throws IllegalStateException if the address array cannot hold the signers the header declares
+  private void requireAddressesCoverSigners() {
+    if (numIncludedAccounts < numSignatures) {
+      throw new IllegalStateException(String.format(
+          "Header declares %d required signatures but only %d addresses are included.",
+          numSignatures, numIncludedAccounts
+      ));
+    }
   }
 
   private int parseSignatureAccounts(final AccountMeta[] accounts) {
@@ -88,6 +111,7 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public PublicKey[] parseSignerPublicKeys() {
+    requireAddressesCoverSigners();
     final var accounts = new PublicKey[numSignatures];
     for (int o = accountsOffset, a = 0; a < numSignatures; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = readPubKey(data, o);
@@ -111,6 +135,7 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public AccountMeta[] parseNonSignerAccounts() {
+    requireAddressesCoverSigners();
     final int numAccounts = numIncludedAccounts - numSignatures;
     final var accounts = new AccountMeta[numAccounts];
     int o = accountsOffset + (numSignatures * PUBLIC_KEY_LENGTH);
@@ -126,6 +151,7 @@ record TransactionSkeletonRecord(byte[] data,
 
   @Override
   public PublicKey[] parseNonSignerPublicKeys() {
+    requireAddressesCoverSigners();
     final int numAccounts = numIncludedAccounts - numSignatures;
     final var accounts = new PublicKey[numAccounts];
     for (int a = 0, o = accountsOffset + (numSignatures * PUBLIC_KEY_LENGTH); a < numAccounts; ++a, o += PUBLIC_KEY_LENGTH) {
