@@ -1,5 +1,6 @@
 package software.sava.core.tx;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
@@ -11,6 +12,7 @@ import software.sava.core.programs.Discriminator;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -38,6 +40,23 @@ final class TransactionByteHelpersTests {
     return key;
   }
 
+  private static final AtomicInteger KEY_SEED = new AtomicInteger();
+
+  @BeforeEach
+  void resetKeySeed() {
+    KEY_SEED.set(0);
+  }
+
+  /// Fixture signers come from a counter reset before each test, so a key depends on neither
+  /// execution order nor how many tests ran before it. A generated key pair makes a PIT kill
+  /// non-reproducible: a mutant that misreads an offset can land on a fixture byte that happens to
+  /// equal an asserted constant, surviving on some runs and dying on others.
+  private static Signer nextSigner() {
+    final byte[] privateKey = new byte[Signer.KEY_LENGTH];
+    Arrays.fill(privateKey, (byte) KEY_SEED.incrementAndGet());
+    return Signer.createFromPrivateKey(privateKey);
+  }
+
   private record Fixture(List<Signer> signers, List<Instruction> instructions) {
 
     Transaction newTx() {
@@ -57,7 +76,7 @@ final class TransactionByteHelpersTests {
   }
 
   private static Fixture singleSigner() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(AccountMeta.createWrite(PublicKey.createPubKey(key(7)))),
@@ -69,8 +88,8 @@ final class TransactionByteHelpersTests {
   /// Two signers so multi-signature offset math (`numSigners * SIGNATURE_LENGTH`) is
   /// observable; the sequenced signer order matches the account order: fee payer first.
   private static Fixture twoSigner() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var authority = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var authority = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(AccountMeta.createWritableSigner(authority.publicKey())),
@@ -263,7 +282,7 @@ final class TransactionByteHelpersTests {
   }
 
   private static Transaction txOfSize(final int targetSize) {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
     final var program = SolanaAccounts.MAIN_NET.systemProgram();
     final var accounts = List.of(AccountMeta.createWrite(PublicKey.createPubKey(key(7))));
     // instruction data in the two-byte compact-u16 range, so size is affine in length

@@ -1,5 +1,6 @@
 package software.sava.core.tx;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
@@ -9,6 +10,7 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,12 +21,29 @@ import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 
 final class TransactionSerializationTests {
 
+  private static final AtomicInteger KEY_SEED = new AtomicInteger();
+
+  @BeforeEach
+  void resetKeySeed() {
+    KEY_SEED.set(0);
+  }
+
+  /// Fixture signers come from a counter reset before each test, so a key depends on neither
+  /// execution order nor how many tests ran before it. PIT re-runs the suite once per mutant, and a
+  /// freshly generated key pair makes a kill non-reproducible: a mutant that misreads a length or an
+  /// offset can land on a fixture byte that happens to equal an asserted constant, so it survives on
+  /// some runs and dies on others. Identity is never the property under test here — only that the
+  /// keys differ — so a counter serves the fixtures just as well and reproducibly.
+  private static Signer nextSigner() {
+    final byte[] privateKey = new byte[Signer.KEY_LENGTH];
+    Arrays.fill(privateKey, (byte) KEY_SEED.incrementAndGet());
+    return Signer.createFromPrivateKey(privateKey);
+  }
+
   @Test
   void testTxSigning() {
-    var keyPairBytes = Signer.generatePrivateKeyPairBytes();
-    final var signerA = Signer.createFromKeyPair(keyPairBytes);
-    keyPairBytes = Signer.generatePrivateKeyPairBytes();
-    final var signerB = Signer.createFromKeyPair(keyPairBytes);
+    final var signerA = nextSigner();
+    final var signerB = nextSigner();
     assertNotEquals(signerA.publicKey(), signerB.publicKey());
 
     var ix = Instruction.createInstruction(
@@ -37,8 +56,7 @@ final class TransactionSerializationTests {
 
     tx.sign(signerA);
     tx.sign(signerB);
-    keyPairBytes = Signer.generatePrivateKeyPairBytes();
-    final var signerC = Signer.createFromKeyPair(keyPairBytes);
+    final var signerC = nextSigner();
     final var _tx = tx;
     assertThrows(IllegalArgumentException.class, () -> _tx.sign(signerC));
 

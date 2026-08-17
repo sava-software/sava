@@ -1,5 +1,6 @@
 package software.sava.core.tx;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
@@ -11,6 +12,7 @@ import software.sava.core.encoding.CompactU16Encoding;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,6 +29,26 @@ final class TransactionSkeletonParseTests {
 
   /// Real main-net transaction: versioned, address-table lookups, 6 instructions.
   private static final String VERSIONED_TX = "ATgc2Iye/GlwnpSeIytu+tYkb2A+5VJhc1yui59+7/PMQSuywEqpb3k8wHCKnupEuC5fDTUjvGhASTEH5c90UACAAQAFEU4rs4al2vatnKR6MtsLLzl+Q24T1Y5kkYBmPhrq9O/VzcyvadLTPMXTLHJ2IKteqvqoQAgRH4dVHOW+cw1EkNOJB31VpbsTMHY+t2f1XsB3tBoNB1994dc/uso8Y9VUcRCcPGXQaDMBtOvEnG0Lyr4Lf68erOMMjG6weDn4HuIS6tSjkUAFDNLqypEZqieck8DZMKBobFJb3fYlMJjWpjHvHv25qj1olz/ZenFlAVmw6stGZYC5aF5nQ9ZqQr8vxXTXpuq5/UeOzPqvqL7sJuBwFgO//vEZG9uw6edrxAd2vInnwNHlA4uvk7TwFNJd9xWnndlfBJ5f9fX36m+JwJ9fAlkt3jAFytFpv8wnPC/6I0tpd+F+Bw3UOdTTA8X8HR7XL/DvxwiqYIadWSBAIms1hbo9KoaOYES91ZtNIF/jeSWG+N64PtIqGyqU3OdPOEd0TTjj79CJx+HICgFkwRrNq0B12gG6uYd+a79dybCsJPRSedzSl8R6nwJYXSLJGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkDBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAJWBt/6PKcF0R86zH0ytUdAc7K5LbdbpdsVcWwvkMUGK86EED9glv4WMHdJchvP2ZZvDPQq6PniaYqUsrsmZ94ETjVRi2k6UWSxzbmoMl/cGeYhlpwGEqRE3YD3BBue3swYOAAUCgE8SAA4ABQEAAAIADgAJAyKiAAAAAAAADwYdDAABFg0IllUsHJUO0hoPHQACAwwREhMUARUWFx0eGBkEHxogGxwFBgcICQoLigEyEHMzqHo5LQIAAAACAAAAAAECAAAAAgEDAAAABBIAAAAEBQQGBwIICQoLBAAMDA0ODxABCQAAABEMEhMUFQgCAAQSAAAABBYEFxgCCAoJGQQADAwNGhscCAAAABAnTB2IE8QJ6ANkAAoAAQC0ZeZpAAAAAFDDAAAAAAAAAAAAAAAAAAAAAAAAAAAQAB9Qb3dlcmVkIGJ5IGJsb1hyb3V0ZSBUcmFkZXIgQXBpAonsVzlUh3H7+XOmaklk0KWZm+wt34ECwzGrxcB6Sb7VCQRLSE8FSUpRTgQMAgsHmoTIVF9hkZWFmpxCqc8zcavo9Yu6S8ysQBz59/7iw1ADVllVAA==";
+
+  private static final AtomicInteger KEY_SEED = new AtomicInteger();
+
+  @BeforeEach
+  void resetKeySeed() {
+    KEY_SEED.set(0);
+  }
+
+  /// Fixture signers come from a counter reset before each test, so a key depends on neither
+  /// execution order nor how many tests ran before it. A generated key pair makes a PIT kill
+  /// non-reproducible: a mutant that misreads an offset can land on a fixture byte that happens to
+  /// equal an asserted constant, surviving on some runs and dying on others. That is not
+  /// hypothetical here — `TransactionRecord.numAccounts()` reads its short-vector at a
+  /// version-dependent offset, and forcing the versioned offset on a legacy transaction reads the
+  /// fee payer's first public-key byte instead.
+  private static Signer nextSigner() {
+    final byte[] privateKey = new byte[Signer.KEY_LENGTH];
+    Arrays.fill(privateKey, (byte) KEY_SEED.incrementAndGet());
+    return Signer.createFromPrivateKey(privateKey);
+  }
 
   private static TransactionSkeleton skeleton(final String base64) {
     return TransactionSkeleton.deserializeSkeleton(Base64.getDecoder().decode(base64));
@@ -517,8 +539,8 @@ final class TransactionSkeletonParseTests {
   void readOnlySignersParseAsReadOnly() {
     // no real fixture here has a read-only signer, so build one: the split between
     // writable and read-only signers is a header-driven bound that nothing else pins
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var readOnlySigner = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var readOnlySigner = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(AccountMeta.createReadOnlySigner(readOnlySigner.publicKey())),
@@ -573,7 +595,7 @@ final class TransactionSkeletonParseTests {
   }
 
   private static byte[] versionedNoTableTx() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(AccountMeta.createWrite(feePayer.publicKey())),
@@ -689,9 +711,9 @@ final class TransactionSkeletonParseTests {
   void multipleWritableSignersParseInOrder() {
     // three writable signers: the writable-signer loop must walk every slot, not just the
     // fee payer and one more
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerB = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var signerC = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var signerB = nextSigner();
+    final var signerC = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(
