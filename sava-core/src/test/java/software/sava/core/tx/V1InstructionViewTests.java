@@ -140,6 +140,69 @@ final class V1InstructionViewTests {
   // requireIncludedProgramAccount(programIdIndex(header)) at the top of the loop rather than only
   // within the matched branch. The malformed instruction is deliberately one the discriminator
   // does not match, so the pre-fix getProgramAccount(...) call inside the if branch never read it.
+  /// The instruction-account wire bound is the message's own NumAddresses, never the caller's
+  /// array. An oversized array must not widen what the transaction declares into resolving an
+  /// undeclared index, and a caller-truncated array reads a declared index as null — the same two
+  /// bounds the legacy/v0 skeleton applies, with the identical exception and message on the wire
+  /// side.
+  @Test
+  void testV1InstructionAccountIndicesAreBoundedByTheWireNotTheCallersArray() {
+    final var feePayer = nextSigner();
+    final var program = newKey();
+    final var read = newKey();
+    final byte[] data = serializedV1(
+        feePayer.publicKey(),
+        ix(program, List.of(AccountMeta.createRead(read)), 9, 9)
+    );
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+    final int numAddresses = skeleton.numIncludedAccounts();
+    assertEquals(numAddresses, skeleton.numAccounts(), "v1 declares no loaded accounts");
+    final var accounts = skeleton.parseAccounts();
+    assertEquals(numAddresses, accounts.length);
+
+    // Locate the single instruction's account-index byte: v1 instruction payloads are
+    // [accountIndex...][data...] behind fixed-width headers, so the first payload byte is it.
+    final var view = skeleton.parseInstructionsWithoutAccounts()[0];
+    final int accountIndexOffset = view.offset() - 1;
+    final int declaredIndex = data[accountIndexOffset] & 0xFF;
+    assertTrue(declaredIndex < numAddresses, "the fixture starts valid");
+
+    // Undeclared: index == NumAddresses. An array large enough to "cover" it must not launder it.
+    data[accountIndexOffset] = (byte) numAddresses;
+    final var patched = TransactionSkeleton.deserializeSkeleton(data);
+    final var oversized = Arrays.copyOf(accounts, numAddresses + 4);
+    Arrays.fill(oversized, numAddresses, oversized.length, accounts[0]);
+    final String expected = "Instruction account index " + numAddresses
+        + " is outside the " + numAddresses + " accounts of this transaction.";
+    assertEquals(
+        expected,
+        assertThrowsExactly(IndexOutOfBoundsException.class, () -> patched.parseInstructions(oversized)).getMessage()
+    );
+    assertEquals(
+        expected,
+        assertThrowsExactly(IndexOutOfBoundsException.class, () -> patched.parseInstructions(accounts)).getMessage()
+    );
+
+    // Declared but unresolvable: set both wire indices explicitly so the fixture does not depend
+    // on account sort order — the program at address 1, the referenced account at the last
+    // address — then truncate the caller's array between them. The program read precedes the
+    // account loop, so the program must stay inside the truncated array for the null to be
+    // observable at all.
+    data[accountIndexOffset] = (byte) declaredIndex;
+    final byte[] reordered = withProgramIdIndex(data, 0, 1);
+    reordered[accountIndexOffset] = (byte) (numAddresses - 1);
+    final var restored = TransactionSkeleton.deserializeSkeleton(reordered);
+    final var truncated = Arrays.copyOf(accounts, numAddresses - 1);
+    final var viaTruncated = restored.parseInstructions(truncated)[0].accounts();
+    assertEquals(1, viaTruncated.size());
+    assertNull(viaTruncated.getFirst(), "declared but unresolvable in the supplied array");
+
+    // Sava-produced arrays always cover NumAddresses, so the last declared index resolves.
+    data[accountIndexOffset] = (byte) (numAddresses - 1);
+    final var lastValid = TransactionSkeleton.deserializeSkeleton(data);
+    assertNotNull(lastValid.parseInstructions(lastValid.parseAccounts())[0].accounts().getFirst());
+  }
+
   @Test
   void testV1FilterValidatesUnmatchedInstructionProgramIndex() {
     final var feePayer = newKey();
