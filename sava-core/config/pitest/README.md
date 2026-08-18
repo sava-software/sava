@@ -229,10 +229,14 @@ same technique twice would prove nothing.
 The `ed25519` subpackage is excluded here — it has its own suite, and the
 `crypto.*` wildcard spans dots.
 
-## vanity suite — no accepted mutants
+## vanity suite — the former Subsequence-only phase (closed 2026-08-04)
 
-`vanity-accepted.csv` is empty and the suite runs at 100%. Keep it that way:
-any new survivor here is a real gap, not debt.
+Everything in this section describes the suite's earlier life, when its target
+list was the `Subsequence*` allowlist: in that phase `vanity-accepted.csv` was
+empty and the narrow suite ran at 100%. The 2026-08-04 ownership closure widened
+the suite to the whole package, and its current state — 63 seeded `# untriaged`
+rows and the audited timeout set — is recorded in the seeded-debt table at the
+top of this file, not here.
 
 It was briefly seeded 2026-07-20 with 9 entries, all from the "Character
 options:" table that `Subsequence.create` printed to `System.out` while
@@ -321,6 +325,19 @@ are all that remain unclassified.
   general join path yields an equal record; only the allocation differs.
 - `TransactionRecord.sign` 154: the multi-signer scan resolves a single
   signer to the same slot the fast path uses.
+- `TransactionSkeletonImpl.filterInstructions` and
+  `filterInstructionsWithoutAccounts`, the trailing
+  `d == numInstructions ? instructions : Arrays.copyOfRange(...)`: when
+  every instruction matched the discriminator, `d` equals the array's
+  length and the copy is the same content. Only the allocation differs,
+  and callers receive an array either way. Forcing the copy branch is
+  observable only by identity, which nothing asserts and nothing should.
+- `TransactionSkeleton.deserializeSkeleton`, the zero-table guard
+  `numLookupTables > 0`: at zero tables `>` → `>=` builds an empty
+  `PublicKey[]` where the guard returns the shared
+  `BaseTransactionSkeleton.NO_TABLES`. Same emptiness, same behaviour
+  from every reader of `lookupTableAccounts`; the constant exists to
+  avoid the allocation, not because an empty array would be wrong.
 
 **No-op displacement boundaries** — baseline label `# displacement boundary`
 (`createTx` 253/427, 255/429): at
@@ -464,14 +481,55 @@ loop that iterates zero times when both values were already found).
 
 ## Untriaged debt (tx suite)
 
-- `TransactionSkeleton.deserializeSkeleton` (3 keys) and
-  `TransactionSkeletonRecord` (4 keys): the long-standing skeleton
-  survivors — offset arithmetic and parse boundaries a length assertion
-  cannot distinguish (see the Transaction hardening section of
-  `AGENTS.md`). Equivalence-triage candidates rather than kill candidates.
-  The `TransactionSkeletonRecord` keys name a class the v1 merge renamed to
-  `TransactionSkeletonImpl`; they are stale on identity and should be pruned
-  on the next refresh rather than argued.
+Triaged 2026-08-17, carried through the v1 merge, which renamed
+`TransactionSkeletonRecord` to `TransactionSkeletonImpl` — the arguments below are
+unchanged, only the class identity is. Three of the seven were equivalent and are argued
+above under their labels; one was killed the same day once its blocking
+decision landed; the rest are kill candidates, recorded here because the
+work is not done rather than because it is accepted.
+
+- `TransactionSkeletonImpl.invokedProgramAccount`
+  `RemoveConditionalMutator_EQUAL_ELSE` — **killed by the v1 merge.** The
+  triage was right that the branches are not result-identical: rebuilding
+  an already-invoked meta through `createInvoked` preserves
+  `AccountMetaInvoked` (whose `equals` is value-based on the public key,
+  which is why the legacy assertions could not see it) but downgrades an
+  `AccountMetaInvokedAndWrite` to read-only. It named the distinguishing
+  fixture — a program account that is also writable — and the v1 branch
+  already had exactly that in
+  `V1FilterBoundaryTests#anInvokedAndWrittenProgramKeepsBothFlagsThroughParseInstructions`,
+  so merging the two histories killed it without new work.
+- `TransactionSkeletonImpl.parseInstructions`
+  `ConditionalsBoundaryMutator` — **killed 2026-08-18** once sava#57
+  resolved the read-side contract as two bounds in `instructionAccount`,
+  neither of them a format split: an index at or past the transaction's
+  own declared total (`numAccounts`, included plus table-loaded) is
+  corruption in every format and throws the diagnosed rejection
+  transaction v1 already uses, while a declared index the supplied array
+  cannot resolve reads as the documented null — reachable through
+  sava's own parsers only for a v0 message parsed without its lookup
+  tables. Both bounds are revert-verified and pinned at their exact
+  boundaries by
+  `TransactionSkeletonParseTests#declaredButUnresolvedV0InstructionAccountIndicesReadAsNull`
+  and `#undeclaredInstructionAccountIndicesAreRejectedInEveryFormat`,
+  the latter including the oversized-caller-array case, since the
+  caller's array must not widen what the wire declares.
+- `TransactionSkeleton.deserializeSkeleton`
+  `RemoveConditionalMutator_ORDER_IF` — **killable, awkwardly.** Forcing
+  the versioned walk for a legacy message leaves `version` untouched, so
+  `isLegacy()` still agrees; what differs is that `invokedIndexes`
+  becomes populated instead of `LEGACY_INVOKED_INDEXES`. That is only
+  observable through `parseVersionedReadAccount`, reached by calling a
+  versioned-path parser on a legacy skeleton.
+- `TransactionSkeleton.deserializeSkeleton`
+  `RemoveConditionalMutator_ORDER_ELSE` (legacy instruction walk) —
+  **owner decision.** Whether the walk is dead for well-formed input
+  depends on whether eager validation of the legacy instruction section
+  is wanted; unlike the precedents above it reads `data`.
+
+The remaining long-standing skeleton survivors are offset arithmetic and
+parse boundaries a length assertion cannot distinguish (see the
+Transaction hardening section of `AGENTS.md`).
 
 Packages without a suite are deliberate scope decisions (see
 `build.gradle.kts`), not omissions.

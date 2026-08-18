@@ -14,6 +14,7 @@ import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 import static software.sava.core.tx.TransactionRecord.mergeAccounts;
+import static software.sava.core.tx.BaseTransaction.requireSignerCount;
 
 public interface Transaction {
 
@@ -609,6 +610,19 @@ public interface Transaction {
     signer.sign(out, msgOffset, msgLen, sigOffset);
   }
 
+  /// Signs `out` with a single signer, dispatching on the payload's format.
+  ///
+  /// The count restriction is legacy/v0 only. There the signature block's length is implied by the
+  /// prefix, so a lone signature cannot fill a block declared wider and the payload is refused. A v1
+  /// payload carries its signature block after the message, at a boundary the message itself
+  /// determines, and the fee payer's signature is the first slot — so signing only the fee payer of
+  /// a multi-signer v1 transaction is well defined, leaves every other slot untouched, and is
+  /// permitted. The v1 branch instead refuses a payload whose implied boundary contradicts its
+  /// message, which is the corruption that matters there.
+  ///
+  /// @throws IllegalArgumentException if a legacy/v0 `out` declares a required signature count other
+  ///                                  than one, or if a v1 `out`'s signature block does not begin
+  ///                                  exactly where its message ends
   static void sign(final Signer signer, final byte[] out) {
     if (V1Transaction.isV1(out)) {
       // The v1 message spans up to the appended signatures, the fee payer signature is first. The
@@ -618,7 +632,7 @@ public interface Transaction {
       final int signaturesOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
       Transaction.sign(signer, out, 0, signaturesOffset, signaturesOffset);
     } else {
-      out[0] = 1;
+      requireSignerCount(out, 1);
       final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;
       final int msgLen = out.length - sigLen;
       Transaction.sign(signer, out, sigLen, msgLen, 1);
@@ -640,6 +654,8 @@ public interface Transaction {
     }
   }
 
+  /// @throws IllegalArgumentException if `signers` does not match the required signature count that
+  ///                                  `out` declares
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     final int numSigners = signers.size();
     if (V1Transaction.isV1(out)) {
@@ -655,7 +671,7 @@ public interface Transaction {
       final int sigOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
       Transaction.sign(signers, out, 0, sigOffset, sigOffset);
     } else {
-      out[0] = (byte) numSigners;
+      requireSignerCount(out, numSigners);
       final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
       final int msgLen = out.length - sigLen;
       Transaction.sign(signers, out, sigLen, msgLen, 1);

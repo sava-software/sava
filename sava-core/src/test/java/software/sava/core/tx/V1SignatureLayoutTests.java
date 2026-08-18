@@ -735,14 +735,14 @@ final class V1SignatureLayoutTests {
   /// The matching-signer-count case is the CONTRACT: signatures land in the prefix and the message
   /// is untouched.
   ///
-  /// The under-supplied case is CURRENT BEHAVIOUR PENDING sava#54, not a guarantee. It is recorded
-  /// because under-supply happens to shrink the prefix, so the writes stay inside it. **The
-  /// over-supplied direction is the defect** — it grows the prefix past the real message start and
-  /// writes signature bytes over the message header — and is deliberately not asserted here because
-  /// it is to be fixed on `main` and rebased in, not fixed on this branch. Nothing below may be read
-  /// as evidence that the legacy branch is safe against a mismatch in general.
+  /// sava#54 landed on `main` and is merged in here, so the mismatch this used to record as pending
+  /// is now refused in both directions: the legacy branch reads the required count from the payload
+  /// and corroborates it against the message header instead of restamping it. Under-supply used to
+  /// be tolerated only because a shorter prefix keeps the writes inside itself; over-supply grew the
+  /// prefix past the real message start and wrote signature bytes over the header. Neither reaches a
+  /// write now, so the payload is asserted byte-identical after the refusal.
   @Test
-  void staticSignLegacyBranchIsUnchanged() {
+  void staticSignLegacyBranchMatchesTheHeaderOrRefuses() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
 
@@ -772,23 +772,17 @@ final class V1SignatureLayoutTests {
         Arrays.copyOfRange(data, 1 + SIGNATURE_LENGTH, messageOffset)
     ));
 
-    // CURRENT BEHAVIOUR PENDING sava#54, not a guarantee. An UNDER-supplied collection is accepted
-    // by the legacy branch, because the v1 header check is confined to the v1 branch. It happens to
-    // be harmless only because fewer signers shrink the prefix: sigLen = 1 + 1*64 is smaller than
-    // the real 1 + 2*64, so the writes stay inside it. The OVER-supplied direction is the sava#54
-    // defect and grows the prefix into the message; it is deliberately not asserted here.
-    final byte[] underSupplied = unsigned.clone();
-    assertDoesNotThrow(() -> Transaction.sign(List.of(feePayer), underSupplied));
-    assertEquals(1, underSupplied[0], "the count byte follows the collection, not the header");
-    assertArrayEquals(
-        Arrays.copyOfRange(unsigned, messageOffset, unsigned.length),
-        Arrays.copyOfRange(underSupplied, messageOffset, underSupplied.length),
-        "under-supply shrinks the prefix, so this direction leaves the message intact"
-    );
-    // Only the first signature slot was touched.
-    assertArrayEquals(
-        Arrays.copyOfRange(unsigned, 1 + SIGNATURE_LENGTH, messageOffset),
-        Arrays.copyOfRange(underSupplied, 1 + SIGNATURE_LENGTH, messageOffset)
-    );
+    // Both mismatch directions are refused, and refused before any byte is written — the payload
+    // that declares two signatures is byte-identical afterwards. Under-supply used to be accepted
+    // (a shorter prefix keeps its writes inside itself); over-supply was the sava#54 defect, growing
+    // the prefix past the real message start and writing over the header.
+    for (final var mismatched : List.of(List.of(feePayer), List.of(feePayer, signerB, signer(33)))) {
+      final byte[] refused = unsigned.clone();
+      assertEquals(
+          String.format("Expected 2 signers, only passed %d.", mismatched.size()),
+          assertThrows(IllegalArgumentException.class, () -> Transaction.sign(mismatched, refused)).getMessage()
+      );
+      assertArrayEquals(unsigned, refused, "a refused payload is left untouched");
+    }
   }
 }

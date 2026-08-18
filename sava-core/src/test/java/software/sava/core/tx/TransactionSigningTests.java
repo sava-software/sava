@@ -1,5 +1,6 @@
 package software.sava.core.tx;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
@@ -11,6 +12,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,6 +21,23 @@ import static org.junit.jupiter.api.Assertions.*;
 /// ones a multisig or fee-payer-plus-authority transaction goes through — had no coverage,
 /// so a signature written to the wrong slot, or a dropped signer, was invisible.
 final class TransactionSigningTests {
+
+  private static final AtomicInteger KEY_SEED = new AtomicInteger();
+
+  @BeforeEach
+  void resetKeySeed() {
+    KEY_SEED.set(0);
+  }
+
+  /// Fixture signers come from a counter reset before each test, so a key depends on neither
+  /// execution order nor how many tests ran before it. A generated key pair makes a PIT kill
+  /// non-reproducible: a mutant that misreads an offset can land on a fixture byte that happens to
+  /// equal an asserted constant, surviving on some runs and dying on others.
+  private static Signer nextSigner() {
+    final byte[] privateKey = new byte[Signer.KEY_LENGTH];
+    Arrays.fill(privateKey, (byte) KEY_SEED.incrementAndGet());
+    return Signer.createFromPrivateKey(privateKey);
+  }
 
   private record Fixture(Transaction tx, Signer feePayer, Signer authority) {
 
@@ -87,8 +106,8 @@ final class TransactionSigningTests {
 
   /// A two-signer transaction: the fee payer plus a writable signer authority.
   private static Fixture twoSignerTx() {
-    final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var authority = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var feePayer = nextSigner();
+    final var authority = nextSigner();
     final var ix = Instruction.createInstruction(
         SolanaAccounts.MAIN_NET.systemProgram(),
         List.of(AccountMeta.createWritableSigner(authority.publicKey())),
@@ -147,8 +166,8 @@ final class TransactionSigningTests {
 
   @Test
   void singleSignerMustMatchTheRequiredPublicKey() {
-    final var required = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
-    final var wrong = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var required = nextSigner();
+    final var wrong = nextSigner();
     final var tx = Transaction.createTx(
         required.publicKey(),
         // Put the wrong signer's key immediately after the required signer region. Matching must
@@ -174,7 +193,7 @@ final class TransactionSigningTests {
     assertArrayEquals(expectedFixture.tx().serialized(), fixture.tx().serialized());
 
     final var rejected = twoSignerTx();
-    final var unknown = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
+    final var unknown = nextSigner();
     assertThrows(
         IllegalArgumentException.class,
         () -> rejected.tx().sign((Collection<Signer>) List.of(rejected.feePayer(), unknown))

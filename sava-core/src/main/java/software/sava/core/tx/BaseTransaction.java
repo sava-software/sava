@@ -6,6 +6,7 @@ import software.sava.core.encoding.Base58;
 
 import java.util.*;
 
+import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 
 abstract class BaseTransaction implements Transaction {
@@ -211,6 +212,61 @@ abstract class BaseTransaction implements Transaction {
     i = 0;
     for (final var signer : signerArray) {
       sign(signerIndexes[i++], signer);
+    }
+  }
+
+  /// The serialized payload, not the caller, decides where a transaction's message begins.
+  ///
+  /// Backs [Transaction]'s `static` signing helpers, where the signer count arrives as raw bytes and
+  /// is therefore untrusted. Those helpers used to size the signature block from the caller's
+  /// argument and overwrite the count byte to match, which silently relocates the message: signing a
+  /// two-signer payload with one signer moved the message start back 64 bytes and wrote a signature
+  /// over the header. The overwrite dated from a time when construction did not set that byte;
+  /// every `createTx` path writes it at allocation now, so all it still did was let a mismatch pass.
+  ///
+  /// A payload states its signature count twice — the prefix that positions the message, and the
+  /// header's own `num_required_signatures` — and only the prefix locates anything, so both are
+  /// checked. Trusting the prefix alone would have moved the defect rather than closed it: a payload
+  /// whose two copies disagree would still be signed, over a span its own header contradicts. The
+  /// header sits at the prefix's implied message offset, after the version byte where there is one.
+  /// [TransactionSkeleton] corroborates the same pair before it will sign.
+  ///
+  /// Nothing is written, and a caller assembling a buffer by hand declares its count exactly as
+  /// `createTx` does. Like every signature-count site in [Transaction] this reads one byte, `sigLen`
+  /// being `1 + (n << 6)` throughout, so counts above 127 narrow rather than growing a second
+  /// compact-u16 byte.
+  ///
+  /// @throws IllegalArgumentException if `numSigners` disagrees with the payload, if the payload's
+  ///                                  two copies of the count disagree, or if it is too short to
+  ///                                  hold the signatures and header they imply
+  static void requireSignerCount(final byte[] out, final int numSigners) {
+    final int numRequiredSignatures = out[0] & 0xFF;
+    if (numSigners != numRequiredSignatures) {
+      throw new IllegalArgumentException(String.format(
+          "Expected %d signers, only passed %d.", numRequiredSignatures, numSigners
+      ));
+    }
+    final int msgOffset = 1 + (numRequiredSignatures << 6);
+    if (msgOffset >= out.length) {
+      throw new IllegalArgumentException(String.format(
+          "A %d byte payload cannot hold %d signatures and a message.", out.length, numRequiredSignatures
+      ));
+    }
+    final int versionByte = out[msgOffset] & 0xFF;
+    final int headerOffset = signedByte(versionByte) ? msgOffset + 1 : msgOffset;
+    if (headerOffset >= out.length) {
+      throw new IllegalArgumentException(String.format(
+          "A %d byte payload cannot hold %d signatures and a message header.", out.length, numRequiredSignatures
+      ));
+    }
+    // One read serves both formats: a legacy header offset is the message offset, so this re-reads
+    // the very byte the version test just looked at, which is that format's count.
+    final int headerSignatures = out[headerOffset] & 0xFF;
+    if (headerSignatures != numRequiredSignatures) {
+      throw new IllegalArgumentException(String.format(
+          "Serialized signature count %d does not match the message header's required signature count %d.",
+          numRequiredSignatures, headerSignatures
+      ));
     }
   }
 

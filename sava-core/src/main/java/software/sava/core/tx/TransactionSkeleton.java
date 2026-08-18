@@ -289,6 +289,28 @@ public interface TransactionSkeleton {
 
   int serializedInstructionsLength();
 
+  /**
+   * Parses each instruction's account references against the supplied array by index.
+   *
+   * <p>An out-of-range account index resolves against two different bounds. An index at or beyond
+   * {@link #numAccounts()} — the included accounts plus every index the transaction's lookup
+   * tables load — names an account the transaction does not declare; that is corruption in every
+   * format and throws, exactly as an out-of-range program index always has. An index the
+   * transaction declares but the supplied array cannot resolve yields a {@code null} element
+   * inside that instruction's account list: through this interface's own parsers that is precisely
+   * a <b>v0</b> message parsed without its lookup tables, whose first table-loaded account sits at
+   * {@link #numIncludedAccounts()} — the same contract
+   * {@link #parseInstructionsWithoutTableAccounts()} documents. Resolvability is judged against
+   * the supplied array alone, so a caller-truncated array produces the same {@code null} for a
+   * declared index in any format; a legacy message has no lookup tables, so through arrays this
+   * interface produces its every declared index resolves and its instruction accounts are never
+   * {@code null}. Transaction v1 also declares no loaded accounts, and its reader — which arrives
+   * with v1 support — enforces these same two bounds, rejecting an undeclared index with the
+   * identical exception and message.</p>
+   *
+   * @throws IndexOutOfBoundsException if an instruction references an account index the
+   *                                   transaction does not declare
+   */
   Instruction[] parseInstructions(final AccountMeta[] accounts);
 
   default Instruction[] parseLegacyInstructions() {
@@ -302,11 +324,21 @@ public interface TransactionSkeleton {
   Instruction[] parseInstructionsWithoutAccounts();
 
   /**
-   * If this is a versioned transaction, accounts which are indexed into a lookup table will be null.
-   * Signing accounts and program accounts will always be included.
+   * If this is a v0 transaction, accounts which are indexed into a lookup table will be null.
+   * Signing accounts and program accounts will always be included. Legacy and v1 transactions have
+   * no lookup tables, so every account is resolved.
    */
   Instruction[] parseInstructionsWithoutTableAccounts();
 
+  /**
+   * Filters by discriminator, resolving accounts the way {@link #parseInstructions(AccountMeta[])}
+   * does — {@code null} elements for declared indices the supplied array cannot resolve, which
+   * through sava-produced arrays only a v0 message parsed without its lookup tables exhibits, and
+   * the same rejection of undeclared indices in every format.
+   *
+   * @throws IndexOutOfBoundsException if a matched instruction references an account index the
+   *                                   transaction does not declare
+   */
   Instruction[] filterInstructions(final AccountMeta[] accounts, final Discriminator discriminator);
 
   default Instruction[] filterInstructionsWithoutTableAccounts(final Discriminator discriminator) {
