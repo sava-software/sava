@@ -229,10 +229,14 @@ same technique twice would prove nothing.
 The `ed25519` subpackage is excluded here — it has its own suite, and the
 `crypto.*` wildcard spans dots.
 
-## vanity suite — no accepted mutants
+## vanity suite — the former Subsequence-only phase (closed 2026-08-04)
 
-`vanity-accepted.csv` is empty and the suite runs at 100%. Keep it that way:
-any new survivor here is a real gap, not debt.
+Everything in this section describes the suite's earlier life, when its target
+list was the `Subsequence*` allowlist: in that phase `vanity-accepted.csv` was
+empty and the narrow suite ran at 100%. The 2026-08-04 ownership closure widened
+the suite to the whole package, and its current state — 63 seeded `# untriaged`
+rows and the audited timeout set — is recorded in the seeded-debt table at the
+top of this file, not here.
 
 It was briefly seeded 2026-07-20 with 9 entries, all from the "Character
 options:" table that `Subsequence.create` printed to `System.out` while

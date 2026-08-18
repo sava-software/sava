@@ -44,12 +44,19 @@ generated"). `MaskWorkerTests` has been driving every worker with a finite
 `maxSearches` all along. The argument was stale rather than wrong: it described
 the code before the seam landed and was never re-measured afterwards.
 
-Measured on the widened suite: **235 mutants, 73% detected, 9 timed out** — not a
-timeout per predicate-breaking mutant. Eight of those nine are one family with one
-cause (the `for (;;)` search has exactly two exits, and each mutant disables the
-cap that is the only one a test can reach), audited in
-`sava-core/config/pitest/README.md`. Eight timeout windows is the whole price of
-mutating the package, and it closed the last ownership gap in this module.
+The committed audited-timeout set for the suite currently holds **five members**,
+all `cause:liveness` (`SubsequenceRecord.formatCharOptions` plus the four
+`MaskWorker`/`BeginsWithMaskWorker` search-loop keys), audited in
+`sava-core/config/pitest/README.md` — that set, not a count, is the present price
+of mutating the package, and widening the suite closed the last ownership gap in
+this module.
+
+Historical measurement, 2026-08-04, on the source of that date: **235 mutants,
+73% detected, 9 timed out** — not a timeout per predicate-breaking mutant. Eight
+of those nine were one family with one cause (the `for (;;)` search has exactly
+two exits, and each mutant disables the cap that is the only one a test can
+reach); the set has since narrowed as members were repaired or retired under the
+plugin's fresh-evidence rules.
 
 Reusable lesson: **an exception argued from a code property expires when that
 property changes.** This one outlived its cause by however long it took someone to
