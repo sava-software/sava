@@ -579,15 +579,15 @@ final class V1InstructionViewTests {
     }
   }
 
-  /// Characterizes a known defect rather than endorsing it, so that fixing it is a deliberate
-  /// change and not a surprise: [Discriminator#equals(byte[], int)] only bounds checks the
-  /// discriminator against the whole serialized length, never against the matched instruction's
-  /// own data length, so a discriminator longer than an instruction's data is compared against the
-  /// bytes that follow it. Both filter loops pass only the data offset, so a longer discriminator
-  /// can match an instruction it does not fit in. This is not a v1 regression: the legacy skeleton
-  /// spills identically, which the second half asserts.
+  /// A discriminator longer than an instruction's data must not be completed by the bytes that
+  /// follow it — the next instruction's payload here, or the trailing signature slots for the last
+  /// one. This used to characterize the opposite as a known defect: both filter loops passed only
+  /// the data offset, so [Discriminator#equals(byte[], int)] bounded the comparison by the whole
+  /// serialized length and the spill matched. The filters now pass the instruction's own data
+  /// length, in the v1 and legacy skeletons alike, agreeing with [Instruction#beginsWith] on the
+  /// same bytes.
   @Test
-  void testFilterDiscriminatorReadsPastInstructionData() {
+  void testFilterDiscriminatorIsBoundedByInstructionData() {
     final var feePayer = newKey();
     final var signer = newKey();
     final var program = SolanaAccounts.MAIN_NET.systemProgram();
@@ -602,15 +602,15 @@ final class V1InstructionViewTests {
     assertEquals(4, v1Parsed[0].len());
 
     // Eight bytes read from the first instruction's data offset: four of its own and four which
-    // belong to the following instruction.
+    // belong to the following instruction. The trap is live — unbounded, this is a match — which
+    // is what makes the zero-match assertions below meaningful.
     final var v1Spill = Discriminator.createDiscriminator(v1Data, v1Parsed[0].offset(), 8);
     assertArrayEquals(new byte[]{1, 2, 3, 4, 5, 6, 7, 8}, v1Spill.data());
-    final var v1Matches = v1Skeleton.filterInstructions(v1Accounts, v1Spill);
-    assertEquals(1, v1Matches.length);
-    // The matched instruction is shorter than the discriminator it supposedly begins with.
-    assertEquals(4, v1Matches[0].len());
-    assertFalse(v1Matches[0].beginsWith(v1Spill.data()));
-    assertEquals(1, v1Skeleton.filterInstructionsWithoutAccounts(v1Spill).length);
+    assertTrue(v1Spill.equals(v1Data, v1Parsed[0].offset()), "the eight bytes are contiguous on the wire");
+    assertFalse(v1Parsed[0].beginsWith(v1Spill.data()), "but the first instruction does not begin with them");
+
+    assertEquals(0, v1Skeleton.filterInstructions(v1Accounts, v1Spill).length);
+    assertEquals(0, v1Skeleton.filterInstructionsWithoutAccounts(v1Spill).length);
 
     final var legacyTx = Transaction.createTx(feePayer, List.of(ix1, ix2));
     legacyTx.setRecentBlockHash(BLOCK_HASH);
@@ -621,9 +621,13 @@ final class V1InstructionViewTests {
     assertEquals(4, legacyParsed[0].len());
 
     final var legacySpill = Discriminator.createDiscriminator(legacyData, legacyParsed[0].offset(), 8);
-    final var legacyMatches = legacySkeleton.filterInstructions(legacyAccounts, legacySpill);
-    assertEquals(1, legacyMatches.length);
-    assertEquals(4, legacyMatches[0].len());
-    assertFalse(legacyMatches[0].beginsWith(legacySpill.data()));
+    assertTrue(legacySpill.equals(legacyData, legacyParsed[0].offset()));
+    assertEquals(0, legacySkeleton.filterInstructions(legacyAccounts, legacySpill).length);
+    assertEquals(0, legacySkeleton.filterInstructionsWithoutAccounts(legacySpill).length);
+
+    // An exact-length discriminator remains a legitimate match: the bound is >=, not >.
+    final var exact = Discriminator.createDiscriminator(new byte[]{1, 2, 3, 4});
+    assertEquals(1, v1Skeleton.filterInstructions(v1Accounts, exact).length);
+    assertEquals(1, legacySkeleton.filterInstructions(legacyAccounts, exact).length);
   }
 }

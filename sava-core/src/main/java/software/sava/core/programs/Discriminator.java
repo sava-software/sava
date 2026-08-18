@@ -4,6 +4,7 @@ import software.sava.core.encoding.ByteUtil;
 import software.sava.core.tx.Instruction;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.function.Predicate;
 
 public interface Discriminator extends Predicate<Instruction> {
@@ -77,9 +78,28 @@ public interface Discriminator extends Predicate<Instruction> {
     );
   }
 
+  /// Matches only within the `len` bytes beginning at `offset`, for callers holding a region of a
+  /// larger buffer — an instruction's data inside a serialized transaction, most of all.
+  ///
+  /// [#equals(byte[], int)] bounds the comparison by the end of the whole array, which is the right
+  /// contract when `offset` starts a standalone payload but the wrong one for a region: a
+  /// discriminator longer than the region is then compared against whatever follows it, so a match
+  /// can be produced by bytes the region does not own. Where those trailing bytes are attacker
+  /// influenced, such a match can be forged outright.
+  ///
+  /// @throws IndexOutOfBoundsException if `offset` and `len` do not describe a region of `data`
+  default boolean equals(final byte[] data, final int offset, final int len) {
+    Objects.checkFromIndexSize(offset, len, data.length);
+    final byte[] thisData = data();
+    return len >= thisData.length && Arrays.equals(
+        thisData, 0, thisData.length,
+        data, offset, offset + thisData.length
+    );
+  }
+
   @Override
   default boolean test(final Instruction ix) {
-    return equals(ix.data(), ix.offset());
+    return equals(ix.data(), ix.offset(), ix.len());
   }
 
   default int[] toIntArray() {
