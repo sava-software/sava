@@ -572,6 +572,170 @@ final class TransactionSkeletonParseTests {
     return out;
   }
 
+  private static PublicKey seededKey(final int fill) {
+    final byte[] key = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    Arrays.fill(key, (byte) fill);
+    return PublicKey.createPubKey(key);
+  }
+
+  /// Locates the first account-index byte of the first instruction that references any accounts,
+  /// so a test can corrupt exactly one wire index without rebuilding the message around it.
+  private static int firstInstructionAccountIndexOffset(final TransactionSkeleton skeleton) {
+    final byte[] data = skeleton.data();
+    int o = skeleton.instructionsOffset();
+    for (int i = 0; i < skeleton.numInstructions(); ++i) {
+      ++o; // raw u8 program index
+      final int numIxAccounts = CompactU16Encoding.decode(data, o);
+      o += CompactU16Encoding.getByteLen(data, o);
+      if (numIxAccounts > 0) {
+        return o;
+      }
+      final int len = CompactU16Encoding.decode(data, o);
+      o += CompactU16Encoding.getByteLen(data, o) + len;
+    }
+    throw new AssertionError("no instruction references an account");
+  }
+
+  /// The sava#57 resolution, ported from main through the Record to Impl rename: an instruction
+  /// account index resolves against two different bounds. Past the transaction's own declared
+  /// total — `numAccounts()`, included plus every table-loaded index — it is corruption in every
+  /// format and throws, exactly as [V1TransactionSkeleton] already refuses. Declared but not
+  /// covered by the supplied array, it reads as the documented null: exactly a v0 message parsed
+  /// without its lookup tables, whose first loaded account sits at `numIncludedAccounts()`.
+  @Test
+  void declaredButUnresolvedV0InstructionAccountIndicesReadAsNull() {
+    final var versioned = skeleton(VERSIONED_TX);
+    assertTrue(versioned.numAccounts() > versioned.numIncludedAccounts(),
+        "the fixture must load accounts from tables");
+    final var included = versioned.parseAccounts();
+    int nulls = 0, resolved = 0;
+    for (final var ix : versioned.parseInstructions(included)) {
+      for (final var meta : ix.accounts()) {
+        if (meta == null) {
+          ++nulls;
+        } else {
+          ++resolved;
+        }
+      }
+    }
+    assertTrue(nulls > 0, "this transaction references table-loaded accounts");
+    assertTrue(resolved > 0, "included accounts still resolve");
+
+    final int indexOffset = firstInstructionAccountIndexOffset(versioned);
+    for (final int declared : new int[]{versioned.numIncludedAccounts(), versioned.numAccounts() - 1}) {
+      final byte[] data = versioned.data().clone();
+      data[indexOffset] = (byte) declared;
+      final var patched = TransactionSkeleton.deserializeSkeleton(data);
+      final var accounts = patched.parseAccounts();
+      Instruction target = null;
+      for (final var ix : patched.parseInstructions(accounts)) {
+        if (!ix.accounts().isEmpty()) {
+          target = ix;
+          break;
+        }
+      }
+      assertNotNull(target);
+      assertNull(target.accounts().getFirst(), "declared index " + declared + " is unresolvable, not corrupt");
+    }
+  }
+
+  /// The wire bound: every format throws for an undeclared index — v0 with tables, v0 without,
+  /// legacy — and the caller's array cannot widen the declaration.
+  @Test
+  void undeclaredInstructionAccountIndicesAreRejectedInEveryFormat() {
+    final var versioned = skeleton(VERSIONED_TX);
+    final byte[] v0Data = versioned.data().clone();
+    v0Data[firstInstructionAccountIndexOffset(versioned)] = (byte) versioned.numAccounts();
+    final var v0Patched = TransactionSkeleton.deserializeSkeleton(v0Data);
+    final var v0Accounts = v0Patched.parseAccounts();
+    final String v0Expected = "Instruction account index " + versioned.numAccounts()
+        + " is outside the " + versioned.numAccounts() + " accounts of this transaction.";
+    assertEquals(
+        v0Expected,
+        assertThrowsExactly(IndexOutOfBoundsException.class, () -> v0Patched.parseInstructions(v0Accounts)).getMessage()
+    );
+
+    final byte[] noTables = versionedNoTableTx();
+    final var noTableSkeleton = TransactionSkeleton.deserializeSkeleton(noTables);
+    assertEquals(noTableSkeleton.numIncludedAccounts(), noTableSkeleton.numAccounts());
+    noTables[firstInstructionAccountIndexOffset(noTableSkeleton)] = (byte) noTableSkeleton.numAccounts();
+    final var noTablePatched = TransactionSkeleton.deserializeSkeleton(noTables);
+    final var noTableAccounts = noTablePatched.parseAccounts();
+    assertThrowsExactly(IndexOutOfBoundsException.class, () -> noTablePatched.parseInstructions(noTableAccounts));
+
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createRead(seededKey(7))),
+        new byte[]{9, 9}
+    );
+    final var tx = Transaction.createTx(seededKey(3), ix);
+    tx.setRecentBlockHash(new byte[Transaction.BLOCK_HASH_LENGTH]);
+    final byte[] data = tx.serialized();
+    final var legacy = TransactionSkeleton.deserializeSkeleton(data);
+    assertTrue(legacy.isLegacy());
+    final int numAccounts = legacy.numAccounts();
+    final int accountIndexOffset = firstInstructionAccountIndexOffset(legacy);
+    assertTrue((data[accountIndexOffset] & 0xFF) < numAccounts, "the fixture starts valid");
+    data[accountIndexOffset] = (byte) numAccounts;
+
+    final var patched = TransactionSkeleton.deserializeSkeleton(data);
+    final var accounts = patched.parseAccounts();
+    final String expected = "Instruction account index " + numAccounts
+        + " is outside the " + numAccounts + " accounts of this transaction.";
+    assertEquals(
+        expected,
+        assertThrowsExactly(IndexOutOfBoundsException.class, () -> patched.parseInstructions(accounts)).getMessage()
+    );
+    assertEquals(
+        expected,
+        assertThrowsExactly(
+            IndexOutOfBoundsException.class,
+            () -> patched.filterInstructions(
+                accounts, software.sava.core.programs.Discriminator.createDiscriminator(new byte[]{9, 9})
+            )
+        ).getMessage()
+    );
+    final var oversized = Arrays.copyOf(accounts, numAccounts + 5);
+    Arrays.fill(oversized, numAccounts, oversized.length, accounts[0]);
+    assertEquals(
+        expected,
+        assertThrowsExactly(IndexOutOfBoundsException.class, () -> patched.parseInstructions(oversized)).getMessage(),
+        "a caller's array cannot widen what the transaction declares"
+    );
+
+    data[accountIndexOffset] = (byte) (numAccounts - 1);
+    final var lastValid = TransactionSkeleton.deserializeSkeleton(data);
+    assertNotNull(lastValid.parseInstructions(lastValid.parseAccounts())[0].accounts().getFirst());
+  }
+
+  /// The array bound is judged against the supplied array alone, sava-produced or not: a
+  /// caller-truncated array reads a declared index as null in any format, legacy included. The
+  /// fixture uses the already-ordered `createTx` overload so the read account sits after the
+  /// program deterministically — the program read precedes the account loop.
+  @Test
+  void aCallerTruncatedArrayReadsDeclaredIndicesAsNullInAnyFormat() {
+    final var program = AccountMeta.createInvoked(seededKey(11));
+    final var readKey = seededKey(12);
+    final var ix = Instruction.createInstruction(program, List.of(AccountMeta.createRead(readKey)), new byte[]{9, 9});
+    final var ordered = new AccountMeta[]{AccountMeta.createFeePayer(seededKey(10)), program, AccountMeta.createRead(readKey)};
+    final var tx = Transaction.createTx(List.of(ix), ordered);
+    tx.setRecentBlockHash(new byte[Transaction.BLOCK_HASH_LENGTH]);
+
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
+    assertTrue(skeleton.isLegacy());
+    final var accounts = skeleton.parseAccounts();
+    assertEquals(3, accounts.length);
+    assertEquals(readKey, accounts[2].publicKey(), "the referenced account must sit after the program");
+
+    final var resolved = skeleton.parseInstructions(accounts)[0].accounts();
+    assertEquals(readKey, resolved.getFirst().publicKey());
+
+    final var truncated = Arrays.copyOf(accounts, 2);
+    final var viaTruncated = skeleton.parseInstructions(truncated)[0].accounts();
+    assertEquals(1, viaTruncated.size());
+    assertNull(viaTruncated.getFirst(), "declared but unresolvable in the supplied array");
+  }
+
   private static byte[] versionedNoTableTx() {
     final var feePayer = Signer.createFromKeyPair(Signer.generatePrivateKeyPairBytes());
     final var ix = Instruction.createInstruction(

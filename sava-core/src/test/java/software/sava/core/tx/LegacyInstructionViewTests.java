@@ -185,12 +185,15 @@ final class LegacyInstructionViewTests {
     assertEquals(createWrite(WRITE_ACCOUNT), findMeta(included, WRITE_ACCOUNT));
   }
 
-  /// Pins the `accountIndex < accounts.length` guard of
-  /// [TransactionSkeletonImpl#parseInstructions(AccountMeta[])]: an instruction account index of
-  /// exactly `accounts.length` is outside the array and must yield a null meta. With `<=` the same
-  /// index reads `accounts[accounts.length]` and throws.
+  /// Pins the two bounds of [TransactionSkeletonImpl#parseInstructions(AccountMeta[])], the
+  /// sava#57 resolution ported from main: a legacy message declares no table-loaded accounts, so
+  /// `numAccounts` equals `numIncludedAccounts` and an instruction account index of exactly
+  /// `accounts.length` is undeclared — corruption, refused with the diagnosed rejection
+  /// [V1TransactionSkeleton] shares — where it used to read as a null meta the caller would trip
+  /// over later. The last declared index must keep resolving: with `>` in place of `>=` the
+  /// smallest undeclared index would slip through to the array read.
   @Test
-  void testLegacyInstructionAccountIndexOnTheAccountsBoundaryIsNull() {
+  void testLegacyInstructionAccountIndexOnTheAccountsBoundaryIsRejected() {
     final byte[] data = serializedLegacy(
         ix(PROGRAM, List.of(createWrite(WRITE_ACCOUNT), createRead(READ_ACCOUNT)), 1, 2, 3, 4)
     );
@@ -198,6 +201,7 @@ final class LegacyInstructionViewTests {
     final var accounts = skeleton.parseAccounts();
     assertEquals(4, accounts.length);
     assertEquals(skeleton.numIncludedAccounts(), accounts.length);
+    assertEquals(skeleton.numAccounts(), accounts.length, "legacy declares no loaded accounts");
 
     final var parsed = skeleton.parseInstructions(accounts);
     assertEquals(1, parsed.length);
@@ -205,7 +209,7 @@ final class LegacyInstructionViewTests {
     assertEquals(WRITE_ACCOUNT, parsed[0].accounts().get(0).publicKey());
     assertEquals(READ_ACCOUNT, parsed[0].accounts().get(1).publicKey());
 
-    // The last in range index still resolves to its own meta.
+    // The last declared index still resolves to its own meta.
     final int lastIndex = accounts.length - 1;
     final var inRangeSkeleton = TransactionSkeleton.deserializeSkeleton(
         withInstructionAccountIndex(data, 0, 1, lastIndex)
@@ -216,7 +220,7 @@ final class LegacyInstructionViewTests {
     assertEquals(inRangeAccounts[lastIndex], inRange[0].accounts().get(1));
     assertEquals(inRangeAccounts[lastIndex].publicKey(), inRange[0].accounts().get(1).publicKey());
 
-    // One past it, exactly accounts.length, is outside the array.
+    // One past it, exactly accounts.length, is undeclared.
     final byte[] outOfRangeData = withInstructionAccountIndex(data, 0, 1, accounts.length);
     final var outOfRangeSkeleton = TransactionSkeleton.deserializeSkeleton(outOfRangeData);
     final var outOfRangeAccounts = outOfRangeSkeleton.parseAccounts();
@@ -224,21 +228,24 @@ final class LegacyInstructionViewTests {
     assertEquals(accounts.length, outOfRangeAccounts.length);
     assertArrayEquals(accounts, outOfRangeAccounts);
 
-    final var outOfRange = outOfRangeSkeleton.parseInstructions(outOfRangeAccounts);
-    assertEquals(1, outOfRange.length);
-    assertEquals(2, outOfRange[0].accounts().size());
-    assertNotNull(outOfRange[0].accounts().get(0));
-    assertEquals(WRITE_ACCOUNT, outOfRange[0].accounts().get(0).publicKey());
-    assertNull(outOfRange[0].accounts().get(1), "an index of accounts.length is outside the accounts");
-    // The program is still resolved and marked invoked, so the null is the account slot alone.
-    assertEquals(PROGRAM, outOfRange[0].programId().publicKey());
-    assertTrue(outOfRange[0].programId().invoked());
+    final String expected = "Instruction account index " + accounts.length
+        + " is outside the " + accounts.length + " accounts of this transaction.";
+    assertEquals(
+        expected,
+        assertThrowsExactly(
+            IndexOutOfBoundsException.class,
+            () -> outOfRangeSkeleton.parseInstructions(outOfRangeAccounts)
+        ).getMessage()
+    );
 
-    // The filter view shares the guard and must agree.
-    final var filtered = outOfRangeSkeleton.filterInstructions(outOfRangeAccounts, toDiscriminator(1, 2, 3, 4));
-    assertEquals(1, filtered.length);
-    assertNotNull(filtered[0].accounts().get(0));
-    assertNull(filtered[0].accounts().get(1));
+    // The filter view shares the bound and must agree.
+    assertEquals(
+        expected,
+        assertThrowsExactly(
+            IndexOutOfBoundsException.class,
+            () -> outOfRangeSkeleton.filterInstructions(outOfRangeAccounts, toDiscriminator(1, 2, 3, 4))
+        ).getMessage()
+    );
   }
 
   /// Covers both arms of the legacy filter loops' exact sizing: every instruction matching, and

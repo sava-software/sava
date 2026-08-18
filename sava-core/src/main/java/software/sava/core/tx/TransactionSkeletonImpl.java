@@ -292,7 +292,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
       o += getByteLen(data, o);
       for (int a = 0; a < numIxAccounts; ++a) {
         accountIndex = data[o++] & 0xFF;
-        ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
+        ixAccounts[a] = instructionAccount(accounts, accountIndex);
       }
 
       final int len = decode(data, o);
@@ -310,6 +310,38 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
           accountIndex, numIncludedAccounts
       ));
     }
+  }
+
+  /// The instruction-account counterpart to [#requireIncludedProgramAccount], bounded twice: once
+  /// by the wire and once by the caller.
+  ///
+  /// The transaction itself declares how many accounts it references — `numAccounts`, the included
+  /// accounts plus every index its lookup tables load. An instruction index at or past that total
+  /// names an account no reading of the transaction can supply, in any format, and the runtime
+  /// rejects such a message outright; it used to read as the same `null` a legitimately
+  /// unresolvable index produces, an instruction that looks well formed and throws a
+  /// `NullPointerException` far from the malformed input, while the program-index field of the
+  /// same instruction has always been loud about the same defect. It now throws for every format
+  /// this class parses — legacy and v0 — and [V1TransactionSkeleton], which the deserialization
+  /// entry point selects before this class is reached, rejects with the identical exception and
+  /// message.
+  ///
+  /// An index the transaction *does* declare but the supplied array cannot resolve reads as the
+  /// documented `null`: through sava's own parsers that is exactly a v0 message parsed without its
+  /// lookup tables, whose first loaded account sits at `numIncludedAccounts`. Legacy declares no
+  /// loaded accounts, so its every declared index resolves and only a caller-truncated array — one
+  /// no sava parser produces — can observe a legacy `null`.
+  ///
+  /// @throws IndexOutOfBoundsException if an instruction references an account index the
+  ///                                   transaction does not declare
+  private AccountMeta instructionAccount(final AccountMeta[] accounts, final int accountIndex) {
+    if (accountIndex >= numAccounts) {
+      throw new IndexOutOfBoundsException(String.format(
+          "Instruction account index %d is outside the %d accounts of this transaction.",
+          accountIndex, numAccounts
+      ));
+    }
+    return accountIndex < accounts.length ? accounts[accountIndex] : null;
   }
 
   private PublicKey getProgramAccount(final int accountIndex) {
@@ -363,7 +395,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
         final var ixAccounts = new AccountMeta[numIxAccounts];
         for (int a = 0; a < numIxAccounts; ++a) {
           final int accountIndex = data[accountsOffset++] & 0xFF;
-          ixAccounts[a] = accountIndex < accounts.length ? accounts[accountIndex] : null;
+          ixAccounts[a] = instructionAccount(accounts, accountIndex);
         }
         instructions[d++] = createInstruction(getProgramAccount(programAccountIndex), Arrays.asList(ixAccounts), data, o, len);
       }
