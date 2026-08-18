@@ -372,8 +372,9 @@ shapes in `TransactionFactoryTests`.
 ## Untriaged debt (tx suite)
 
 Triaged 2026-08-17. Three of the seven were equivalent and are argued
-above under their labels; the rest are kill candidates, recorded here
-because the work is not done rather than because it is accepted.
+above under their labels; one was killed the same day once its blocking
+decision landed; the rest are kill candidates, recorded here because the
+work is not done rather than because it is accepted.
 
 - `TransactionSkeletonRecord.invokedProgramAccount`
   `RemoveConditionalMutator_EQUAL_ELSE` — **killable, not equivalent.**
@@ -384,14 +385,20 @@ because the work is not done rather than because it is accepted.
   `AccountMetaInvokedAndWrite` to read-only. A program account that is
   also writable distinguishes them.
 - `TransactionSkeletonRecord.parseInstructions`
-  `ConditionalsBoundaryMutator` — **killable.** `<` to `<=` changes
-  behaviour at exactly `accountIndex == accounts.length`, which is the
-  first table-loaded account of a v0 message parsed against an
-  unresolved array: the ternary stores `null` there and the mutant
-  throws. Nothing asserts a null instruction-account slot today. Held
-  pending the open decision on whether that null is the contract at all
-  (see `TransactionSkeleton#parseInstructionsWithoutTableAccounts`) —
-  killing it would pin behaviour that may be changing.
+  `ConditionalsBoundaryMutator` — **killed 2026-08-18** once sava#57
+  resolved the read-side contract as two bounds in `instructionAccount`,
+  neither of them a format split: an index at or past the transaction's
+  own declared total (`numAccounts`, included plus table-loaded) is
+  corruption in every format and throws the diagnosed rejection
+  transaction v1 already uses, while a declared index the supplied array
+  cannot resolve reads as the documented null — reachable through
+  sava's own parsers only for a v0 message parsed without its lookup
+  tables. Both bounds are revert-verified and pinned at their exact
+  boundaries by
+  `TransactionSkeletonParseTests#declaredButUnresolvedV0InstructionAccountIndicesReadAsNull`
+  and `#undeclaredInstructionAccountIndicesAreRejectedInEveryFormat`,
+  the latter including the oversized-caller-array case, since the
+  caller's array must not widen what the wire declares.
 - `TransactionSkeleton.deserializeSkeleton`
   `RemoveConditionalMutator_ORDER_IF` — **killable, awkwardly.** Forcing
   the versioned walk for a legacy message leaves `version` untouched, so

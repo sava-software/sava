@@ -3,25 +3,24 @@ software.sava.core.accounts.lookup.AccountIndexLookupTableView,compareTo,RemoveC
 software.sava.core.tx.InstructionRecord,extraAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 27
 software.sava.core.tx.InstructionRecord,toString,ConditionalsBoundaryMutator,SURVIVED # redundant work # line 188
 software.sava.core.tx.InstructionRecord,toString,RemoveConditionalMutator_EQUAL_IF,SURVIVED # redundant work # line 188
-software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 252
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 254
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 384
-software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 425
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 427
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_IF,SURVIVED # displacement boundary # line 427
-software.sava.core.tx.Transaction,createTx,VoidMethodCallMutator,SURVIVED # redundant work # line 430
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 491
-software.sava.core.tx.Transaction,exceedsSizeLimit,BooleanTrueReturnValsMutator,NO_COVERAGE # shadowed default # line 671
-software.sava.core.tx.Transaction,exceedsSizeLimit,ConditionalsBoundaryMutator,NO_COVERAGE # shadowed default # line 671
-software.sava.core.tx.Transaction,exceedsSizeLimit,RemoveConditionalMutator_ORDER_ELSE,NO_COVERAGE # shadowed default # line 671
+software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 253
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 255
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 385
+software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 426
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 428
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_IF,SURVIVED # displacement boundary # line 428
+software.sava.core.tx.Transaction,createTx,VoidMethodCallMutator,SURVIVED # redundant work # line 431
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 492
+software.sava.core.tx.Transaction,exceedsSizeLimit,BooleanTrueReturnValsMutator,NO_COVERAGE # shadowed default # line 676
+software.sava.core.tx.Transaction,exceedsSizeLimit,ConditionalsBoundaryMutator,NO_COVERAGE # shadowed default # line 676
+software.sava.core.tx.Transaction,exceedsSizeLimit,RemoveConditionalMutator_ORDER_ELSE,NO_COVERAGE # shadowed default # line 676
 software.sava.core.tx.TransactionRecord,lambda$static$0,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead defensive # line 29
-software.sava.core.tx.TransactionRecord,setBlockHash,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # shadowed default # line 239
-software.sava.core.tx.TransactionRecord,setBlockHash,RemoveConditionalMutator_EQUAL_IF,SURVIVED # shadowed default # line 239
-software.sava.core.tx.TransactionRecord,setBlockHash,VoidMethodCallMutator,NO_COVERAGE # shadowed default # line 246
+software.sava.core.tx.TransactionRecord,setBlockHash,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # shadowed default # line 294
+software.sava.core.tx.TransactionRecord,setBlockHash,RemoveConditionalMutator_EQUAL_IF,SURVIVED # shadowed default # line 294
+software.sava.core.tx.TransactionRecord,setBlockHash,VoidMethodCallMutator,NO_COVERAGE # shadowed default # line 301
 software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # untriaged # line 143
 software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,RemoveConditionalMutator_ORDER_IF,SURVIVED # untriaged # line 66
 software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,ConditionalsBoundaryMutator,SURVIVED # result identical routing # line 85
-software.sava.core.tx.TransactionSkeletonRecord,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 349
-software.sava.core.tx.TransactionSkeletonRecord,filterInstructionsWithoutAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 374
-software.sava.core.tx.TransactionSkeletonRecord,invokedProgramAccount,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 238
-software.sava.core.tx.TransactionSkeletonRecord,parseInstructions,ConditionalsBoundaryMutator,SURVIVED # untriaged # line 255
+software.sava.core.tx.TransactionSkeletonRecord,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 406
+software.sava.core.tx.TransactionSkeletonRecord,filterInstructionsWithoutAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 431
+software.sava.core.tx.TransactionSkeletonRecord,invokedProgramAccount,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 264
