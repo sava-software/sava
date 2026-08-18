@@ -150,6 +150,26 @@ final class V1Transaction extends BaseTransaction {
     return this;
   }
 
+  /// The composition the interface default used to provide, now explicit because the inherited
+  /// default throws for implementations that never supported these mutators: apply the limit, then
+  /// price against it.
+  ///
+  /// Both ConfigValue slots are validated before either is written. Composed naively, a
+  /// transaction whose mask carries the compute-unit-limit bit but not the priority-fee pair would
+  /// have its limit written and then throw on the fee slot, leaving it observably half-updated —
+  /// and a builder-produced v1 transaction has exactly that shape unless a priority fee was
+  /// requested, since [TxBuilder] always serializes the limit slot but never defaults the fee. The
+  /// fee slot is resolved first, so a refusal on either slot leaves every byte untouched.
+  @Override
+  public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit,
+                                                                final int computeUnitLimit) {
+    final int priorityFeeOffset = configValueOffset(PRIORITY_FEE_MASK);
+    setComputeUnitLimit(computeUnitLimit);
+    ByteUtil.putInt64LE(data, priorityFeeOffset,
+        TxBuilder.computeUnitPriceToPriorityFeeLamports(microLamportsPerComputeUnit, computeUnitLimit));
+    return this;
+  }
+
   @Override
   public Transaction setAccountDataSizeLimit(final int accountDataSizeLimit) {
     ByteUtil.putInt32LE(data, configValueOffset(ACCOUNT_DATA_SIZE_LIMIT_MASK), accountDataSizeLimit);

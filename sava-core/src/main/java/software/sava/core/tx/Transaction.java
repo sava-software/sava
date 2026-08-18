@@ -771,11 +771,22 @@ public interface Transaction {
 
   int size();
 
-  boolean exceedsSizeLimit();
+  /// Compatibility default for implementations compiled against the pre-v1 interface: the legacy
+  /// limit main has always applied. The built-in implementations override this per format — a v1
+  /// transaction's limit is 4096 bytes.
+  default boolean exceedsSizeLimit() {
+    return size() > Transaction.MAX_SERIALIZED_LENGTH;
+  }
 
   /// The number of unique accounts referenced by this transaction, including any which would be
   /// loaded via an address lookup table.
-  int numAccounts();
+  /// Compatibility default for implementations compiled against the pre-v1 interface: reparses the
+  /// serialized transaction and reports the skeleton's wire-declared total, included accounts plus
+  /// every index its lookup tables load. Override to answer from state the implementation already
+  /// holds — this default costs a full deserialization per call.
+  default int numAccounts() {
+    return TransactionSkeleton.deserializeSkeleton(serialized()).numAccounts();
+  }
 
   /// Whether the number of unique accounts referenced by this transaction, including any which
   /// would be loaded via an address lookup table, exceeds the 64 account limit.
@@ -785,7 +796,10 @@ public interface Transaction {
   }
 
   /// The number of top-level instructions.
-  int numInstructions();
+  /// Compatibility default for implementations compiled against the pre-v1 interface.
+  default int numInstructions() {
+    return instructions().size();
+  }
 
   /// Whether the number of top-level instructions exceeds the 64-instruction limit. SIMD-0385
   /// imposes the limit on the v1 format directly, while legacy and v0 transactions are bound at
@@ -803,7 +817,12 @@ public interface Transaction {
   /// Legacy and v0 transactions have no distinct signature count limit, they are only bound by
   /// the serialized size limit, so this is always false.
   ///
-  boolean exceedsSignatureLimit();
+  /// Compatibility default for implementations compiled against the pre-v1 interface: only
+  /// SIMD-0385 v1 bounds the required signature count, at twelve, so every legacy and v0
+  /// transaction reports false here exactly as it did before this method existed.
+  default boolean exceedsSignatureLimit() {
+    return version() == 1 && numSigners() > TxBuilderImpl.MAX_V1_SIGNATURES;
+  }
 
   AccountMeta feePayer();
 
@@ -850,11 +869,20 @@ public interface Transaction {
   /// transaction is returned. Set the compute unit limit before the priority fee so the
   /// conversion reflects the intended limit.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that throws
+  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
+  /// implementation can hold the expectation, and a throwing default keeps recompilation
+  /// compatibility without inventing behaviour. The built-in implementations override it.
+  ///
   /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
   ///                               transaction are not set, because a priority fee was not
   ///                               provided to the {@link TxBuilder} or this transaction was
   ///                               produced elsewhere without one.
-  Transaction setPriorityFeeLamports(final long priorityFeeLamports);
+  /// @throws UnsupportedOperationException from the compatibility default, when this method is
+  ///                                       not overridden
+  default Transaction setPriorityFeeLamports(final long priorityFeeLamports) {
+    throw new UnsupportedOperationException("This Transaction implementation does not support setPriorityFeeLamports.");
+  }
 
   /// Sets the compute unit limit for this transaction.
   ///
@@ -865,10 +893,19 @@ public interface Transaction {
   /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
   /// to the runtime maximum.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that throws
+  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
+  /// implementation can hold the expectation, and a throwing default keeps recompilation
+  /// compatibility without inventing behaviour. The built-in implementations override it.
+  ///
   /// @throws IllegalStateException if the compute unit limit TransactionConfigMask bit of this
   ///                               v1 transaction is not set, because it was explicitly cleared
   ///                               or this transaction was produced elsewhere without one.
-  Transaction setComputeUnitLimit(final int computeUnitLimit);
+  /// @throws UnsupportedOperationException from the compatibility default, when this method is
+  ///                                       not overridden
+  default Transaction setComputeUnitLimit(final int computeUnitLimit) {
+    throw new UnsupportedOperationException("This Transaction implementation does not support setComputeUnitLimit.");
+  }
 
   /// Sets the priority fee for this transaction from a legacy/v0 SetComputeUnitPrice compute
   /// budget price, denominated in micro-lamports per compute unit, by converting it to lamports
@@ -892,6 +929,11 @@ public interface Transaction {
   /// flow this matters: tighten the compute unit limit first and convert afterwards, or call this
   /// again, if the fee should reflect the tightened limit rather than the one it was sized for.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that throws
+  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
+  /// implementation can hold the expectation, and a throwing default keeps recompilation
+  /// compatibility without inventing behaviour. The built-in implementations override it.
+  ///
   /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
   /// @return the transaction with its priority fee set
   /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
@@ -899,7 +941,11 @@ public interface Transaction {
   ///                               provided to the {@link TxBuilder} or this transaction was
   ///                               produced elsewhere without one.
   /// @see TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)
-  Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit);
+  /// @throws UnsupportedOperationException from the compatibility default, when this method is
+  ///                                       not overridden
+  default Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
+    throw new UnsupportedOperationException("This Transaction implementation does not support setPriorityFeeLamportsFromComputeUnitPrice.");
+  }
 
   /// Sets both the compute unit limit and the priority fee for this transaction from a legacy/v0
   /// SetComputeUnitPrice compute budget price, denominated in micro-lamports per compute unit. The
@@ -921,6 +967,14 @@ public interface Transaction {
   /// transaction was built with. As with the single argument overload the v1 result is a one-time
   /// conversion — a limit changed after this call does not move the fee.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that throws
+  /// [UnsupportedOperationException] directly — deliberately not composed from
+  /// [#setComputeUnitLimit(int)] followed by the single-argument overload, which would let an
+  /// implementation that defines its own compute unit limit mutate it before the inherited fee
+  /// call throws, leaving the transaction half-updated. The built-in implementations override this
+  /// with that composition and neither can half-update: the v1 override validates both ConfigValue
+  /// slots before writing either, and legacy/v0 build a new transaction, leaving this one untouched.
+  ///
   /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
   /// @param computeUnitLimit            the compute unit limit to set and convert the price against
   /// @return the transaction with its compute unit limit and priority fee set
@@ -928,12 +982,13 @@ public interface Transaction {
   ///                               TransactionConfigMask bits of this v1 transaction are not set,
   ///                               because they were not provided to the {@link TxBuilder} or this
   ///                               transaction was produced elsewhere without them.
+  /// @throws UnsupportedOperationException from the compatibility default, when this method is
+  ///                                       not overridden
   /// @see #setPriorityFeeLamportsFromComputeUnitPrice(long)
   /// @see TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)
   default Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit,
                                                                  final int computeUnitLimit) {
-    return setComputeUnitLimit(computeUnitLimit)
-        .setPriorityFeeLamportsFromComputeUnitPrice(microLamportsPerComputeUnit);
+    throw new UnsupportedOperationException("This Transaction implementation does not support setPriorityFeeLamportsFromComputeUnitPrice.");
   }
 
   /// Sets the loaded accounts data size limit, in bytes, for this transaction. Values above the
@@ -949,12 +1004,21 @@ public interface Transaction {
   /// to the runtime maximum. Unlike legacy and v0 transactions, a value of 0 is valid and per
   /// SIMD-0385 is equivalent to an unset limit of 0 bytes.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that throws
+  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
+  /// implementation can hold the expectation, and a throwing default keeps recompilation
+  /// compatibility without inventing behaviour. The built-in implementations override it.
+  ///
   /// @throws IllegalArgumentException if the limit is not greater than 0 for a legacy or v0
   ///                                  transaction.
   /// @throws IllegalStateException    if the account data size limit TransactionConfigMask bit of
   ///                               this v1 transaction is not set, because it was explicitly
   ///                               cleared or this transaction was produced elsewhere without one.
-  Transaction setAccountDataSizeLimit(final int accountDataSizeLimit);
+  /// @throws UnsupportedOperationException from the compatibility default, when this method is
+  ///                                       not overridden
+  default Transaction setAccountDataSizeLimit(final int accountDataSizeLimit) {
+    throw new UnsupportedOperationException("This Transaction implementation does not support setAccountDataSizeLimit.");
+  }
 
   /// Sets the requested heap size, in bytes, for this transaction, which per SIMD-0385 must be
   /// a multiple of 1KiB in the inclusive range [32KiB,256KiB].
@@ -965,11 +1029,20 @@ public interface Transaction {
   /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
   /// return this transaction.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that throws
+  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
+  /// implementation can hold the expectation, and a throwing default keeps recompilation
+  /// compatibility without inventing behaviour. The built-in implementations override it.
+  ///
   /// @throws IllegalArgumentException if the heap size is not a multiple of 1KiB in the
   ///                                  inclusive range [32KiB,256KiB].
   /// @throws IllegalStateException    if the heap size TransactionConfigMask bit of this v1
   ///                               transaction is not set, because a heap size was not provided
   ///                               to the {@link TxBuilder} or this transaction was produced
   ///                               elsewhere without one.
-  Transaction setHeapSize(final int heapSize);
+  /// @throws UnsupportedOperationException from the compatibility default, when this method is
+  ///                                       not overridden
+  default Transaction setHeapSize(final int heapSize) {
+    throw new UnsupportedOperationException("This Transaction implementation does not support setHeapSize.");
+  }
 }
