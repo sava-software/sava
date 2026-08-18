@@ -292,19 +292,21 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   }
 
   /// SIMD-0385 makes an instruction account index at or beyond NumAddresses a sanitization failure,
-  /// so no such transaction can execute. The legacy and v0 skeletons substitute a null meta for one
-  /// and leave the caller to trip over it; v1 is new, and a null inside a returned
-  /// `List<AccountMeta>` is a footgun worth refusing rather than inheriting — a caller iterating an
-  /// instruction's accounts should not have to null check each element. This also makes the two
-  /// index checks symmetric: an out-of-range program id already throws.
-  private static AccountMeta requireIncludedInstructionAccount(final AccountMeta[] accounts, final int accountIndex) {
-    if (accountIndex >= accounts.length) {
+  /// so no such transaction can execute, and the refusal is bounded by the wire — `numAccounts`,
+  /// the message's own NumAddresses — never by the caller's array: an oversized array must not
+  /// widen what the transaction declares into resolving an undeclared index. The legacy and v0
+  /// skeleton applies the identical wire bound with the identical exception and message, so every
+  /// format refuses corruption the same way. An index the message does declare but a
+  /// caller-truncated array cannot cover reads as null there and here alike — through sava's own
+  /// parsers that never happens for v1, whose account arrays always cover NumAddresses.
+  private AccountMeta requireIncludedInstructionAccount(final AccountMeta[] accounts, final int accountIndex) {
+    if (accountIndex >= numAccounts) {
       throw new IndexOutOfBoundsException(String.format(
           "Instruction account index %d is outside the %d accounts of this transaction.",
-          accountIndex, accounts.length
+          accountIndex, numAccounts
       ));
     }
-    return accounts[accountIndex];
+    return accountIndex < accounts.length ? accounts[accountIndex] : null;
   }
 
   private PublicKey getProgramAccount(final int accountIndex) {
