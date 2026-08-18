@@ -1,5 +1,25 @@
 # Changelog
 
+## [25.6.0](https://github.com/sava-software/sava/compare/25.9.1...25.6.0) (2026-08-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** TransactionSkeleton#parseInstructions and #filterInstructions now throw IndexOutOfBoundsException for an instruction account index the transaction does not declare (at or past numAccounts()), in every message format; such indices previously produced a null AccountMeta inside the returned instruction's account list. Indices the transaction declares but the supplied array cannot resolve continue to read as null.
+* **core:** Transaction.sign(Signer, byte[]) and Transaction.sign(SequencedCollection<Signer>, byte[]) no longer write the signature-count prefix. A payload must declare its required signature count, as every Transaction.createTx serialization does; a count that is absent or disagrees with the message header now throws IllegalArgumentException instead of silently corrupting the payload.
+
+### Bug Fixes
+
+* **core:** bound discriminator matching by the instruction's own length ([f06bf0e](https://github.com/sava-software/sava/commit/f06bf0e1eccb3a5e7bdac536001a4149128d5e88))
+* **core:** diagnose a header declaring more signers than addresses ([e32a323](https://github.com/sava-software/sava/commit/e32a32367971bd7477f88248085c0daf17835777))
+* **core:** read the signer count from the payload instead of writing it ([727501a](https://github.com/sava-software/sava/commit/727501a4df795f7452fa3a2aa8753264fe9129bf))
+* **core:** resolve instruction account indices against two bounds ([7f0430f](https://github.com/sava-software/sava/commit/7f0430fc80f0083827ad18ae7f462cebaf1c1c42))
+
+
+### Miscellaneous Chores
+
+* release 25.6.0 ([6044238](https://github.com/sava-software/sava/commit/604423865c6f9ca4485ca9e9aefef8223b47ad1c))
+
 ## [25.9.1](https://github.com/sava-software/sava/compare/25.9.0...25.9.1) (2026-08-14)
 
 
