@@ -398,7 +398,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
       final int numIxAccounts = numIxAccounts(header);
       final int numDataBytes = numDataBytes(header);
       final int dataOffset = cursor + numIxAccounts;
-      if (discriminator.equals(data, dataOffset)) {
+      if (discriminator.equals(data, dataOffset, numDataBytes)) {
         final var ixAccounts = new AccountMeta[numIxAccounts];
         for (int a = 0, accountIndex; a < numIxAccounts; ++a) {
           accountIndex = data[cursor + a] & 0xFF;
@@ -425,7 +425,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
       requireIncludedProgramAccount(programAccountIndex);
       final int numDataBytes = numDataBytes(header);
       final int dataOffset = cursor + numIxAccounts(header);
-      if (discriminator.equals(data, dataOffset)) {
+      if (discriminator.equals(data, dataOffset, numDataBytes)) {
         instructions[d++] = createInstruction(accountKey(programAccountIndex), NO_ACCOUNTS, data, dataOffset, numDataBytes);
       }
       cursor = dataOffset + numDataBytes;

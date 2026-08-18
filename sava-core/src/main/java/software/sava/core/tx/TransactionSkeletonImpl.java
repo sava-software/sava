@@ -359,7 +359,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
       len = decode(data, o);
       o += getByteLen(data, o);
 
-      if (discriminator.equals(data, o)) {
+      if (discriminator.equals(data, o, len)) {
         final var ixAccounts = new AccountMeta[numIxAccounts];
         for (int a = 0; a < numIxAccounts; ++a) {
           final int accountIndex = data[accountsOffset++] & 0xFF;
@@ -389,7 +389,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
       len = decode(data, o);
       o += getByteLen(data, o);
 
-      if (discriminator.equals(data, o)) {
+      if (discriminator.equals(data, o, len)) {
         instructions[d++] = createInstruction(getProgramAccount(programAccountIndex), NO_ACCOUNTS, data, o, len);
       }
       o += len;
