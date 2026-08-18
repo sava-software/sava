@@ -301,4 +301,44 @@ final class V1ConfigValueTests {
     assertCarriesOnly(ACCOUNT_DATA_SIZE_LIMIT_MASK, 0L, 0, ACCOUNT_DATA_SIZE_LIMIT, 0);
     assertCarriesOnly(HEAP_SIZE_MASK, 0L, 0, 0, HEAP_SIZE);
   }
+  /// The two-argument fee conversion validates both ConfigValue slots before writing either. A
+  /// builder-produced v1 transaction carries the compute-unit-limit slot but no priority-fee pair
+  /// unless a fee was requested, which is exactly the shape where a naive
+  /// set-limit-then-price composition would write the limit and then throw — an observably
+  /// half-updated transaction. The refusal must leave every serialized byte untouched.
+  @Test
+  void twoArgumentFeeConversionRefusesWithoutWritingWhenTheFeeSlotIsAbsent() {
+    final var tx = TxBuilder.createBuilder()
+        .feePayer(key(3))
+        .addInstruction(markerIx(1))
+        .createTransaction();
+    assertInstanceOf(V1Transaction.class, tx);
+    tx.setRecentBlockHash(blockHash());
+    final int limitBefore = TransactionSkeleton.deserializeSkeleton(tx.serialized()).computeUnitLimit();
+    assertNotEquals(0, limitBefore, "the builder always serializes the limit slot");
+    final byte[] before = tx.serialized().clone();
+
+    assertThrows(
+        IllegalStateException.class,
+        () -> tx.setPriorityFeeLamportsFromComputeUnitPrice(5_000L, 250_000)
+    );
+    assertArrayEquals(before, tx.serialized(), "a refused conversion must not write the limit first");
+
+    // With both slots present the same call applies the limit and prices against it.
+    final var priced = TxBuilder.createBuilder()
+        .feePayer(key(4))
+        .addInstruction(markerIx(2))
+        .priorityFeeLamports(1L)
+        .createTransaction();
+    priced.setRecentBlockHash(blockHash());
+    priced.setPriorityFeeLamportsFromComputeUnitPrice(5_000L, 250_000);
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(priced.serialized());
+    assertEquals(250_000, skeleton.computeUnitLimit());
+    assertEquals(
+        TxBuilder.computeUnitPriceToPriorityFeeLamports(5_000L, 250_000),
+        skeleton.priorityFeeLamports(),
+        "the fee is priced against the limit being set, not a stale one"
+    );
+  }
+
 }

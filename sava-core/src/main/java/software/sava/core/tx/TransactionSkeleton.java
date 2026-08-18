@@ -235,18 +235,42 @@ public interface TransactionSkeleton {
   /// differ for such transactions. Transactions which explicitly set a compute unit limit are
   /// exact.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
+  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
+  /// skeleton over a transaction carrying real compute-budget instructions reports their values
+  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
+  /// deserialization per call.
+  ///
   /// @return 0 if no priority fee ConfigValue or SetComputeUnitPrice instruction is present.
-  long priorityFeeLamports();
+  default long priorityFeeLamports() {
+    return TransactionSkeleton.deserializeSkeleton(data()).priorityFeeLamports();
+  }
 
+  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
+  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
+  /// skeleton over a transaction carrying real compute-budget instructions reports their values
+  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
+  /// deserialization per call.
+  ///
   /// @return 0 if not explicitly set via Config Value or Compute Budget. A v1 transaction that
   ///         requests no compute unit limit really is budgeted 0 units, and cannot execute a single
   ///         metered instruction; it is not given the runtime default.
-  int computeUnitLimit();
+  default int computeUnitLimit() {
+    return TransactionSkeleton.deserializeSkeleton(data()).computeUnitLimit();
+  }
 
+  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
+  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
+  /// skeleton over a transaction carrying real compute-budget instructions reports their values
+  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
+  /// deserialization per call.
+  ///
   /// @return 0 if not explicitly set via Config Value or Compute Budget. Per SIMD-0385 a v1
   ///         transaction that requests no accounts data size limit really is limited to 0 bytes,
   ///         rather than the 64MiB legacy transactions default to.
-  int accountDataSizeLimit();
+  default int accountDataSizeLimit() {
+    return TransactionSkeleton.deserializeSkeleton(data()).accountDataSizeLimit();
+  }
 
   /// Reports the heap size this transaction *requests*, not the heap it will run with.
   ///
@@ -257,9 +281,17 @@ public interface TransactionSkeleton {
   /// {@link #prototypeTransaction} — carries exactly the ConfigValues its source did rather than
   /// gaining a heap request it never had.
   ///
+  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
+  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
+  /// skeleton over a transaction carrying real compute-budget instructions reports their values
+  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
+  /// deserialization per call.
+  ///
   /// @return 0 if no heap size ConfigValue or RequestHeapFrame instruction is present, in which
   ///         case the runtime applies 32KiB.
-  int heapSize();
+  default int heapSize() {
+    return TransactionSkeleton.deserializeSkeleton(data()).heapSize();
+  }
 
   AccountMeta[] parseAccounts();
 
