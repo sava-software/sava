@@ -117,8 +117,33 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
     return PublicKey.readPubKey(data, accountsOffset() + (accountIndex * PUBLIC_KEY_LENGTH));
   }
 
+  /// The signature count and the address count are two independently read fields, so
+  /// `numIncludedAccounts < numSignatures` is representable on the wire even though no valid
+  /// transaction has it — every signer is an address. Every account-parsing entry point sizes its
+  /// array from the address count and then fills signer slots from the signature count, so the
+  /// mismatch used to surface as a bare `ArrayIndexOutOfBoundsException` (or a
+  /// `NegativeArraySizeException` from [#parseNonSignerAccounts], which subtracts the two).
+  ///
+  /// This narrows *how* such a header fails, not *whether* it does: the same inputs threw before.
+  /// Over-limit-but-coherent headers stay readable, as they must — narrowing a count to its wire
+  /// byte is a documented analysis affordance. A header that contradicts itself is a different
+  /// thing, because no reading of it is faithful. A v1 message cannot reach this: its
+  /// deserialization rejects the same contradiction against SIMD-0385's header rules first.
+  ///
+  /// @throws IllegalStateException if the address array cannot hold the signers the header declares
+  protected final void requireAddressesCoverSigners() {
+    final int numIncludedAccounts = numIncludedAccounts();
+    if (numIncludedAccounts < numSignatures) {
+      throw new IllegalStateException(String.format(
+          "Header declares %d required signatures but only %d addresses are included.",
+          numSignatures, numIncludedAccounts
+      ));
+    }
+  }
+
   @Override
   public final PublicKey feePayer() {
+    requireAddressesCoverSigners();
     return readPubKey(data, accountsOffset());
   }
 
@@ -144,6 +169,7 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
 
   @Override
   public final PublicKey[] parseSignerPublicKeys() {
+    requireAddressesCoverSigners();
     final var accounts = new PublicKey[numSignatures];
     for (int o = accountsOffset(), a = 0; a < numSignatures; ++a, o += PUBLIC_KEY_LENGTH) {
       accounts[a] = readPubKey(data, o);
@@ -168,6 +194,7 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
 
   @Override
   public final AccountMeta[] parseNonSignerAccounts() {
+    requireAddressesCoverSigners();
     final int numAccounts = numIncludedAccounts() - numSignatures;
     final var accounts = new AccountMeta[numAccounts];
     int o = accountsOffset() + (numSignatures * PUBLIC_KEY_LENGTH);
@@ -183,6 +210,7 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
 
   @Override
   public final PublicKey[] parseNonSignerPublicKeys() {
+    requireAddressesCoverSigners();
     final int numAccounts = numIncludedAccounts() - numSignatures;
     final var accounts = new PublicKey[numAccounts];
     for (int a = 0, o = accountsOffset() + (numSignatures * PUBLIC_KEY_LENGTH); a < numAccounts; ++a, o += PUBLIC_KEY_LENGTH) {

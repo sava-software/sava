@@ -106,12 +106,17 @@ final class SigningCountTests {
     );
   }
 
-  /// Drives `data[0]` away from the transaction's real signer count using nothing but public API:
-  /// the static single-signer helper stamps a count of 1, which is what a caller who partially
-  /// signed through `Transaction#signAndBase64Encode(Signer, byte[])` is left holding.
-  private static void partiallySignThroughTheStaticHelper(final Transaction tx, final Signer feePayer) {
-    Transaction.sign(feePayer, tx.serialized());
-    assertEquals(1, tx.serialized()[0], "the static single-signer helper stamps a count of 1");
+  /// Leaves the payload carrying a stale signature count, which is the state the restamp tests
+  /// below need to observe.
+  ///
+  /// The static single-signer helper used to produce this as a side effect: it stamped a count of 1
+  /// over whatever the payload declared. Since sava#54 it reads that count instead and refuses a
+  /// payload whose header disagrees, so the stale byte is written directly. The property under test
+  /// is unchanged — it was never about how the count went stale, only that instance signing
+  /// restores it.
+  private static void staleTheSerializedSignatureCount(final Transaction tx) {
+    tx.serialized()[0] = 1;
+    assertEquals(1, tx.serialized()[0], "the payload now understates its signature count");
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -131,7 +136,7 @@ final class SigningCountTests {
 
     final var tx = legacyTwoSignerTx(feePayer, signerB);
     final byte[] data = tx.serialized();
-    partiallySignThroughTheStaticHelper(tx, feePayer);
+    staleTheSerializedSignatureCount(tx);
 
     tx.sign(feePayer);
     assertEquals(2, data[0], "sign(Signer) must rewrite the serialized signature count");
@@ -150,7 +155,7 @@ final class SigningCountTests {
 
     final var tx = legacyTwoSignerTx(feePayer, signerB);
     final byte[] data = tx.serialized();
-    partiallySignThroughTheStaticHelper(tx, feePayer);
+    staleTheSerializedSignatureCount(tx);
 
     final SequencedCollection<Signer> inOrder = List.of(feePayer, signerB);
     tx.sign(inOrder);
@@ -168,7 +173,7 @@ final class SigningCountTests {
 
     final var tx = legacyTwoSignerTx(feePayer, signerB);
     final byte[] data = tx.serialized();
-    partiallySignThroughTheStaticHelper(tx, feePayer);
+    staleTheSerializedSignatureCount(tx);
 
     // A Collection static type is required to select the by-key overload; List binds to the
     // SequencedCollection one.
