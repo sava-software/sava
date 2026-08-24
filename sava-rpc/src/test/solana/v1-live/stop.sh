@@ -12,11 +12,15 @@ if [[ ! -f "$PID_FILE" ]]; then
     exit 0
 fi
 
-# start.sh writes "<pid> <ledger>": the ledger path is what makes the pid ours, since another
-# project's validator, or a recycled pid, can carry the same executable name.
-read -r pid ledger < "$PID_FILE"
-if [[ -z "${pid:-}" || -z "${ledger:-}" ]]; then
-    echo "$PID_FILE does not hold '<pid> <ledger>'; refusing to guess which process to kill" >&2
+# start.sh recorded the process identity ps reported at launch: pid, start time, executable,
+# then the ledger. Only a pid that still reports the same start time and executable is ours;
+# a recycled pid, or another project's validator, cannot share a start time to the second.
+# Exact string comparison against the same ps fields, never a substring of a flattened
+# command line, so a ledger or executable whose name merely extends ours is refused too.
+{ read -r pid; read -r start_time; read -r executable; read -r ledger; } < "$PID_FILE" || true
+if [[ -z "${pid:-}" || -z "${start_time:-}" || -z "${executable:-}" || -z "${ledger:-}" ]]; then
+    echo "$PID_FILE does not hold pid, start time, executable and ledger lines; refusing to guess" >&2
+    echo "which process to kill — remove it by hand if the validator is already gone" >&2
     exit 1
 fi
 if ! kill -0 "$pid" 2> /dev/null; then
@@ -25,14 +29,12 @@ if ! kill -0 "$pid" 2> /dev/null; then
     exit 0
 fi
 
-# `args=` rather than `comm=`: Linux truncates comm to 15 characters ("solana-test-val"),
-# which would make this guard refuse every validator it was asked to stop.
-command_line="$(ps -p "$pid" -o args=)"
-command_name="$(printf '%s\n' "$command_line" | awk '{ print $1 }' | xargs basename)"
-if [[ "$command_name" != solana-test-validator* || "$command_line" != *"--ledger $ledger"* ]]; then
-    echo "pid $pid is '$command_name' ($command_line)," >&2
-    echo "not the solana-test-validator start.sh launched on ledger $ledger; refusing to kill it" >&2
-    echo "remove $PID_FILE by hand if that validator is already gone" >&2
+current_start="$(ps -p "$pid" -o lstart= | sed 's/^ *//; s/ *$//')"
+current_executable="$(ps -p "$pid" -o comm= | sed 's/^ *//; s/ *$//')"
+if [[ "$current_start" != "$start_time" || "$current_executable" != "$executable" ]]; then
+    echo "pid $pid is now '$current_executable' started '$current_start'," >&2
+    echo "not the '$executable' started '$start_time' on ledger $ledger that start.sh launched;" >&2
+    echo "refusing to kill it — remove $PID_FILE by hand if that validator is already gone" >&2
     exit 1
 fi
 
