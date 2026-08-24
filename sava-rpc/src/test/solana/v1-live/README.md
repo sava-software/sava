@@ -51,7 +51,7 @@ the default ports, pass alternates through `VALIDATOR_ARGS`, for example
 different `RPC_PORT` must also be given to the check as `SAVA_V1_RPC_URL=http://127.0.0.1:<port>`.
 `start.sh` refuses to start when something already answers on the RPC port — a second `--reset`
 would delete the ledger the running validator has open while the readiness check passed against
-the wrong process. `stop.sh` kills only the process `start.sh` recorded, and only while it still reports the same start time and executable that `ps` showed at launch — an exact identity, so a recycled pid or another project's validator (even one whose ledger or binary name merely extends ours) is refused rather than killed.
+the wrong process. `stop.sh` signals only the process `start.sh` recorded, and only while it still reports the same start time and executable that `ps` showed at launch — re-checked on every poll and again before escalating to SIGKILL, so a recycled pid or another project's validator (even one whose ledger or binary name merely extends ours) is refused rather than killed. Signalling a pid from a shell is not atomic, so the window between a check and its signal remains; it is kept to a single `ps` call rather than closed.
 
 The model for both scripts is `scripts/validator.sh` in
 https://github.com/solana-foundation/transaction-v1-examples (the Solana Foundation's SIMD-0385
