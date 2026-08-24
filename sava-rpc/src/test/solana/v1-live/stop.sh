@@ -29,10 +29,19 @@ if ! kill -0 "$pid" 2> /dev/null; then
     exit 0
 fi
 
-current_start="$(ps -p "$pid" -o lstart= | sed 's/^ *//; s/ *$//')"
-current_executable="$(ps -p "$pid" -o comm= | sed 's/^ *//; s/ *$//')"
-if [[ "$current_start" != "$start_time" || "$current_executable" != "$executable" ]]; then
-    echo "pid $pid is now '$current_executable' started '$current_start'," >&2
+# True while the pid still reports the identity start.sh recorded. Re-evaluated before every
+# signal and on every poll, because a pid can be recycled the moment the validator exits;
+# between one check and the signal that follows it there is an unavoidable but tiny window,
+# which is why this is "the recorded validator, as far as ps can tell" rather than a guarantee.
+is_ours() {
+    local current_start current_executable
+    current_start="$(ps -p "$pid" -o lstart= 2> /dev/null | sed 's/^ *//; s/ *$//')"
+    current_executable="$(ps -p "$pid" -o comm= 2> /dev/null | sed 's/^ *//; s/ *$//')"
+    [[ "$current_start" == "$start_time" && "$current_executable" == "$executable" ]]
+}
+
+if ! is_ours; then
+    echo "pid $pid is now '$(ps -p "$pid" -o comm= | sed 's/^ *//')' started '$(ps -p "$pid" -o lstart= | sed 's/^ *//; s/ *$//')'," >&2
     echo "not the '$executable' started '$start_time' on ledger $ledger that start.sh launched;" >&2
     echo "refusing to kill it — remove $PID_FILE by hand if that validator is already gone" >&2
     exit 1
@@ -40,13 +49,19 @@ fi
 
 kill "$pid"
 for _ in $(seq 1 30); do
-    if ! kill -0 "$pid" 2> /dev/null; then
+    # Gone, or the pid already belongs to something else: either way ours has exited.
+    if ! is_ours; then
         rm -f "$PID_FILE"
         echo "stopped validator pid $pid"
         exit 0
     fi
     sleep 1
 done
+if ! is_ours; then
+    rm -f "$PID_FILE"
+    echo "stopped validator pid $pid"
+    exit 0
+fi
 echo "pid $pid did not exit within 30s; sending SIGKILL" >&2
 kill -9 "$pid" 2> /dev/null || true
 rm -f "$PID_FILE"
