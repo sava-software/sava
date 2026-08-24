@@ -59,6 +59,10 @@ integ.*
 # branch without the crate takes the rule away and strands its build output as untracked.
 target/
 
+# pnpm install output for the @solana/kit conformance-vector generator under
+# sava-core/src/test/solana/kit-v1-vectors/, kept here for the same reason as target/ above.
+node_modules/
+
 # arcmutate incremental-analysis state — machine local, survives clean
 .pitest-history/
 

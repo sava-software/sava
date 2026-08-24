@@ -1,0 +1,17 @@
+{
+  "name": "sava-kit-v1-vectors",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "write": "tsx gen.ts --write",
+    "check": "tsx gen.ts --check"
+  },
+  "dependencies": {
+    "@solana-program/memo": "0.13.0",
+    "@solana-program/system": "0.13.0",
+    "@solana/kit": "8.0.0",
+    "tsx": "4.23.12"
+  }
+}

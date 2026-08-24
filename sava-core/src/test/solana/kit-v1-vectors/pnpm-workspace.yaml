@@ -1,0 +1,7 @@
+# pnpm 11 reads its settings from here, not from a "pnpm" field in package.json.
+#
+# tsx depends on esbuild, whose postinstall script only validates the platform binary that
+# already ships as an optional dependency; nothing here needs it, and refusing every build
+# script keeps `pnpm install` non-interactive and identical on every machine.
+allowBuilds:
+  esbuild: false
