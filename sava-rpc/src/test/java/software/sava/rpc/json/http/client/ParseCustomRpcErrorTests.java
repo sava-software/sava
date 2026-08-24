@@ -7,6 +7,7 @@ import software.sava.rpc.json.http.response.RpcCustomError;
 import software.sava.rpc.json.http.response.TransactionError;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -162,5 +163,83 @@ final class ParseCustomRpcErrorTests {
     );
     assertEquals(-32021, exception.code());
     assertInstanceOf(RpcCustomError.NoSlotHistory.class, exception.customError());
+  }
+
+  // The three bodies below are verbatim Agave 4.2.1 captures, see V1AgaveTestFixtures.
+
+  /// A v1 transaction requested without a `maxSupportedTransactionVersion` ceiling of at least 1.
+  /// The error object carries no `data`, so the code alone must select the variant, and the
+  /// message — which quotes the parameter name the caller has to add — must pass through intact.
+  @Test
+  void testUnsupportedTransactionVersion() {
+    final var exception = parseException(V1AgaveTestFixtures.UNSUPPORTED_TRANSACTION_VERSION_ERROR);
+    assertEquals(-32015, exception.code());
+    assertInstanceOf(RpcCustomError.UnsupportedTransactionVersion.class, exception.customError());
+    assertEquals(
+        "Transaction version (1) is not supported by the requesting client. "
+            + "Please try the request again with the following configuration parameter: "
+            + "\"maxSupportedTransactionVersion\": 1",
+        exception.getMessage()
+    );
+    assertTrue(exception.retryAfterSeconds().isEmpty());
+  }
+
+  /// Preflight of a v1 transaction on a node whose `enable_tx_v1` gate is inactive. The simulation
+  /// never runs, so every metric is at its floor: `err` is the bare string `UnsupportedVersion`
+  /// (a top-level TransactionError, not an InstructionError), `unitsConsumed` is a present 0,
+  /// `loadedAccountsDataSize` is 0, and `fee` is JSON `null`, which must read back as empty rather
+  /// than as a fee of 0.
+  @Test
+  void testPreflightRejectsV1BeforeActivation() {
+    final var exception = parseException(V1AgaveTestFixtures.GATE_OFF_SEND_PREFLIGHT_ERROR);
+    assertEquals(-32002, exception.code());
+    assertEquals("Transaction simulation failed: Transaction version is unsupported", exception.getMessage());
+
+    if (exception.customError() instanceof RpcCustomError.SendTransactionPreflightFailure(final var simulation)) {
+      assertInstanceOf(TransactionError.UnsupportedVersion.class, simulation.error());
+      assertEquals(OptionalInt.of(0), simulation.unitsConsumed());
+      assertEquals(0, simulation.loadedAccountsDataSize());
+      assertTrue(simulation.fee().isEmpty(), "null fee must not read as 0");
+      assertTrue(simulation.logs().isEmpty());
+      assertTrue(simulation.accounts().isEmpty());
+      assertTrue(simulation.innerInstructions().isEmpty());
+      assertNull(simulation.replacementBlockHash());
+      assertNull(simulation.context());
+    } else {
+      fail(exception.customError().getClass().getSimpleName());
+    }
+  }
+
+  /// Preflight of a v1 transaction whose compute-unit limit was cleared to 0: the gate is active
+  /// and the transaction is well formed, so the failure is the first metered instruction running
+  /// out of budget. Unlike the pre-activation body, this one carries a concrete `fee` (the base fee
+  /// plus the 5000-lamport v1 priority fee) and a real `loadedAccountsDataSize`.
+  @Test
+  void testPreflightRejectsClearedComputeUnitLimit() {
+    final var exception = parseException(V1AgaveTestFixtures.GATE_ON_SEND_CU0_PREFLIGHT_ERROR);
+    assertEquals(-32002, exception.code());
+    assertEquals(
+        "Transaction simulation failed: Error processing Instruction 0: Computational budget exceeded",
+        exception.getMessage()
+    );
+
+    if (exception.customError() instanceof RpcCustomError.SendTransactionPreflightFailure(final var simulation)) {
+      if (simulation.error() instanceof TransactionError.InstructionError(final int index, final var ixError)) {
+        assertEquals(0, index);
+        assertInstanceOf(IxError.ComputationalBudgetExceeded.class, ixError);
+      } else {
+        fail(String.valueOf(simulation.error()));
+      }
+      assertEquals(OptionalInt.of(0), simulation.unitsConsumed());
+      assertEquals(OptionalLong.of(10_000), simulation.fee());
+      assertEquals(213, simulation.loadedAccountsDataSize());
+      final var logs = simulation.logs();
+      assertEquals(2, logs.size());
+      assertEquals("Program 11111111111111111111111111111111 invoke [1]", logs.getFirst());
+      assertEquals("Program 11111111111111111111111111111111 failed: Computational budget exceeded", logs.getLast());
+      assertNull(simulation.replacementBlockHash());
+    } else {
+      fail(exception.customError().getClass().getSimpleName());
+    }
   }
 }
