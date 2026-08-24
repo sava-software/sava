@@ -12,20 +12,27 @@ if [[ ! -f "$PID_FILE" ]]; then
     exit 0
 fi
 
-pid="$(cat "$PID_FILE")"
+# start.sh writes "<pid> <ledger>": the ledger path is what makes the pid ours, since another
+# project's validator, or a recycled pid, can carry the same executable name.
+read -r pid ledger < "$PID_FILE"
+if [[ -z "${pid:-}" || -z "${ledger:-}" ]]; then
+    echo "$PID_FILE does not hold '<pid> <ledger>'; refusing to guess which process to kill" >&2
+    exit 1
+fi
 if ! kill -0 "$pid" 2> /dev/null; then
     echo "pid $pid is not running; removing stale $PID_FILE"
     rm -f "$PID_FILE"
     exit 0
 fi
 
-# The pid could have been recycled by an unrelated process since start.sh recorded it.
 # `args=` rather than `comm=`: Linux truncates comm to 15 characters ("solana-test-val"),
 # which would make this guard refuse every validator it was asked to stop.
-command_name="$(ps -p "$pid" -o args= | awk '{ print $1 }' | xargs basename)"
-if [[ "$command_name" != solana-test-validator* ]]; then
-    echo "pid $pid is '$command_name', not solana-test-validator; refusing to kill it" >&2
-    echo "remove $PID_FILE by hand if the validator is already gone" >&2
+command_line="$(ps -p "$pid" -o args=)"
+command_name="$(printf '%s\n' "$command_line" | awk '{ print $1 }' | xargs basename)"
+if [[ "$command_name" != solana-test-validator* || "$command_line" != *"--ledger $ledger"* ]]; then
+    echo "pid $pid is '$command_name' ($command_line)," >&2
+    echo "not the solana-test-validator start.sh launched on ledger $ledger; refusing to kill it" >&2
+    echo "remove $PID_FILE by hand if that validator is already gone" >&2
     exit 1
 fi
 

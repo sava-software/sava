@@ -16,6 +16,10 @@
 #   VALIDATOR_ARGS         extra flags, e.g. alternate ports when another validator holds
 #                          the defaults: "--faucet-port 9901 --gossip-port 8101
 #                          --dynamic-port-range 8102-8140"
+#
+# validator.pid records "<pid> <ledger>"; stop.sh refuses a pid whose command line does
+# not name that ledger, so a recycled pid — even another solana-test-validator — is never
+# the one it kills.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -83,22 +87,33 @@ if is_running; then
     echo "it was not started by this script; stop it yourself or pick another RPC_PORT" >&2
     exit 1
 fi
-if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2> /dev/null; then
-    echo "pid $(cat "$PID_FILE") from $PID_FILE is still alive; run stop.sh first" >&2
-    exit 1
+if [[ -f "$PID_FILE" ]]; then
+    read -r recorded_pid _ < "$PID_FILE"
+    if kill -0 "$recorded_pid" 2> /dev/null; then
+        echo "pid $recorded_pid from $PID_FILE is still alive; run stop.sh first" >&2
+        exit 1
+    fi
+fi
+
+# Optional flags, word-split on purpose; an unset VALIDATOR_ARGS must expand to nothing
+# rather than trip `set -u` inside the child before the validator even starts.
+extra_args=()
+if [[ -n "${VALIDATOR_ARGS:-}" ]]; then
+    read -r -a extra_args <<< "$VALIDATOR_ARGS"
 fi
 
 mkdir -p "$LEDGER_DIR"
-# shellcheck disable=SC2086  # VALIDATOR_ARGS is deliberately word-split
+# `${extra_args[@]+...}` keeps an empty array expansion legal under `set -u` on bash 3.2.
 "$VALIDATOR" \
     --reset \
     --quiet \
     --ledger "$LEDGER_DIR" \
     --rpc-port "$RPC_PORT" \
-    $VALIDATOR_ARGS \
+    ${extra_args[@]+"${extra_args[@]}"} \
     > "$LOG_FILE" 2>&1 &
-echo $! > "$PID_FILE"
-echo "started $VALIDATOR $version, pid $(cat "$PID_FILE"), ledger $LEDGER_DIR, log $LOG_FILE"
+validator_pid=$!
+echo "$validator_pid $LEDGER_DIR" > "$PID_FILE"
+echo "started $VALIDATOR $version, pid $validator_pid, ledger $LEDGER_DIR, log $LOG_FILE"
 
 for _ in $(seq 1 90); do
     if is_running; then

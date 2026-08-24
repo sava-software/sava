@@ -25,6 +25,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.time.Duration;
 import java.util.List;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletionException;
@@ -64,6 +65,9 @@ final class LiveV1ValidatorCheck {
   private static final long AIRDROP = 1_000_000_000L;
   private static final int LEGACY_PACKET_LIMIT = 1_232;
   private static final SecureRandom RANDOM = new SecureRandom();
+  private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+  /// Generous next to the client's 8s default: a fresh validator can pause on its first blocks.
+  private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
   private static URI rpcUrl;
   private static HttpClient httpClient;
@@ -73,7 +77,7 @@ final class LiveV1ValidatorCheck {
   static void requireActiveGate() {
     final var url = System.getenv("SAVA_V1_RPC_URL");
     rpcUrl = URI.create(url == null || url.isBlank() ? DEFAULT_RPC_URL : url);
-    httpClient = HttpClient.newHttpClient();
+    httpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
     rpcClient = SolanaRpcClient.createClient(rpcUrl, httpClient, Commitment.CONFIRMED);
 
     // An unreachable endpoint is a failure, not a skip: SAVA_V1_LIVE=true asked for a live run, and
@@ -204,8 +208,12 @@ final class LiveV1ValidatorCheck {
     return landed;
   }
 
+  /// Bypasses the client on purpose (the request shapes under test are the ones it never sends),
+  /// but keeps its bounded-request discipline: a stalled validator fails the check instead of
+  /// hanging Gradle.
   private static String rawRpc(final String body) throws Exception {
     final var request = HttpRequest.newBuilder(rpcUrl)
+        .timeout(REQUEST_TIMEOUT)
         .header("Content-Type", "application/json")
         .POST(HttpRequest.BodyPublishers.ofString(body))
         .build();
