@@ -245,6 +245,17 @@ hardening {
   }
 }
 
+// The conformance tests verify fixture provenance by hashing their generators' locked
+// inputs (Cargo.lock, main.rs, package.json, pnpm-lock.yaml, gen.ts, ...) straight from
+// src/test/solana, which is not on the test classpath. Without declaring those files as
+// inputs, a generator-only edit leaves the test task's cache key unchanged and the
+// provenance check is restored from the build cache instead of re-run.
+tasks.test {
+  inputs.files(fileTree("src/test/solana") { exclude("**/node_modules/**", "**/target/**") })
+    .withPropertyName("conformanceGeneratorInputs")
+    .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 // Mutator-trial hook (shared HARDENING.md: "trial per suite, enable only what
 // fires"): -PtrialMutators=STRONGER,EXPERIMENTAL_X overrides every suite for a run.
 // Trial results are recorded in HARDENING_NOTES.md ("Mutator-set trials").

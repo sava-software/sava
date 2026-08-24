@@ -62,7 +62,21 @@ final class KitV1VectorTests {
   private static final String COLUMNS =
       "id\tconfig\textra\tconfig_mask\theader\tstatic_accounts\tprogram_ids\tinstruction_data_hex\t"
           + "unsigned_message_hex\tsigned_wire_hex\tsignatures_hex\tread_back_version\tread_back_config";
-  private static final int VECTOR_COUNT = 9;
+  /// The fixture's vectors, in order. Pinned by name so a row cannot be dropped, duplicated or
+  /// renamed without this list changing: a count alone would stay green if `f_two_signers` were
+  /// replaced by a second copy of a single-signer row, silently losing two-signature coverage.
+  private static final List<String> EXPECTED_IDS = List.of(
+      "a_example_config",
+      "b_empty_config",
+      "c_only_cu_limit",
+      "d_only_priority_fee",
+      "e_explicit_zeros",
+      "f_two_signers",
+      "g_large_memo",
+      "h_sava_defaults",
+      "i_two_readonly_programs"
+  );
+  private static final int VECTOR_COUNT = EXPECTED_IDS.size();
   private static final HexFormat HEX = HexFormat.of();
   private static final int MISMATCH_CONTEXT = 32;
 
@@ -633,7 +647,7 @@ final class KitV1VectorTests {
     }
     assertTrue(sawColumns, "missing columns");
     assertEquals(EXPECTED_METADATA, metadata, "fixture provenance changed");
-    assertEquals(VECTOR_COUNT, vectors.size());
+    assertEquals(EXPECTED_IDS, vectors.stream().map(Vector::id).toList(), "vector inventory");
     return new Fixture(metadata, vectors);
   }
 
