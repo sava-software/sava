@@ -30,6 +30,11 @@ comparing.
   method pages at `apps/docs/content/docs/en/rpc/http/*.mdx` and
   `apps/docs/content/docs/en/rpc/websocket/*.mdx` (canonical request/response examples in
   `jsonc !response` blocks).
+- **transaction-v1-examples** — `https://github.com/solana-foundation/transaction-v1-examples`
+  — the Solana Foundation's SIMD-0385 examples: `@solana/kit`, Rust, Python and Go clients
+  driving a local 4.2.1 validator. `ts/src/estimate.ts` is the reference for kit's v1
+  resource-limit flow and `scripts/validator.sh` the model for sava's
+  `sava-rpc/src/test/solana/v1-live/` scripts.
 
 Repo-relative paths below are prefixed with the repo name (e.g. `agave:rpc/src/rpc.rs`).
 
@@ -254,6 +259,51 @@ requests and all `getTransaction` requests send
 `accounts` constant; agave's `TransactionDetails::Accounts` arm does version-check via
 `build_json_accounts`.
 
+### Observed on Agave 4.2.1
+
+Raw JSON-RPC bodies captured 2026-08-24 from a `solana-test-validator` 4.2.1 (feature-set
+`565236538`, the same set mainnet 4.2.0 reports) with `enable_tx_v1` active and then inactive.
+The gate-on rows are re-checked by `LiveV1ValidatorCheck` (sava-rpc; run instructions in
+`sava-rpc/src/test/solana/v1-live/README.md`); the gate-off rows were captured once by hand,
+because the validator that check starts activates every gate at genesis.
+
+1. **Version ceiling.** `getTransaction` and full `getBlock` with `maxSupportedTransactionVersion`
+   omitted or `0` fail the *whole* response with `-32015` when any transaction is v1 — one v1
+   transaction blinds a ceiling-0 caller for the entire slot. Message text: `Transaction version
+   (1) is not supported by the requesting client. Please try the request again with the following
+   configuration parameter: "maxSupportedTransactionVersion": 1`. The `signatures` and `none`
+   detail levels are served regardless. A ceiling above every version present is accepted:
+   mainnet 4.2.0 today serves full `getBlock` at ceiling 1 and 2 on legacy/v0-only blocks, so
+   `MAX_SUPPORTED_TRANSACTION_VERSION = 1` is safe to send before activation.
+2. **Pre-activation write path** (`enable_tx_v1` inactive — mainnet, devnet and testnet as of
+   2026-08-24; the feature account `txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL` does not exist
+   on any of them). `simulateTransaction` returns `err: "UnsupportedVersion"` with
+   `unitsConsumed: 0` and no logs. `sendTransaction` with preflight returns `-32002`
+   `Transaction simulation failed: Transaction version is unsupported` (`data.err:
+   "UnsupportedVersion"`). `sendTransaction` with `skipPreflight` returns the signature, but the
+   transaction is silently discarded by sigverify — `agave:perf/src/sigverify.rs` `verify_packet`
+   returns false for `TransactionVersion::V1` while the gate is off, and
+   `agave:runtime/src/bank.rs` `verify_transaction` plus
+   `agave:runtime/src/bank/check_transactions.rs` `filter_v1_transactions` return
+   `TransactionError::UnsupportedVersion` — so it never lands and `getSignatureStatuses` stays
+   `null`. The RPC's base64 size ceiling already admits 4096-byte v1 payloads before activation
+   (`agave:rpc/src/rpc.rs` `decode_and_deserialize` keys the limit on the `0x81` base64 prefix),
+   so a >1232-byte v1 transaction fails with `UnsupportedVersion`, not a size error.
+3. **Absent compute-unit limit.** A v1 transaction whose compute-unit-limit bit is absent fails
+   preflight with `InstructionError(0, ComputationalBudgetExceeded)` and `unitsConsumed: 0` — the
+   empirical basis for the `TxBuilder` defaults row in "Deliberate divergences: v1 compute budget
+   values" below.
+4. **kit parity.** `@solana/kit`'s recommended v1 flow
+   (`transaction-v1-examples:ts/src/estimate.ts`: `fillTransactionMessageProvisoryResourceLimits`,
+   then `estimateAndSetResourceLimits`) also fills both limits with provisory maxima before
+   simulating, so that the message simulates at its final size and cannot fail for want of the
+   resources being measured. `TxBuilder`'s default-to-max shape is therefore kit-conformant, not a
+   divergence; only the explicit `0`-clears-the-bit escape hatch is sava's own.
+5. **Costs seen while tightening.** A plain system transfer is 150 CU and loads 149 bytes of
+   account data (213 once the recipient exists). A Memo v3 instruction carrying 3000 bytes costs
+   ~1,052,946 CU and loads ~75 KB (75,013 bytes) of program data — most of the 1.4M ceiling for
+   one instruction, which matters when tightening limits from a simulation.
+
 ## Other sync surfaces (sava-core)
 
 | Java (under `sava-core/.../software/sava/core/`) | Models | Canonical source |
@@ -267,7 +317,7 @@ requests and all `getTransaction` requests send
 | `accounts/token/Mint.java` | SPL Mint, 82-byte packed layout with u32-tag COptions | `spl-token-interface` `state::Mint`; `agave:account-decoder/src/parse_token.rs` |
 | `accounts/token/TokenAccount.java`, `AccountState.java` | SPL Account, 165 bytes, explicit memcmp offsets used for `getProgramAccounts` filters | `spl-token-interface` `state::Account`/`AccountState` |
 | `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest upstream parser: `agave-sdk:transaction-view/` |
-| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/` |
+| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and the live `LiveV1ValidatorCheck` in sava-rpc against a 4.2.1 validator — see "Observed on Agave 4.2.1" above |
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
@@ -372,7 +422,7 @@ deliberately. **These are intentional; do not "fix" them toward the canonical im
 |---|---|---|---|
 | `TransactionSkeleton` readers for an absent bit | `0` for fee, CU limit and data size | same | faithful to the wire |
 | `TransactionSkeleton#heapSize()` for an absent bit | `0` | `32KiB` (`MIN_HEAP_FRAME_BYTES`) | heap is the only value whose absent and effective readings differ, so the reader must pick one: it reports what was *requested*. Reporting the effective 32KiB would make `prototypeTransaction` write a heap ConfigValue the source never had, and would split v1 from sava's legacy reader, which already returns `0` when no `RequestHeapFrame` instruction is present. An explicit 32KiB and no request behave identically at runtime |
-| `TxBuilder` defaults | CU limit `1_400_000`, data size 64MiB, both always serialized; fee and heap unset | unset stays unset | reserves both slots so they can be updated in place after simulating, and keeps the built transaction executable; `0` is the explicit clear |
+| `TxBuilder` defaults | CU limit `1_400_000`, data size 64MiB, both always serialized; fee and heap unset | unset stays unset | reserves both slots so they can be updated in place after simulating, and keeps the built transaction executable; `0` is the explicit clear. Verified on 4.2.1: the cleared bit fails preflight with `ComputationalBudgetExceeded` at 0 units, and `@solana/kit` fills the same provisory maxima before simulating — items 3 and 4 under "Observed on Agave 4.2.1" |
 | `TransactionSkeleton#prototypeTransaction` on a v1 source | carries `0` through verbatim | n/a | preservation, not construction — a rebuilt transaction must equal its source |
 | `Transaction#setPriorityFeeLamportsFromComputeUnitPrice` on v1 with an absent CU limit | prices against `1_400_000` | no counterpart; v1 fees are absolute lamports, never price × limit | pricing, not preservation — a fee of `0` for a transaction that cannot execute is useless, and `1_400_000` is what `TxBuilder` would have written |
 | an explicit legacy/v0 `SetComputeUnitLimit(0)`, when deriving a priority fee | treated as absent: falls back to the per-instruction default | taken verbatim as a 0-unit budget | same reason. A 0-unit budget cannot execute a single metered instruction, so deriving a fee against it is pointless; the useful reading of an explicit zero is "no limit stated". Note this affects fee *derivation* only — `computeUnitLimit()` still reports the 0 that is on the wire |
@@ -691,6 +741,11 @@ files in the solana-improvement-documents repo.
 - Live parser drift check: `DRIFT_CHECK=true ./gradlew :sava-rpc:test --tests
   '*LiveMainNetDriftCheck'` exercises the production parsers against current main-net
   responses; rate-limited methods are skipped and reported.
+- Live transaction v1 check: `SAVA_V1_LIVE=true ./gradlew :sava-rpc:test --tests
+  '*LiveV1ValidatorCheck'` sends sava-built v1 transactions to a local 4.2.1+ validator
+  (`SAVA_V1_RPC_URL`, default `http://127.0.0.1:8899`) and reads them back; it decodes the
+  `enable_tx_v1` feature account first and skips itself when the gate is inactive.
+  `sava-rpc/src/test/solana/v1-live/` holds the start/stop scripts and README.
 - Compute-budget instruction builders live outside sava-core; constants reference
   `agave:compute-budget/src/compute_budget_limits.rs` and
   `solana-sdk:compute-budget-interface/` (watch SIMD-0268 default changes).
