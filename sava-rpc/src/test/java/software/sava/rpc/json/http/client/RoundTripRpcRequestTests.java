@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.List;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -1022,6 +1023,16 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertFalse(skeleton.isLegacy());
     assertEquals(txSignature, skeleton.id());
     assertEquals(1, skeleton.numSignatures());
+    // The capture's one signature must verify over the message it trails, with the fee payer's key:
+    // a corrupted message byte would otherwise stay green as long as the trailing 64 bytes still
+    // base58-encode to the signature the request asked for.
+    final byte[] wire = tx.data();
+    final int messageLength = wire.length - Transaction.SIGNATURE_LENGTH;
+    assertTrue(PublicKey.verifySignature(
+        skeleton.feePayer().toByteArray(), 0,
+        wire, 0, messageLength,
+        Arrays.copyOfRange(wire, messageLength, wire.length)
+    ), "fee payer signature verifies over the v1 message");
     assertEquals(1, skeleton.numInstructions());
     assertEquals(3, skeleton.numAccounts());
     // The four config slots were all set on this transaction; each reads back the value sent.
