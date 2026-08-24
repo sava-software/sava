@@ -17,9 +17,12 @@
 #                          the defaults: "--faucet-port 9901 --gossip-port 8101
 #                          --dynamic-port-range 8102-8140"
 #
-# validator.pid records "<pid> <ledger>"; stop.sh refuses a pid whose command line does
-# not name that ledger, so a recycled pid — even another solana-test-validator — is never
-# the one it kills.
+# validator.pid records the launched process's identity as ps reported it right after the
+# start — pid, start time and executable, one per line, then the ledger for the message —
+# and stop.sh kills only a pid that still reports the same start time and executable. A
+# recycled pid, another project's validator, or one on a ledger with a similar name all
+# differ in start time, so none of them can be the one it kills; nothing is matched by
+# substring or by splitting a flattened command line.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,7 +115,17 @@ mkdir -p "$LEDGER_DIR"
     ${extra_args[@]+"${extra_args[@]}"} \
     > "$LOG_FILE" 2>&1 &
 validator_pid=$!
-echo "$validator_pid $LEDGER_DIR" > "$PID_FILE"
+# Observed through ps so stop.sh compares like with like on every platform: lstart is exact
+# to the second and comm is whatever this ps prints (a full path on macOS, a 15-character
+# name on Linux), which is all that matters when the same command reads it back.
+start_time="$(ps -p "$validator_pid" -o lstart= | sed 's/^ *//; s/ *$//')"
+executable="$(ps -p "$validator_pid" -o comm= | sed 's/^ *//; s/ *$//')"
+if [[ -z "$start_time" || -z "$executable" ]]; then
+    echo "validator pid $validator_pid vanished before its identity could be recorded; see $LOG_FILE" >&2
+    tail -50 "$LOG_FILE" >&2
+    exit 1
+fi
+printf '%s\n%s\n%s\n%s\n' "$validator_pid" "$start_time" "$executable" "$LEDGER_DIR" > "$PID_FILE"
 echo "started $VALIDATOR $version, pid $validator_pid, ledger $LEDGER_DIR, log $LOG_FILE"
 
 for _ in $(seq 1 90); do
