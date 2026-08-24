@@ -13,3 +13,13 @@
 /solana/upstream-layout-vectors/rust-toolchain.toml text eol=lf
 /solana/upstream-layout-vectors/src/*.rs text eol=lf
 /resources/upstream/*.tsv text eol=lf
+/solana/v1-message-vectors/Cargo.lock text eol=lf
+/solana/v1-message-vectors/Cargo.toml text eol=lf
+/solana/v1-message-vectors/rust-toolchain.toml text eol=lf
+/solana/v1-message-vectors/src/*.rs text eol=lf
+/resources/tx/solana-v1-message-vectors.tsv text eol=lf
+/solana/kit-v1-vectors/gen.ts text eol=lf
+/solana/kit-v1-vectors/package.json text eol=lf
+/solana/kit-v1-vectors/pnpm-lock.yaml text eol=lf
+/solana/kit-v1-vectors/pnpm-workspace.yaml text eol=lf
+/resources/tx/kit-v1-message-vectors.tsv text eol=lf
