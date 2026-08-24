@@ -495,6 +495,22 @@ final class ParseResponseFieldTests {
     assertArrayEquals(txBytes, blockTx.data());
     assertNull(BlockTx.parse(ji("""
         {"transaction":"jsonParsed"}""")).data());
+
+    // The node's `version` member is not surfaced on BlockTx: it is read off the wire bytes through
+    // the skeleton, so a v1 body's `"version":1` is skipped like any other unknown field and the
+    // version comes from the message's own 0x81 prefix (see RoundTripRpcRequestTests for a real one).
+    final var versionedBody = BlockTx.parse(ji("""
+        {"meta":null,"version":1,"transaction":["%s","base64"],"future":9}""".formatted(txBase64)));
+    assertArrayEquals(txBytes, versionedBody.data());
+    assertEquals(1, versionedBody.skeleton().numSignatures());
+    assertTrue(versionedBody.skeleton().isLegacy());
+
+    // Like Tx#skeleton, an empty or absent payload is reported as no skeleton rather than handed
+    // to the deserializer, which would throw on zero bytes.
+    assertNull(new BlockTx(null, new byte[0]).skeleton());
+    assertNull(new BlockTx(null, null).skeleton());
+    assertNull(BlockTx.parse(ji("""
+        {"version":null}""")).skeleton());
   }
 
   @Test
