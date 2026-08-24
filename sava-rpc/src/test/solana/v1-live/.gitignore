@@ -1,0 +1,4 @@
+# start.sh output: the validator's ledger, pid and log. The ledger is reset on every start.
+/test-ledger/
+/validator.pid
+/validator.log
