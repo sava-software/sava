@@ -981,6 +981,131 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(1, skeleton.numSignatures());
   }
 
+  /// Recorded on 2026-08-24 against a local Agave 4.2.1 test validator with the `enable_tx_v1`
+  /// feature gate active: the first SIMD-0385 transaction sava landed. The node reports
+  /// `"version":1` as a number and serves the message-first wire bytes (`0x81` prefix, signatures
+  /// trailing) under the same base64 array shape as legacy, so the only thing that distinguishes a
+  /// v1 [software.sava.rpc.json.http.response.Tx] is the version and what its skeleton reads out
+  /// of the config section. The request must carry `maxSupportedTransactionVersion` of at least 1
+  /// or the node answers -32015 instead (see `ParseCustomRpcErrorTests`).
+  @Test
+  void getTransactionV1() {
+    final var txSignature = "2ToHAkydxvLtd4WufbyK7hVtCtQbXXPVkrByh1jjUGYupddy1ApA3tf22K9jCu915acGvW84rJmnLf2wvJDztNL5";
+
+    registerRequest("""
+        {"jsonrpc":"2.0","id":912,"method":"getTransaction","params":["%s",{"commitment":"confirmed","maxSupportedTransactionVersion":1,"encoding":"base64"}]}""".formatted(txSignature), """
+        {"jsonrpc":"2.0","result":{"blockTime":1787585794,"meta":{"computeUnitsConsumed":150,"costUnits":1481,"err":null,"fee":10000,"innerInstructions":[],"loadedAddresses":{"readonly":[],"writable":[]},"logMessages":["Program 11111111111111111111111111111111 invoke [1]","Program 11111111111111111111111111111111 success"],"postBalances":[998990000,1000000,1],"postTokenBalances":[],"preBalances":[1000000000,0,1],"preTokenBalances":[],"rewards":[],"status":{"Ok":null}},"slot":943,"transaction":["gQEAAR8AAAAcJpmE5WQDuTTNlRpHkFmZc/U8i2jMDeJFzW9yxlkcVgEDDd/kWT3I9NuNLkTkoEr6wX0XQtIXymFIK98TH6bY346bcy9z9H+e6Q2yk3MFuWR4Vigj7dUr+1dDje0/75uDWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAiBMAAAAAAAAgTgAAAAABAAAAAQACAgwAAAECAAAAQEIPAAAAAABJIGI0jDFLk4JUIF8oJLfQT5R7Fk7dRHWUFN/nSLd3OLSM5cQ3Zgdt8wMEgOQOsFCnoZuC9u4En4JPd94NoaEO","base64"],"transactionIndex":1,"version":1},"id":3}"""
+    );
+
+    final var tx = rpcClient.getTransaction(txSignature).join();
+
+    assertEquals(1, tx.version());
+    assertFalse(tx.isLegacy());
+    assertEquals(943L, tx.slot());
+    assertEquals(1_787_585_794L, tx.blockTime().orElseThrow());
+    assertEquals(OptionalInt.of(1), tx.transactionIndex());
+    assertNull(tx.meta().error());
+    assertEquals(10_000L, tx.meta().fee());
+    assertEquals(150, tx.meta().computeUnitsConsumed());
+    assertEquals(List.of(1_000_000_000L, 0L, 1L), tx.meta().preBalances());
+    assertEquals(List.of(998_990_000L, 1_000_000L, 1L), tx.meta().postBalances());
+
+    // 0x81 is the v1 discriminator; a legacy transaction starts with its compact-u16 signature
+    // count and a v0 one with 0x80.
+    final byte[] data = tx.data();
+    assertEquals((byte) 0x81, data[0]);
+    assertEquals(txSignature, Transaction.getBase58Id(data));
+
+    final var skeleton = Objects.requireNonNull(tx.skeleton());
+    assertEquals(1, skeleton.version());
+    assertTrue(skeleton.isVersioned());
+    assertFalse(skeleton.isLegacy());
+    assertEquals(txSignature, skeleton.id());
+    assertEquals(1, skeleton.numSignatures());
+    assertEquals(1, skeleton.numInstructions());
+    assertEquals(3, skeleton.numAccounts());
+    // The four config slots were all set on this transaction; each reads back the value sent.
+    assertEquals(5_000L, skeleton.priorityFeeLamports());
+    assertEquals(20_000, skeleton.computeUnitLimit());
+    assertEquals(65_536, skeleton.accountDataSizeLimit());
+    assertEquals(65_536, skeleton.heapSize());
+    // 1_000_000 lamports moved, per the balance deltas above and the transfer's u64 payload.
+    final var instructions = skeleton.parseInstructions(skeleton.parseAccounts());
+    assertEquals(1, instructions.length);
+    assertEquals(V1AgaveTestFixtures.SYSTEM_PROGRAM, instructions[0].programId().publicKey());
+    assertEquals(12, instructions[0].len(), "u32 discriminator + u64 lamports");
+  }
+
+  /// The block that holds the seeded gate-on v1 transaction of [V1AgaveTestFixtures]: a vote, the v1
+  /// transfer, and a legacy control transfer from the same payer, in that order. `getBlock` only
+  /// sends `maxSupportedTransactionVersion` for `transactionDetails: full` — without it the node
+  /// refuses this block outright with -32015 — and the node labels each entry with its own
+  /// version, so a block mixes legacy and v1 [software.sava.rpc.json.http.response.BlockTx]
+  /// entries and each must be read by its own rules.
+  @Test
+  void getBlockWithV1Transaction() {
+    registerRequest("""
+        {"jsonrpc":"2.0","id":753,"method":"getBlock","params":[6,{"encoding":"base64","commitment":"confirmed","transactionDetails":"full","rewards":false,"maxSupportedTransactionVersion":1}]}""",
+        readFileString("getBlock-v1-agave-4.2.1.json")
+    );
+
+    final var block = rpcClient.getBlock(6, BlockTxDetails.full, false).join();
+    assertEquals(6L, block.blockHeight());
+    assertEquals(1_787_587_902L, block.blockTime());
+    assertEquals("CiaMdATaDdkz6tQwbvCMrWp2Z6HPi7SdW8uaPhnJzifT", block.blockHash());
+    assertEquals("F6zAJmFANkBykAHcJJUbBiC6GsjhA6jNKoytYRQe5mZK", block.previousBlockHash());
+    assertEquals(5L, block.parentSlot());
+    assertTrue(block.rewards().isEmpty());
+    assertTrue(block.signatures().isEmpty(), "full details carry transactions, not a signature list");
+
+    final var transactions = block.transactions();
+    assertEquals(3, transactions.size());
+
+    final var vote = transactions.get(0);
+    assertEquals(2_100, vote.meta().computeUnitsConsumed());
+    assertEquals(10_000L, vote.meta().fee());
+    assertNull(vote.meta().error());
+    final var voteSkeleton = Objects.requireNonNull(vote.skeleton());
+    assertTrue(voteSkeleton.isLegacy());
+    assertEquals(2, voteSkeleton.numSignatures());
+    assertEquals("Vote111111111111111111111111111111111111111",
+        voteSkeleton.parseInstructions(voteSkeleton.parseAccounts())[0].programId().publicKey().toBase58());
+
+    final var v1 = transactions.get(1);
+    assertEquals(150, v1.meta().computeUnitsConsumed());
+    assertEquals(10_000L, v1.meta().fee());
+    assertEquals(List.of(1_000_000_000L, 0L, 1L), v1.meta().preBalances());
+    assertEquals(List.of(989_990_000L, 10_000_000L, 1L), v1.meta().postBalances());
+    assertEquals((byte) 0x81, v1.data()[0]);
+    assertEquals(V1AgaveTestFixtures.GATE_ON_V1_SIGNATURE, Transaction.getBase58Id(v1.data()));
+    final var v1Skeleton = Objects.requireNonNull(v1.skeleton());
+    assertEquals(1, v1Skeleton.version());
+    assertEquals(1, v1Skeleton.numSignatures());
+    assertEquals(5_000L, v1Skeleton.priorityFeeLamports());
+    assertEquals(20_000, v1Skeleton.computeUnitLimit());
+    assertEquals(65_536, v1Skeleton.accountDataSizeLimit());
+    assertEquals(65_536, v1Skeleton.heapSize());
+    assertArrayEquals(V1AgaveTestFixtures.GATE_ON_BLOCKHASH, v1Skeleton.blockHash());
+
+    // The served bytes are exactly what sava builds from the seeds: the whole
+    // build -> set blockhash -> sign path is pinned by the validator's own copy.
+    final var payer = V1AgaveTestFixtures.seeded(V1AgaveTestFixtures.PAYER_SEED);
+    final var recipient = V1AgaveTestFixtures.seeded(V1AgaveTestFixtures.RECIPIENT_SEED).publicKey();
+    final var rebuilt = V1AgaveTestFixtures.v1Transfer(payer, recipient, 10_000_000L, 5_000L, 20_000, 65_536, 65_536);
+    rebuilt.setRecentBlockHash(V1AgaveTestFixtures.GATE_ON_BLOCKHASH);
+    rebuilt.sign(payer);
+    assertArrayEquals(rebuilt.serialized(), v1.data());
+    assertEquals(V1AgaveTestFixtures.GATE_ON_V1_SIGNATURE, rebuilt.getBase58Id());
+    // ...and the skeleton's own rebuild is byte-identical too.
+    assertArrayEquals(v1.data(), v1Skeleton.createTransaction().serialized());
+
+    final var legacyControl = transactions.get(2);
+    assertEquals(5_000L, legacyControl.meta().fee(), "no priority fee on the legacy control");
+    assertEquals(V1AgaveTestFixtures.GATE_ON_LEGACY_CONTROL_SIGNATURE, Transaction.getBase58Id(legacyControl.data()));
+    assertTrue(Objects.requireNonNull(legacyControl.skeleton()).isLegacy());
+    assertEquals(0L, legacyControl.skeleton().priorityFeeLamports());
+  }
+
   @Test
   void getTransactionCount() {
     registerRequest("""
