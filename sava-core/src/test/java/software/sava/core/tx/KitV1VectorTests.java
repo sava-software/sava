@@ -128,10 +128,11 @@ final class KitV1VectorTests {
           "same-role-ordering",
           "kit sorts same-role accounts by Intl.Collator(en) over base58; Sava leaves them unordered"
       ),
-      Map.entry("package-json-sha256", "15ff053938b8d269a3183d14378a45c90c3ea069c3f73c8bd7092502321bbad6"),
-      Map.entry("pnpm-lock-sha256", "a075aa449d5d4f42581da8202e192c28a0be0c9a75543dc00ab06ba80abacd78"),
+      Map.entry("package-json-sha256", "f808fa4b7cfb2527c07759e723a95e602eacd6794ba06df948ad143330899442"),
+      Map.entry("pnpm-lock-sha256", "a6f1232d20da3287a2433fcf5ed066758ea144bd5509f6c9964d6022eaba7e05"),
       Map.entry("pnpm-workspace-sha256", "43ec7f44d6604a53db59c5a093e87a4916becfbb9baba7fb3582594cb32f9e44"),
-      Map.entry("generator-source-sha256", "936427a9d30cba3e7e8c860ff339c3d06507987fc381e7e71e9cdc580fedca42"),
+      Map.entry("tsconfig-json-sha256", "4c1f1a05eaa6b878e4952af474dff02f567821a4894b64379ee93941c8d56c1a"),
+      Map.entry("generator-source-sha256", "dadf7a223c17f97c2f0fde3fd8cdfa882c398f62dd3ed4338d2177a2f3dff8e3"),
       Map.entry("vectors", Integer.toString(VECTOR_COUNT))
   );
 
@@ -144,6 +145,7 @@ final class KitV1VectorTests {
     assertFileSha256(metadata, "package-json-sha256", "package.json");
     assertFileSha256(metadata, "pnpm-lock-sha256", "pnpm-lock.yaml");
     assertFileSha256(metadata, "pnpm-workspace-sha256", "pnpm-workspace.yaml");
+    assertFileSha256(metadata, "tsconfig-json-sha256", "tsconfig.json");
     assertFileSha256(metadata, "generator-source-sha256", "gen.ts");
   }
 

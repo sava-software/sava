@@ -22,4 +22,5 @@
 /solana/kit-v1-vectors/package.json text eol=lf
 /solana/kit-v1-vectors/pnpm-lock.yaml text eol=lf
 /solana/kit-v1-vectors/pnpm-workspace.yaml text eol=lf
+/solana/kit-v1-vectors/tsconfig.json text eol=lf
 /resources/tx/kit-v1-message-vectors.tsv text eol=lf

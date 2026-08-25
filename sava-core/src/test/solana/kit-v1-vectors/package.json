@@ -6,12 +6,17 @@
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "write": "tsx gen.ts --write",
-    "check": "tsx gen.ts --check"
+    "check": "tsx gen.ts --check",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@solana-program/memo": "0.13.0",
     "@solana-program/system": "0.13.0",
     "@solana/kit": "8.0.0",
     "tsx": "4.23.12"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2"
   }
 }
