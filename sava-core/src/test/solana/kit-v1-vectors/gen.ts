@@ -13,7 +13,7 @@ import { getAddMemoInstruction } from '@solana-program/memo';
 import { getTransferSolInstruction } from '@solana-program/system';
 import {
     address,
-    appendTransactionMessageInstruction,
+    appendTransactionMessageInstructions,
     blockhash,
     compileTransaction,
     createKeyPairSignerFromPrivateKeyBytes,
@@ -196,41 +196,38 @@ async function generateRow(
     second: KeyPairSigner,
     lifetime: { readonly blockhash: ReturnType<typeof blockhash>; readonly lastValidBlockHeight: bigint },
 ): Promise<Row> {
-    let message = pipe(
-        createTransactionMessage({ version: 1 }),
-        m => setTransactionMessageFeePayerSigner(payer, m),
-        m => setTransactionMessageLifetimeUsingBlockhash(lifetime, m),
-        m =>
-            appendTransactionMessageInstruction(
-                getTransferSolInstruction({ amount: lamports(1n), destination: recipient.address, source: payer }),
-                m,
-            ),
-    );
+    const instructions: Instruction[] = [
+        getTransferSolInstruction({ amount: lamports(1n), destination: recipient.address, source: payer }),
+    ];
     switch (testCase.extra) {
         case 'none':
             break;
         case 'second-signer':
-            message = appendTransactionMessageInstruction(
+            instructions.push(
                 getTransferSolInstruction({ amount: lamports(1n), destination: recipient.address, source: second }),
-                message,
             );
             break;
         case 'memo':
-            message = appendTransactionMessageInstruction(getAddMemoInstruction({ memo: LARGE_MEMO }), message);
+            instructions.push(getAddMemoInstruction({ memo: LARGE_MEMO }));
             break;
-        case 'memo+ed25519': {
-            const ed25519: Instruction = { data: ED25519_NO_SIGNATURES, programAddress: ED25519_PROGRAM };
-            message = pipe(
-                message,
-                m => appendTransactionMessageInstruction(getAddMemoInstruction({ memo: SHORT_MEMO }), m),
-                m => appendTransactionMessageInstruction(ed25519, m),
-            );
+        case 'memo+ed25519':
+            instructions.push(getAddMemoInstruction({ memo: SHORT_MEMO }), {
+                data: ED25519_NO_SIGNATURES,
+                programAddress: ED25519_PROGRAM,
+            });
             break;
-        }
     }
-    if (testCase.config !== undefined) {
-        message = setTransactionMessageConfig(testCase.config, message);
-    }
+    // The instructions are collected first and appended in one call. Appending one at a time onto
+    // a reassigned `let` fails tsc: pipe infers an exact instruction-tuple type for the initial
+    // message, and each reassignment widens it. The runtime result is identical either way, which
+    // the committed fixture pins byte for byte.
+    const base = pipe(
+        createTransactionMessage({ version: 1 }),
+        m => setTransactionMessageFeePayerSigner(payer, m),
+        m => setTransactionMessageLifetimeUsingBlockhash(lifetime, m),
+        m => appendTransactionMessageInstructions(instructions, m),
+    );
+    const message = testCase.config === undefined ? base : setTransactionMessageConfig(testCase.config, base);
 
     const unsigned = compileTransaction(message);
     const signed = await signTransactionMessageWithSigners(message);
@@ -305,6 +302,7 @@ async function generate(): Promise<string> {
     const packageJson = readFileSync(resolve(GENERATOR_DIR, 'package.json'), 'utf8');
     const lock = readFileSync(resolve(GENERATOR_DIR, 'pnpm-lock.yaml'), 'utf8');
     const workspace = readFileSync(resolve(GENERATOR_DIR, 'pnpm-workspace.yaml'), 'utf8');
+    const tsconfig = readFileSync(resolve(GENERATOR_DIR, 'tsconfig.json'), 'utf8');
     const generator = readFileSync(fileURLToPath(import.meta.url), 'utf8');
     assertPinned(packageJson, lock);
 
@@ -351,6 +349,7 @@ async function generate(): Promise<string> {
         ['package-json-sha256', sha256(packageJson)],
         ['pnpm-lock-sha256', sha256(lock)],
         ['pnpm-workspace-sha256', sha256(workspace)],
+        ['tsconfig-json-sha256', sha256(tsconfig)],
         ['generator-source-sha256', sha256(generator)],
         ['vectors', String(rows.length)],
     ];

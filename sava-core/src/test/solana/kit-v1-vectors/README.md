@@ -137,3 +137,14 @@ Node version changes that line and nothing else, and is an expected `--check` di
 the fixture is regenerated and `KitV1VectorTests.EXPECTED_METADATA` is updated. Dependency
 changes require a deliberate lockfile update, fixture regeneration, and matching Java
 provenance updates.
+
+## IDE and type checking
+
+`@types/node` and `typescript` are devDependencies for `pnpm exec tsc --noEmit` (also
+`pnpm run typecheck`) and for IDE language services; generation runs through `tsx`, which
+type-checks nothing, so they cannot affect the fixture's bytes — they are still covered by
+`package-json-sha256` and `pnpm-lock-sha256` like everything else, and `tsconfig.json` is
+hashed as `tsconfig-json-sha256` because `tsx` reads it. `@types/node` is pinned below the
+newest release on purpose: this machine's pnpm supply-chain policy (`minimumReleaseAge`)
+refuses packages published too recently, so "bump to latest" is not automatically an
+improvement here.
