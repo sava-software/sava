@@ -22,11 +22,12 @@ Anza 4.2.1, the same release the reference examples pin, so `start.sh` refuses a
 tarball carries `bin/solana-test-validator` and `bin/solana`; no install is required, pass the
 binary's path in `SOLANA_TEST_VALIDATOR`).
 
-The gate is not active on mainnet, devnet or testnet as of 2026-08-24 — the feature account does
-not exist on any of them — so pointing the check at a public cluster skips it. That is the
-honest outcome, not a failure.
+The gate has since activated on the public clusters: testnet at slot 437,276,256 (2026-09-02) and
+devnet at slot 492,480,000 (2026-09-03). On mainnet the feature account still does not exist, so
+pointing the check there skips it — that is the honest outcome, not a failure. On devnet and
+testnet it no longer skips; see "Against a public cluster" below before running it there.
 
-## The loop
+## The loop, against a local validator
 
 ```sh
 cd sava-rpc/src/test/solana/v1-live
@@ -40,6 +41,42 @@ The feature status line should read `active since epoch 0` with activation slot 
 performs the same test itself before sending anything — it decodes the feature account, owned by
 `Feature111111111111111111111111111111111111`, as 9 bytes: a `1` tag then the activation slot
 as u64 LE — so the CLI step is for the human, not the build.
+
+## Against a public cluster
+
+Now that devnet and testnet have the gate, `SAVA_V1_RPC_URL` pointed at either one runs the check
+for real: it funds signers and lands transactions on a shared cluster. Two things a private ledger
+gave for free have to be supplied.
+
+**A payer.** Both public faucets are rate limited or dry, so `requestAirdrop` fails outright.
+`SAVA_V1_PAYER` names a Solana CLI keypair file — the 64-byte JSON array — whose account holds
+lamports, and every fresh signer is then funded by a v1 transfer from it instead of by airdrop. A
+full pass funds 8 signers with 0.02 SOL each, so roughly 0.2 SOL covers one. The check refuses up
+front when the payer cannot cover that, rather than failing midway. Leave the variable unset and it
+airdrops exactly as before, which is what a local validator serves.
+
+**Pacing.** `api.devnet.solana.com` enforces a per-method rate limit that a whole-class run trips
+within seconds, reported as `Too many requests for a specific RPC call` — a property of the public
+node, nothing to do with v1. Run one case at a time, pausing between:
+
+```sh
+SAVA_V1_LIVE=true \
+SAVA_V1_RPC_URL=https://api.devnet.solana.com \
+SAVA_V1_PAYER="$HOME/.config/solana/<payer>.json" \
+  ./gradlew :sava-rpc:test --tests '*LiveV1ValidatorCheck.basicV1Transfer' --rerun
+```
+
+All seven cases were verified this way against devnet on 2026-09-03 (Agave 4.3.0-beta.3), and the
+whole class against local 4.3.0-beta.3 and 4.2.2 validators.
+
+One assertion is necessarily looser than it can be on a private ledger. Agave names the version of
+the *first* transaction a request could not serve, so a full `getBlock` with no ceiling at all
+names 0 when a neighbouring v0 transaction precedes sava's v1 in the block, and 1 when nothing else
+is in there. `versionCeiling` accepts either for that one call; every other call still pins
+ceiling 1 exactly, including the full `getBlock` at ceiling 0, where sava's v1 is by construction
+the first transaction above the ceiling.
+
+## The scripts
 
 `start.sh` takes the validator binary from `SOLANA_TEST_VALIDATOR` (default:
 `solana-test-validator` on `PATH`), keeps the ledger in `LEDGER_DIR` (default `./test-ledger`
@@ -59,14 +96,15 @@ examples), minus the geyser plugin and the Token-2022 override sava does not nee
 
 ## What the check covers
 
-Every case funds a fresh payer by airdrop, so the validator must serve the faucet. Keys are
+Every case funds a fresh payer — by airdrop, so the validator must serve the faucet, or by transfer
+from `SAVA_V1_PAYER` when that is set (see "Against a public cluster" above). Keys are
 fresh per run on purpose: a fixed payer re-sending the same transfer inside one blockhash window
 would be refused as `AlreadyProcessed`, which says nothing about v1.
 
 | case | pins |
 |---|---|
 | `basicV1Transfer` | version 1 on the wire and in `getTransaction`; landed bytes equal sent bytes; fee is exactly `5000 base + 5000 priority`; every config value reads back through `TransactionSkeleton`; full `getBlock` (sent at ceiling 1) carries the same bytes |
-| `versionCeiling` | raw HTTP: `getTransaction` and full `getBlock` with the ceiling omitted or `0` fail the whole response with `-32015`, mapped to `RpcCustomError.UnsupportedTransactionVersion`, and the message names ceiling 1; ceiling 1 serves it; `transactionDetails: signatures` is served at ceiling 0 |
+| `versionCeiling` | raw HTTP: `getTransaction` and full `getBlock` with the ceiling omitted or `0` fail the whole response with `-32015`, mapped to `RpcCustomError.UnsupportedTransactionVersion`; the message names ceiling 1, except for the omitted-ceiling `getBlock`, where a shared block may name 0 instead; ceiling 1 serves it; `transactionDetails: signatures` is served at ceiling 0 |
 | `largeV1Transaction` | a 3236-byte v1 transaction (system transfer with 3000 trailing data bytes, still 150 CU) is accepted past the 1232-byte legacy packet limit and lands byte-exact; simulation and execution agree on units |
 | `simulateThenTighten` | builder defaults reserve both limit slots at the maxima (`1_400_000`, 64 MiB); `setComputeUnitLimit` / `setAccountDataSizeLimit` overwrite in place; the landed transaction carries exactly the measured values and executes with them |
 | `clearedComputeUnitLimitIsRejected` | `computeUnitLimit(0)` clears the mask bit, the in-place setter then throws, simulation reports `InstructionError(0, ComputationalBudgetExceeded)` with 0 units, and preflight refuses with `-32002` mapped to `SendTransactionPreflightFailure` carrying that simulation |

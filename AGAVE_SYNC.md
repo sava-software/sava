@@ -274,10 +274,15 @@ because the validator that check starts activates every gate at genesis.
    configuration parameter: "maxSupportedTransactionVersion": 1`. The `signatures` and `none`
    detail levels are served regardless. A ceiling above every version present is accepted:
    mainnet 4.2.0 today serves full `getBlock` at ceiling 1 and 2 on legacy/v0-only blocks, so
-   `MAX_SUPPORTED_TRANSACTION_VERSION = 1` is safe to send before activation.
+   `MAX_SUPPORTED_TRANSACTION_VERSION = 1` is safe to send before activation. The version the
+   message names is that of the *first* transaction the request could not serve, not the highest
+   one present — so on a shared cluster (see "Observed on public devnet" below) a full `getBlock`
+   with the ceiling omitted names `0` whenever a neighbouring v0 transaction precedes a v1 in the
+   block, and only a ledger carrying nothing but sava's own v1 transactions always names `1`.
 2. **Pre-activation write path** (`enable_tx_v1` inactive — mainnet, devnet and testnet as of
-   2026-08-24; the feature account `txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL` does not exist
-   on any of them). `simulateTransaction` returns `err: "UnsupportedVersion"` with
+   2026-08-24; the feature account `txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL` did not exist
+   on any of them. Superseded for devnet and testnet on 2026-09-03, see below; still current for
+   mainnet, and still the behaviour any pre-activation cluster shows). `simulateTransaction` returns `err: "UnsupportedVersion"` with
    `unitsConsumed: 0` and no logs. `sendTransaction` with preflight returns `-32002`
    `Transaction simulation failed: Transaction version is unsupported` (`data.err:
    "UnsupportedVersion"`). `sendTransaction` with `skipPreflight` returns the signature, but the
@@ -304,6 +309,42 @@ because the validator that check starts activates every gate at genesis.
    ~1,052,946 CU and loads ~75 KB (75,013 bytes) of program data — most of the 1.4M ceiling for
    one instruction, which matters when tightening limits from a simulation.
 
+### Observed on public devnet, Agave 4.3.0-beta.3
+
+`enable_tx_v1` activated on the public clusters: testnet at slot 437,276,256 (2026-09-02
+10:39:27 UTC) and devnet at slot 492,480,000 (2026-09-03 11:38:04 UTC). Both nodes report
+4.3.0-beta.3, feature-set `2409014235`. Mainnet still returns `value: null` for the feature
+account on 4.2.2, feature-set `565236538`.
+
+On 2026-09-03 all seven `LiveV1ValidatorCheck` cases were run against `api.devnet.solana.com`
+and passed, so every gate-on row above now holds on a production cluster and not only on a
+`solana-test-validator`: byte-exact `getTransaction` round trip, fee `5000` base plus the
+priority lamports verbatim (`fees=[5000, 10000]` for priority 0 and 5000), a 3236-byte v1
+transaction accepted and landed byte-exact, `simulateTransaction` → in-place tighten → execution
+agreeing on units, the cleared compute-unit limit refused with `-32002`, and two signatures
+charged `2 × 5000 + 5000`. Two differences from a private ledger, neither a v1 behaviour:
+
+- **The named ceiling is context-dependent**, per the refinement in row 1 above. Measured on
+  devnet block 492,653,301: ceiling omitted → `-32015` naming `0`; ceiling `0` → `-32015` naming
+  `1`; ceiling `1` → the block is served. `LiveV1ValidatorCheck.versionCeiling` therefore accepts
+  either `0` or `1` for the omitted-ceiling call alone.
+- **`loadedAccountsDataSize` is a per-ledger constant** — 142 bytes on devnet for the transfer
+  that loads 149 on a fresh local ledger. Not a busy-cluster effect, and nothing to do with the
+  recipient, which is a fresh key that exists on neither cluster and so loads nothing
+  (`agave:svm/src/account_loader.rs`, a missing account contributes no size). The whole 7-byte
+  delta is the system program's own account: `agave:runtime/src/bank.rs` `add_builtin_account`
+  returns early when a native-loader account already exists, so each ledger keeps whichever
+  builtin name its genesis wrote. Devnet's predates the rename and still holds the 14-byte
+  `system_program`, while a fresh `solana-test-validator` genesis — and testnet and mainnet —
+  hold today's 21-byte `solana_system_program`. Since v1 carries the budget values in the config
+  mask rather than as a ComputeBudget instruction, the only accounts loaded are the fee payer and
+  the system program: `64 + 0 + (64 + 14) = 142` against `64 + 0 + (64 + 21) = 149`. The
+  simulate-then-tighten flow is what makes this a non-issue: the landed limit is whatever that
+  cluster measured.
+
+`api.devnet.solana.com` also enforces a per-method rate limit (`Too many requests for a specific
+RPC call`) that a whole-class run trips within seconds; the cases have to be run one at a time.
+
 ## Other sync surfaces (sava-core)
 
 | Java (under `sava-core/.../software/sava/core/`) | Models | Canonical source |
@@ -317,7 +358,7 @@ because the validator that check starts activates every gate at genesis.
 | `accounts/token/Mint.java` | SPL Mint, 82-byte packed layout with u32-tag COptions | `spl-token-interface` `state::Mint`; `agave:account-decoder/src/parse_token.rs` |
 | `accounts/token/TokenAccount.java`, `AccountState.java` | SPL Account, 165 bytes, explicit memcmp offsets used for `getProgramAccounts` filters | `spl-token-interface` `state::Account`/`AccountState` |
 | `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest upstream parser: `agave-sdk:transaction-view/` |
-| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and the live `LiveV1ValidatorCheck` in sava-rpc against a 4.2.1 validator — see "Observed on Agave 4.2.1" above |
+| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and the live `LiveV1ValidatorCheck` in sava-rpc, run against local 4.2.1/4.2.2/4.3.0-beta.3 validators and against public devnet — see "Observed on Agave 4.2.1" and "Observed on public devnet" above |
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |

@@ -18,11 +18,14 @@ import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.time.Duration;
@@ -32,19 +35,24 @@ import java.util.concurrent.CompletionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/// Live check of sava-built SIMD-0385 transaction v1 against a real Agave `solana-test-validator`
-/// (4.2.1 or later) whose `enable_tx_v1` gate is active. It is the only place the v1 builder, the
-/// in-place config setters, the v1 arms of the response parsers and the `-32015` / `-32002` error
-/// mappings meet a validator; the offline oracles for the wire format are the Rust and kit fixtures
-/// under `sava-core/src/test/solana/`. Not part of the default test suite or CI, run on demand:
+/// Live check of sava-built SIMD-0385 transaction v1 against a real Agave node whose `enable_tx_v1`
+/// gate is active — a local `solana-test-validator` (4.2.1 or later), or a public cluster that has
+/// activated the gate. It is the only place the v1 builder, the in-place config setters, the v1 arms
+/// of the response parsers and the `-32015` / `-32002` error mappings meet a validator; the offline
+/// oracles for the wire format are the Rust and kit fixtures under `sava-core/src/test/solana/`. Not
+/// part of the default test suite or CI, run on demand:
 ///
 /// `SAVA_V1_LIVE=true ./gradlew :sava-rpc:test --tests '*LiveV1ValidatorCheck'`
 ///
-/// The endpoint defaults to `http://127.0.0.1:8899` and is overridden by `SAVA_V1_RPC_URL`; the
-/// validator must also serve airdrops. `sava-rpc/src/test/solana/v1-live/README.md` documents how
-/// to start one. Before anything is sent, the `enable_tx_v1` feature account is read and decoded,
-/// and the whole class is skipped — not failed — when the gate is inactive, so the check stays
-/// honest on a pre-activation cluster instead of reporting `UnsupportedVersion` as a sava defect.
+/// The endpoint defaults to `http://127.0.0.1:8899` and is overridden by `SAVA_V1_RPC_URL`; that
+/// node must also serve airdrops, unless `SAVA_V1_PAYER` names a Solana CLI keypair file whose
+/// account holds enough lamports, in which case every fresh signer is funded by a transfer from it
+/// instead — the way to run against a public cluster, whose faucet is rate limited or dry.
+/// `sava-rpc/src/test/solana/v1-live/README.md` documents both, and the public clusters' per-method
+/// rate limits, which a whole-class run trips. Before anything is sent, the `enable_tx_v1` feature
+/// account is read and decoded, and the whole class is skipped — not failed — when the gate is
+/// inactive, so the check stays honest on a pre-activation cluster such as mainnet instead of
+/// reporting `UnsupportedVersion` as a sava defect.
 ///
 /// Keys are fresh per run on purpose: a fixed payer re-sending the same transfer inside one
 /// blockhash window would be refused as `AlreadyProcessed`, which says nothing about v1.
@@ -63,6 +71,13 @@ final class LiveV1ValidatorCheck {
   /// Per-signature base fee of the local cluster (`solana-test-validator` genesis default).
   private static final long BASE_FEE = 5_000L;
   private static final long AIRDROP = 1_000_000_000L;
+  /// Lamports moved to each fresh signer when funding by transfer instead of by airdrop. Covers the
+  /// largest case's transfer (10_000_000) plus its fees, and still leaves that signer's residue above
+  /// the rent-exempt minimum, so no case is refused with `InsufficientFundsForRent`.
+  private static final long FUND_LAMPORTS = 20_000_000L;
+  /// Fresh signers a full run funds: one per case, and a second for `twoSigners`. Only used to
+  /// refuse an underfunded payer up front rather than midway through the class.
+  private static final int FUNDED_SIGNERS = 8;
   private static final int LEGACY_PACKET_LIMIT = 1_232;
   private static final SecureRandom RANDOM = new SecureRandom();
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
@@ -72,6 +87,8 @@ final class LiveV1ValidatorCheck {
   private static URI rpcUrl;
   private static HttpClient httpClient;
   private static SolanaRpcClient rpcClient;
+  /// Set from `SAVA_V1_PAYER`. Null means fund by airdrop, which is what a local validator serves.
+  private static Signer fundingPayer;
 
   @BeforeAll
   static void requireActiveGate() {
@@ -101,6 +118,27 @@ final class LiveV1ValidatorCheck {
             + " Start a 4.2.1+ solana-test-validator (sava-rpc/src/test/solana/v1-live/README.md)."
     );
     System.out.println("[v1-live] enable_tx_v1 active since slot " + activationSlot.getAsLong() + " on " + rpcUrl);
+
+    final var payerPath = System.getenv("SAVA_V1_PAYER");
+    if (payerPath != null && !payerPath.isBlank()) {
+      try {
+        fundingPayer = readKeyPair(Path.of(payerPath));
+      } catch (final IOException | RuntimeException e) {
+        throw new AssertionError(
+            "SAVA_V1_PAYER (" + payerPath + ") is not a readable Solana CLI keypair file: " + e, e);
+      }
+      final long balance = rpcClient.getBalance(fundingPayer.publicKey()).join().lamports();
+      final long required = FUND_LAMPORTS * FUNDED_SIGNERS;
+      if (balance < required) {
+        throw new AssertionError(
+            "SAVA_V1_PAYER " + fundingPayer.publicKey() + " holds " + balance + " lamports on " + rpcUrl
+                + "; a full run funds " + FUNDED_SIGNERS + " signers with " + FUND_LAMPORTS + " each, so it needs "
+                + required + " plus fees."
+        );
+      }
+      System.out.println("[v1-live] funding signers by transfer from " + fundingPayer.publicKey()
+          + " (" + balance + " lamports)");
+    }
   }
 
   @AfterAll
@@ -135,8 +173,49 @@ final class LiveV1ValidatorCheck {
 
   private static Signer fundedSigner() throws InterruptedException {
     final var signer = randomSigner();
-    awaitConfirmed(rpcClient.requestAirdrop(signer.publicKey(), AIRDROP).join());
+    if (fundingPayer == null) {
+      awaitConfirmed(rpcClient.requestAirdrop(signer.publicKey(), AIRDROP).join());
+    } else {
+      fundFromPayer(signer.publicKey());
+    }
     return signer;
+  }
+
+  /// Funds one fresh signer from [#fundingPayer]. Sent as v1 like everything else here: the gate is
+  /// known active by the time any signer is funded, so a legacy funding path would be dead weight.
+  private static void fundFromPayer(final PublicKey signer) throws InterruptedException {
+    final var tx = TxBuilder.createBuilder()
+        .feePayer(fundingPayer.publicKey())
+        .addInstruction(transferIx(fundingPayer.publicKey(), signer, FUND_LAMPORTS))
+        .computeUnitLimit(20_000)
+        .createTransaction();
+    tx.setRecentBlockHash(blockHash());
+    tx.sign(fundingPayer);
+    awaitConfirmed(rpcClient.sendTransaction(tx.base64EncodeToString()).join());
+  }
+
+  /// Reads a Solana CLI keypair file: a JSON array of 64 unsigned bytes, the 32-byte seed followed by
+  /// the public key. [Signer#createFromKeyPair(byte[])] re-derives the public key and rejects the file
+  /// when the two halves disagree.
+  private static Signer readKeyPair(final Path path) throws IOException {
+    final var text = Files.readString(path).trim();
+    if (text.length() < 2 || text.charAt(0) != '[' || text.charAt(text.length() - 1) != ']') {
+      throw new IllegalArgumentException("expected a JSON array of bytes");
+    }
+    final var fields = text.substring(1, text.length() - 1).split(",");
+    if (fields.length != Signer.KEY_LENGTH << 1) {
+      throw new IllegalArgumentException(
+          "expected " + (Signer.KEY_LENGTH << 1) + " bytes, read " + fields.length);
+    }
+    final byte[] keyPair = new byte[fields.length];
+    for (int i = 0; i < fields.length; ++i) {
+      final int b = Integer.parseInt(fields[i].trim());
+      if (b < 0 || b > 0xFF) {
+        throw new IllegalArgumentException("byte " + i + " out of range: " + b);
+      }
+      keyPair[i] = (byte) b;
+    }
+    return Signer.createFromKeyPair(keyPair);
   }
 
   private static TxStatus awaitConfirmed(final String signature) throws InterruptedException {
@@ -230,13 +309,25 @@ final class LiveV1ValidatorCheck {
   }
 
   private static void assertUnsupportedVersion(final String responseBody) {
+    assertUnsupportedVersion(responseBody, 1);
+  }
+
+  /// Agave names the version of the *first* transaction the request could not serve, so the ceiling
+  /// it reports depends on what else shares the response. Asking for a whole block with no ceiling at
+  /// all makes every versioned transaction unservable, and on a shared cluster someone else's v0
+  /// usually precedes sava's v1 in the block — both answers are correct, so such a call passes the
+  /// acceptable ceilings it may legitimately name. On a private ledger only this check's own v1
+  /// transactions exist and the answer is always 1.
+  private static void assertUnsupportedVersion(final String responseBody, final int... ceilings) {
     final var error = rpcError(responseBody);
     assertNotNull(error, () -> "expected a JSON-RPC error in: " + responseBody);
     assertEquals(-32015, error.code());
     assertInstanceOf(RpcCustomError.UnsupportedTransactionVersion.class, error.customError());
+    final var message = error.getMessage();
     assertTrue(
-        error.getMessage().contains("\"maxSupportedTransactionVersion\": 1"),
-        () -> "the node must name the ceiling that would have served the request: " + error.getMessage()
+        Arrays.stream(ceilings).anyMatch(c -> message.contains("\"maxSupportedTransactionVersion\": " + c)),
+        () -> "the node must name a ceiling that would have served the request, one of "
+            + Arrays.toString(ceilings) + ": " + message
     );
   }
 
@@ -304,8 +395,10 @@ final class LiveV1ValidatorCheck {
         {"jsonrpc":"2.0","id":1,"method":"getTransaction","params":["%s",{"commitment":"confirmed","encoding":"base64"}]}""".formatted(signature)));
     assertUnsupportedVersion(rawRpc("""
         {"jsonrpc":"2.0","id":2,"method":"getTransaction","params":["%s",{"commitment":"confirmed","encoding":"base64","maxSupportedTransactionVersion":0}]}""".formatted(signature)));
+    // No ceiling at all: any versioned transaction in the block is unservable, so on a shared cluster
+    // the node names 0 for a neighbouring v0 and on a private ledger 1 for this check's own v1.
     assertUnsupportedVersion(rawRpc("""
-        {"jsonrpc":"2.0","id":3,"method":"getBlock","params":[%d,{"commitment":"confirmed","encoding":"base64","transactionDetails":"full","rewards":false}]}""".formatted(slot)));
+        {"jsonrpc":"2.0","id":3,"method":"getBlock","params":[%d,{"commitment":"confirmed","encoding":"base64","transactionDetails":"full","rewards":false}]}""".formatted(slot)), 0, 1);
     assertUnsupportedVersion(rawRpc("""
         {"jsonrpc":"2.0","id":4,"method":"getBlock","params":[%d,{"commitment":"confirmed","encoding":"base64","transactionDetails":"full","rewards":false,"maxSupportedTransactionVersion":0}]}""".formatted(slot)));
 
