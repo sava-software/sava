@@ -9,6 +9,7 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.meta.LookupTableAccountMeta;
 import software.sava.core.programs.Discriminator;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -371,6 +372,108 @@ final class PreV1InterfaceShapeTests {
     );
     assertFalse(preV1.exceedsSignatureLimit(), "only v1 bounds the signature count");
     assertFalse(preV1.exceedsSizeLimit());
+  }
+
+  @Test
+  void namedSigningDefaultsReachTheExistingImplementationOverloads() {
+    final var feePayer = Signer.createFromPrivateKey(new byte[Signer.KEY_LENGTH]);
+    final byte[] authoritySeed = new byte[Signer.KEY_LENGTH];
+    Arrays.fill(authoritySeed, (byte) 22);
+    final var authority = Signer.createFromPrivateKey(authoritySeed);
+    final var delegate = Transaction.createTx(feePayer.publicKey(), Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWritableSigner(authority.publicKey())),
+        new byte[]{1, 2, 3, 4}
+    ));
+    final class ExistingSigningImplementation extends PreV1Transaction {
+      private int byKeyCalls;
+      private int inOrderCalls;
+
+      private ExistingSigningImplementation() {
+        super(delegate);
+      }
+
+      @Override
+      public void sign(final Collection<Signer> signers) {
+        ++byKeyCalls;
+        super.sign(signers);
+      }
+
+      @Override
+      public void sign(final SequencedCollection<Signer> signers) {
+        ++inOrderCalls;
+        super.sign(signers);
+      }
+    }
+    final var existing = new ExistingSigningImplementation();
+    final var reversed = List.of(authority, feePayer);
+    final int messageOffset = 1 + 2 * Transaction.SIGNATURE_LENGTH;
+    final byte[] message = Arrays.copyOfRange(delegate.serialized(), messageOffset, delegate.size());
+
+    existing.signByKey(reversed);
+    assertEquals(1, existing.byKeyCalls);
+    assertEquals(0, existing.inOrderCalls);
+    assertTrue(feePayer.publicKey().verifySignature(message, existing.getId()));
+
+    existing.signInOrder(reversed);
+    assertEquals(1, existing.byKeyCalls);
+    assertEquals(1, existing.inOrderCalls);
+    assertTrue(authority.publicKey().verifySignature(message, existing.getId()),
+        "the inherited positional name must preserve the existing implementation's dispatch");
+  }
+
+  @Test
+  void positionalConvenienceAliasesPreserveExistingOverridesAndArguments() {
+    final var expectedSigners = List.of(Signer.createFromPrivateKey(new byte[Signer.KEY_LENGTH]));
+    final byte[] expectedHash = new byte[Transaction.BLOCK_HASH_LENGTH];
+    Arrays.fill(expectedHash, (byte) 19);
+    final String expectedBase58Hash = PublicKey.createPubKey(expectedHash).toBase58();
+    final var calls = new ArrayList<String>();
+    final var existing = new PreV1Transaction(legacyTx(4)) {
+      @Override
+      public String signAndBase64Encode(final SequencedCollection<Signer> signers) {
+        assertSame(expectedSigners, signers);
+        calls.add("encode");
+        return "existing-ordered-encoding";
+      }
+
+      @Override
+      public void sign(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
+        assertSame(expectedHash, recentBlockHash);
+        assertSame(expectedSigners, signers);
+        calls.add("bytes");
+      }
+
+      @Override
+      public void sign(final String recentBlockHash, final SequencedCollection<Signer> signers) {
+        assertSame(expectedBase58Hash, recentBlockHash);
+        assertSame(expectedSigners, signers);
+        calls.add("base58");
+      }
+
+      @Override
+      public String signAndBase64Encode(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
+        assertSame(expectedHash, recentBlockHash);
+        assertSame(expectedSigners, signers);
+        calls.add("encode-bytes");
+        return "existing-byte-hash-encoding";
+      }
+
+      @Override
+      public String signAndBase64Encode(final String recentBlockHash, final SequencedCollection<Signer> signers) {
+        assertSame(expectedBase58Hash, recentBlockHash);
+        assertSame(expectedSigners, signers);
+        calls.add("encode-base58");
+        return "existing-base58-hash-encoding";
+      }
+    };
+
+    assertEquals("existing-ordered-encoding", existing.signInOrderAndBase64Encode(expectedSigners));
+    existing.signInOrder(expectedHash, expectedSigners);
+    existing.signInOrder(expectedBase58Hash, expectedSigners);
+    assertEquals("existing-byte-hash-encoding", existing.signInOrderAndBase64Encode(expectedHash, expectedSigners));
+    assertEquals("existing-base58-hash-encoding", existing.signInOrderAndBase64Encode(expectedBase58Hash, expectedSigners));
+    assertEquals(List.of("encode", "bytes", "base58", "encode-bytes", "encode-base58"), calls);
   }
 
   /// The size default keeps main's exact boundary: `size() > 1232`, not `>=`.

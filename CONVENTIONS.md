@@ -57,8 +57,21 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - `Transaction.sign(List<Signer>)` selects the `SequencedCollection` overload and signs
   **positionally**; the first element writes the first required-signature slot even when
   its public key belongs to another slot. `sign(Collection<Signer>)` validates the complete
-  by-key assignment before signing. Cast a list to `Collection<Signer>` when its order is
-  not already message signer order.
+  by-key assignment before signing. The positional overload is deprecated: use
+  `signInOrder(signers)` to preserve it, or `signByKey(signers)` to match signers by public
+  key regardless of the collection type. Neither named method requires a cast for lists.
+
+## Byte-array ownership
+
+`PublicKey.createPubKey(bytes)` and `Discriminator.createDiscriminator(bytes)` retain
+their input arrays. Callers that will reuse or mutate the source can pass `bytes.clone()`.
+The ranged discriminator factories copy, and factory-created discriminators return a
+copy from `data()`.
+
+For public keys, `copyByteArray()` returns an independent copy. `toByteArray()` may
+return shared storage, so callers must copy before modifying it. Sharing depends on
+the implementation: a lookup-table view copies its key slice. Mutating retained
+public-key bytes can leave cached Base58 and hash-code values stale.
 
 ## Wire field names vs Java accessors
 

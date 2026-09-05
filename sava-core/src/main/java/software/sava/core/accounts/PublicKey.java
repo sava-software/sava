@@ -165,14 +165,12 @@ public interface PublicKey extends Comparable<PublicKey> {
   }
 
   /**
-   * Creates a public key from 32 bytes.
+   * Creates a public key retaining the supplied 32-byte array without copying it.
    *
-   * <p>Current-behavior compatibility note: the current implementation retains the input
-   * array, and {@link #toByteArray()} exposes that same array. If those bytes are mutated
-   * after {@link #toBase58()} or {@link Object#hashCode()} has populated its cache, the cached
-   * representation can disagree with the current bytes; two equal keys can then have
-   * different hash codes, contrary to {@link Object#hashCode()}. This is retained pending
-   * an owner decision.</p>
+   * <p>The caller must leave the retained bytes unchanged while the key is in use. Pass
+   * {@code publicKey.clone()} if the source array may be modified later. Mutating retained
+   * bytes can leave cached {@link #toBase58()} and {@link Object#hashCode()} values stale,
+   * causing equal keys to have different hash codes.</p>
    */
   static PublicKey createPubKey(final byte[] publicKey) {
     if (publicKey.length != PublicKey.PUBLIC_KEY_LENGTH) {
@@ -301,9 +299,10 @@ public interface PublicKey extends Comparable<PublicKey> {
   }
 
   /**
-   * Returns this implementation's byte array. Implementations may differ in whether that array
-   * is shared; keys returned by {@link #createPubKey(byte[])} currently expose their backing
-   * array, as described by that factory's cache-coherence compatibility note.
+   * Returns this implementation's byte array, which may share the key's storage.
+   * Keys returned by {@link #createPubKey(byte[])} expose their retained input array;
+   * other implementations may return a copy. Treat shared bytes as read-only and use
+   * {@link #copyByteArray()} when an independent array is needed.
    */
   byte[] toByteArray();
 

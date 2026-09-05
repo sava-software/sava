@@ -72,3 +72,32 @@ The single transaction-size constant could not describe every transaction format
 legacy/v0 and 4,096 bytes for v1. Its interface default retains the 1,232-byte
 compatibility limit for third-party implementations. A transaction fitting its
 format's size limit does not imply that the destination cluster accepts that format.
+
+## Newly deprecated transaction signing APIs
+
+These methods remain available with their existing behavior for this release, but
+are now marked `@Deprecated(forRemoval = true)`.
+
+The `SequencedCollection<Signer>` overloads of `sign` and `signAndBase64Encode` sign
+positionally. A `List<Signer>` selects these overloads even when the caller expects
+the by-key behavior of `sign(Collection<Signer>)`.
+
+Use the explicit names to choose the behavior:
+
+```java
+tx.signInOrder(signers); // Preserves positional signing; supply message signer order.
+tx.signByKey(signers);   // Matches required signer keys, regardless of list order.
+```
+
+Both families include blockhash and Base64 conveniences, such as
+`signInOrderAndBase64Encode(recentBlockHash, signers)` and
+`signByKeyAndBase64Encode(recentBlockHash, signers)`. The static raw-buffer helpers
+use `Transaction.signInOrder(...)` and `Transaction.signInOrderAndBase64Encode(...)`.
+Transaction-aware positional overloads retain count validation without checking each
+signer's key against its slot; the explicit-offset helper trusts the supplied spans.
+By-key signing validates the complete assignment before writing signatures.
+
+The existing single-signer, explicit-index, and `Collection<Signer>` overloads remain
+undeprecated. Named positional aliases delegate to the corresponding existing overload,
+including custom convenience overrides. New instance methods have defaults, so existing
+`Transaction` implementations do not need additional method overrides.

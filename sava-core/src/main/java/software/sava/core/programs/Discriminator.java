@@ -12,6 +12,12 @@ public interface Discriminator extends Predicate<Instruction> {
   int NATIVE_DISCRIMINATOR_LENGTH = Integer.BYTES;
   int ANCHOR_DISCRIMINATOR_LENGTH = 8;
 
+  /**
+   * Creates a discriminator retaining the supplied array without copying it. Pass
+   * {@code discriminator.clone()} if the source array may be modified later.
+   * The ranged factories copy their input, and {@link #data()} returns a copy for
+   * discriminators created by these factories.
+   */
   static Discriminator createDiscriminator(final byte[] discriminator) {
     return new DiscriminatorRecord(discriminator);
   }

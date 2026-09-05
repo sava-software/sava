@@ -641,6 +641,11 @@ public interface Transaction {
     return Base64.getEncoder().encodeToString(out);
   }
 
+  /**
+   * @deprecated Use {@link #signInOrder(SequencedCollection, byte[], int, int, int)} to make
+   *             positional signing explicit. The supplied order and offsets retain their meaning.
+   */
+  @Deprecated(forRemoval = true)
   static void sign(final SequencedCollection<Signer> signers,
                    final byte[] out,
                    final int msgOffset,
@@ -653,6 +658,9 @@ public interface Transaction {
 
   /// @throws IllegalArgumentException if `signers` does not match the required signature count that
   ///                                  `out` declares
+  /// @deprecated Use [#signInOrder(SequencedCollection, byte[])] to keep positional signing with
+  ///             an explicit name. Signer public keys are not matched to required slots.
+  @Deprecated(forRemoval = true)
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     final int numSigners = signers.size();
     if (V1Transaction.isV1(out)) {
@@ -675,8 +683,43 @@ public interface Transaction {
     }
   }
 
+  /**
+   * @deprecated Use {@link #signInOrderAndBase64Encode(SequencedCollection, byte[])} to keep
+   *             positional signing with an explicit name.
+   */
+  @Deprecated(forRemoval = true)
   static String signAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
     sign(signers, out);
+    return Base64.getEncoder().encodeToString(out);
+  }
+
+  /**
+   * Signs the supplied message span into consecutive signature slots, in iteration order.
+   * The caller supplies the message and signature offsets; signer public keys are not matched
+   * to transaction accounts and the serialized layout is not validated by this overload.
+   */
+  static void signInOrder(final SequencedCollection<Signer> signers,
+                          final byte[] out,
+                          final int msgOffset,
+                          final int msgLen,
+                          final int sigOffset) {
+    sign(signers, out, msgOffset, msgLen, sigOffset);
+  }
+
+  /**
+   * Signs every required slot in iteration order, using the serialized legacy, v0, or v1 layout.
+   * The first signer writes the first signature slot regardless of its public key.
+   *
+   * @throws IllegalArgumentException if the signer count does not match the serialized count,
+   *                                  or the serialized signature boundary is inconsistent
+   */
+  static void signInOrder(final SequencedCollection<Signer> signers, final byte[] out) {
+    sign(signers, out);
+  }
+
+  /** Signs positionally and returns the complete signed payload encoded as Base64. */
+  static String signInOrderAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
+    signInOrder(signers, out);
     return Base64.getEncoder().encodeToString(out);
   }
 
@@ -725,40 +768,149 @@ public interface Transaction {
   /**
    * Validates the complete required-signer assignment, then signs each slot by public key; input
    * order is irrelevant. Assignment-validation failures leave every signature untouched.
-   * Because {@link List} binds to {@link #sign(SequencedCollection)}, cast a list to
-   * {@link Collection} to select this by-key overload.
+   * Use {@link #signByKey(Collection)} to select this behavior for a {@link List} without a cast.
    */
   void sign(final Collection<Signer> signers);
 
   /**
    * Signs each required slot positionally. The first signer writes the first signature slot,
-   * regardless of its public key. Use {@link #sign(Collection)} when order is not already the
+   * regardless of its public key. Use {@link #signByKey(Collection)} when order is not already the
    * message's required-signer order.
+   *
+   * @deprecated Use {@link #signInOrder(SequencedCollection)} to retain positional signing.
+   *             Use {@link #signByKey(Collection)} to match signers by public key instead.
    */
+  @Deprecated(forRemoval = true)
   void sign(final SequencedCollection<Signer> signers);
 
+  /**
+   * @deprecated Use {@link #signInOrderAndBase64Encode(SequencedCollection)} to retain positional
+   *             signing, or {@link #signByKeyAndBase64Encode(Collection)} to match public keys.
+   */
+  @Deprecated(forRemoval = true)
   default String signAndBase64Encode(final SequencedCollection<Signer> signers) {
     sign(signers);
     return base64EncodeToString();
   }
 
+  /**
+   * @deprecated Use {@link #signInOrder(byte[], SequencedCollection)} to retain positional signing,
+   *             or {@link #signByKey(byte[], Collection)} to match public keys.
+   */
+  @Deprecated(forRemoval = true)
   default void sign(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     sign(signers);
   }
 
+  /**
+   * @deprecated Use {@link #signInOrder(String, SequencedCollection)} to retain positional signing,
+   *             or {@link #signByKey(String, Collection)} to match public keys.
+   */
+  @Deprecated(forRemoval = true)
   default void sign(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     sign(signers);
   }
 
+  /**
+   * @deprecated Use {@link #signInOrderAndBase64Encode(byte[], SequencedCollection)} to retain
+   *             positional signing, or {@link #signByKeyAndBase64Encode(byte[], Collection)} to
+   *             match public keys.
+   */
+  @Deprecated(forRemoval = true)
   default String signAndBase64Encode(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
     return base64EncodeToString();
   }
 
+  /**
+   * @deprecated Use {@link #signInOrderAndBase64Encode(String, SequencedCollection)} to retain
+   *             positional signing, or {@link #signByKeyAndBase64Encode(String, Collection)} to
+   *             match public keys.
+   */
+  @Deprecated(forRemoval = true)
   default String signAndBase64Encode(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
+    return base64EncodeToString();
+  }
+
+  /**
+   * Signs every required slot in iteration order. The first signer writes the first signature
+   * slot regardless of its public key; the collection must follow the message's required-signer
+   * order to produce valid signatures. Delegates to the existing positional implementation.
+   *
+   * @throws IllegalArgumentException if the collection size differs from {@link #numSigners()}
+   */
+  default void signInOrder(final SequencedCollection<Signer> signers) {
+    sign(signers);
+  }
+
+  /** Signs positionally and returns the complete signed payload encoded as Base64. */
+  default String signInOrderAndBase64Encode(final SequencedCollection<Signer> signers) {
+    return signAndBase64Encode(signers);
+  }
+
+  /** Sets the recent blockhash before signing every required slot in iteration order. */
+  default void signInOrder(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
+    sign(recentBlockHash, signers);
+  }
+
+  /** Sets the Base58 recent blockhash before signing every required slot in iteration order. */
+  default void signInOrder(final String recentBlockHash, final SequencedCollection<Signer> signers) {
+    sign(recentBlockHash, signers);
+  }
+
+  /** Sets the recent blockhash, signs positionally, and returns the signed payload as Base64. */
+  default String signInOrderAndBase64Encode(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
+    return signAndBase64Encode(recentBlockHash, signers);
+  }
+
+  /** Sets the Base58 blockhash, signs positionally, and returns the signed payload as Base64. */
+  default String signInOrderAndBase64Encode(final String recentBlockHash, final SequencedCollection<Signer> signers) {
+    return signAndBase64Encode(recentBlockHash, signers);
+  }
+
+  /**
+   * Validates the complete required-signer assignment, then signs each slot by public key;
+   * iteration order is irrelevant, including for {@link List} inputs. Assignment-validation
+   * failures leave every signature untouched. Delegates to {@link #sign(Collection)} so existing
+   * implementations retain their by-key signing behavior.
+   *
+   * @throws IllegalArgumentException if the collection does not contain exactly the required
+   *                                  signers, including duplicate or unknown signers
+   */
+  default void signByKey(final Collection<Signer> signers) {
+    sign(signers);
+  }
+
+  /** Signs by public key and returns the complete signed payload encoded as Base64. */
+  default String signByKeyAndBase64Encode(final Collection<Signer> signers) {
+    signByKey(signers);
+    return base64EncodeToString();
+  }
+
+  /** Sets the recent blockhash before validating and signing the complete by-key assignment. */
+  default void signByKey(final byte[] recentBlockHash, final Collection<Signer> signers) {
+    setRecentBlockHash(recentBlockHash);
+    signByKey(signers);
+  }
+
+  /** Sets the Base58 blockhash before validating and signing the complete by-key assignment. */
+  default void signByKey(final String recentBlockHash, final Collection<Signer> signers) {
+    setRecentBlockHash(recentBlockHash);
+    signByKey(signers);
+  }
+
+  /** Sets the recent blockhash, signs by public key, and returns the signed payload as Base64. */
+  default String signByKeyAndBase64Encode(final byte[] recentBlockHash, final Collection<Signer> signers) {
+    signByKey(recentBlockHash, signers);
+    return base64EncodeToString();
+  }
+
+  /** Sets the Base58 blockhash, signs by public key, and returns the signed payload as Base64. */
+  default String signByKeyAndBase64Encode(final String recentBlockHash, final Collection<Signer> signers) {
+    signByKey(recentBlockHash, signers);
     return base64EncodeToString();
   }
 
