@@ -449,4 +449,23 @@ final class TransactionFactoryTests {
     assertArrayEquals(new PublicKey[]{ALT_ADDRESS, ALT_ADDRESS_2}, skeleton.lookupTableAccounts());
     assertArrayEquals(tx.serialized(), skeleton.createTransaction(tableMetas).serialized());
   }
+
+  @Test
+  void multiTableCompactionPreservesCallerArrayEntriesAndRelativeOrder() {
+    final var payer = AccountMeta.createFeePayer(FEE_PAYER);
+    final var lookupA = AccountMeta.createWrite(TABLE_WRITE);
+    final var lookupB = AccountMeta.createWrite(TABLE_WRITE_2);
+    final var program = AccountMeta.createInvoked(PROGRAM);
+    final var sortedAccounts = new AccountMeta[]{payer, lookupA, lookupB, program};
+    final var ix = Instruction.createInstruction(program, List.of(lookupA, lookupB), new byte[]{9});
+    // Reverse table order to distinguish the caller's array order from the wire's lookup order.
+    final var tableMetas = new LookupTableAccountMeta[]{
+        LookupTableAccountMeta.createMeta(alt(ALT_ADDRESS_2, TABLE_WRITE_2)),
+        LookupTableAccountMeta.createMeta(alt(ALT_ADDRESS, TABLE_WRITE))
+    };
+
+    Transaction.createTx(List.of(ix), ix.serializedLength(), sortedAccounts, tableMetas);
+
+    assertArrayEquals(new AccountMeta[]{payer, program, lookupA, lookupB}, sortedAccounts);
+  }
 }

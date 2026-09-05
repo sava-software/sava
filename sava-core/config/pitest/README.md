@@ -353,20 +353,6 @@ The filter-copy mutants in `TransactionSkeletonImpl` are covered separately unde
 `# array identity only`. No current `# result identical routing` row belongs to
 transaction signing.
 
-**Singleton null handling — pending retirement** — baseline label
-`# singleton null handling pending prune`: the
-`InstructionRecord.extraAccounts(List),RemoveConditionalMutator_EQUAL_ELSE` row
-previously shared the result-identical routing argument. Bypassing its single-element
-shortcut appends the same account for a non-null element, but a singleton containing
-null differs: `extraAccount(null)` returns the original instruction, while the general
-join appends a null account. No declared contract excludes that input.
-`InstructionBuildingTests.extraAccountsRetainsSizeDependentNullHandlingForCompatibility`
-pins the existing asymmetry without changing the implementation. The first
-2026-09-05 observation with that regression killed this mutation: it recorded 1,678
-mutants, with 1,635 killed, 42 survivors, and one existing audited timeout. That pass
-retained all 43 baseline rows. Retirement of this killed row awaits the required
-repeated prune observations; its former equivalence argument no longer applies.
-
 **No-op displacement boundaries** — baseline label `# displacement boundary`:
 
 - `Transaction.createTx`, `ConditionalsBoundaryMutator` ×2, in the single-table
@@ -376,42 +362,6 @@ repeated prune observations; its former equivalence argument no longer applies.
 - `Transaction.createTx`, `RemoveConditionalMutator_EQUAL_ELSE`, in the
   single-table overload: bypassing `len == 1` performs the same one-element move
   with `System.arraycopy` before the common front assignment.
-- `Transaction.createTx`, `RemoveConditionalMutator_EQUAL_IF`, in the
-  `LookupTableAccountMeta[]` overload: forcing the singleton arm also handles
-  longer displacements. It writes a different consumed tail, but the table metas
-  already captured those lookup accounts and only the compacted front is read
-  from `sortedAccounts` afterwards. The serialized transaction is unchanged.
-  This last row is equivalent because of the consumed-tail invariant, not because
-  its change is limited to `len == 1`.
-
-**Redundant work** — baseline label `# redundant work`:
-`Transaction.createTx`, `VoidMethodCallMutator`, in the overload taking
-`LookupTableAccountMeta[]`: the compaction `System.arraycopy` shifts tail slots
-holding already-consumed indexed accounts, captured in the table metas by
-`addAccountIfExists`. Only the common front assignment is read back. The
-single-table overload's similar copy is load-bearing because its tail feeds
-lookup-index serialization, and its removal mutant is killed.
-
-**Empty data rendering — pending retirement** — baseline label
-`# empty data rendering pending prune`: two `InstructionRecord.toString` rows
-previously shared the redundant-work argument:
-
-- `RemoveConditionalMutator_EQUAL_IF` removes `data != null`, not the length
-  check. The explicit-slice factory accepts null data for diagnostic rendering;
-  with a positive declared length, the current `toString` renders empty data,
-  while this mutation attempts to copy the null array and throws.
-- `ConditionalsBoundaryMutator` changes `len > 0` to `>=`. For valid empty ranges,
-  encoding the range produces the same empty string. But the explicit-slice factory
-  also permits an invalid offset with zero length: the current renderer skips the
-  copy, while the mutation attempts it and throws. No declared rendering contract
-  excludes that input.
-
-`InstructionBuildingTests.toStringRendersNullOrZeroLengthDataWithoutReadingTheSpan`
-pins these existing diagnostic behaviors without changing production behavior. The
-fresh 2026-09-05 run killed both mutants: 1,678 total, 1,637 killed, 40 survivors,
-and one existing audited timeout. All 43 baseline rows remain. These two rows and
-the singleton-null row above await the required repeated prune observations; their
-former equivalence arguments no longer apply.
 
 **Dead defensive code** — baseline label `# dead defensive`:
 
@@ -425,6 +375,39 @@ former equivalence arguments no longer apply.
   was fixed on 2026-07-21 and is pinned by
   `AccountIndexLookupTableTests.viewCompareToReadsTheOtherViewsBackingTable`.
   No current row in this family belongs to transaction signing.
+
+### Retired compatibility acceptances — 2026-09-05
+
+Five accepted rows were removed with `pitestTxBaselinePrune` after two matching
+fresh full history-free previews and a distinct third write-boundary run over
+unchanged source, tests, toolchain, and baseline inputs. All three serialized Tx
+runs produced 1,678 mutants: 1,639 killed, 38 survivors, and one existing audited
+timeout. They agreed on every mutation status and the exact five removal candidates.
+The baseline shrank from 43 to 38 rows; the writer also refreshed two retained line
+metadata tags. No new timeout or invalid execution status was observed.
+
+- `Transaction.createTx(..., AccountMeta[], LookupTableAccountMeta[])`,
+  `RemoveConditionalMutator_EQUAL_IF` and `VoidMethodCallMutator`: forcing the
+  singleton compaction arm or removing the arraycopy changes the caller's array
+  even though the serialized transaction stays identical. The array tail is
+  caller-visible, so the former consumed-tail argument was insufficient.
+  `TransactionFactoryTests.multiTableCompactionPreservesCallerArrayEntriesAndRelativeOrder`
+  pins the existing stable partition: message accounts first, lookup accounts
+  afterward, retaining every entry and relative order within both groups. The
+  lookup tail follows the input array order, not the table order on the wire.
+- `InstructionRecord.extraAccounts(List)`, `RemoveConditionalMutator_EQUAL_ELSE`:
+  bypassing the singleton shortcut appends a null account where the current method
+  ignores it. `InstructionBuildingTests.extraAccountsRetainsSizeDependentNullHandlingForCompatibility`
+  pins that published asymmetry, including retention of nulls in larger lists.
+- `InstructionRecord.toString`, `RemoveConditionalMutator_EQUAL_IF` and
+  `ConditionalsBoundaryMutator`: removing the null-data guard or widening the
+  positive-length check can make diagnostic rendering throw for inputs it currently
+  renders as empty. `InstructionBuildingTests.toStringRendersNullOrZeroLengthDataWithoutReadingTheSpan`
+  covers null data with a positive length and a zero-length span with an invalid
+  offset. Diagnostic rendering does not make either input valid for serialization.
+
+These regressions preserve behavior already present in 25.10.0. The records were
+retired because the licensed mutants were observed killed, not merely absent.
 
 ### SIMD-0385 v1 transactions — triaged 2026-08-15
 
@@ -613,7 +596,7 @@ from the earlier seven-row triage; they are historical evidence, not retained de
   is wanted; unlike the precedents above it reads `data`.
 
 These two rows remain untriaged. No other current tx baseline row carries
-`# untriaged`; the pending-retirement entries above are recorded separately.
+`# untriaged`; the retired entries above are historical evidence.
 Baseline shrinkage requires row-specific evidence, and growth requires a reason here.
 
 ## Timed-out mutants (audited set)
