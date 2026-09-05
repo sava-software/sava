@@ -180,13 +180,14 @@ abstract class BaseTransaction implements Transaction {
   }
 
   @Override
+  @SuppressWarnings("removal") // Required implementation of the retained positional signing API.
   public final void sign(final SequencedCollection<Signer> signers) {
     final int numSigners = signers.size();
     if (numSigners != this.numSigners()) {
       throw new IllegalArgumentException(String.format("Expected %d signers, only passed %d.", this.numSigners(), numSigners));
     }
     recordNumSignatures(numSigners);
-    Transaction.sign(signers, this.data, messageOffset(), messageLength(), signatureOffset(0));
+    Transaction.signInOrder(signers, this.data, messageOffset(), messageLength(), signatureOffset(0));
   }
 
   @Override

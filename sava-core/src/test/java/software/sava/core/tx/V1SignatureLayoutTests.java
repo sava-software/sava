@@ -618,6 +618,7 @@ final class V1SignatureLayoutTests {
   /// `Transaction#sign(SequencedCollection, byte[], int, int, int)` overload, which is literally
   /// the call the v1 branch makes.
   @Test
+  @SuppressWarnings("removal") // Pins the published helper and replays its former offset calculation.
   void staticSignRejectsTooFewSignersForAV1Payload() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
@@ -664,6 +665,7 @@ final class V1SignatureLayoutTests {
   /// pre-fix boundary `out.length - signers.size() * 64` lands 64 bytes inside the message, so the
   /// signatures were written straight over the tail of the instruction payloads.
   @Test
+  @SuppressWarnings("removal") // Pins the published helper and replays its former offset calculation.
   void staticSignRejectsTooManySignersForAV1Payload() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
@@ -699,6 +701,7 @@ final class V1SignatureLayoutTests {
   /// Pins that the header-derived boundary is the same one the instance API uses, so the added
   /// validation did not change the signing behaviour for a correctly-sized collection.
   @Test
+  @SuppressWarnings("removal") // Compares the published static and instance positional paths.
   void staticSignWithTheRequiredSignerCountMatchesTheInstanceApi() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
@@ -742,6 +745,7 @@ final class V1SignatureLayoutTests {
   /// prefix past the real message start and wrote signature bytes over the header. Neither reaches a
   /// write now, so the payload is asserted byte-identical after the refusal.
   @Test
+  @SuppressWarnings("removal") // Pins the published helper's legacy layout and refusal behavior.
   void staticSignLegacyBranchMatchesTheHeaderOrRefuses() {
     final var feePayer = signer(11);
     final var signerB = signer(22);

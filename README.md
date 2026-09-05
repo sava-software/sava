@@ -9,7 +9,7 @@ User documentation lives at [sava.software](https://sava.software/).
 * [Dependency Configuration](https://sava.software/quickstart)
 * [Core](https://sava.software/libraries/core): Common Solana cryptography and serialization utilities.
 * [RPC](https://sava.software/libraries/rpc): HTTP and WebSocket Clients.
-* [Upcoming v1 release migration](MIGRATION.md): Replacements for removed deprecated APIs.
+* [25.11.0 migration](MIGRATION.md): Removed APIs and newly deprecated signing methods.
 
 ## WebSocket upgrade notes
 

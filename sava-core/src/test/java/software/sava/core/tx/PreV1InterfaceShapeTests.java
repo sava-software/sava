@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// published-library rule enforced by the compiler instead of by review. The assertions then hold
 /// the inherited defaults to their documented behaviour, so a default cannot quietly change
 /// meaning either.
+@SuppressWarnings("removal") // This fixture pins the published interface and existing override dispatch.
 final class PreV1InterfaceShapeTests {
 
   private static final AtomicInteger KEY_SEED = new AtomicInteger();

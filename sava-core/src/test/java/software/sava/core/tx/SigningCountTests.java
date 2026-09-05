@@ -149,6 +149,7 @@ final class SigningCountTests {
 
   /// The positional `sign(SequencedCollection)` overload restamps the count it validated against.
   @Test
+  @SuppressWarnings("removal") // Pins the published positional overload's count update.
   void signSequencedRestampsTheSerializedSignatureCount() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
@@ -190,6 +191,7 @@ final class SigningCountTests {
   /// while signing would change the very bytes being signed. Every signing path must therefore
   /// leave the header byte-identical.
   @Test
+  @SuppressWarnings("removal") // Every published signing path must preserve the v1 header.
   void v1SigningNeverRewritesTheHeaderSignatureCount() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
@@ -537,6 +539,7 @@ final class SigningCountTests {
     }
 
     @Override
+    @SuppressWarnings("removal") // Required by the existing Transaction implementation contract.
     public void sign(final SequencedCollection<Signer> signers) {
       throw new UnsupportedOperationException();
     }

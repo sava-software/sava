@@ -779,6 +779,8 @@ public interface Transaction {
    *
    * @deprecated Use {@link #signInOrder(SequencedCollection)} to retain positional signing.
    *             Use {@link #signByKey(Collection)} to match signers by public key instead.
+   *             Migrate before removal: a recompiled {@code sign(list)} call could otherwise
+   *             resolve to {@link #sign(Collection)} and change to by-key signing.
    */
   @Deprecated(forRemoval = true)
   void sign(final SequencedCollection<Signer> signers);
@@ -843,6 +845,8 @@ public interface Transaction {
    * @throws IllegalArgumentException if the collection size differs from {@link #numSigners()}
    */
   default void signInOrder(final SequencedCollection<Signer> signers) {
+    // Preserve existing implementors' positional override. When removing that overload, migrate
+    // this body too: leaving sign(signers) would silently bind to sign(Collection) instead.
     sign(signers);
   }
 

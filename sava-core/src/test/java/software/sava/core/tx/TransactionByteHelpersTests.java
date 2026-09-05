@@ -69,7 +69,7 @@ final class TransactionByteHelpersTests {
       if (signers.size() == 1) {
         tx.sign(signers.getFirst());
       } else {
-        tx.sign(signers);
+        tx.signInOrder(signers);
       }
       return tx;
     }
@@ -123,6 +123,7 @@ final class TransactionByteHelpersTests {
   /// signer i alone would still pass if two slots were swapped, since each signature verifies fine
   /// where it landed.
   @Test
+  @SuppressWarnings("removal") // Pins the published static positional helper's slot traversal.
   void staticSequencedSigningWalksEverySlotAtThreeSigners() {
     final var feePayer = nextSigner();
     final var second = nextSigner();
@@ -223,6 +224,7 @@ final class TransactionByteHelpersTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins the published static positional signing and encoding helpers.
   void staticSequencedSigning() {
     final var fixture = twoSigner();
     final var instanceSigned = fixture.newSignedTx(HASH_A);
@@ -316,6 +318,7 @@ final class TransactionByteHelpersTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins all published positional blockhash and encoding conveniences.
   void sequencedBlockHashOverloads() {
     final var fixture = twoSigner();
     final var signers = fixture.signers();

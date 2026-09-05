@@ -9,6 +9,8 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.Base58;
 import software.sava.core.encoding.ByteUtil;
 
+import java.security.GeneralSecurityException;
+import java.security.Signature;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -91,6 +93,39 @@ final class NamedTransactionSigningTests {
       tx.signByKey(reversed);
       assertSignedBy(tx, List.of(feePayer, authority));
       assertArrayEquals(unsignedMessage, message(tx));
+    }
+  }
+
+  @Test
+  void positionalSigningAcceptsKeysOutsideTheRequiredSignerSet() throws GeneralSecurityException {
+    final var feePayer = signer(11);
+    final var authority = signer(22);
+    final var foreignSigners = List.of(signer(33), signer(44));
+    for (final int version : new int[]{-128, 0, 1}) {
+      for (int variant = 0; variant < 2; ++variant) {
+        final var tx = transaction(version, feePayer, authority);
+        final byte[] unsignedMessage = message(tx);
+        final byte[] expected = tx.serialized().clone();
+        // Positional signing leaves key assignment to the caller. These keys deliberately
+        // cannot authorize this transaction; their expected bytes come directly from JDK Ed25519.
+        for (int slot = 0; slot < foreignSigners.size(); ++slot) {
+          final var signature = Signature.getInstance("Ed25519");
+          signature.initSign(foreignSigners.get(slot).privateKey());
+          signature.update(unsignedMessage);
+          final byte[] expectedSignature = signature.sign();
+          assertEquals(SIGNATURE_LENGTH, expectedSignature.length);
+          System.arraycopy(expectedSignature, 0, expected,
+              signatureStart(tx) + slot * SIGNATURE_LENGTH, SIGNATURE_LENGTH);
+        }
+
+        if (variant == 0) {
+          tx.signInOrder(foreignSigners);
+        } else {
+          Transaction.signInOrder(foreignSigners, tx.serialized());
+        }
+
+        assertArrayEquals(expected, tx.serialized(), "version " + version + ", signing variant " + variant);
+      }
     }
   }
 

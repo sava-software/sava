@@ -308,11 +308,12 @@ a sanctioned writer can preserve that evidence while pruning the separately
 killed and retired rows.
 ## Triaged equivalent mutants (accepted with reasons)
 
-Triaged 2026-07-18 — all 8 `responses` baseline entries are accepted
-equivalents, with no debt. That was true of the whole module until the
-`client` suite was added on 2026-07-20; its 56 entries are triaged above but
-include real coverage debt, so the module-wide claim no longer holds. The
-`responses` baseline itself should stay debt free.
+The 2026-09-05 fresh `responses` observation has eight surviving mutants and no
+`NO_COVERAGE` mutants. The accepted record retains twelve rows: eight match those
+survivors, one preserves historical `Lamports.amount` evidence absent from the
+current licensed population, and three `JsonUtil` rows await retirement as described
+below. The current equivalence arguments cover the eight observed survivors and
+the retained Lamports instance; they do not apply to the three pending rows.
 
 - `RpcCustomError.parseError` (both overloads) — baseline label
   `# int clamp boundary` — `changed conditional
@@ -324,10 +325,12 @@ include real coverage debt, so the module-wide claim no longer holds. The
   The killable near-misses — codes aliasing real ones under `(int)`
   truncation, `code ± (1L << 32)` — are pinned by
   `ParseCustomErrorCodeTests`.
-- `Lamports.amount` — baseline label `# allocation routing` — boundary/forced-true on `lamports < 0`: both branches
-  build the same `BigInteger` for every long, so the signed branch is
-  allocation routing only — `valueOf` is cheaper than widening the bits. The
-  agreement is not just prose: sava-core's
+- `Lamports.amount` — baseline label `# allocation routing` — boundary/forced-true
+  on `lamports < 0`: both branches build the same `BigInteger` for non-negative
+  longs, including zero. Negative inputs already take the unsigned-widening branch,
+  so forcing that branch true leaves their result unchanged too. The guard saves
+  allocation for non-negative values — `valueOf` is cheaper than widening the bits.
+  The agreement is not just prose: sava-core's
   `ByteUtilTests.toUnsignedBigIntegerAgreesWithValueOfWhereCallersBranch`
   sweeps `valueOf` vs the widening over 10k seeded non-negative values plus
   boundaries on every build. See the decimal suite notes in sava-core for why

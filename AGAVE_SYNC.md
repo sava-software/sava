@@ -65,10 +65,12 @@ Java: `sava-core/src/main/java/software/sava/core/accounts/token/`
   and round-trip through `write`. `Token2022.parseExtensions` dispatches on the wire ID;
   its private names table preserves the diagnostic names used before the enum and
   `extensions()` compatibility maps were removed.
-- `extensions/*.java` — one record per extension with a static `read(data, offset)` and a
-  `write(data, offset)`/`l()` pair. Variable-length extensions
-  (`ConfidentialTransferFeeConfig`, `ConfidentialTransferFeeAmount`) take an end bound in
-  `read`.
+- `extensions/*.java` — extension records have a static reader and a
+  `write(data, offset)`/`l()` pair. `ConfidentialTransferFeeConfig` and
+  `ConfidentialTransferFeeAmount` have fixed wire lengths of 129 and 64 bytes. Their
+  readers take an end bound to delimit the ciphertext; `Token2022.parseExtensions`
+  validates those fixed lengths before calling them. `TokenMetadata` is variable-length
+  and is read from a slice bounded by its declared TLV length.
 - `Token2022.java` — mint parsing: base `Mint` (82 bytes) + 83 bytes padding + 1 accountType
   byte, then TLV entries (`u16 LE type`, `u16 LE length`, payload — both read unsigned).
   The extension dispatch switch must cover every known wire ID; a zeroed type terminates parsing

@@ -548,7 +548,7 @@ final class TransactionSkeletonParseTests {
     );
     final var tx = Transaction.createTx(feePayer.publicKey(), ix);
     tx.setRecentBlockHash(new byte[Transaction.BLOCK_HASH_LENGTH]);
-    tx.sign(List.of(feePayer, readOnlySigner));
+    tx.signInOrder(List.of(feePayer, readOnlySigner));
 
     final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
     assertEquals(2, skeleton.numSignatures());
@@ -909,7 +909,7 @@ final class TransactionSkeletonParseTests {
     final var tx = Transaction.createTx(feePayer.publicKey(), ix);
     tx.setRecentBlockHash(new byte[Transaction.BLOCK_HASH_LENGTH]);
     assertEquals(3, tx.numSigners());
-    tx.sign(List.of(feePayer, signerB, signerC));
+    tx.signInOrder(List.of(feePayer, signerB, signerC));
 
     final var skeleton = TransactionSkeleton.deserializeSkeleton(tx.serialized());
     assertEquals(3, skeleton.numSignatures());

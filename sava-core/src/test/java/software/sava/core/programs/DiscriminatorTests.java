@@ -39,12 +39,9 @@ final class DiscriminatorTests {
     assertNotSame(first, discriminator.data(), "each call returns its own copy");
   }
 
-  /// **Pins current behaviour, which is asymmetric.** `createDiscriminator(byte[])`
-  /// stores the caller's array as-is, so a later write by the caller *is* visible through
-  /// the discriminator — even though `data()` copies on the way out and the
-  /// `(data, offset, length)` overloads copy on the way in. Reported rather than
-  /// changed: callers may rely on either half, and a defensive copy here is an
-  /// additive fix for the owner to make deliberately.
+  /// The single-argument factory retains caller storage by design. Callers that will
+  /// reuse or mutate the input must pass a clone; `data()` and ranged factories copy
+  /// independently of that input ownership rule.
   @Test
   void theSingleArgFactoryAliasesTheCallersArray() {
     final byte[] mutable = ANCHOR_EIGHT.clone();
@@ -55,8 +52,7 @@ final class DiscriminatorTests {
     assertEquals((byte) 0xFF, aliasing.data()[0], "createDiscriminator(byte[]) does not copy — see the note above");
   }
 
-  /// The ranged overloads *do* copy, which is the half a caller is more likely to assume
-  /// holds everywhere.
+  /// Ranged factories own a copy, so callers can keep modifying the original array.
   @Test
   void theRangedFactoryCopiesTheCallersArray() {
     final byte[] mutable = ANCHOR_EIGHT.clone();

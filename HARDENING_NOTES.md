@@ -76,10 +76,30 @@ mutators can reach, so do not re-enable them on a hunch.
 
 | Suite | Target | Notes |
 | --- | --- | --- |
-| `pitestResponses` | `json.http.response.*` | Debt free — keep it that way. |
+| `pitestResponses` | `json.http.response.*` | Eight observed equivalents; retained retirement candidates are documented in the RPC baseline notes. |
 | `pitestClient` | `json.http.client.*` | Coverage debt cleared 2026-07-31; see below. |
 | `pitestWs` | `json.http.ws.*` | Seeded at 50%, worked to 73% same day; see below. |
 | `pitestEncoding` | `json.*`, `json.http.request.*` | Added 2026-08-04 to close ownership; subtracts the three sibling suites' packages, since the wildcard spans dots. |
+
+### `pitestResponses` — invalid observation and successful retry, 2026-09-05
+
+The first response-suite attempt during the compatibility cleanup review produced
+605 mutation records: 596 `KILLED`, eight `SURVIVED`, and one `RUN_ERROR`.
+Verification rejected the report and the build failed. The invalid record was
+`software.sava.rpc.json.http.response.HighestSnapshotSlot.parse`,
+`VoidMethodCallMutator`, removing the call to `JsonIterator.testObject` from the
+single-argument parser. Its observed locator was source line 12, bytecode index 11,
+block 1; those are diagnostic coordinates, not the baseline identity. The failed
+XML was saved before retrying, preserving its method descriptor and mutation
+metadata for comparison.
+
+A separate full history-free retry produced 605 mutants: 597 `KILLED`, eight
+`SURVIVED`, and no invalid statuses. The same mutation descriptor, index, and block
+were `KILLED` by `ParseRpcResponseTests.getHighestSnapshotSlot`; the ratchet passed.
+This records a failed execution followed by a successful observation at the same
+coordinate. It establishes neither load nor memory as the cause, and the failed
+report supplies no baseline or certification evidence. No accepted or timeout
+membership was changed on the strength of this incident.
 
 ### `pitestClient` — the debt is deliberate and documented
 

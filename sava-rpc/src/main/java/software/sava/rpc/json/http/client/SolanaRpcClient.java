@@ -927,10 +927,18 @@ public interface SolanaRpcClient {
                                             final Signer signer,
                                             final byte[] recentBlockHash);
 
+  /// Sets the blockhash and signs in iteration order before submitting. Each signer writes the
+  /// corresponding signature position, without matching its public key to the required account.
+  /// For by-key signing, pass [Transaction#signByKeyAndBase64Encode(byte[], Collection)]'s result
+  /// to [#sendTransaction(String)].
   CompletableFuture<String> sendTransaction(final Transaction transaction,
                                             final SequencedCollection<Signer> signers,
                                             final byte[] recentBlockHash);
 
+  /// Sets the blockhash and signs in iteration order before submitting with the given commitment.
+  /// Signer public keys are not matched to required accounts. For by-key signing, pass
+  /// [Transaction#signByKeyAndBase64Encode(byte[], Collection)]'s result to
+  /// [#sendTransaction(Commitment, String)].
   CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
                                             final Transaction transaction,
                                             final SequencedCollection<Signer> signers,

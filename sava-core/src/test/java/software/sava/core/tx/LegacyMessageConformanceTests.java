@@ -159,6 +159,7 @@ final class LegacyMessageConformanceTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins the published static helper's permissive byte-oriented contract.
   void v0WithoutLookupsRecordsTheSignatureBoundaryWithoutBlockingConstruction() throws IOException {
     final var vectors = loadFixture().vectors();
     final var accepted = vectors.stream()

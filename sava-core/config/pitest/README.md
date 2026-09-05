@@ -323,9 +323,9 @@ The tx baseline was seeded 2026-07-18 with 182 keys of untriaged debt from
 widening the suite to the full `tx` and `accounts.lookup` packages. A
 kill pass the same day (`AccountIndexLookupTableTests`,
 `TransactionByteHelpersTests`, `TransactionFactoryTests`,
-`TransactionRecordPlumbingTests`) removed 142 of them; the 27 keys below
-are accepted equivalents, and the seven skeleton keys under Untriaged debt
-are all that remain unclassified.
+`TransactionRecordPlumbingTests`) removed 142 of them. Those are historical
+measurements; the accepted CSV records the current retained rows, and the arguments
+below apply only to their named branches.
 
 `Transaction.exceedsSizeLimit` is a reachable compatibility default for external
 implementations. `PreV1InterfaceShapeTests` exercises its 1232/1233-byte boundary;
@@ -334,28 +334,38 @@ There is no accepted mutant on this default. The current `BaseTransaction.setBlo
 acceptance is documented below under `# both arms write the same bytes`.
 
 **Result-identical routing** — baseline label `# result identical routing`:
-- `Transaction.createTx` 386: one table meta forced through the generic
-  multi-table path builds the same transaction the single-table shortcut
-  does.
-- `Transaction.createTx` 494: when every table has indexed accounts, the
-  filtered table serializer emits the same bytes as the direct loop.
-- `InstructionRecord.extraAccounts` 27: a one-account list through the
-  general join path yields an equal record; only the allocation differs.
-- `TransactionRecord.sign` 154: the multi-signer scan resolves a single
-  signer to the same slot the fast path uses.
-- `TransactionSkeletonImpl.filterInstructions` and
-  `filterInstructionsWithoutAccounts`, the trailing
-  `d == numInstructions ? instructions : Arrays.copyOfRange(...)`: when
-  every instruction matched the discriminator, `d` equals the array's
-  length and the copy is the same content. Only the allocation differs,
-  and callers receive an array either way. Forcing the copy branch is
-  observable only by identity, which nothing asserts and nothing should.
-- `TransactionSkeleton.deserializeSkeleton`, the zero-table guard
-  `numLookupTables > 0`: at zero tables `>` → `>=` builds an empty
-  `PublicKey[]` where the guard returns the shared
-  `BaseTransactionSkeleton.NO_TABLES`. Same emptiness, same behaviour
-  from every reader of `lookupTableAccounts`; the constant exists to
-  avoid the allocation, not because an empty array would be wrong.
+two branches retain this equivalence argument after the 2026-09-05 review. The
+singleton-null exception in `InstructionRecord` is documented separately below.
+
+- `Transaction.createTx`, `RemoveConditionalMutator_EQUAL_ELSE`, in the overload
+  taking `LookupTableAccountMeta[]`: forcing the `len == 1` compaction shortcut
+  false routes a one-element displacement through `System.arraycopy`. It copies
+  the same account into the same destination slot before the common front
+  assignment. This argument covers that singleton displacement, not the removed
+  single-table dispatch or filtered-table serialization shortcuts.
+- `TransactionSkeleton.deserializeSkeleton`, `ConditionalsBoundaryMutator`, on
+  `numLookupTables > 0`: at zero tables `>` → `>=` builds an empty `PublicKey[]`
+  where the guard returns the shared `BaseTransactionSkeleton.NO_TABLES`. Both
+  expose zero loaded accounts and the same remaining transaction fields; the
+  constant avoids allocation.
+
+The filter-copy mutants in `TransactionSkeletonImpl` are covered separately under
+`# array identity only`. No current `# result identical routing` row belongs to
+transaction signing.
+
+**Singleton null handling — pending retirement** — baseline label
+`# singleton null handling pending prune`: the
+`InstructionRecord.extraAccounts(List),RemoveConditionalMutator_EQUAL_ELSE` row
+previously shared the result-identical routing argument. Bypassing its single-element
+shortcut appends the same account for a non-null element, but a singleton containing
+null differs: `extraAccount(null)` returns the original instruction, while the general
+join appends a null account. No declared contract excludes that input.
+`InstructionBuildingTests.extraAccountsRetainsSizeDependentNullHandlingForCompatibility`
+pins the existing asymmetry without changing the implementation. The fresh 2026-09-05
+run killed this mutation: the population remains 1,678, with 1,635 killed, 42 survivors,
+and one existing audited timeout. All 43 baseline rows remain; retirement of the newly
+killed row awaits the required repeated prune observations. Its former equivalence
+argument no longer applies.
 
 **No-op displacement boundaries** — baseline label `# displacement boundary`
 (`createTx` 253/427, 255/429): at

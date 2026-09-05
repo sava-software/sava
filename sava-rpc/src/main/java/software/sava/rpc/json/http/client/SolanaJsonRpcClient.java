@@ -1588,7 +1588,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                    final Transaction transaction,
                                                    final SequencedCollection<Signer> signers,
                                                    final byte[] recentBlockHash) {
-    final var base64SignedTx = transaction.signAndBase64Encode(recentBlockHash, signers);
+    final var base64SignedTx = transaction.signInOrderAndBase64Encode(recentBlockHash, signers);
     return sendTransaction(preflightCommitment, base64SignedTx);
   }
 

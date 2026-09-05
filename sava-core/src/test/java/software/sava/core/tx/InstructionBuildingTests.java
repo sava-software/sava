@@ -7,6 +7,7 @@ import software.sava.core.accounts.meta.AccountMeta;
 
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +74,17 @@ final class InstructionBuildingTests {
 
     // an empty list is a no-op returning the receiver untouched
     assertSame(base, base.extraAccounts(List.of()));
+  }
+
+  @Test
+  void extraAccountsRetainsSizeDependentNullHandlingForCompatibility() {
+    final var base = instruction();
+
+    // Pin the published asymmetry without treating it as a consistent null-filtering policy.
+    assertSame(base, base.extraAccounts(Collections.singletonList(null)));
+    assertEquals(Arrays.asList(ACCOUNT_A, ACCOUNT_B, null, ACCOUNT_C),
+        base.extraAccounts(Arrays.asList(null, ACCOUNT_C)).accounts());
+    assertUnchangedBase(base);
   }
 
   @Test

@@ -42,6 +42,9 @@ public interface Instruction {
     return createInstruction(programId, keys, data, 0, data.length);
   }
 
+  /// Appends the supplied accounts. The built-in implementation ignores a singleton null entry,
+  /// as [#extraAccount(AccountMeta)] does, but retains null entries in larger lists. This existing
+  /// size-dependent behavior is preserved for compatibility; callers should supply non-null metas.
   Instruction extraAccounts(final List<AccountMeta> accounts);
 
   Instruction extraAccount(final AccountMeta account);

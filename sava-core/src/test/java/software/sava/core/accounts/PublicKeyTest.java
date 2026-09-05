@@ -41,13 +41,11 @@ final class PublicKeyTest {
     assertArrayEquals(byteKey, PublicKey.fromBase58Encoded(key3.toBase58()).toByteArray());
   }
 
-  /// `createPubKey` and `toByteArray` expose one mutable backing array while Base58 and
-  /// hashCode are cached. Java's independent contract requires equal objects to have equal
-  /// hash codes, and a public key's Base58 text should encode its current bytes. Pin the
-  /// present contradiction pending an owner decision; do not present it as intended value
-  /// semantics.
+  /// The factory retains caller storage; callers that may mutate it must pass a copy.
+  /// Deliberately violating that ownership rule exposes stale Base58 and hash-code caches.
+  /// This pins the consequence of mutating borrowed bytes, not a pending factory change.
   @Test
-  void backingMutationLeavesCachedPublicKeyViewsStalePendingOwnerDecision() {
+  void mutatingBorrowedPublicKeyBytesLeavesCachedViewsStale() {
     final byte[] backing = new byte[PublicKey.PUBLIC_KEY_LENGTH];
     final var key = PublicKey.createPubKey(backing);
     final String cachedBase58 = key.toBase58();

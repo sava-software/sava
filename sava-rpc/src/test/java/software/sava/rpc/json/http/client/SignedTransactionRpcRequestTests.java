@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /// string overloads, so what they add is the signing step and the choice of
 /// which string overload to delegate to.
 ///
-/// The expected base64 is produced by calling the same `signAndBase64Encode` the
+/// The expected base64 is produced by calling the matching signing helper the
 /// client uses. That is deliberate — signing is `sava-core`'s contract and is
 /// tested there; what is asserted here is that the client sends *that* payload,
 /// with the right commitment and to the right method.
@@ -94,7 +94,7 @@ final class SignedTransactionRpcRequestTests extends RpcRequestTests {
   @Test
   void signsWithACollectionOfSigners() {
     final var signer = signer();
-    final var expected = transaction(signer).signAndBase64Encode(BLOCK_HASH, List.of(signer));
+    final var expected = transaction(signer).signInOrderAndBase64Encode(BLOCK_HASH, List.of(signer));
     expectSend(expected, "\"preflightCommitment\":\"confirmed\",\"maxRetries\":1");
 
     assertEquals(SIGNATURE,
@@ -107,7 +107,7 @@ final class SignedTransactionRpcRequestTests extends RpcRequestTests {
   @Test
   void signsWithACollectionAtAnExplicitCommitment() {
     final var signer = signer();
-    final var expected = transaction(signer).signAndBase64Encode(BLOCK_HASH, List.of(signer));
+    final var expected = transaction(signer).signInOrderAndBase64Encode(BLOCK_HASH, List.of(signer));
     expectSend(expected, "\"preflightCommitment\":\"processed\",\"maxRetries\":1");
 
     assertEquals(SIGNATURE, rpcClient.sendTransaction(

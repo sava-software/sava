@@ -105,3 +105,23 @@ The existing single-signer, explicit-index, and `Collection<Signer>` overloads r
 undeprecated. Named positional aliases delegate to the corresponding existing overload,
 including custom convenience overrides. New instance methods have defaults, so existing
 `Transaction` implementations do not need additional method overrides.
+
+Migrate callers before the deprecated overload is removed. A recompiled `tx.sign(list)`
+would then select the retained `sign(Collection<Signer>)` overload and change to by-key
+signing without a compilation error. `signInOrder` makes the positional choice durable.
+
+Implementors must still provide `sign(SequencedCollection<Signer>)` in this release:
+it remains abstract and the new defaults preserve dispatch to existing overrides.
+Implementing or overriding a removal-deprecated method can produce a compiler removal
+warning; use a method-level `@SuppressWarnings("removal")` for that compatibility
+implementation. At eventual removal, move its positional implementation to
+`signInOrder(SequencedCollection<Signer>)`, and move any overridden positional
+conveniences to their corresponding named methods. Do not drop the old overrides
+while supporting releases that still require them.
+
+The RPC conveniences taking a `SequencedCollection<Signer>` also sign positionally.
+To submit a transaction signed by key through the existing RPC API, use:
+
+```java
+rpcClient.sendTransaction(tx.signByKeyAndBase64Encode(recentBlockHash, signers));
+```

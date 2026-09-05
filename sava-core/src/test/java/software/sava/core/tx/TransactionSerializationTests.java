@@ -2024,6 +2024,7 @@ final class TransactionSerializationTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins both serialized layouts through the published static helper.
   void testStaticSignSigners() {
     final var signerA = nextSigner();
     final var signerB = nextSigner();

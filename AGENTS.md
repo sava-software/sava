@@ -442,10 +442,12 @@ bullet says never to add a passing assertion that merely locks in a bug — and 
 published-library rule says to pin surprising behaviour with a test and report it. They
 agree on the analysis and differ only on who acts: state the property and its independent
 oracle either way, and when the oracle contradicts the code, *say so in the test* rather
-than dressing the current behaviour up as intended. `DiscriminatorTests` is the worked
-example — `createDiscriminator(byte[])` aliases the caller's array while the ranged
-overloads copy, so the test names that asymmetry as current-behaviour-pending-an-owner-fix
-instead of asserting it is correct. A fix here is additive and stays the owner's call.
+than dressing the current behaviour up as intended. The byte-array ownership review is
+now settled by the owner: `createDiscriminator(byte[])` and `PublicKey.createPubKey(byte[])`
+retain the input; callers that will reuse or mutate it must pass a defensive copy.
+The ranged discriminator factories still copy. `DiscriminatorTests` pins those ownership
+boundaries, and `PublicKeyTest` records the stale-cache consequence of mutating borrowed
+key bytes. These are documented contracts, not pending owner fixes.
 
 ## Verifying your own work
 

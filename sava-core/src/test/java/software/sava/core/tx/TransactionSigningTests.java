@@ -140,6 +140,7 @@ final class TransactionSigningTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins the published positional overload.
   void signSequencedCollectionMatchesIndividualSigning() {
     final var individually = twoSignerTx();
     individually.tx().sign(individually.feePayer());
@@ -154,6 +155,7 @@ final class TransactionSigningTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins positional behavior under the old overloaded name.
   void sequencedCollectionRemainsPositional() {
     final var fixture = twoSignerTx();
     fixture.tx().sign((java.util.SequencedCollection<Signer>) List.of(
@@ -213,6 +215,7 @@ final class TransactionSigningTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Both published collection overloads must still validate the count.
   void signCollectionRejectsWrongSignerCount() {
     final var fixture = twoSignerTx();
     assertThrows(IllegalArgumentException.class, () -> fixture.tx().sign(List.of(fixture.feePayer())));

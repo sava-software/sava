@@ -58,6 +58,7 @@ final class StaticSignSignerCountTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins count validation on the published static positional helper.
   void aSequencedCollectionShorterThanTheHeaderIsRefused() {
     final var feePayer = nextSigner();
     final var tx = twoSignerTx(feePayer, nextSigner());
@@ -92,6 +93,7 @@ final class StaticSignSignerCountTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins count validation on the published static positional helper.
   void moreSignersThanTheHeaderRequiresIsAlsoRefused() {
     final var feePayer = nextSigner();
     final var ix = Instruction.createInstruction(
@@ -116,6 +118,7 @@ final class StaticSignSignerCountTests {
   /// The matching case must still sign, and every signature must verify against the message span
   /// the header implies — which is the property a relocated message start would break.
   @Test
+  @SuppressWarnings("removal") // Pins the published static positional helper's valid signing path.
   void aMatchingSignerCountStillSigns() {
     final var feePayer = nextSigner();
     final var authority = nextSigner();
@@ -196,6 +199,7 @@ final class StaticSignSignerCountTests {
   /// The prefix also decides how far into the payload the header is looked for, so a count larger
   /// than the payload can hold must be refused rather than read out of bounds.
   @Test
+  @SuppressWarnings("removal") // Pins malformed-payload rejection on the published helper.
   void aPrefixLargerThanThePayloadIsRefused() {
     final byte[] tooShort = new byte[8];
     tooShort[0] = (byte) 4; // implies 1 + 256 bytes before the message even starts
