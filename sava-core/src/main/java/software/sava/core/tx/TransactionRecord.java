@@ -11,10 +11,11 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.meta.AccountMeta.ACCOUNT_META_ARRAY_GENERATOR;
 import static software.sava.core.encoding.CompactU16Encoding.*;
+import static software.sava.core.tx.TxBuilderImpl.MAX_SERIALIZED_LENGTH_LEGACY;
+import static software.sava.core.tx.TxBuilderImpl.MERGE_ACCOUNT_META;
 
 // Legacy and v0 transaction formats.
 final class TransactionRecord extends BaseTransaction {
@@ -24,8 +25,6 @@ final class TransactionRecord extends BaseTransaction {
   static final int VERSIONED_MSG_HEADER_LENGTH = 1 + MSG_HEADER_LENGTH;
   static final int BASE_LOOKUP_TABLE_LEN = PublicKey.PUBLIC_KEY_LENGTH + 2;
   static final LookupTableAccountMeta[] NO_TABLES = new LookupTableAccountMeta[0];
-
-  static final BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
   static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {

@@ -34,12 +34,18 @@ WebSocket endpoint getter; the baseline remains untouched pending the gate below
 The new field-order regression failed against unmodified production:
 `PrivateKeyEncoding.fromJsonPrivateKey` records a deferred `secret` position but
 leaves its value unconsumed when `secret` precedes `encoding`. Valid string and
-array secrets therefore fail in `testObject`. The desired import/cursor test and
-failure are preserved at `/private/tmp/sava-triage-rpc-field-order-regression.java`,
-`/private/tmp/sava-triage-rpc-tests-red.xml`, and
-`/private/tmp/sava-triage-rpc-tests-red.log`. The compatibility test is explicitly
+array secrets therefore fail in `testObject`. The portable reproducer and desired
+signer/cursor assertions live in
+[`PrivateKeyEncodingTests`](../../src/test/java/software/sava/rpc/json/PrivateKeyEncodingTests.java).
+Both field orders use the same five encoded test cases and
+`assertImportedSignerAndOuterArrayCursor`. The compatibility test is explicitly
 named `jsonSecretBeforeEncodingIsRejectedPendingOwnerDecision`; it records a bug,
-not the intended semantics of JSON objects. The declaration documents putting
+not the intended semantics of JSON objects. An approved fix replaces its
+`assertThrows` with the shared assertion directly. Cursor failures after a successful
+import become assertion failures, so they cannot satisfy the expected import rejection.
+The original failure XML and log at `/private/tmp/sava-triage-rpc-tests-red.xml` and
+`/private/tmp/sava-triage-rpc-tests-red.log` are optional machine-local diagnostics;
+the reproduction does not depend on them. The declaration documents putting
 `encoding` first as the current workaround. No parser behavior was changed.
 
 Two `PrivateKeyEncoding$Parser.createSigner` `NakedReceiverMutator` rows remain

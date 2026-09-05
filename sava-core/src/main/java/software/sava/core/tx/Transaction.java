@@ -14,7 +14,6 @@ import static software.sava.core.encoding.CompactU16Encoding.getByteLen;
 import static software.sava.core.encoding.CompactU16Encoding.signedByte;
 import static software.sava.core.tx.TransactionRecord.NO_TABLES;
 import static software.sava.core.tx.TransactionRecord.mergeAccounts;
-import static software.sava.core.tx.BaseTransaction.requireSignerCount;
 
 public interface Transaction {
 
@@ -631,19 +630,7 @@ public interface Transaction {
   ///                                  than one, or if a v1 `out`'s signature block does not begin
   ///                                  exactly where its message ends
   static void sign(final Signer signer, final byte[] out) {
-    if (V1Transaction.isV1(out)) {
-      // The v1 message spans up to the appended signatures, the fee payer signature is first. The
-      // boundary is only implied by out.length, so corroborate it against the message before
-      // writing: on a padded or truncated buffer the implied slot lands inside the message and
-      // signing would overwrite its tail while signing the wrong span.
-      final int signaturesOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
-      Transaction.sign(signer, out, 0, signaturesOffset, signaturesOffset);
-    } else {
-      requireSignerCount(out, 1);
-      final int sigLen = 1 + Transaction.SIGNATURE_LENGTH;
-      final int msgLen = out.length - sigLen;
-      Transaction.sign(signer, out, sigLen, msgLen, 1);
-    }
+    BaseTransaction.signInOrder(Collections.singletonList(signer), out, true);
   }
 
   static String signAndBase64Encode(final Signer signer, final byte[] out) {
@@ -660,10 +647,8 @@ public interface Transaction {
                    final byte[] out,
                    final int msgOffset,
                    final int msgLen,
-                   int sigOffset) {
-    for (final var signer : signers) {
-      sigOffset = signer.sign(out, msgOffset, msgLen, sigOffset);
-    }
+                   final int sigOffset) {
+    signInOrder(signers, out, msgOffset, msgLen, sigOffset);
   }
 
   /// @throws IllegalArgumentException if `signers` does not match the required signature count that
@@ -672,25 +657,7 @@ public interface Transaction {
   ///             an explicit name. Signer public keys are not matched to required slots.
   @Deprecated(forRemoval = true)
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
-    final int numSigners = signers.size();
-    if (V1Transaction.isV1(out)) {
-      // A v1 message's signature count is fixed in its header, not implied by the caller's
-      // collection. Deriving the boundary from signers.size() would sign the wrong span and, when
-      // over-supplied, write signature bytes over the tail of the message, so validate first.
-      final int numRequiredSignatures = out[1] & 0xFF;
-      if (numSigners != numRequiredSignatures) {
-        throw new IllegalArgumentException(String.format(
-            "Expected %d signers, only passed %d.", numRequiredSignatures, numSigners
-        ));
-      }
-      final int sigOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
-      Transaction.sign(signers, out, 0, sigOffset, sigOffset);
-    } else {
-      requireSignerCount(out, numSigners);
-      final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
-      final int msgLen = out.length - sigLen;
-      Transaction.sign(signers, out, sigLen, msgLen, 1);
-    }
+    signInOrder(signers, out);
   }
 
   /**
@@ -699,8 +666,7 @@ public interface Transaction {
    */
   @Deprecated(forRemoval = true)
   static String signAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
-    sign(signers, out);
-    return Base64.getEncoder().encodeToString(out);
+    return signInOrderAndBase64Encode(signers, out);
   }
 
   /**
@@ -712,8 +678,10 @@ public interface Transaction {
                           final byte[] out,
                           final int msgOffset,
                           final int msgLen,
-                          final int sigOffset) {
-    sign(signers, out, msgOffset, msgLen, sigOffset);
+                          int sigOffset) {
+    for (final var signer : signers) {
+      sigOffset = signer.sign(out, msgOffset, msgLen, sigOffset);
+    }
   }
 
   /**
@@ -724,7 +692,7 @@ public interface Transaction {
    *                                  or the serialized signature boundary is inconsistent
    */
   static void signInOrder(final SequencedCollection<Signer> signers, final byte[] out) {
-    sign(signers, out);
+    BaseTransaction.signInOrder(signers, out, false);
   }
 
   /** Signs positionally and returns the complete signed payload encoded as Base64. */
@@ -938,7 +906,7 @@ public interface Transaction {
   /// limit main has always applied. The built-in implementations override this per format — a v1
   /// transaction's limit is 4096 bytes.
   default boolean exceedsSizeLimit() {
-    return size() > BaseTransaction.MAX_SERIALIZED_LENGTH_LEGACY;
+    return size() > TxBuilderImpl.MAX_SERIALIZED_LENGTH_LEGACY;
   }
 
   /// The number of unique accounts referenced by this transaction, including any which would be

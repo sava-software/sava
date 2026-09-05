@@ -356,6 +356,26 @@ the built-in legacy/v0 implementation has its own independent boundary test.
 There is no accepted mutant on this default. The current `BaseTransaction.setBlockHash`
 acceptance is documented below under `# both arms write the same bytes`.
 
+On 2026-09-05 the static positional signing implementations moved into the named
+`signInOrder` methods, with the deprecated statics forwarding to them. Sharing the
+Base64 convenience removes one duplicate signing call and its killed
+`VoidMethodCallMutator`: the full population changed from 1704 to 1703, with
+1664 killed, 38 survived, and one existing audited timeout. `check` and the fresh
+`BaselineRetag` run passed; the writer refreshed eight matched line tags and
+preserved all 38 rows / 31 unique keys. The machine-local log is
+`/private/tmp/sava-transaction-cleanup-final.log`.
+
+The single-signer and collection statics subsequently shared the same format
+dispatch in the package-private `BaseTransaction.signInOrder` helper, retaining
+partial v1 signing only for the single-signer convenience.
+Removing that duplicated dispatch reduced the population by another four mutants:
+1699 total, 1660 killed, 38 survived, and the same audited timeout. `check` and the
+fresh full transaction gate passed without baseline changes; the log is
+`/private/tmp/sava-signing-dedup-check.log`. The final package-private move passed
+`check` and a fresh `BaselineRetag` with that same population; the writer refreshed
+six matched line tags without changing membership. That log is
+`/private/tmp/sava-package-signing-check.log`.
+
 **Result-identical routing** — baseline label `# result identical routing`:
 two branches retain this equivalence argument after the 2026-09-05 review. The
 singleton-null exception in `InstructionRecord` is documented separately below.
@@ -388,10 +408,22 @@ transaction signing.
 
 **Dead defensive code** — baseline label `# dead defensive`:
 
-- `TransactionRecord.MERGE_ACCOUNT_META` (`lambda$static$0`),
+- `TxBuilderImpl.MERGE_ACCOUNT_META` (`lambda$static$0`),
   `RemoveConditionalMutator_EQUAL_ELSE`: `Map.merge` never invokes its remapping
   function with a null existing value, so bypassing `prev == null` cannot change
   a valid map merge.
+  On 2026-09-05 the unchanged helper moved from `TransactionRecord` into
+  `TxBuilderImpl`. A fresh full observation and `BaselineUnion` established the
+  new key with this same reason; two matching post-union previews preceded the
+  matching `BaselinePrune` run that retired the old key. This was a relocation,
+  not a newly killed merger. The baseline remained 38 rows / 31 unique keys,
+  with 1704 mutants: 1665 killed, 38 survived, and one existing audited timeout.
+  All 35 comparator mutants remained killed despite the comparator lambda names
+  being renumbered in `TransactionRecord`. Machine-local logs:
+  `/private/tmp/sava-merge-helper-union.log`,
+  `/private/tmp/sava-merge-helper-preview1.log`,
+  `/private/tmp/sava-merge-helper-preview2.log`, and
+  `/private/tmp/sava-merge-helper-prune.log`.
 - `AccountIndexLookupTableView.compareTo`, `RemoveConditionalMutator_EQUAL_ELSE`:
   for views of complete 32-byte keys, forcing the view-specific branch off
   compares the same key bytes through `toByteArray`. The cross-table comparison

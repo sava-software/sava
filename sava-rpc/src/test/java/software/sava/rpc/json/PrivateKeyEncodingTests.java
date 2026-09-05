@@ -111,24 +111,42 @@ final class PrivateKeyEncodingTests {
     verifySigner(PrivateKeyEncoding.fromJsonPrivateKey(ji));
   }
 
+  private record JsonSecret(PrivateKeyEncoding encoding, String value) {
+
+    String jsonValue() {
+      return encoding == PrivateKeyEncoding.jsonKeyPairArray ? value : "\"%s\"".formatted(value);
+    }
+  }
+
+  private static List<JsonSecret> encodedJsonSecrets() {
+    return List.of(
+        new JsonSecret(PrivateKeyEncoding.jsonKeyPairArray, JSON_ARRAY),
+        new JsonSecret(PrivateKeyEncoding.base64PrivateKey, BASE64_PRIVATE_KEY),
+        new JsonSecret(PrivateKeyEncoding.base64KeyPair, BASE64_KEY_PAIR),
+        new JsonSecret(PrivateKeyEncoding.base58PrivateKey, BASE58_PRIVATE_KEY),
+        new JsonSecret(PrivateKeyEncoding.base58KeyPair, BASE58_KEY_PAIR)
+    );
+  }
+
+  private static void assertImportedSignerAndOuterArrayCursor(final JsonIterator ji, final String encoding) {
+    verifySigner(PrivateKeyEncoding.fromJsonPrivateKey(ji));
+    // A cursor error after a successful import must not satisfy the pending bug's
+    // expected JsonException. Only the import itself may propagate that exception.
+    assertDoesNotThrow(() -> {
+      assertTrue(ji.readArray(), encoding);
+      assertEquals(73, ji.readInt(), encoding);
+      assertFalse(ji.readArray(), encoding);
+    }, encoding);
+  }
+
   @Test
   void jsonEncodingBeforeSecretPreservesSignerAndOuterArrayCursor() {
-    final String[][] secrets = {
-        {"jsonKeyPairArray", JSON_ARRAY},
-        {"base64PrivateKey", '"' + BASE64_PRIVATE_KEY + '"'},
-        {"base64KeyPair", '"' + BASE64_KEY_PAIR + '"'},
-        {"base58PrivateKey", '"' + BASE58_PRIVATE_KEY + '"'},
-        {"base58KeyPair", '"' + BASE58_KEY_PAIR + '"'}
-    };
-    for (final var secret : secrets) {
+    for (final var secret : encodedJsonSecrets()) {
       final var json = "[{\"pubKey\":\"%s\",\"encoding\":\"%s\",\"secret\":%s},73]"
-          .formatted(EXPECTED_PUB_KEY, secret[0], secret[1]);
+          .formatted(EXPECTED_PUB_KEY, secret.encoding(), secret.jsonValue());
       final var ji = JsonIterator.parse(json.getBytes(StandardCharsets.UTF_8));
       assertTrue(ji.readArray());
-      verifySigner(PrivateKeyEncoding.fromJsonPrivateKey(ji));
-      assertTrue(ji.readArray(), secret[0]);
-      assertEquals(73, ji.readInt(), secret[0]);
-      assertFalse(ji.readArray(), secret[0]);
+      assertImportedSignerAndOuterArrayCursor(ji, secret.encoding().name());
     }
   }
 
@@ -136,17 +154,15 @@ final class PrivateKeyEncodingTests {
   void jsonSecretBeforeEncodingIsRejectedPendingOwnerDecision() {
     // JSON field order should not affect import. This pins the published bug pending
     // owner approval: the deferred reader leaves the secret value unconsumed.
-    final String[][] secrets = {
-        {"jsonKeyPairArray", JSON_ARRAY},
-        {"base64PrivateKey", '"' + BASE64_PRIVATE_KEY + '"'},
-        {"base64KeyPair", '"' + BASE64_KEY_PAIR + '"'},
-        {"base58PrivateKey", '"' + BASE58_PRIVATE_KEY + '"'},
-        {"base58KeyPair", '"' + BASE58_KEY_PAIR + '"'}
-    };
-    for (final var secret : secrets) {
-      final var json = "{\"secret\":%s,\"encoding\":\"%s\"}".formatted(secret[1], secret[0]);
+    // For an approved fix, call the shared assertion directly in place of assertThrows;
+    // the same reproducer then requires both the signer and enclosing cursor to be correct.
+    for (final var secret : encodedJsonSecrets()) {
+      final var json = "[{\"pubKey\":\"%s\",\"secret\":%s,\"encoding\":\"%s\"},73]"
+          .formatted(EXPECTED_PUB_KEY, secret.jsonValue(), secret.encoding());
+      final var ji = JsonIterator.parse(json.getBytes(StandardCharsets.UTF_8));
+      assertTrue(ji.readArray());
       assertThrows(JsonException.class,
-          () -> PrivateKeyEncoding.fromJsonPrivateKey(JsonIterator.parse(json)), secret[0]);
+          () -> assertImportedSignerAndOuterArrayCursor(ji, secret.encoding().name()), secret.encoding().name());
     }
   }
 

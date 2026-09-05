@@ -111,7 +111,7 @@ signer's key against its slot; the explicit-offset helper trusts the supplied sp
 By-key signing validates the complete assignment before writing signatures.
 
 The existing single-signer, explicit-index, and `Collection<Signer>` overloads remain
-undeprecated. Named positional aliases delegate to the corresponding existing overload,
+undeprecated. Named instance positional aliases delegate to the corresponding existing overload,
 including custom convenience overrides. New instance methods have defaults, so existing
 `Transaction` implementations do not need additional method overrides.
 

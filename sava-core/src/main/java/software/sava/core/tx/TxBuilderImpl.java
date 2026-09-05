@@ -6,10 +6,13 @@ import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.encoding.ByteUtil;
 
 import java.util.*;
+import java.util.function.BiFunction;
 
 import static software.sava.core.accounts.lookup.AccountIndexLookupTableEntry.indexOfOrThrow;
 
 final class TxBuilderImpl implements TxBuilder {
+
+  static final BiFunction<AccountMeta, AccountMeta, AccountMeta> MERGE_ACCOUNT_META = (prev, add) -> prev == null ? add : prev.merge(add);
 
   // ComputeBudgetProgram instructions configure a legacy/v0 transaction, but a v1 transaction is
   // configured by its ConfigValues; per SIMD-0385 the v1 runtime processes them as no-ops which
@@ -29,6 +32,7 @@ final class TxBuilderImpl implements TxBuilder {
         : Arrays.copyOfRange(retained, 0, numRetained);
   }
 
+  static final int MAX_SERIALIZED_LENGTH_LEGACY = 1_232;
   static final int MAX_SERIALIZED_LENGTH_V1 = 4_096;
   // SIMD-0385 Transaction V1 format.
   // The version byte that distinguishes a v1 transaction from the legacy and v0 formats.
@@ -405,10 +409,10 @@ final class TxBuilderImpl implements TxBuilder {
     for (final var instruction : instructions) {
       instructionPayloadLength += instruction.accounts().size() + instruction.len();
       for (final var meta : instruction.accounts()) {
-        accounts.merge(meta.publicKey(), meta, TransactionRecord.MERGE_ACCOUNT_META);
+        accounts.merge(meta.publicKey(), meta, MERGE_ACCOUNT_META);
       }
       final var programMeta = instruction.programId();
-      accounts.merge(programMeta.publicKey(), programMeta, TransactionRecord.MERGE_ACCOUNT_META);
+      accounts.merge(programMeta.publicKey(), programMeta, MERGE_ACCOUNT_META);
     }
     return instructionPayloadLength;
   }

@@ -19,9 +19,6 @@ abstract class BaseTransaction implements Transaction {
   // number — Transaction#exceedsInstructionLimit is the published way to ask.
   static final int MAX_INSTRUCTIONS = 64;
 
-  // Legacy/v0 byte limit, also used by the interface compatibility default.
-  static final int MAX_SERIALIZED_LENGTH_LEGACY = 1_232;
-
   protected final AccountMeta feePayer;
   protected final List<Instruction> instructions;
   protected final byte[] data;
@@ -216,6 +213,31 @@ abstract class BaseTransaction implements Transaction {
     i = 0;
     for (final var signer : signerArray) {
       sign(signerIndexes[i++], signer);
+    }
+  }
+
+  static void signInOrder(final SequencedCollection<Signer> signers,
+                          final byte[] out,
+                          final boolean allowPartialV1) {
+    final int numSigners = signers.size();
+    if (V1Transaction.isV1(out)) {
+      // A v1 message's signature count is fixed in its header, not implied by the caller's
+      // collection. Deriving the boundary from signers.size() would sign the wrong span and, when
+      // over-supplied, write signature bytes over the tail of the message, so validate first.
+      final int numRequiredSignatures = out[1] & 0xFF;
+      // Only the single-signer convenience may fill just the v1 fee payer slot.
+      if (!allowPartialV1 && numSigners != numRequiredSignatures) {
+        throw new IllegalArgumentException(String.format(
+            "Expected %d signers, only passed %d.", numRequiredSignatures, numSigners
+        ));
+      }
+      final int sigOffset = V1TransactionSkeleton.requireSignatureBlockOffset(out);
+      Transaction.signInOrder(signers, out, 0, sigOffset, sigOffset);
+    } else {
+      requireSignerCount(out, numSigners);
+      final int sigLen = 1 + (numSigners * Transaction.SIGNATURE_LENGTH);
+      final int msgLen = out.length - sigLen;
+      Transaction.signInOrder(signers, out, sigLen, msgLen, 1);
     }
   }
 
