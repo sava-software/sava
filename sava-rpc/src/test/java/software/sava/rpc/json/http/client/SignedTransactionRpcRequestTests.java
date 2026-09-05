@@ -11,16 +11,17 @@ import software.sava.rpc.json.http.request.Commitment;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /// The overloads that take an unsigned [Transaction] plus signers, rather than a
 /// base64 string. These sign on the caller's behalf and then hand off to the
 /// string overloads, so what they add is the signing step and the choice of
 /// which string overload to delegate to.
 ///
-/// The expected base64 is produced by calling the matching signing helper the
-/// client uses. That is deliberate — signing is `sava-core`'s contract and is
-/// tested there; what is asserted here is that the client sends *that* payload,
-/// with the right commitment and to the right method.
+/// Most expected payloads use the corresponding core signing helper. The foreign-key
+/// case uses an explicit signature index to distinguish positional from by-key routing.
+/// The local server checks the submitted payload and commitment; it does not verify
+/// whether the signatures authorize the transaction.
 final class SignedTransactionRpcRequestTests extends RpcRequestTests {
 
   private static final byte[] BLOCK_HASH = new byte[32];
@@ -44,8 +45,12 @@ final class SignedTransactionRpcRequestTests extends RpcRequestTests {
 
   /// A fixed keypair so the signed payload is identical on every run.
   private static Signer signer() {
+    return signer(3);
+  }
+
+  private static Signer signer(final int fill) {
     final byte[] seed = new byte[32];
-    java.util.Arrays.fill(seed, (byte) 3);
+    java.util.Arrays.fill(seed, (byte) fill);
     return Signer.createFromPrivateKey(seed);
   }
 
@@ -112,6 +117,27 @@ final class SignedTransactionRpcRequestTests extends RpcRequestTests {
 
     assertEquals(SIGNATURE, rpcClient.sendTransaction(
         Commitment.PROCESSED, transaction(signer), List.of(signer), BLOCK_HASH).join());
+  }
+
+  @Test
+  void collectionSigningUsesSignaturePositionsForBothCommitmentOverloads() {
+    final var payer = signer();
+    final var foreignSigner = signer(4);
+    assertNotEquals(payer.publicKey(), foreignSigner.publicKey());
+
+    final var expectedTx = transaction(payer);
+    expectedTx.setRecentBlockHash(BLOCK_HASH);
+    // Build the oracle by explicit slot, without using either bulk-signing convenience.
+    expectedTx.sign(0, foreignSigner);
+    final var expected = expectedTx.base64EncodeToString();
+
+    expectSend(expected, "\"preflightCommitment\":\"confirmed\",\"maxRetries\":1");
+    assertEquals(SIGNATURE,
+        rpcClient.sendTransaction(transaction(payer), List.of(foreignSigner), BLOCK_HASH).join());
+
+    expectSend(expected, "\"preflightCommitment\":\"processed\",\"maxRetries\":1");
+    assertEquals(SIGNATURE, rpcClient.sendTransaction(
+        Commitment.PROCESSED, transaction(payer), List.of(foreignSigner), BLOCK_HASH).join());
   }
 
   /// Simulation takes no signer — `sigVerify` is always false — so the transaction

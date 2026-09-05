@@ -12,6 +12,9 @@ import java.util.function.Function;
 
 public interface Instruction {
 
+  /// Retains the supplied array and span without validation. Diagnostic `toString()` renders
+  /// null or zero-length data as empty without reading the span; byte-oriented operations
+  /// still require a valid array and span.
   static Instruction createInstruction(final AccountMeta programId,
                                        final List<AccountMeta> keys,
                                        final byte[] data, int offset, int len) {

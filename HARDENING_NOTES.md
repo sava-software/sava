@@ -90,8 +90,9 @@ Verification rejected the report and the build failed. The invalid record was
 `VoidMethodCallMutator`, removing the call to `JsonIterator.testObject` from the
 single-argument parser. Its observed locator was source line 12, bytecode index 11,
 block 1; those are diagnostic coordinates, not the baseline identity. The failed
-XML was saved before retrying, preserving its method descriptor and mutation
-metadata for comparison.
+XML was saved locally at `/private/tmp/sava-review-rpc-run-error.xml` before
+retrying, preserving its method descriptor and mutation metadata for comparison.
+That temporary capture supplements the durable coordinate recorded here.
 
 A separate full history-free retry produced 605 mutants: 597 `KILLED`, eight
 `SURVIVED`, and no invalid statuses. The same mutation descriptor, index, and block

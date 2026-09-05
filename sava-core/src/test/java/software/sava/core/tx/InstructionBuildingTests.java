@@ -282,6 +282,19 @@ final class InstructionBuildingTests {
   }
 
   @Test
+  void toStringRendersNullOrZeroLengthDataWithoutReadingTheSpan() {
+    for (final var instruction : List.of(
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), null, 2, 4),
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[0], 2, 0))) {
+      // Diagnostic rendering tolerates these unvalidated spans; it does not make them serializable.
+      final var rendered = instruction.toString();
+      assertTrue(rendered.contains(PROGRAM.toBase58()), rendered);
+      assertTrue(rendered.contains(ACCOUNT_A.publicKey().toBase58()), rendered);
+      assertTrue(rendered.contains("\"data\": \"\""), rendered);
+    }
+  }
+
+  @Test
   void mergeAccountsCollectsProgramAndAccounts() {
     final var ix = instruction();
     final var merged = new HashMap<PublicKey, AccountMeta>();

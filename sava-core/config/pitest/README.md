@@ -361,45 +361,70 @@ shortcut appends the same account for a non-null element, but a singleton contai
 null differs: `extraAccount(null)` returns the original instruction, while the general
 join appends a null account. No declared contract excludes that input.
 `InstructionBuildingTests.extraAccountsRetainsSizeDependentNullHandlingForCompatibility`
-pins the existing asymmetry without changing the implementation. The fresh 2026-09-05
-run killed this mutation: the population remains 1,678, with 1,635 killed, 42 survivors,
-and one existing audited timeout. All 43 baseline rows remain; retirement of the newly
-killed row awaits the required repeated prune observations. Its former equivalence
-argument no longer applies.
+pins the existing asymmetry without changing the implementation. The first
+2026-09-05 observation with that regression killed this mutation: it recorded 1,678
+mutants, with 1,635 killed, 42 survivors, and one existing audited timeout. That pass
+retained all 43 baseline rows. Retirement of this killed row awaits the required
+repeated prune observations; its former equivalence argument no longer applies.
 
-**No-op displacement boundaries** — baseline label `# displacement boundary`
-(`createTx` 253/427, 255/429): at
-`i == numIncludedAccounts` the compaction degenerates to a zero-length
-arraycopy plus a self-assignment, and at `len == 1` the swap fast path and
-a one-element arraycopy produce identical arrays — both directions of each
-check are result-identical at the boundary. The real displacement paths
-(single swap and `len > 1` arraycopy) are killed by the rank-displacement
-shapes in `TransactionFactoryTests`.
+**No-op displacement boundaries** — baseline label `# displacement boundary`:
+
+- `Transaction.createTx`, `ConditionalsBoundaryMutator` ×2, in the single-table
+  and `LookupTableAccountMeta[]` overloads: changing `i > numIncludedAccounts` to
+  `>=` adds only the equality case. There `len` is zero, so the copy moves no
+  elements and the front assignment writes the account back to its existing slot.
+- `Transaction.createTx`, `RemoveConditionalMutator_EQUAL_ELSE`, in the
+  single-table overload: bypassing `len == 1` performs the same one-element move
+  with `System.arraycopy` before the common front assignment.
+- `Transaction.createTx`, `RemoveConditionalMutator_EQUAL_IF`, in the
+  `LookupTableAccountMeta[]` overload: forcing the singleton arm also handles
+  longer displacements. It writes a different consumed tail, but the table metas
+  already captured those lookup accounts and only the compacted front is read
+  from `sortedAccounts` afterwards. The serialized transaction is unchanged.
+  This last row is equivalent because of the consumed-tail invariant, not because
+  its change is limited to `len == 1`.
 
 **Redundant work** — baseline label `# redundant work`:
-- `Transaction.createTx` 432: the multi-table compaction arraycopy shifts
-  tail slots that hold already-consumed indexed accounts (captured inside
-  the table metas via `addAccountIfExists`); only the front assignment is
-  ever read back. The single-table path's identical-looking arraycopy is
-  load-bearing — its tail feeds lookup-index serialization — and its
-  removal mutant dies.
-- `InstructionRecord.equals` 171: the `len` equality is a fast path; the
-  ranged `Arrays.equals` re-checks range lengths, so no input can pass one
-  and fail the other.
-- `InstructionRecord.toString` 188 (3 keys): at `len == 0` the base64 of an
-  empty range equals the `""` fast-path constant.
+`Transaction.createTx`, `VoidMethodCallMutator`, in the overload taking
+`LookupTableAccountMeta[]`: the compaction `System.arraycopy` shifts tail slots
+holding already-consumed indexed accounts, captured in the table metas by
+`addAccountIfExists`. Only the common front assignment is read back. The
+single-table overload's similar copy is load-bearing because its tail feeds
+lookup-index serialization, and its removal mutant is killed.
+
+**Empty data rendering — pending retirement** — baseline label
+`# empty data rendering pending prune`: two `InstructionRecord.toString` rows
+previously shared the redundant-work argument:
+
+- `RemoveConditionalMutator_EQUAL_IF` removes `data != null`, not the length
+  check. The explicit-slice factory accepts null data for diagnostic rendering;
+  with a positive declared length, the current `toString` renders empty data,
+  while this mutation attempts to copy the null array and throws.
+- `ConditionalsBoundaryMutator` changes `len > 0` to `>=`. For valid empty ranges,
+  encoding the range produces the same empty string. But the explicit-slice factory
+  also permits an invalid offset with zero length: the current renderer skips the
+  copy, while the mutation attempts it and throws. No declared rendering contract
+  excludes that input.
+
+`InstructionBuildingTests.toStringRendersNullOrZeroLengthDataWithoutReadingTheSpan`
+pins these existing diagnostic behaviors without changing production behavior. The
+fresh 2026-09-05 run killed both mutants: 1,678 total, 1,637 killed, 40 survivors,
+and one existing audited timeout. All 43 baseline rows remain. These two rows and
+the singleton-null row above await the required repeated prune observations; their
+former equivalence arguments no longer apply.
 
 **Dead defensive code** — baseline label `# dead defensive`:
-- `TransactionRecord.lambda$static$0` 29: `Map.merge` never invokes the
-  remapping function with a null existing value.
-- `TransactionRecord.sign` 156: widening the signer scan by one slot probes
-  an account that cannot equal a distinct signer key.
-- `AccountIndexLookupTableView.compareTo` 25: forcing the `instanceof` view
-  branch off routes through `toByteArray`, result-identical for every pair of
-  views since the 2026-07-21 fix. (The view-vs-view branch used to compare
-  `this.lookupTable` against itself rather than `view.lookupTable` — flagged
-  2026-07-18, owner-approved and fixed 2026-07-21, cross-table ordering
-  pinned by `viewCompareToReadsTheOtherViewsBackingTable`.)
+
+- `TransactionRecord.MERGE_ACCOUNT_META` (`lambda$static$0`),
+  `RemoveConditionalMutator_EQUAL_ELSE`: `Map.merge` never invokes its remapping
+  function with a null existing value, so bypassing `prev == null` cannot change
+  a valid map merge.
+- `AccountIndexLookupTableView.compareTo`, `RemoveConditionalMutator_EQUAL_ELSE`:
+  for views of complete 32-byte keys, forcing the view-specific branch off
+  compares the same key bytes through `toByteArray`. The cross-table comparison
+  was fixed on 2026-07-21 and is pinned by
+  `AccountIndexLookupTableTests.viewCompareToReadsTheOtherViewsBackingTable`.
+  No current row in this family belongs to transaction signing.
 
 ### SIMD-0385 v1 transactions — triaged 2026-08-15
 
@@ -409,8 +434,8 @@ Merging the v1 transaction work brought seven previously unbaselined classes
 unkilled mutants on first measurement. A kill pass took that to 29 —
 `TransactionEqualityTests`, `LegacyComputeBudgetTests`, `TxBuilderValidationTests`,
 `SigningCountTests`, `V1ConfigValueTests`, `V1FilterBoundaryTests` and
-`LegacyInstructionViewTests`, 63 tests — and the families below are the
-remainder, accepted as equivalent.
+`LegacyInstructionViewTests`, 63 tests. Those counts describe that historical
+measurement; the current per-family arguments follow.
 
 **Config value offset codomain excludes 0** — baseline label
 `# config value offset codomain excludes 0` (`V1Transaction.configValueOffset`,
@@ -419,9 +444,10 @@ remainder, accepted as equivalent.
 `.accountDataSizeLimit` / `.heapSize`): every one of these tests an offset
 returned by `V1TransactionSkeleton.configValueOffset`, whose only outcomes are
 the literal `-1` when the mask bits are clear, or
-`V1_ACCOUNTS_OFFSET + (numAddresses << 5) + (bitCount << 2)`. `V1_ACCOUNTS_OFFSET`
-is 42, so the codomain is `{-1} ∪ [42, 8330]`. `< 0` and `<= 0` (likewise `>= 0`
-and `> 0`) can only differ at exactly 0, which is not in it. Both arms of each
+`V1_ACCOUNTS_OFFSET + (numAddresses << 5) + (bitCount << 2)`. The base offset is
+42, and the unsigned address count and bit count add non-negative displacements,
+so a present value's offset is at least 42. `< 0` and `<= 0` (likewise `>= 0` and
+`> 0`) differ only at zero, which neither outcome can produce. Both arms of each
 guard are exercised — the mutants are the boundary alone.
 
 **Signature offset codomain excludes 0** — baseline label
@@ -432,15 +458,27 @@ guard are exercised — the mutants are the boundary alone.
 `>= V1_ACCOUNTS_OFFSET`. Never 0.
 
 **A v1 buffer always carries signatures** — baseline label
-`# a v1 buffer always carries signatures` (`V1TransactionSkeleton.messageEnd`,
-`.signaturesOffset`): both boundaries compare a header-block end against
-`data.length`, and equality would mean the buffer ends exactly where the
-instruction headers do — no payloads and no signature block. `V1Transaction.isV1`
-requires `data[1] != 0`, i.e. at least one required signature, so at least 64
-bytes always follow. The reachable half of each guard is killed by
-`aPayloadTruncatedInsideTheInstructionHeadersIsDiagnosed` and
-`aTransactionWhoseInstructionsHaveNoAccountsOrDataSitsExactlyOnTheHeaderBound`,
-which sits a legal transaction exactly on the bound.
+`# a v1 buffer always carries signatures`: the `ConditionalsBoundaryMutator` in
+`V1TransactionSkeleton.signaturesOffset` changes `headerBlockEnd > data.length`
+to `>=`. At equality, the existing `signaturesOffset < headerBlockEnd` operand
+already rejects the message, because a parsed v1 skeleton requires at least one
+64-byte signature and its implied signature offset is therefore below `data.length`.
+The same `IllegalStateException` and message are reached either way. Complete
+signature layouts and truncated-header rejection are covered by
+`aTransactionWhoseInstructionsHaveNoAccountsOrDataSitsExactlyOnTheHeaderBound` and
+`aPayloadTruncatedInsideTheInstructionHeadersIsDiagnosed`.
+
+**Malformed message still rejected** — baseline label
+`# malformed message still rejected`: the `ConditionalsBoundaryMutator` on
+`V1TransactionSkeleton.messageEnd`'s header-block bound also changes `>` to `>=`,
+but this helper reads untrusted raw bytes. A malformed buffer can end exactly at
+its header-block end. The original returns an end at or beyond the buffer length;
+the mutant returns `-1`. `requireSignatureBlockOffset` rejects both because neither
+can equal the implied signature offset, which is below the buffer length for a
+nonzero signature count. The diagnostic's rendered message-end offset differs,
+while the documented `IllegalArgumentException` rejection and every valid
+transaction's result are unchanged. This acceptance covers that diagnostic-only
+difference; it does not claim the boundary is unreachable.
 
 **Array identity only** — baseline label `# array identity only`
 (`TransactionSkeletonImpl.filterInstructions` / `.filterInstructionsWithoutAccounts`
@@ -454,13 +492,22 @@ which would return the null-padded array when `d < numInstructions`, are
 genuinely observable and are killed.
 
 **Short circuit already returned** — baseline label
-`# short circuit already returned` (`TxBuilder.computeUnitPriceToPriorityFeeLamports`
-boundary, `TransactionRecord.priorityFeeLamportsToComputeUnitPrice` ×2): the
-`< 0` guards differ from `<= 0` only at exactly 0, and the preceding `== 0` fast
-return has already left the method for that input. Note the *other* operand of
-that same fast return is **not** equivalent and is killed by
-`testAZeroComputeUnitLimitShortCircuitsBeforeTheOverflowGuardDivides`: skipping
-it with a zero limit divides by zero in the overflow guard below.
+`# short circuit already returned`:
+
+- `TxBuilder.computeUnitPriceToPriorityFeeLamports` and
+  `TransactionRecord.priorityFeeLamportsToComputeUnitPrice`,
+  `ConditionalsBoundaryMutator` ×2: each negative-price/fee guard differs from
+  `<= 0` only at zero, already handled by the preceding fast return.
+- `TransactionRecord.priorityFeeLamportsToComputeUnitPrice`,
+  `RemoveConditionalMutator_EQUAL_ELSE`, on `priorityFeeLamports == 0`: if the
+  limit is zero the other operand still returns immediately; otherwise bypassing
+  the zero-fee shortcut computes `(limit - 1) / limit`, which is also zero for
+  the positive capped limit. This row skips a redundant shortcut rather than
+  testing a value after that shortcut returned.
+
+The zero-limit operand in `TxBuilder.computeUnitPriceToPriorityFeeLamports` is
+not equivalent: skipping it reaches division by zero in the overflow guard.
+`testAZeroComputeUnitLimitShortCircuitsBeforeTheOverflowGuardDivides` kills it.
 
 **Legacy parse routes converge** — baseline label
 `# legacy parse routes converge` (`TransactionSkeletonImpl.parseAccounts` ×2):
@@ -494,27 +541,37 @@ reaches the identical result:
   Whenever `headerBlockEnd > data.length` holds, `headerBlockEnd > signaturesOffset`
   follows, so the second operand catches every input the first would have.
 
-**Locally unreachable guards** — assorted labels.
-`# v1 guard makes the read unreachable`
-(`BaseTransaction.feePayerSignatureOffset` — the line is reached
-only when `isV1` already proved `data[1] != 0`, and the value is dead
-afterwards); `# both arms write the same bytes` (`BaseTransaction.setBlockHash` —
-the else arm routes through the `final` `setRecentBlockHash`, copying the same 32
-bytes to the same offset); `# mergeAccounts rejects it identically`
-(`TxBuilderImpl.createTransaction` — skipping the empty-instruction throw falls
-into `mergeAccounts`, whose first statement throws for the same input);
-`# prepend path is a no-op when nothing is prepended`
-(`TransactionRecord.setComputeBudgetValues` — bypassing the fast return enters a
-loop that iterates zero times when both values were already found).
+**Other unchanged outcomes** — retained family labels:
+
+- `# v1 signer count remains nonzero`,
+  `BaseTransaction.feePayerSignatureOffset`, `MathMutator`: the v1 discriminator
+  has already established `data[1] != 0`. Replacing the sign-count mask `& 0xFF`
+  with `| 0xFF` changes the numeric value but preserves its only later use,
+  `numSigners != 0`. Signature-block validation reads its own count from the
+  buffer. The read executes, and the zero-count route remains unreachable.
+- `# both arms write the same bytes`, `BaseTransaction.setBlockHash`,
+  `RemoveConditionalMutator_EQUAL_ELSE`: for a built-in transaction, bypassing
+  the direct copy routes through its final `setRecentBlockHash`, copying the same
+  32 bytes to the same destination offset. External implementations already use
+  the setter route.
+- `# mergeAccounts rejects it identically`, `TxBuilderImpl.createTransaction`,
+  `RemoveConditionalMutator_EQUAL_ELSE`: bypassing the empty-instruction check
+  reaches `mergeAccounts`, which rejects the same empty input with the same
+  exception class and message.
+- `# prepend path is a no-op when nothing is prepended`,
+  `TransactionRecord.setComputeBudgetValues`, `RemoveConditionalMutator_EQUAL_ELSE`:
+  when both requested values have been found, bypassing `numToPrepend == 0`
+  allocates an equally sized local array, adds neither prefix instruction, and
+  copies all updated instructions into it at offset zero. Both routes rebuild
+  from the same ordered instructions and carry over the same blockhash. The copy
+  executes; no zero-iteration loop is involved.
 
 ## Untriaged debt (tx suite)
 
-Triaged 2026-08-17, carried through the v1 merge, which renamed
-`TransactionSkeletonRecord` to `TransactionSkeletonImpl` — the arguments below are
-unchanged, only the class identity is. Three of the seven were equivalent and are argued
-above under their labels; one was killed the same day once its blocking
-decision landed; the rest are kill candidates, recorded here because the
-work is not done rather than because it is accepted.
+The current baseline has two `# untriaged` rows, both in
+`TransactionSkeleton.deserializeSkeleton`: the forced versioned walk and the removed
+legacy instruction walk described below. The first two entries record closed findings
+from the earlier seven-row triage; they are historical evidence, not retained debt.
 
 - `TransactionSkeletonImpl.invokedProgramAccount`
   `RemoveConditionalMutator_EQUAL_ELSE` — **killed by the v1 merge.** The
@@ -543,27 +600,21 @@ work is not done rather than because it is accepted.
   the latter including the oversized-caller-array case, since the
   caller's array must not widen what the wire declares.
 - `TransactionSkeleton.deserializeSkeleton`
-  `RemoveConditionalMutator_ORDER_IF` — **killable, awkwardly.** Forcing
-  the versioned walk for a legacy message leaves `version` untouched, so
-  `isLegacy()` still agrees; what differs is that `invokedIndexes`
-  becomes populated instead of `LEGACY_INVOKED_INDEXES`. That is only
-  observable through `parseVersionedReadAccount`, reached by calling a
-  versioned-path parser on a legacy skeleton.
+  `RemoveConditionalMutator_ORDER_IF` — **kill candidate.** Forcing the versioned
+  walk for a legacy message leaves `version` untouched, so `isLegacy()` still
+  agrees, but `invokedIndexes` becomes populated instead of remaining empty.
+  The public `parseAccounts(writableLoaded, readonlyLoaded)` overload uses
+  `parseVersionedIncludedAccounts` even for a legacy skeleton; empty loaded-account
+  lists expose the changed invoked flag on a read-only program account.
 - `TransactionSkeleton.deserializeSkeleton`
   `RemoveConditionalMutator_ORDER_ELSE` (legacy instruction walk) —
   **owner decision.** Whether the walk is dead for well-formed input
   depends on whether eager validation of the legacy instruction section
   is wanted; unlike the precedents above it reads `data`.
 
-The remaining long-standing skeleton survivors are offset arithmetic and
-parse boundaries a length assertion cannot distinguish (see the
-Transaction hardening section of `AGENTS.md`).
-
-Packages without a suite are deliberate scope decisions (see
-`build.gradle.kts`), not omissions.
-
-Shrinking the baseline is always an improvement; growing it requires a
-reason here.
+These two rows remain untriaged. No other current tx baseline row carries
+`# untriaged`; the pending-retirement entries above are recorded separately.
+Baseline shrinkage requires row-specific evidence, and growth requires a reason here.
 
 ## Timed-out mutants (audited set)
 
