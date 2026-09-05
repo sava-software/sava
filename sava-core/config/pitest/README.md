@@ -9,7 +9,7 @@ method churns nothing. Full policy — the three legal outcomes for a new
 survivor, determinism requirements, targeting rules — lives in sava-build's
 `HARDENING.md`.
 
-## Newly adopted suites — 2026-08-04, seeded debt, not acceptance
+## Newly adopted suites — 2026-08-04, seeded untriaged debt
 
 `accounts`, `sysvar`, `pbkdf` and `primitives` were registered, and `vanity` was
 widened from its `Subsequence*` allowlist to the whole package, to close
