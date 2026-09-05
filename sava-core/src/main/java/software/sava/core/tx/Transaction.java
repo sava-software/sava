@@ -261,6 +261,11 @@ public interface Transaction {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
+  /// With a lookup table, compacts `sortedAccounts` in place: accounts included in the message
+  /// come first, followed by accounts loaded from the table. All entries are retained, with their
+  /// relative order preserved within each group. Pass a clone to preserve the input array's order.
+  /// With a null lookup table, serializes the supplied `sortedAccounts` as a legacy transaction
+  /// without changing the array.
   // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
   // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
@@ -430,12 +435,13 @@ public interface Transaction {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
-  // @Deprecated
   /// With one or more lookup tables, compacts `sortedAccounts` in place: accounts included in the
   /// message come first, followed by lookup-loaded accounts. All entries are retained, with their
   /// relative order preserved within each group. Pass a clone to preserve the input array's order.
-  /// With no lookup tables, rebuilds from `instructions` without using or changing `sortedAccounts`.
+  /// With an empty `tableAccountMetas` array, rebuilds from `instructions` without using or changing
+  /// `sortedAccounts`.
+  // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
+  // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
                               final int serializedInstructionLength,
                               final AccountMeta[] sortedAccounts,

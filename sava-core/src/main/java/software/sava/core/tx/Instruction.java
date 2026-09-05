@@ -10,11 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+/// For valid data spans, built-in instructions compare and hash their program, accounts, and data by value.
+/// Keep retained accounts, public keys, and data unchanged while using an instruction as a hash-based
+/// collection key.
 public interface Instruction {
 
   /// Retains the supplied array and span without validation. Diagnostic `toString()` renders
-  /// null or zero-length data as empty without reading the span; byte-oriented operations
-  /// still require a valid array and span.
+  /// empty data when `data == null` or `len <= 0`, without reading the span. For a positive
+  /// length, it uses {@link java.util.Arrays#copyOfRange(byte[], int, int) Arrays.copyOfRange}, which can zero-pad
+  /// beyond the array's end. Diagnostic rendering does not validate the span for serialization.
   static Instruction createInstruction(final AccountMeta programId,
                                        final List<AccountMeta> keys,
                                        final byte[] data, int offset, int len) {

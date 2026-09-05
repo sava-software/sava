@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -258,6 +259,72 @@ final class InstructionBuildingTests {
   }
 
   @Test
+  void equalInstructionSpansWorkAsHashKeys() {
+    final byte[] repeated = {1, 2, 3, 1, 2, 3};
+    final var first = Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), repeated, 0, 3);
+    final var second = Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), repeated, 3, 3);
+    final var copied = Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[]{1, 2, 3});
+    final var padded = Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[]{9, 1, 2, 3, 8}, 1, 3);
+    final var instructions = new HashSet<Instruction>();
+    final var values = new HashMap<Instruction, String>();
+    instructions.add(first);
+    values.put(first, "instruction");
+
+    for (final var equal : List.of(second, copied, padded)) {
+      assertEquals(first, equal);
+      assertEquals(first.hashCode(), equal.hashCode(), "equal values must have equal hashes");
+      assertFalse(instructions.add(equal), "equal spans must occupy one set entry");
+      assertEquals("instruction", values.get(equal), "an equal span must find the existing map entry");
+    }
+  }
+
+  @Test
+  void emptyInstructionSpansHaveEqualHashesAtDifferentOffsets() {
+    final var empty = Instruction.createInstruction(PROGRAM, List.of(), new byte[0]);
+    final var end = Instruction.createInstruction(PROGRAM, List.of(), new byte[]{1, 2, 3}, 3, 0);
+    assertEquals(empty, end);
+    assertEquals(empty.hashCode(), end.hashCode());
+  }
+
+  @Test
+  void instructionHashesDistinguishLogicalContents() {
+    final var hashes = new HashSet<Integer>();
+    for (final var instruction : List.of(
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[]{1, 2, 3}),
+        Instruction.createInstruction(key(6), List.of(ACCOUNT_A), new byte[]{1, 2, 3}),
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_B), new byte[]{1, 2, 3}),
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[]{4, 2, 3}),
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[]{1, 4, 3}),
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[]{1, 2, 4}),
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[]{1, 2}))) {
+      assertTrue(hashes.add(instruction.hashCode()), "these single-field changes should not collapse to one hash");
+    }
+  }
+
+  private record FormerInstructionComponents(AccountMeta programId, List<AccountMeta> accounts,
+                                             byte[] data, int offset, int len) {
+  }
+
+  @Test
+  void hashingUnvalidatedInstructionSpansDoesNotReadInvalidData() {
+    for (final var instruction : List.of(
+        Instruction.createInstruction(PROGRAM, List.of(), null, 0, 1),
+        Instruction.createInstruction(PROGRAM, List.of(), new byte[]{1}, -1, 1),
+        Instruction.createInstruction(PROGRAM, List.of(), new byte[]{1}, 0, -1),
+        Instruction.createInstruction(PROGRAM, List.of(), new byte[]{1}, 0, 2),
+        Instruction.createInstruction(PROGRAM, List.of(), new byte[]{1}, 2, 0),
+        Instruction.createInstruction(PROGRAM, List.of(), new byte[]{1}, 1, Integer.MAX_VALUE),
+        Instruction.createInstruction((AccountMeta) null, null, null, 0, 0))) {
+      // The former generated record hash is the compatibility oracle for unvalidated inputs.
+      final var former = new FormerInstructionComponents(instruction.programId(), instruction.accounts(),
+          instruction.data(), instruction.offset(), instruction.len());
+      assertEquals(former.hashCode(), instruction.hashCode());
+    }
+    final var nullFields = Instruction.createInstruction((AccountMeta) null, null, new byte[0], 0, 0);
+    assertDoesNotThrow(nullFields::hashCode);
+  }
+
+  @Test
   void toStringRendersProgramAccountsAndData() {
     final byte[] backing = {9, 1, 2, 3, 4, 9};
     final var sliced = Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A, ACCOUNT_B), backing, 1, 4);
@@ -282,16 +349,25 @@ final class InstructionBuildingTests {
   }
 
   @Test
-  void toStringRendersNullOrZeroLengthDataWithoutReadingTheSpan() {
+  void toStringRendersNullOrNonpositiveLengthDataWithoutReadingTheSpan() {
     for (final var instruction : List.of(
         Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), null, 2, 4),
-        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[0], 2, 0))) {
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[0], 2, 0),
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[0], 2, -1))) {
       // Diagnostic rendering tolerates these unvalidated spans; it does not make them serializable.
       final var rendered = instruction.toString();
       assertTrue(rendered.contains(PROGRAM.toBase58()), rendered);
       assertTrue(rendered.contains(ACCOUNT_A.publicKey().toBase58()), rendered);
       assertTrue(rendered.contains("\"data\": \"\""), rendered);
     }
+  }
+
+  @Test
+  void toStringZeroPadsDataPastTheBackingArrayEnd() {
+    final var empty = Instruction.createInstruction(PROGRAM, List.of(), new byte[0], 0, 4);
+    final var shortData = Instruction.createInstruction(PROGRAM, List.of(), new byte[]{9, 1}, 1, 4);
+    assertTrue(empty.toString().contains("\"data\": \"AAAAAA==\""));
+    assertTrue(shortData.toString().contains("\"data\": \"AQAAAA==\""));
   }
 
   @Test

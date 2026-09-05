@@ -16,6 +16,15 @@ sysvar accessors also remain.
 | `RpcEncoding.base58` | Request `RpcEncoding.base64`, or `base64_zstd` where supported. |
 | `Transaction.MAX_SERIALIZED_LENGTH` | Use the transaction's `exceedsSizeLimit()` method. |
 
+## Instructions in hash-based collections
+
+For valid data spans, factory-created instructions now hash their data by content,
+consistently with `equals`. Equal instructions can be used interchangeably as `HashMap` keys and
+`HashSet` entries even when backed by different arrays or offsets. Hash values change;
+do not persist them as identifiers. Keep the retained account list, public keys, and
+data unchanged while an instruction is stored in a hash-based collection. Copy mutable
+inputs before construction if their original owners will reuse them.
+
 ## Signature verification
 
 A signature is binary data. Decode a textual signature using its actual encoding

@@ -327,6 +327,18 @@ kill pass the same day (`AccountIndexLookupTableTests`,
 measurements; the accepted CSV records the current retained rows, and the arguments
 below apply only to their named branches.
 
+**Instruction hash mixing** — baseline label `# hash mixing` (2 sibling rows
+under `InstructionRecord.hashCode`, `MathMutator`). The reviewed mutants replace
+addition with subtraction in the valid-span length fold and the per-byte fold,
+respectively. Both retain a deterministic, content-dependent hash: equal programs,
+account lists, lengths, and ordered logical bytes still produce equal hashes,
+independent of backing-array identity or offset. Exact valid-span hash values are
+not a public contract. The collection and representative-field tests in
+`InstructionBuildingTests` protect equality consistency and useful dispersion;
+pinning exact integers merely to kill these sign changes would overspecify them.
+This acceptance does not cover arithmetic in the invalid-span fallback, whose
+former generated-record hash is preserved and checked independently.
+
 `Transaction.exceedsSizeLimit` is a reachable compatibility default for external
 implementations. `PreV1InterfaceShapeTests` exercises its 1232/1233-byte boundary;
 the built-in legacy/v0 implementation has its own independent boundary test.
@@ -402,7 +414,7 @@ metadata tags. No new timeout or invalid execution status was observed.
 - `InstructionRecord.toString`, `RemoveConditionalMutator_EQUAL_IF` and
   `ConditionalsBoundaryMutator`: removing the null-data guard or widening the
   positive-length check can make diagnostic rendering throw for inputs it currently
-  renders as empty. `InstructionBuildingTests.toStringRendersNullOrZeroLengthDataWithoutReadingTheSpan`
+  renders as empty. `InstructionBuildingTests.toStringRendersNullOrNonpositiveLengthDataWithoutReadingTheSpan`
   covers null data with a positive length and a zero-length span with an invalid
   offset. Diagnostic rendering does not make either input valid for serialization.
 
@@ -647,8 +659,13 @@ package-private visibility and an exact `BigInteger` oracle, which cannot flap,
 needs no warm-up, and killed one more mutant than a measured allocation bound
 did. The harness stays what `AGENTS.md` calls it: a last resort.
 
-**ed25519** (3, all `Ed25519Util`; read `TIMED_OUT` identically solo and under
-gate load in the 2026-07-22 mode comparison)
+**ed25519** (4 retained members, all `Ed25519Util`; 3 observed `TIMED_OUT` in
+the 2026-09-05 certification)
+
+The three observed members also read `TIMED_OUT` identically solo and under
+gate load in the 2026-07-22 mode comparison. The fourth, `pack25519`, remains
+retained pending retirement as described below.
+
 - `pack25519:385` (`RemoveConditionalMutator_ORDER_IF` on the `j < 2`
   reduction-pass loop) — **restored 2026-08-10, retirement pending.** The
   2026-08-08 reading was that the mutant is no longer generated at all: `pack25519` now yields only `ORDER_ELSE`
@@ -687,12 +704,13 @@ gate load in the 2026-07-22 mode comparison)
   `i -> i + PUBLIC_KEY_LENGTH` → `0`): the offset cursor collapses to 0,
   stays below `to` forever, and the join accumulates keys until the watchdog.
 
-**vanity** (4, cut from 8 on 2026-08-08 — see "the deterministic seam" below)
+**vanity** (5 retained members; 4 observed `TIMED_OUT` in the 2026-09-05
+certification)
 
 Every mask worker's search is a `for (;;)` with exactly **two** exits: "found
 enough" (`foundHitLimitOrInterrupted` / `foundLimitOrInterrupted`) and "cap
 reached" (`searchExhausted(attempts)`, the bounded-attempts seam whose javadoc
-names tests as its reason for existing). All four members below disable the cap
+names tests as its reason for existing). All four worker members below disable the cap
 itself — they break either the counter that feeds it or the branch that consumes
 it — so the loop is left with no exit any test can reach. This is the
 non-termination class: nothing but the watchdog can observe them.
@@ -727,14 +745,16 @@ tests. That is the rule the plugin states as "only `cause:liveness` is
 admissible **after deterministic seams/budgets are exhausted**": a mutant that a
 budget can bound is not a liveness member, it is an unexercised seam.
 
-`SubsequenceRecord.formatCharOptions:148` (`ORDER_IF`) was retired in the same
-pass for a different reason: the member matches no mutant in the current report
-at all — `formatCharOptions` now yields only `ORDER_ELSE` and
-`ConditionalsBoundary` at that line, both `KILLED`. This was the known
+`SubsequenceRecord.formatCharOptions` (`RemoveConditionalMutator_ORDER_IF`)
+was removed on 2026-08-08 for a different reason: the member matched no mutant
+in that report — `formatCharOptions` yielded only `ORDER_ELSE` and
+`ConditionalsBoundary`, both `KILLED`. It was **restored 2026-08-10, retirement
+pending**, and remains the fifth retained member despite being absent from the
+2026-09-05 report. This was the known
 `KILLED`↔`TIMED_OUT` flapper in the `HARDENING_NOTES.md` mode comparisons.
 
 The fixture bound is worth recording explicitly, since the plugin asks whether a
 claimed bound can fail first: `MAX_SEARCHES` is *not* the oracle for the four
-members that remain. For them it is the seam that had to be exhausted before
+worker members. For them it is the seam that had to be exhausted before
 liveness could be claimed at all, and the mutant's whole effect is to make it
 unreachable — which is exactly why the watchdog is the only remaining observer.

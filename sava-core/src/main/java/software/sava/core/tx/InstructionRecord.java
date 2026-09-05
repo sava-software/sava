@@ -178,6 +178,22 @@ record InstructionRecord(AccountMeta programId,
   }
 
   @Override
+  public int hashCode() {
+    int result = 31 * Objects.hashCode(programId) + Objects.hashCode(accounts);
+    if (data == null || offset < 0 || len < 0 || offset > data.length - len) {
+      // Factories retain unvalidated spans. Keep their former component hash without reading data.
+      result = 31 * result + Objects.hashCode(data);
+      result = 31 * result + offset;
+      return 31 * result + len;
+    }
+    result = 31 * result + len;
+    for (int i = offset, end = offset + len; i < end; ++i) {
+      result = 31 * result + data[i];
+    }
+    return result;
+  }
+
+  @Override
   public String toString() {
     final var accountsJson = accounts != null && !accounts.isEmpty()
         ? accounts.stream()
