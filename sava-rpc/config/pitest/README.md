@@ -332,31 +332,45 @@ include real coverage debt, so the module-wide claim no longer holds. The
   sweeps `valueOf` vs the widening over 10k seeded non-negative values plus
   boundaries on every build. See the decimal suite notes in sava-core for why
   the allocation-bound technique that would kill these was tried and reverted.
-- `JsonUtil.parseEncodedData` — baseline label `# single element array` —
-  forced-true on `ji.readArray()` plus the
-  `NO_COVERAGE` null-return below it: both sit on the single-element-array
-  branch, which always throws (the known parser quirk recorded in
-  `AGENTS.md` — real providers send `[data, encoding]` pairs). Both routes
-  reject, and the branch's return value is never observable. Killing these
-  means changing the quirk, which is deliberately unchanged.
-- `JsonUtil.parseEncodedData:37` — baseline label `# reset position equivalent`
-  — historical acceptance of the `NakedReceiverMutator` on
-  `ji.reset(mark2).skipRestOfArray()` (2026-07-22), superseded by the
-  2026-09-05 unknown-encoding continuation test. The original argument assumed
-  the data element had already been decoded. The unknown-encoding fallback
-  does not consume it, and dropping the reset no longer preserves the cursor.
-  `unknownResponseEncodingsStillConsumeTheArrayAndReturnEmptyData` independently
-  asserts empty output and the next field in the enclosing object, and kills the reset-drop
-  in the fresh full response suite. The historical row remains as evidence;
-  this observation does not prune the baseline.
 - `JsonUtil.parseEncodedData` — baseline label `# logging only` — removed
   `System.Logger::log` call on the unsupported-encoding fallback.
 - `JsonUtil.toJsonIntArray` — baseline label `# capacity math` —
   `(data.length << 2) + 2`:
   `StringBuilder` sizing only; the builder grows as needed.
 
-Shrinking the baseline is always an improvement; growing it requires a
-reason here.
+### Pending JsonUtil baseline retirement
+
+Three retained rows no longer have valid equivalence arguments:
+
+- `# killed guard pending prune` — `parseEncodedData`,
+  `RemoveConditionalMutator_EQUAL_IF,SURVIVED`: the former `# single element array`
+  argument predates the explicit missing-encoding exception introduced in `0d68f02`.
+  Forcing the guard now rejects valid encoded arrays; the current guard mutants are
+  killed. `ParseResponseFieldTests` also pins the missing-encoding exception message.
+- `# removed fallback pending prune` — `parseEncodedData`,
+  `NullReturnValsMutator,NO_COVERAGE`: the other former `# single element array` row
+  belonged to a fallback return removed by `0d68f02`. The current throwing branch has
+  no return to mutate. This is removed-source evidence, not identification of that
+  historical sibling among today's return mutants.
+- `# killed reset pending prune` — `parseEncodedData`,
+  `NakedReceiverMutator,SURVIVED`: the former `# reset position equivalent` argument
+  assumed the data element had already been decoded. Unknown encodings leave it
+  unconsumed, so dropping `ji.reset(mark2)` breaks the cursor.
+  `unknownResponseEncodingsStillConsumeTheArrayAndReturnEmptyData` asserts both empty
+  output and the next enclosing-object field, and kills this mutation in a fresh full
+  response suite.
+
+These labels record unfinished pruning; **each row still contributes active baseline
+matching capacity**. Keeping the notes accurate does not retire that capacity.
+The 2026-09-05 fresh response observation also nominated the unrelated
+`Lamports.amount,RemoveConditionalMutator_ORDER_IF,SURVIVED` row under
+`# allocation routing`. It is absent from the licensed population, not observed
+killed, and its equivalence argument remains valid. No baseline membership was
+removed: the available transition would also remove that unrelated evidence.
+The removed fallback additionally requires reconciliation with sava's licensed-kill
+retirement rule. Writer options remain defined by the installed `hardeningHelp`.
+
+Baseline shrinkage requires row-specific evidence; growth requires a reason here.
 
 ## Timed-out mutants (audited set)
 

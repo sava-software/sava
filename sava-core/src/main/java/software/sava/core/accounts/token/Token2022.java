@@ -87,11 +87,11 @@ public record Token2022(Mint mint,
         case 14 -> TransferHook.read(data, i);
         case 15 -> TransferHookAccount.read(data, i);
         case 16 -> {
-          requireLength("ConfidentialTransferFeeConfig", length, ConfidentialTransferFeeConfig.BYTES);
+          requireLength(extensionType, length, ConfidentialTransferFeeConfig.BYTES);
           yield ConfidentialTransferFeeConfig.read(data, i, i + length);
         }
         case 17 -> {
-          requireLength("ConfidentialTransferFeeAmount", length, ConfidentialTransferFeeAmount.BYTES);
+          requireLength(extensionType, length, ConfidentialTransferFeeAmount.BYTES);
           yield ConfidentialTransferFeeAmount.read(data, i, i + length);
         }
         case 18 -> MetadataPointer.read(data, i);
@@ -109,22 +109,16 @@ public record Token2022(Mint mint,
         case 28 -> PermissionedBurnConfig.read(data, i);
         default -> new UnknownTokenExtension(extensionType, Arrays.copyOfRange(data, i, i + length));
       };
-      if (extensionData instanceof UnknownTokenExtension) {
-        extensions.add(extensionData);
-        i += length;
-        continue;
-      }
-      final var type = EXTENSION_NAMES[extensionType];
       if (extensionData == null) {
         throw new IllegalArgumentException(String.format(
-            "Extension %s claims %d bytes, but contains no value.", type, length
+            "Extension %s claims %d bytes, but contains no value.", EXTENSION_NAMES[extensionType], length
         ));
       }
       final int parsedLength = extensionData.l();
       if (!(extensionData instanceof TokenMetadata) && parsedLength != length) {
         throw new IllegalArgumentException(String.format(
             "Extension %s claims %d bytes, expected %d.",
-            type, length, parsedLength
+            EXTENSION_NAMES[extensionType], length, parsedLength
         ));
       }
       extensions.add(extensionData);
@@ -133,12 +127,12 @@ public record Token2022(Mint mint,
     return extensions;
   }
 
-  private static void requireLength(final String type,
+  private static void requireLength(final int extensionType,
                                     final int actual,
                                     final int expected) {
     if (actual != expected) {
       throw new IllegalArgumentException(String.format(
-          "Extension %s claims %d bytes, expected %d.", type, actual, expected
+          "Extension %s claims %d bytes, expected %d.", EXTENSION_NAMES[extensionType], actual, expected
       ));
     }
   }

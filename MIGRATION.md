@@ -1,9 +1,11 @@
-# Migrating from 25.10.0 to the v1 release
+# Migrating from 25.10.0 to 25.11.0
 
-The upcoming release removes APIs that were already deprecated in 25.10.0.
+25.11.0 introduces transaction format v1 and removes APIs that were already
+deprecated in 25.10.0. These removals are intentional breaking changes.
 Applications using them need source changes and recompilation. Legacy and v0
-transaction factories remain available; their removal is deferred until v1 is
-activated on mainnet. The deprecated RecentBlockhashes sysvar accessors also remain.
+transaction factories remain available; their deprecation is deferred until v1 is
+activated on mainnet, with removal to follow later. The deprecated RecentBlockhashes
+sysvar accessors also remain.
 
 | Removed API | Replacement |
 | --- | --- |
@@ -68,6 +70,8 @@ member does not remove the response decoder. `RpcEncoding.parseEncoding` now
 returns `null` for `"base58"`, just as it does for other unsupported request names.
 
 The single transaction-size constant could not describe every transaction format.
+It carried plain `@Deprecated` in 25.10.0, without `forRemoval = true`, so builds
+that checked only removal warnings did not receive advance notice of this removal.
 `exceedsSizeLimit()` applies the built-in transaction's limit: 1,232 bytes for
 legacy/v0 and 4,096 bytes for v1. Its interface default retains the 1,232-byte
 compatibility limit for third-party implementations. A transaction fitting its

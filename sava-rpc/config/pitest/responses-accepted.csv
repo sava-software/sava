@@ -1,7 +1,7 @@
 !sava-hardening-baseline-schema,1
-software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,RemoveConditionalMutator_EQUAL_IF,SURVIVED # single element array # line 28
-software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NakedReceiverMutator,SURVIVED # reset position equivalent # line 37
-software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NullReturnValsMutator,NO_COVERAGE # single element array # line 40
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,RemoveConditionalMutator_EQUAL_IF,SURVIVED # killed guard pending prune # line 28
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NakedReceiverMutator,SURVIVED # killed reset pending prune # line 37
+software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,NullReturnValsMutator,NO_COVERAGE # removed fallback pending prune # line 40
 software.sava.rpc.json.http.response.JsonUtil,parseEncodedData,VoidMethodCallMutator,SURVIVED # logging only # line 85
 software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # capacity math # line 126
 software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # capacity math # line 126

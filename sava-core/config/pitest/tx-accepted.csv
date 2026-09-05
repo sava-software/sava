@@ -1,9 +1,9 @@
 !sava-hardening-baseline-schema,1
 software.sava.core.accounts.lookup.AccountIndexLookupTableView,compareTo,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead defensive # line 25
-software.sava.core.tx.BaseTransaction,feePayerSignatureOffset,MathMutator,SURVIVED # v1 guard makes the read unreachable # line 46
-software.sava.core.tx.BaseTransaction,setBlockHash,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # both arms write the same bytes # line 274
-software.sava.core.tx.BaseTransaction,signedIdOffset,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 69
-software.sava.core.tx.BaseTransaction,toString,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 362
+software.sava.core.tx.BaseTransaction,feePayerSignatureOffset,MathMutator,SURVIVED # v1 guard makes the read unreachable # line 49
+software.sava.core.tx.BaseTransaction,setBlockHash,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # both arms write the same bytes # line 277
+software.sava.core.tx.BaseTransaction,signedIdOffset,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 72
+software.sava.core.tx.BaseTransaction,toString,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 365
 software.sava.core.tx.InstructionRecord,extraAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 27
 software.sava.core.tx.InstructionRecord,toString,ConditionalsBoundaryMutator,SURVIVED # redundant work # line 188
 software.sava.core.tx.InstructionRecord,toString,RemoveConditionalMutator_EQUAL_IF,SURVIVED # redundant work # line 188

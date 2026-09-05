@@ -924,7 +924,7 @@ public interface Transaction {
   /// limit main has always applied. The built-in implementations override this per format — a v1
   /// transaction's limit is 4096 bytes.
   default boolean exceedsSizeLimit() {
-    return size() > 1232;
+    return size() > BaseTransaction.MAX_SERIALIZED_LENGTH_LEGACY;
   }
 
   /// The number of unique accounts referenced by this transaction, including any which would be

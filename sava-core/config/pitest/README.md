@@ -75,6 +75,19 @@ accepted twin. The migration that materialized them added five copies here
 (`ed25519` `car25519`, `encoding` `Base58` ×4) — all inside the families
 below, plus one `limbsLength` copy that had been reading `TIMED_OUT`.
 
+## Removed PublicKey overloads — pending baseline retirement
+
+`# removed signature overload pending prune` marks four retained excess
+`PublicKey.verifySignature` `NO_COVERAGE` rows: two each for
+`BooleanFalseReturnValsMutator` and `BooleanTrueReturnValsMutator`, following removal
+of the String-signature overloads in `0112d69`. The fresh 2026-09-05 accounts run
+contains three remaining `NO_COVERAGE` instances per mutator; the baseline contains five.
+
+These rows still contribute active baseline matching capacity. Removed-source
+evidence establishes absence, not an observed licensed kill. Their retirement
+remains pending reconciliation with the repository's licensed-kill removal rule;
+the labels do not claim that the deleted sites are equivalent or still uncovered.
+
 ## Triaged equivalent mutants (accepted with reasons)
 
 Triaged 2026-07-18 for the encoding, ed25519, and token2022 suites (the tx
@@ -120,21 +133,24 @@ result-identical and the mutant only changes which one runs:
   of the modeled TokenMetadata wire domain.
 
 **Defensive code unreachable in context** (baseline labels `# surplus zero strip`
-for the Base58 encode family, `# extension null guard` for `parseExtensions`,
-`# pack25519 passes` for the dropped `car25519` passes):
+for the Base58 encode family and `# pack25519 passes` for the dropped
+`car25519` passes):
 - `Base58` encode family (`encode`, `mutableEncode`,
   `continueMutableEncode`, `beginMutableEncode`): the surplus-`ENCODED_ZERO`
   strip loop after digit emission (and its boundary variant). No entry point
   produces surplus zero digits for it to remove — corroborated by the
   BigInteger-reference differential and Bitcoin Core vectors passing with
   the strip disabled; retained as defense.
-- `Token2022.parseExtensions`: forcing the `extensionData != null` guard
-  true — the extension `read(data, offset)` null returns fire only on
-  null/empty whole buffers, which `parseExtensions` has already excluded.
 - `Ed25519Util.pack25519`: dropping one of the three leading `car25519`
   passes, and its `changed conditional boundary`: the remaining passes plus
   the exact double conditional-subtract reduction still fully normalize
   every limb state reachable from 32-byte `Codec.decode32` inputs.
+
+The fresh 2026-09-05 `token2022` run generated 620 mutants: 600 killed and the
+same 20 accepted survivors, all in extension classes. Removing the redundant
+unknown-extension add-and-advance branch reduced the population from 623;
+unknown values now use the common path, and diagnostic names are looked up only
+on errors. No `Token2022.parseExtensions` null-guard acceptance remains.
 
 **Static-initializer construction** — baseline label `# static init`
 (`Ed25519Util$PointAccum.create`,
@@ -213,18 +229,25 @@ here, because they are a behaviour gap rather than an unkillable mutant.
 
 ## crypto suite — no accepted mutants
 
-`crypto-accepted.csv` is empty and the suite runs at 100% (12 mutants). Keep it
-that way.
+No `crypto-accepted.csv` is present because this suite has no accepted mutants.
+The fresh 2026-09-05 observation after removing `Hmac.hmacSHA512(byte[], byte[])`
+generated and killed all 10 mutants. The earlier 12-mutant population included
+the removed helper; the reduction is explained by that API removal, not reduced
+test execution. The dated trial table in `HARDENING_NOTES.md` retains its original
+12-mutant measurement.
 
 `Hash.sha256Twice` and `Hash.h160` have no caller anywhere in the repo. They
-were kept rather than deprecated — unlike `Hmac.hmacSHA512`, which was
-deprecated because it was wrong — since they are correct, tiny, and removing
+were kept rather than deprecated since they are correct, tiny, and removing
 `h160` would not shed the BouncyCastle dependency (ed25519, `Signer`,
 `PublicKey` and Argon2id all need it). Being uncalled is exactly why they are
 pinned to published vectors *and* differentially checked against a naive
 two-instance implementation: `sha256Twice` reuses one `MessageDigest` across
 both rounds and depends on `digest()` resetting it, so comparing against the
 same technique twice would prove nothing.
+
+The removed two-argument `Hmac.hmacSHA512` helper had a historical key/data reversal
+and was deprecated before its removal for 25.11.0. The no-argument factory remains
+supported; the RFC 4231 vector tests initialize its `Mac` explicitly.
 
 The `ed25519` subpackage is excluded here — it has its own suite, and the
 `crypto.*` wildcard spans dots.
@@ -304,16 +327,11 @@ kill pass the same day (`AccountIndexLookupTableTests`,
 are accepted equivalents, and the seven skeleton keys under Untriaged debt
 are all that remain unclassified.
 
-**Shadowed defaults / single-implementation dispatch** — baseline label
-`# shadowed default`:
-- `Transaction.exceedsSizeLimit` line 652 (4 NC keys): the interface
-  default is overridden by `TransactionRecord`, the only implementation —
-  structurally unreachable. The record's own boundary is pinned by
-  `exceedsSizeLimitBoundary` at exactly 1232/1233 bytes.
-- `TransactionRecord.setBlockHash` 224/231: `instanceof TransactionRecord`
-  is always true (single implementation); the mutated else-branch routes
-  through the public `setRecentBlockHash` with identical bytes, and the
-  unmutated else-branch line is unreachable (NC).
+`Transaction.exceedsSizeLimit` is a reachable compatibility default for external
+implementations. `PreV1InterfaceShapeTests` exercises its 1232/1233-byte boundary;
+the built-in legacy/v0 implementation has its own independent boundary test.
+There is no accepted mutant on this default. The current `BaseTransaction.setBlockHash`
+acceptance is documented below under `# both arms write the same bytes`.
 
 **Result-identical routing** — baseline label `# result identical routing`:
 - `Transaction.createTx` 386: one table meta forced through the generic

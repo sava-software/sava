@@ -23,11 +23,13 @@ import software.sava.core.accounts.token.extensions.TokenMetadata;
 import software.sava.core.accounts.token.extensions.TransferFeeAmount;
 import software.sava.core.accounts.token.extensions.TransferHook;
 import software.sava.core.accounts.token.extensions.TransferHookAccount;
+import software.sava.core.accounts.token.extensions.UnknownTokenExtension;
 import software.sava.core.encoding.ByteUtil;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,6 +38,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -114,6 +117,10 @@ public final class SolanaUpstreamLayoutConformanceTests {
         "every Token-2022 extension ordinal and fixed Rust TLV value length matches Sava",
         29
     );
+    final var concreteTypes = new HashSet<Class<? extends TokenExtension>>();
+    collectConcreteExtensionTypes(TokenExtension.class, concreteTypes);
+    assertTrue(concreteTypes.remove(UnknownTokenExtension.class), "unknown extensions retain their opaque representation");
+    final var fixtureTypes = new HashSet<Class<? extends TokenExtension>>();
     for (int index = 0; index < fixture.rows().size(); ++index) {
       final var fields = fields(fixture.rows().get(index), 10);
       final int ordinal = Integer.parseInt(fields[0]);
@@ -135,6 +142,8 @@ public final class SolanaUpstreamLayoutConformanceTests {
       };
       assertEquals(javaTypeName, extension.getClass().getSimpleName(),
           () -> "Java extension type for Rust ordinal " + ordinal);
+      assertTrue(fixtureTypes.add(extension.getClass()),
+          () -> "multiple Rust extension IDs dispatch to " + extension.getClass().getName());
       assertEquals(ordinal, extension.ordinal(), () -> "parsed ordinal for " + name);
       assertEquals(valueLength, extension.l(), () -> "Java fixed/value length for " + name);
       assertAccountType(accountType, extension, name);
@@ -162,6 +171,26 @@ public final class SolanaUpstreamLayoutConformanceTests {
         assertEquals("n/a", fields[8]);
         assertEquals("n/a", fields[9]);
       }
+    }
+    assertEquals(concreteTypes, fixtureTypes,
+        "every concrete Token-2022 type needs a pinned Rust fixture and typed parser dispatch");
+  }
+
+  private static void collectConcreteExtensionTypes(
+      final Class<? extends TokenExtension> type,
+      final Set<Class<? extends TokenExtension>> concreteTypes
+  ) {
+    final int modifiers = type.getModifiers();
+    if (!Modifier.isAbstract(modifiers)) {
+      concreteTypes.add(type);
+    }
+    if (type.isSealed()) {
+      for (final var permittedType : type.getPermittedSubclasses()) {
+        collectConcreteExtensionTypes(permittedType.asSubclass(TokenExtension.class), concreteTypes);
+      }
+    } else {
+      assertTrue(Modifier.isFinal(modifiers),
+          () -> "Token-2022 hierarchy must remain closed for fixture coverage: " + type.getName());
     }
   }
 

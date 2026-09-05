@@ -14,13 +14,13 @@ software.sava.core.accounts.PublicKey,readPubKey,NullReturnValsMutator,NO_COVERA
 software.sava.core.accounts.PublicKey,verifySignature,BooleanFalseReturnValsMutator,NO_COVERAGE # untriaged # line 106
 software.sava.core.accounts.PublicKey,verifySignature,BooleanFalseReturnValsMutator,NO_COVERAGE # untriaged # line 116
 software.sava.core.accounts.PublicKey,verifySignature,BooleanFalseReturnValsMutator,NO_COVERAGE # untriaged # line 325
-software.sava.core.accounts.PublicKey,verifySignature,BooleanFalseReturnValsMutator,NO_COVERAGE # untriaged # line 340
-software.sava.core.accounts.PublicKey,verifySignature,BooleanFalseReturnValsMutator,NO_COVERAGE # untriaged # line 368
+software.sava.core.accounts.PublicKey,verifySignature,BooleanFalseReturnValsMutator,NO_COVERAGE # removed signature overload pending prune # line 340
+software.sava.core.accounts.PublicKey,verifySignature,BooleanFalseReturnValsMutator,NO_COVERAGE # removed signature overload pending prune # line 368
 software.sava.core.accounts.PublicKey,verifySignature,BooleanTrueReturnValsMutator,NO_COVERAGE # untriaged # line 106
 software.sava.core.accounts.PublicKey,verifySignature,BooleanTrueReturnValsMutator,NO_COVERAGE # untriaged # line 116
 software.sava.core.accounts.PublicKey,verifySignature,BooleanTrueReturnValsMutator,NO_COVERAGE # untriaged # line 325
-software.sava.core.accounts.PublicKey,verifySignature,BooleanTrueReturnValsMutator,NO_COVERAGE # untriaged # line 340
-software.sava.core.accounts.PublicKey,verifySignature,BooleanTrueReturnValsMutator,NO_COVERAGE # untriaged # line 368
+software.sava.core.accounts.PublicKey,verifySignature,BooleanTrueReturnValsMutator,NO_COVERAGE # removed signature overload pending prune # line 340
+software.sava.core.accounts.PublicKey,verifySignature,BooleanTrueReturnValsMutator,NO_COVERAGE # removed signature overload pending prune # line 368
 software.sava.core.accounts.PublicKeyBytes,compareTo,InvertNegsMutator,NO_COVERAGE # untriaged # line 167
 software.sava.core.accounts.PublicKeyBytes,compareTo,PrimitiveReturnsMutator,NO_COVERAGE # untriaged # line 165
 software.sava.core.accounts.PublicKeyBytes,compareTo,PrimitiveReturnsMutator,NO_COVERAGE # untriaged # line 167

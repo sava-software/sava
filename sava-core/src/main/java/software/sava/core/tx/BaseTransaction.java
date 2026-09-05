@@ -19,6 +19,9 @@ abstract class BaseTransaction implements Transaction {
   // number — Transaction#exceedsInstructionLimit is the published way to ask.
   static final int MAX_INSTRUCTIONS = 64;
 
+  // Legacy/v0 byte limit, also used by the interface compatibility default.
+  static final int MAX_SERIALIZED_LENGTH_LEGACY = 1_232;
+
   protected final AccountMeta feePayer;
   protected final List<Instruction> instructions;
   protected final byte[] data;
