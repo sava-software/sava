@@ -18,8 +18,8 @@ public record MintCloseAuthority(PublicKey closeAuthority) implements MintTokenE
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.MintCloseAuthority;
+  public int ordinal() {
+    return 3;
   }
 
   @Override

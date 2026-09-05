@@ -7,13 +7,6 @@ import java.util.Arrays;
 /// data for the user to handle as they see fit.
 public record UnknownTokenExtension(int type, byte[] data) implements TokenExtension {
 
-  /// Returns null, no [ExtensionType] constant exists yet for this extension, see
-  /// [#type()] for the on-chain extension type value.
-  @Override
-  public ExtensionType extensionType() {
-    return null;
-  }
-
   @Override
   public int ordinal() {
     return type;

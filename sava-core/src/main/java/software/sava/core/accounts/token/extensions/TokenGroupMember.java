@@ -28,8 +28,8 @@ public record TokenGroupMember(PublicKey mint,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.TokenGroupMember;
+  public int ordinal() {
+    return 23;
   }
 
   @Override

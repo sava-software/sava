@@ -19,8 +19,8 @@ public record MetadataPointer(PublicKey authority, PublicKey metadataAddress) im
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.MetadataPointer;
+  public int ordinal() {
+    return 18;
   }
 
   @Override

@@ -8,7 +8,6 @@ import software.sava.core.accounts.token.Token2022Account;
 import software.sava.core.accounts.token.extensions.AccountType;
 import software.sava.core.accounts.token.extensions.AccountTokenExtension;
 import software.sava.core.accounts.token.extensions.CpiGuard;
-import software.sava.core.accounts.token.extensions.ExtensionType;
 import software.sava.core.accounts.token.extensions.ImmutableOwner;
 import software.sava.core.accounts.token.extensions.InterestBearingConfig;
 import software.sava.core.accounts.token.extensions.MemoTransfer;
@@ -48,9 +47,10 @@ import static org.junit.jupiter.api.Assertions.*;
 /// First-party defensive conformance for Sava's client-side Token-2022 and sysvar
 /// parsers. The committed fixtures were generated through pinned upstream Rust APIs;
 /// ordinary Java tests require neither Rust nor network access.
-@SuppressWarnings("removal")
 public final class SolanaUpstreamLayoutConformanceTests {
 
+  // On-chain ID pinned by solana-token2022-extensions.tsv.
+  private static final int TOKEN_METADATA_TYPE = 19;
   private static final String EXTENSIONS_RESOURCE = "/upstream/solana-token2022-extensions.tsv";
   private static final String TOKEN_BOOLS_RESOURCE = "/upstream/solana-token2022-bools.tsv";
   private static final String TOKEN_ACCOUNTS_RESOURCE = "/upstream/solana-token2022-accounts.tsv";
@@ -114,9 +114,6 @@ public final class SolanaUpstreamLayoutConformanceTests {
         "every Token-2022 extension ordinal and fixed Rust TLV value length matches Sava",
         29
     );
-    final var javaTypes = ExtensionType.values();
-    assertEquals(javaTypes.length, fixture.rows().size());
-
     for (int index = 0; index < fixture.rows().size(); ++index) {
       final var fields = fields(fixture.rows().get(index), 10);
       final int ordinal = Integer.parseInt(fields[0]);
@@ -127,12 +124,17 @@ public final class SolanaUpstreamLayoutConformanceTests {
       final byte[] value = HEX.parseHex(fields[5]);
 
       assertEquals(index, ordinal, () -> "non-contiguous Rust ordinal for " + name);
-      assertEquals(javaTypes[index].name(), name, () -> "Java extension name for ordinal " + ordinal);
       assertEquals(valueLength, value.length, () -> "fixture length for " + name);
       assertEquals(fields[6], sha256Hex(value), () -> "fixture value hash for " + name);
       assertTrue(parseBoolean(fields[7]), () -> "Rust rejected exact value for " + name);
 
       final var extension = onlyExtension(parseTlv(ordinal, value));
+      final String javaTypeName = switch (name) {
+        case "ScaledUiAmount", "Pausable", "PermissionedBurn" -> name + "Config";
+        default -> name;
+      };
+      assertEquals(javaTypeName, extension.getClass().getSimpleName(),
+          () -> "Java extension type for Rust ordinal " + ordinal);
       assertEquals(ordinal, extension.ordinal(), () -> "parsed ordinal for " + name);
       assertEquals(valueLength, extension.l(), () -> "Java fixed/value length for " + name);
       assertAccountType(accountType, extension, name);
@@ -147,7 +149,14 @@ public final class SolanaUpstreamLayoutConformanceTests {
         }
         final byte[] longValue = Arrays.copyOf(value, value.length + 1);
         longValue[longValue.length - 1] = (byte) 0xa5;
-        assertAcceptance(parseBoolean(fields[9]), ordinal, longValue, name + " long");
+        final var longError = assertAcceptance(parseBoolean(fields[9]), ordinal, longValue, name + " long");
+        if (longError != null) {
+          assertEquals(
+              "Extension " + name + " claims " + longValue.length + " bytes, expected " + valueLength + ".",
+              longError.getMessage(),
+              "length diagnostics retain the on-chain type name"
+          );
+        }
       } else {
         assertEquals("TokenMetadata", name);
         assertEquals("n/a", fields[8]);
@@ -201,7 +210,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
 
         final var throughTlv = assertThrows(
             IllegalArgumentException.class,
-            () -> parseTlv(ExtensionType.TokenMetadata.ordinal(), declared),
+            () -> parseTlv(TOKEN_METADATA_TYPE, declared),
             "Token-2022 TLV accessor must match the pinned Rust rejection"
         );
         assertEquals(IllegalArgumentException.class, throughTlv.getClass());
@@ -267,7 +276,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
       if (tlvFits) {
         final var extension = assertInstanceOf(
             TokenMetadata.class,
-            onlyExtension(parseTlv(ExtensionType.TokenMetadata.ordinal(), declared)),
+            onlyExtension(parseTlv(TOKEN_METADATA_TYPE, declared)),
             () -> "TLV metadata for " + id
         );
         final byte[] extensionRewrite = new byte[extension.l()];
@@ -571,7 +580,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
     return fail("missing extension " + type.getSimpleName());
   }
 
-  private static void assertAcceptance(
+  private static RuntimeException assertAcceptance(
       final boolean accepts,
       final int ordinal,
       final byte[] value,
@@ -579,12 +588,14 @@ public final class SolanaUpstreamLayoutConformanceTests {
   ) {
     if (accepts) {
       assertDoesNotThrow(() -> parseTlv(ordinal, value), description);
+      return null;
     } else {
       final var thrown = assertThrows(RuntimeException.class, () -> parseTlv(ordinal, value), description);
       assertTrue(
           thrown instanceof IllegalArgumentException || thrown instanceof IndexOutOfBoundsException,
           () -> "unexpected rejection for " + description + ": " + thrown
       );
+      return thrown;
     }
   }
 
@@ -596,7 +607,7 @@ public final class SolanaUpstreamLayoutConformanceTests {
     switch (accountType) {
       case "Mint" -> assertInstanceOf(MintTokenExtension.class, extension, name);
       case "Account" -> assertInstanceOf(AccountTokenExtension.class, extension, name);
-      case "Uninitialized" -> assertEquals(ExtensionType.Uninitialized.ordinal(), extension.ordinal(), name);
+      case "Uninitialized" -> assertEquals(0, extension.ordinal(), name);
       default -> fail("unknown Rust account type for " + name + ": " + accountType);
     }
   }

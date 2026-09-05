@@ -5,8 +5,8 @@ public record NonTransferable() implements MintTokenExtension {
   public static final NonTransferable INSTANCE = new NonTransferable();
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.NonTransferable;
+  public int ordinal() {
+    return 9;
   }
 
   @Override

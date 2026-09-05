@@ -18,9 +18,6 @@ import static software.sava.core.tx.BaseTransaction.requireSignerCount;
 
 public interface Transaction {
 
-  /// @deprecated no longer valid for all transaction versions once v1 transactions are activated.
-  @Deprecated
-  int MAX_SERIALIZED_LENGTH = 1232;
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
@@ -775,7 +772,7 @@ public interface Transaction {
   /// limit main has always applied. The built-in implementations override this per format — a v1
   /// transaction's limit is 4096 bytes.
   default boolean exceedsSizeLimit() {
-    return size() > Transaction.MAX_SERIALIZED_LENGTH;
+    return size() > 1232;
   }
 
   /// The number of unique accounts referenced by this transaction, including any which would be

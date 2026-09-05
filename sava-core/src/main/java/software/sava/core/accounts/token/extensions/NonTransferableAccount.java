@@ -5,8 +5,8 @@ public record NonTransferableAccount() implements AccountTokenExtension {
   public static final NonTransferableAccount INSTANCE = new NonTransferableAccount();
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.NonTransferableAccount;
+  public int ordinal() {
+    return 13;
   }
 
   @Override

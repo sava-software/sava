@@ -338,6 +338,24 @@ final class ParseResponseFieldTests {
   }
 
   @Test
+  void base58ResponsesRemainReadableAfterRemovingTheRequestEncoding() {
+    final var it = ji("""
+        {"data":["1112","base58",{"future":true}],"after":31}""");
+    it.skipUntil("data");
+    assertArrayEquals(new byte[]{0, 0, 0, 1}, JsonUtil.parseEncodedData(it));
+    assertEquals(31, it.skipUntil("after").readInt());
+  }
+
+  @Test
+  void unknownResponseEncodingsStillConsumeTheArrayAndReturnEmptyData() {
+    final var it = ji("""
+        {"data":["1112","future-encoding",{"future":true}],"after":41}""");
+    it.skipUntil("data");
+    assertArrayEquals(new byte[0], JsonUtil.parseEncodedData(it));
+    assertEquals(41, it.skipUntil("after").readInt());
+  }
+
+  @Test
   void jsonUtilZstdAccountDataLimit() {
     // These zstd CLI-generated run-length frames expand to exactly Solana's account
     // limit and one byte beyond it. Their tiny compressed size makes the second one a

@@ -5,8 +5,8 @@ public record ImmutableOwner() implements AccountTokenExtension {
   public static final ImmutableOwner INSTANCE = new ImmutableOwner();
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.ImmutableOwner;
+  public int ordinal() {
+    return 7;
   }
 
   @Override

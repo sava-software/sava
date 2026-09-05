@@ -17,5 +17,5 @@ software.sava.core.accounts.token.extensions.ConfidentialTransferAccount,hashCod
 software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 76
 software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 77
 software.sava.core.accounts.token.extensions.ConfidentialTransferFeeConfig,hashCode,MathMutator,SURVIVED # hash mixing # line 78
-software.sava.core.accounts.token.extensions.TokenMetadata,read,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # slow path routing # line 54
-software.sava.core.accounts.token.extensions.UnknownTokenExtension,hashCode,MathMutator,SURVIVED # hash mixing # line 42
+software.sava.core.accounts.token.extensions.TokenMetadata,read,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # slow path routing # line 57
+software.sava.core.accounts.token.extensions.UnknownTokenExtension,hashCode,MathMutator,SURVIVED # hash mixing # line 35

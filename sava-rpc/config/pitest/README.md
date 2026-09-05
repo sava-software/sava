@@ -340,15 +340,15 @@ include real coverage debt, so the module-wide claim no longer holds. The
   reject, and the branch's return value is never observable. Killing these
   means changing the quirk, which is deliberately unchanged.
 - `JsonUtil.parseEncodedData:37` — baseline label `# reset position equivalent`
-  — `NakedReceiverMutator` on
-  `ji.reset(mark2).skipRestOfArray()` (2026-07-22): dropping the `reset`
-  makes `skipRestOfArray` re-skip the elements between the cursor (after the
-  decoded data element) and `mark2` instead of starting there — either way
-  the iterator stops after the array's `]`, so the terminal position is
-  identical. The line is covered: `skippedValuesLeaveTheIteratorAligned`
-  parses a field *after* the array and killed the sibling
-  `skipRestOfArray`-drop on the same line; only the reset-drop is
-  position-equivalent.
+  — historical acceptance of the `NakedReceiverMutator` on
+  `ji.reset(mark2).skipRestOfArray()` (2026-07-22), superseded by the
+  2026-09-05 unknown-encoding continuation test. The original argument assumed
+  the data element had already been decoded. The unknown-encoding fallback
+  does not consume it, and dropping the reset no longer preserves the cursor.
+  `unknownResponseEncodingsStillConsumeTheArrayAndReturnEmptyData` independently
+  asserts empty output and the next field in the enclosing object, and kills the reset-drop
+  in the fresh full response suite. The historical row remains as evidence;
+  this observation does not prune the baseline.
 - `JsonUtil.parseEncodedData` — baseline label `# logging only` — removed
   `System.Logger::log` call on the unsupported-encoding fallback.
 - `JsonUtil.toJsonIntArray` — baseline label `# capacity math` —

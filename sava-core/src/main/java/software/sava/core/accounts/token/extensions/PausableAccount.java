@@ -5,8 +5,8 @@ public record PausableAccount() implements AccountTokenExtension {
   public static final PausableAccount INSTANCE = new PausableAccount();
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.PausableAccount;
+  public int ordinal() {
+    return 27;
   }
 
   @Override

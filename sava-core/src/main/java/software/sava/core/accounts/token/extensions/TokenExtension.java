@@ -8,15 +8,8 @@ public sealed interface TokenExtension extends Serializable permits
     MintTokenExtension,
     UnknownTokenExtension {
 
-  /// Deprecated with [ExtensionType], switch on the sealed [TokenExtension] type instead.
-  /// [#ordinal()] provides the on-chain extension type value.
-  @Deprecated(forRemoval = true)
-  ExtensionType extensionType();
-
   /// The on-chain extension type value.
-  default int ordinal() {
-    return extensionType().ordinal();
-  }
+  int ordinal();
 
   static int write(final TokenExtension extension, final byte[] data, final int offset) {
     final int ordinal = extension.ordinal();

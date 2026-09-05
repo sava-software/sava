@@ -1,7 +1,6 @@
 package software.sava.rpc.json.http.response;
 
 import software.sava.core.encoding.Base58;
-import software.sava.rpc.json.http.request.RpcEncoding;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonException;
 import systems.comodal.jsoniter.JsonIterator;
@@ -23,6 +22,23 @@ public final class JsonUtil {
   private static final System.Logger logger = System.getLogger(JsonUtil.class.getName());
 
   public static final CharBufferFunction<byte[]> DECODE_BASE58 = Base58::decode;
+
+  // Reading existing RPC data still accepts base58 even though requests no longer offer it.
+  private enum DataEncoding {
+    base58, base64, base64_zstd
+  }
+
+  private static final CharBufferFunction<DataEncoding> DATA_ENCODING_PARSER = (buf, offset, len) -> {
+    if (JsonIterator.fieldEquals("base64", buf, offset, len)) {
+      return DataEncoding.base64;
+    } else if (JsonIterator.fieldEquals("base64+zstd", buf, offset, len)) {
+      return DataEncoding.base64_zstd;
+    } else if (JsonIterator.fieldEquals("base58", buf, offset, len)) {
+      return DataEncoding.base58;
+    } else {
+      return null;
+    }
+  };
 
   public static byte[] parseEncodedData(final JsonIterator ji) {
     final var next = ji.whatIsNext();
@@ -52,7 +68,7 @@ public final class JsonUtil {
       if (!ji.readArray()) {
         throw new JsonException("Encoded account data array is missing its encoding");
       }
-      final var encoding = RpcEncoding.parseEncoding(ji);
+      final var encoding = ji.applyChars(DATA_ENCODING_PARSER);
       final int mark2 = ji.mark();
       ji.reset(mark);
       final byte[] decodedData = switch (encoding) {

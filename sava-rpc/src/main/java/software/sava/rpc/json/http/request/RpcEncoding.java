@@ -3,7 +3,7 @@ package software.sava.rpc.json.http.request;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.JsonIterator;
 
-/// Wire encodings for account and transaction data.
+/// Supported request encodings for account and transaction data.
 ///
 /// `jsonParsed` is deliberately absent and should not be added. sava's purpose is
 /// to parse account and transaction data client side — asking the node to do it
@@ -13,8 +13,6 @@ import systems.comodal.jsoniter.JsonIterator;
 /// project.
 public enum RpcEncoding {
 
-  @Deprecated(forRemoval = true)
-  base58,
   base64,
   base64_zstd("base64+zstd");
 
@@ -37,13 +35,12 @@ public enum RpcEncoding {
       return base64;
     } else if (JsonIterator.fieldEquals("base64+zstd", buf, offset, len)) {
       return base64_zstd;
-    } else if (JsonIterator.fieldEquals("base58", buf, offset, len)) {
-      return base58;
     } else {
       return null;
     }
   };
 
+  /// Parses a supported request encoding, or returns null for other wire names, including base58.
   public static RpcEncoding parseEncoding(final JsonIterator ji) {
     return ji.applyChars(PARSER);
   }

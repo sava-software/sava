@@ -12,8 +12,8 @@ public record TransferHookAccount(boolean transferring) implements AccountTokenE
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.TransferHookAccount;
+  public int ordinal() {
+    return 15;
   }
 
   @Override

@@ -42,8 +42,8 @@ public record TransferFeeConfig(PublicKey transferFeeConfigAuthority,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.TransferFeeConfig;
+  public int ordinal() {
+    return 1;
   }
 
   @Override

@@ -56,26 +56,24 @@ types. Pinned versions worth checking on each sync: `spl-token-interface`,
 ## Token-2022 extensions
 
 Java: `sava-core/src/main/java/software/sava/core/accounts/token/`
-- `extensions/ExtensionType.java` — DEPRECATED enum of all 29 on-chain extension types,
-  ordinals 0 (`Uninitialized`) through 28 (`PermissionedBurn`); it duplicates the sealed
-  `TokenExtension` hierarchy, which is the migration target. While it exists it **must
-  stay ordinal-aligned with the Rust `ExtensionType` enum**: new SPL extensions are
-  appended, so new Java entries must be appended in the same order. The live model is the
-  `Set<TokenExtension>` on `Token2022`/`Token2022Account`: users iterate it and switch on
-  the sealed type; `UnknownTokenExtension(type, data)` entries keep parsing alive across
-  new SPL releases and round-trip through `write`. The deprecated `extensions()` map
-  drops unknown entries since they cannot be keyed by the enum; a future release removes
-  the map method and the enum. Append new enum entries promptly so the dispatch switch
-  parses new extensions typed.
+- `extensions/TokenExtension.java` — sealed hierarchy covering all 29 known on-chain
+  extension types, ordinals 0 (`Uninitialized`) through 28 (`PermissionedBurn`). Each
+  concrete type's `ordinal()` returns its fixed wire ID, which **must match the Rust
+  `ExtensionType` ordinal**. The model is the `Set<TokenExtension>` on
+  `Token2022`/`Token2022Account`: users iterate it and switch on the sealed type;
+  `UnknownTokenExtension(type, data)` entries keep parsing alive across new SPL releases
+  and round-trip through `write`. `Token2022.parseExtensions` dispatches on the wire ID;
+  its private names table preserves the diagnostic names used before the enum and
+  `extensions()` compatibility maps were removed.
 - `extensions/*.java` — one record per extension with a static `read(data, offset)` and a
   `write(data, offset)`/`l()` pair. Variable-length extensions
   (`ConfidentialTransferFeeConfig`, `ConfidentialTransferFeeAmount`) take an end bound in
   `read`.
 - `Token2022.java` — mint parsing: base `Mint` (82 bytes) + 83 bytes padding + 1 accountType
   byte, then TLV entries (`u16 LE type`, `u16 LE length`, payload — both read unsigned).
-  The extension dispatch switch must be exhaustive; a zeroed type terminates parsing
+  The extension dispatch switch must cover every known wire ID; a zeroed type terminates parsing
   (trailing re-allocated but uninitialized space) while retaining extensions already
-  parsed; a type past the enum yields `UnknownTokenExtension`; an unknown extension whose
+  parsed; an unrecognized type yields `UnknownTokenExtension`; an unknown extension whose
   claimed length overshoots the data end throws `IndexOutOfBoundsException` like known
   extensions do. See Token-2022 hardening below.
 - `Token2022Account.java` — token account parsing: base `TokenAccount` (165 bytes) + 1
@@ -85,8 +83,8 @@ Agave/SPL canonical sources:
 - `agave:account-decoder/src/parse_token_extension.rs` — the `parse_extension` match lists
   every extension agave supports; the `convert_*` functions and the `Ui*` structs in
   `agave:account-decoder-client-types/src/token.rs` give field names, order, and widths.
-  **To check for new extensions: confirm the match in `parse_extension` still ends where
-  `ExtensionType.java` ends.**
+  **To check for new extensions: compare the match in `parse_extension` with the sealed
+  hierarchy and `Token2022.parseExtensions` dispatch cases.**
 - `spl-token-2022-interface` crate (version pinned in agave `Cargo.toml`) defines the actual
   packed structs. Layout conventions: `OptionalNonZeroPubkey` = 32 bytes with all-zero
   meaning none; `solana_zero_copy::unaligned::Bool` = 1 byte, with every nonzero value
@@ -793,8 +791,9 @@ files in the solana-improvement-documents repo.
 - Compute-budget instruction builders live outside sava-core; constants reference
   `agave:compute-budget/src/compute_budget_limits.rs` and
   `solana-sdk:compute-budget-interface/` (watch SIMD-0268 default changes).
-- Watch for larger-transaction SIMDs: `Transaction.MAX_SERIALIZED_LENGTH=1232` and
-  `MAX_ACCOUNTS=64` are already deprecated as not valid for all future versions.
+- Watch for larger-transaction SIMDs: use `Transaction.exceedsSizeLimit()` when checking
+  transaction size. The built-in implementations apply the format-specific limit (1232 bytes
+  for legacy/v0, 4096 for v1); account limits can also vary by format.
 - `CompactU16Encoding.decode`/`getByteLen(byte[], int)` are still lenient where agave's
   deserializer (`solana-sdk:short-vec/` `visit_byte`) is strict: agave rejects alias
   encodings (zero continuation bytes) and a continuation bit on byte three, while sava
@@ -872,9 +871,10 @@ git -C <solana-sdk-clone> diff 4fb3a9a3..HEAD -- \
    the sync-point table above); a link into agave's old `sdk/` tree means the crate moved
    to the solana-sdk repo.
 4. For token extensions: compare `parse_token_extension.rs`'s match against
-   `ExtensionType.java`; add the record to the sealed `TokenExtension` hierarchy, the
-   enum entry and dispatch case, and a round-trip test (plus a real fixture when
-   available).
+   `Token2022.parseExtensions`; add the record to the sealed `TokenExtension` hierarchy,
+   its fixed `ordinal()`, dispatch case and diagnostic name, and a round-trip test (plus
+   a real fixture when available). Keep wire IDs and lengths checked against the frozen
+   Rust conformance fixtures.
 5. For RPC methods: compare `rpc.rs` registrations against `SolanaJsonRpcClient.java`
    literals; add interface method, request builder, response record + parser, and a
    `RoundTripRpcRequestTests` case.

@@ -332,12 +332,12 @@ final class InstructionBuildingTests {
         Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[8]));
     assertFalse(small.exceedsSizeLimit());
     assertEquals(small.serialized().length, small.size());
-    assertTrue(small.size() <= Transaction.MAX_SERIALIZED_LENGTH);
+    assertTrue(small.size() <= 1232);
 
     final var big = Transaction.createTx(feePayer,
-        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[Transaction.MAX_SERIALIZED_LENGTH]));
+        Instruction.createInstruction(PROGRAM, List.of(ACCOUNT_A), new byte[1232]));
     assertTrue(big.exceedsSizeLimit());
     assertEquals(big.serialized().length, big.size());
-    assertTrue(big.size() > Transaction.MAX_SERIALIZED_LENGTH);
+    assertTrue(big.size() > 1232);
   }
 }

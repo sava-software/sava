@@ -18,8 +18,8 @@ public record PermanentDelegate(PublicKey delegate) implements MintTokenExtensio
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.PermanentDelegate;
+  public int ordinal() {
+    return 12;
   }
 
   @Override

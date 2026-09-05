@@ -19,8 +19,8 @@ public record GroupPointer(PublicKey authority, PublicKey groupAddress) implemen
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.GroupPointer;
+  public int ordinal() {
+    return 20;
   }
 
   @Override

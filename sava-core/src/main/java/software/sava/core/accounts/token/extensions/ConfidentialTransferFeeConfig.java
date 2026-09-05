@@ -40,8 +40,8 @@ public record ConfidentialTransferFeeConfig(PublicKey authority,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.ConfidentialTransferFeeConfig;
+  public int ordinal() {
+    return 16;
   }
 
   @Override

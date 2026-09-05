@@ -378,10 +378,10 @@ final class PreV1InterfaceShapeTests {
   void sizeLimitDefaultSitsExactlyAtTheLegacyBoundary() {
     // The instruction data length is a compact-u16, so the serialization overhead itself grows by
     // a byte once the data passes 127; measure at the target scale and correct once.
-    int dataLength = Transaction.MAX_SERIALIZED_LENGTH - (legacyTx(8).size() - 8);
-    dataLength += Transaction.MAX_SERIALIZED_LENGTH - legacyTx(dataLength).size();
+    int dataLength = 1232 - (legacyTx(8).size() - 8);
+    dataLength += 1232 - legacyTx(dataLength).size();
     final var atLimit = new PreV1Transaction(legacyTx(dataLength));
-    assertEquals(Transaction.MAX_SERIALIZED_LENGTH, atLimit.size(), "fixture must land exactly on the limit");
+    assertEquals(1232, atLimit.size(), "fixture must land exactly on the limit");
     assertFalse(atLimit.exceedsSizeLimit(), "the limit itself is within bounds");
 
     final var pastLimit = new PreV1Transaction(legacyTx(dataLength + 1));

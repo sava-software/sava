@@ -32,8 +32,8 @@ public record TokenGroup(PublicKey updateAuthority,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.TokenGroup;
+  public int ordinal() {
+    return 21;
   }
 
   @Override

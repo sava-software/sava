@@ -111,7 +111,6 @@ final class ExtensionRoundTripTests {
         2L,
         3L
     );
-    // In ordinal order so that the EnumMap based write below is byte identical.
     final var extensions = writeRead(
         confidentialTransferAccount,
         ImmutableOwner.INSTANCE,
@@ -148,7 +147,6 @@ final class ExtensionRoundTripTests {
 
   @Test
   void mintAccountRoundTrip() {
-    // In ordinal order so that the EnumMap based write below is byte identical.
     final var extensions = writeRead(
         new TransferFeeConfig(
             key(60), key(61), 21L,

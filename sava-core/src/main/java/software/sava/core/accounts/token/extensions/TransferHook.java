@@ -19,8 +19,8 @@ public record TransferHook(PublicKey authority, PublicKey programId) implements 
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.TransferHook;
+  public int ordinal() {
+    return 14;
   }
 
   @Override

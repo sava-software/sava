@@ -18,8 +18,8 @@ public record ConfidentialTransferFeeAmount(byte[] withheldAmount) implements Ac
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.ConfidentialTransferFeeAmount;
+  public int ordinal() {
+    return 17;
   }
 
   @Override

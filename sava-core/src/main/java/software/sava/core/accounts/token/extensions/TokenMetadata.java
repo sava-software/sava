@@ -105,8 +105,8 @@ public record TokenMetadata(PublicKey updateAuthority,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.TokenMetadata;
+  public int ordinal() {
+    return 19;
   }
 
   @Override

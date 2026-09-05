@@ -16,8 +16,8 @@ public record MemoTransfer(boolean requireIncomingTransferAmount) implements Acc
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.MemoTransfer;
+  public int ordinal() {
+    return 8;
   }
 
   @Override

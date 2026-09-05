@@ -11,7 +11,6 @@ import software.sava.core.encoding.ByteUtil;
 import software.sava.core.zk.ElGamal;
 
 import java.util.Arrays;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -240,36 +239,6 @@ final class ExtensionEdgeCaseTests {
   }
 
   @Test
-  @SuppressWarnings({"deprecation", "removal"}) // exercises the deprecated extensions() map, whose drop-unknowns behavior has no successor
-  void extensionsMapDropsUnknownExtensions() {
-    final var pausableConfig = new PausableConfig(key(1), true);
-    final var unknown = new UnknownTokenExtension(999, bytes(2, 3));
-    final var mint = new Mint(key(2), null, 0L, 6, true, null);
-    final var token2022 = new Token2022(
-        mint,
-        AccountType.Mint,
-        new LinkedHashSet<>(List.of(pausableConfig, unknown))
-    );
-    assertEquals(Map.of(ExtensionType.Pausable, pausableConfig), token2022.extensions());
-
-    // Token2022Account carries its own copy of the deprecated map, which nothing
-    // reached — the mint's map passing says nothing about the account's
-    final var tokenAccount = new TokenAccount(
-        key(4), key(5), key(6), 42L,
-        1, key(7),
-        AccountState.Initialized,
-        0, 0L, 21L,
-        1, key(8)
-    );
-    final var account = new Token2022Account(
-        tokenAccount,
-        AccountType.Account,
-        new LinkedHashSet<>(List.of(pausableConfig, unknown))
-    );
-    assertEquals(Map.of(ExtensionType.Pausable, pausableConfig), account.extensions());
-  }
-
-  @Test
   void uninitializedExtension() {
     // Uninitialized is padding: on-chain extension type value 0 with a zero-length payload
     assertEquals(0, Uninitialized.INSTANCE.ordinal());
@@ -343,17 +312,17 @@ final class ExtensionEdgeCaseTests {
   }
 
   @Test
-  @SuppressWarnings("removal") // the boundary IS ExtensionType.values().length, the count parseExtensions keys on; migrates when the enum is removed
-  void ordinalsExactlyAtTheEnumBoundary() {
-    // values().length is the first ordinal released after the last sync
+  void firstUnsupportedAccountAndExtensionTypes() {
     final byte[] mintData = new byte[Mint.BYTES + 83 + 1];
     mintData[Mint.BYTES + 83] = (byte) AccountType.values().length;
     assertNull(Token2022.read(key(1), mintData).accountType());
 
+    // The pinned Rust Token-2022 fixture defines types 0 through 28.
+    final int firstUnknownExtensionType = 29;
     final byte[] tlv = new byte[Integer.BYTES];
-    ByteUtil.putInt16LE(tlv, 0, ExtensionType.values().length);
+    ByteUtil.putInt16LE(tlv, 0, firstUnknownExtensionType);
     assertEquals(
-        Set.of(new UnknownTokenExtension(ExtensionType.values().length, new byte[0])),
+        Set.of(new UnknownTokenExtension(firstUnknownExtensionType, new byte[0])),
         Token2022.parseExtensions(tlv, 0)
     );
   }

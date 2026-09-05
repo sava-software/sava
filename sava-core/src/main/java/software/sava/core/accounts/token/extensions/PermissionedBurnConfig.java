@@ -18,8 +18,8 @@ public record PermissionedBurnConfig(PublicKey authority) implements MintTokenEx
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.PermissionedBurn;
+  public int ordinal() {
+    return 28;
   }
 
   @Override

@@ -12,8 +12,8 @@ public record DefaultAccountState(int state) implements MintTokenExtension {
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.DefaultAccountState;
+  public int ordinal() {
+    return 6;
   }
 
   @Override

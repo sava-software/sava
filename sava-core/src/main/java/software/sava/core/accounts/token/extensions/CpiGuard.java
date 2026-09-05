@@ -12,8 +12,8 @@ public record CpiGuard(boolean lockCPI) implements AccountTokenExtension {
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.CpiGuard;
+  public int ordinal() {
+    return 11;
   }
 
   @Override

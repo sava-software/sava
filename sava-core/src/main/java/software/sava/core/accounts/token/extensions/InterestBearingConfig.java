@@ -41,8 +41,8 @@ public record InterestBearingConfig(PublicKey rateAuthority,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.InterestBearingConfig;
+  public int ordinal() {
+    return 10;
   }
 
   @Override

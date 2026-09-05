@@ -2,12 +2,9 @@ package software.sava.core.accounts.token;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.extensions.AccountType;
-import software.sava.core.accounts.token.extensions.ExtensionType;
 import software.sava.core.accounts.token.extensions.TokenExtension;
-import software.sava.core.accounts.token.extensions.UnknownTokenExtension;
 import software.sava.core.serial.Serializable;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 
@@ -28,14 +25,6 @@ public record Token2022Account(TokenAccount tokenAccount,
     final var accountType = parseAccountType(data, i);
     ++i;
     return new Token2022Account(tokenAccount, accountType, Token2022.parseExtensions(data, i));
-  }
-
-  /// Deprecated with [ExtensionType], use [#tokenExtensions()] and switch on the sealed
-  /// [TokenExtension] type. Built dynamically on each call, [UnknownTokenExtension]
-  /// entries are dropped since they cannot be keyed by [ExtensionType].
-  @Deprecated(forRemoval = true)
-  public Map<ExtensionType, TokenExtension> extensions() {
-    return Token2022.parseExtensionsMap(tokenExtensions);
   }
 
   @Override

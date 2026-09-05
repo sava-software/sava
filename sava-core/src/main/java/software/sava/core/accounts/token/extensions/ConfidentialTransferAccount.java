@@ -96,8 +96,8 @@ public record ConfidentialTransferAccount(boolean approved,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.ConfidentialTransferAccount;
+  public int ordinal() {
+    return 5;
   }
 
   @Override

@@ -148,21 +148,6 @@ public interface PublicKey extends Comparable<PublicKey> {
     return verifySignature(publicKey, 0, msg, signature);
   }
 
-  /**
-   * Verifies UTF-8 encodings of both arguments.
-   *
-   * @deprecated Ed25519 signatures are arbitrary bytes and cannot generally be represented
-   *             losslessly as a {@link String}; use {@link #verifySignature(byte[], String, byte[])}.
-   */
-  @Deprecated(forRemoval = true)
-  static boolean verifySignature(final byte[] publicKey, final String msg, final String signature) {
-    return verifySignature(
-        publicKey, 0,
-        msg,
-        signature.getBytes(UTF_8)
-    );
-  }
-
   static PublicKey readPubKey(final byte[] bytes, final int offset) {
     // Arrays.copyOfRange zero-pads past the end of the source, which would silently
     // fabricate a key from truncated data
@@ -355,17 +340,6 @@ public interface PublicKey extends Comparable<PublicKey> {
   /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
   default boolean verifySignature(final String msg, final byte[] signature) {
     return verifySignature(toByteArray(), msg, signature);
-  }
-
-  /**
-   * Verifies UTF-8 encodings of both arguments.
-   *
-   * @deprecated Ed25519 signatures are arbitrary bytes and cannot generally be represented
-   *             losslessly as a {@link String}; use {@link #verifySignature(String, byte[])}.
-   */
-  @Deprecated(forRemoval = true)
-  default boolean verifySignature(final String msg, final String signature) {
-    return verifySignature(msg, signature.getBytes(UTF_8));
   }
 
   default java.security.PublicKey toJavaPublicKey() {

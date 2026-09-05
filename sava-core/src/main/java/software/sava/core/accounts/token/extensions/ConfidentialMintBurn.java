@@ -44,8 +44,8 @@ public record ConfidentialMintBurn(byte[] confidentialSupply,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.ConfidentialMintBurn;
+  public int ordinal() {
+    return 24;
   }
 
   @Override

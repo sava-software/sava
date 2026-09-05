@@ -1,0 +1,74 @@
+# Migrating from 25.10.0 to the v1 release
+
+The upcoming release removes APIs that were already deprecated in 25.10.0.
+Applications using them need source changes and recompilation. Legacy and v0
+transaction factories remain available; their removal is deferred until v1 is
+activated on mainnet. The deprecated RecentBlockhashes sysvar accessors also remain.
+
+| Removed API | Replacement |
+| --- | --- |
+| `PublicKey.verifySignature` overloads taking a `String` signature | Pass the decoded signature as `byte[]`. |
+| `Hmac.hmacSHA512(byte[], byte[])` | Obtain a `Mac` from `Hmac.hmacSHA512()`, initialize it with the key, and authenticate the message. |
+| `Token2022.extensions()` and `Token2022Account.extensions()` | Use `tokenExtensions()`, which returns a `Set<TokenExtension>`. |
+| `ExtensionType` and `TokenExtension.extensionType()` | Use concrete extension types for dispatch and `ordinal()` for the on-chain type ID. |
+| `RpcEncoding.base58` | Request `RpcEncoding.base64`, or `base64_zstd` where supported. |
+| `Transaction.MAX_SERIALIZED_LENGTH` | Use the transaction's `exceedsSizeLimit()` method. |
+
+## Signature verification
+
+A signature is binary data. Decode a textual signature using its actual encoding
+before passing it to the existing byte-array overload. For example, for a base58
+signature:
+
+```java
+boolean valid = publicKey.verifySignature(message, Base58.decode(signatureBase58));
+```
+
+The removed overload encoded the signature string as UTF-8. That cannot generally
+preserve an Ed25519 signature. The overloads accepting a `String` message remain.
+
+## HMAC-SHA512
+
+Initialize the retained factory's `Mac` explicitly:
+
+```java
+var mac = Hmac.hmacSHA512();
+mac.init(new SecretKeySpec(key, "HmacSHA512"));
+byte[] digest = mac.doFinal(data);
+```
+
+`SecretKeySpec` is in `javax.crypto.spec`. Handle or declare the checked
+`InvalidKeyException` from `Mac.init`. This preserves the key/data roles of the
+removed overload in 25.10.0. Older versions of that overload used the second
+argument as the key; consumers preserving that historical output must initialize
+with that argument instead.
+
+## Token-2022 extensions
+
+The map keyed by `ExtensionType` is removed. Iterate `tokenExtensions()` and match
+the concrete type, for example:
+
+```java
+for (var extension : token2022.tokenExtensions()) {
+  if (extension instanceof TransferFeeConfig transferFees) {
+    // Use transferFees here.
+  }
+}
+```
+
+`ordinal()` is the stable on-chain numeric type ID, not an index into a Java enum.
+Known extensions retain their existing IDs and serialized layouts. Unknown type
+IDs remain represented by `UnknownTokenExtension`, including their raw bytes, so
+consumers should preserve them when reading and writing accounts.
+
+## RPC encodings and transaction limits
+
+Base58 account data in RPC responses remains readable. Removing the request enum
+member does not remove the response decoder. `RpcEncoding.parseEncoding` now
+returns `null` for `"base58"`, just as it does for other unsupported request names.
+
+The single transaction-size constant could not describe every transaction format.
+`exceedsSizeLimit()` applies the built-in transaction's limit: 1,232 bytes for
+legacy/v0 and 4,096 bytes for v1. Its interface default retains the 1,232-byte
+compatibility limit for third-party implementations. A transaction fitting its
+format's size limit does not imply that the destination cluster accepts that format.

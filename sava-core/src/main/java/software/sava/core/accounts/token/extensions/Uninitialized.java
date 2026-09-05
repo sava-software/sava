@@ -5,8 +5,8 @@ public record Uninitialized() implements MintTokenExtension {
   public static final Uninitialized INSTANCE = new Uninitialized();
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.Uninitialized;
+  public int ordinal() {
+    return 0;
   }
 
   @Override

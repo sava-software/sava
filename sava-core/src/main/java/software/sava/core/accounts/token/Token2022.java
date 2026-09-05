@@ -14,12 +14,44 @@ public record Token2022(Mint mint,
 
   private static final int PADDING_AFTER_MINT = 83;
 
+  // Wire names retained for the parser's existing diagnostic messages.
+  private static final String[] EXTENSION_NAMES = {
+      "Uninitialized",
+      "TransferFeeConfig",
+      "TransferFeeAmount",
+      "MintCloseAuthority",
+      "ConfidentialTransferMint",
+      "ConfidentialTransferAccount",
+      "DefaultAccountState",
+      "ImmutableOwner",
+      "MemoTransfer",
+      "NonTransferable",
+      "InterestBearingConfig",
+      "CpiGuard",
+      "PermanentDelegate",
+      "NonTransferableAccount",
+      "TransferHook",
+      "TransferHookAccount",
+      "ConfidentialTransferFeeConfig",
+      "ConfidentialTransferFeeAmount",
+      "MetadataPointer",
+      "TokenMetadata",
+      "GroupPointer",
+      "TokenGroup",
+      "GroupMemberPointer",
+      "TokenGroupMember",
+      "ConfidentialMintBurn",
+      "ScaledUiAmount",
+      "Pausable",
+      "PausableAccount",
+      "PermissionedBurn"
+  };
+
   public static final BiFunction<PublicKey, byte[], Token2022> FACTORY = Token2022::read;
 
   public static Set<TokenExtension> parseExtensions(final byte[] data, final int offset) {
     final var extensions = new LinkedHashSet<TokenExtension>();
     final var seenExtensionTypes = new HashSet<Integer>();
-    final var extensionTypes = ExtensionType.values();
     for (int i = offset; i < data.length; ) {
       final int extensionType = ByteUtil.getUInt16LE(data, i);
       if (extensionType == 0) {
@@ -38,60 +70,58 @@ public record Token2022(Mint mint,
             extensionType, length, data.length - i
         ));
       }
-      if (extensionType >= extensionTypes.length) {
-        // Extension released after ExtensionType was last synced, pass the raw data back
-        // to the user.
-        extensions.add(new UnknownTokenExtension(extensionType, Arrays.copyOfRange(data, i, i + length)));
+      final var extensionData = switch (extensionType) {
+        case 1 -> TransferFeeConfig.read(data, i);
+        case 2 -> TransferFeeAmount.read(data, i);
+        case 3 -> MintCloseAuthority.read(data, i);
+        case 4 -> ConfidentialTransferMint.read(data, i);
+        case 5 -> ConfidentialTransferAccount.read(data, i);
+        case 6 -> DefaultAccountState.read(data, i);
+        case 7 -> ImmutableOwner.INSTANCE;
+        case 8 -> MemoTransfer.read(data, i);
+        case 9 -> NonTransferable.INSTANCE;
+        case 10 -> InterestBearingConfig.read(data, i);
+        case 11 -> CpiGuard.read(data, i);
+        case 12 -> PermanentDelegate.read(data, i);
+        case 13 -> NonTransferableAccount.INSTANCE;
+        case 14 -> TransferHook.read(data, i);
+        case 15 -> TransferHookAccount.read(data, i);
+        case 16 -> {
+          requireLength("ConfidentialTransferFeeConfig", length, ConfidentialTransferFeeConfig.BYTES);
+          yield ConfidentialTransferFeeConfig.read(data, i, i + length);
+        }
+        case 17 -> {
+          requireLength("ConfidentialTransferFeeAmount", length, ConfidentialTransferFeeAmount.BYTES);
+          yield ConfidentialTransferFeeAmount.read(data, i, i + length);
+        }
+        case 18 -> MetadataPointer.read(data, i);
+        // Bound the variable-length Borsh reader to the declared TLV value. Without the
+        // slice, malformed string/count fields can consume bytes from the next extension.
+        case 19 -> TokenMetadata.read(Arrays.copyOfRange(data, i, i + length), 0);
+        case 20 -> GroupPointer.read(data, i);
+        case 21 -> TokenGroup.read(data, i);
+        case 22 -> GroupMemberPointer.read(data, i);
+        case 23 -> TokenGroupMember.read(data, i);
+        case 24 -> ConfidentialMintBurn.read(data, i);
+        case 25 -> ScaledUiAmountConfig.read(data, i);
+        case 26 -> PausableConfig.read(data, i);
+        case 27 -> PausableAccount.INSTANCE;
+        case 28 -> PermissionedBurnConfig.read(data, i);
+        default -> new UnknownTokenExtension(extensionType, Arrays.copyOfRange(data, i, i + length));
+      };
+      if (extensionData instanceof UnknownTokenExtension) {
+        extensions.add(extensionData);
         i += length;
         continue;
       }
-      final var type = extensionTypes[extensionType];
-      final var extensionData = switch (type) {
-        case Uninitialized -> Uninitialized.INSTANCE;
-        case TransferFeeConfig -> TransferFeeConfig.read(data, i);
-        case TransferFeeAmount -> TransferFeeAmount.read(data, i);
-        case MintCloseAuthority -> MintCloseAuthority.read(data, i);
-        case ConfidentialTransferMint -> ConfidentialTransferMint.read(data, i);
-        case ConfidentialTransferAccount -> ConfidentialTransferAccount.read(data, i);
-        case DefaultAccountState -> DefaultAccountState.read(data, i);
-        case ImmutableOwner -> ImmutableOwner.INSTANCE;
-        case MemoTransfer -> MemoTransfer.read(data, i);
-        case NonTransferable -> NonTransferable.INSTANCE;
-        case InterestBearingConfig -> InterestBearingConfig.read(data, i);
-        case CpiGuard -> CpiGuard.read(data, i);
-        case PermanentDelegate -> PermanentDelegate.read(data, i);
-        case NonTransferableAccount -> NonTransferableAccount.INSTANCE;
-        case TransferHook -> TransferHook.read(data, i);
-        case TransferHookAccount -> TransferHookAccount.read(data, i);
-        case ConfidentialTransferFeeConfig -> {
-          requireLength(type, length, ConfidentialTransferFeeConfig.BYTES);
-          yield ConfidentialTransferFeeConfig.read(data, i, i + length);
-        }
-        case ConfidentialTransferFeeAmount -> {
-          requireLength(type, length, ConfidentialTransferFeeAmount.BYTES);
-          yield ConfidentialTransferFeeAmount.read(data, i, i + length);
-        }
-        case MetadataPointer -> MetadataPointer.read(data, i);
-        // Bound the variable-length Borsh reader to the declared TLV value. Without the
-        // slice, malformed string/count fields can consume bytes from the next extension.
-        case TokenMetadata -> TokenMetadata.read(Arrays.copyOfRange(data, i, i + length), 0);
-        case GroupPointer -> GroupPointer.read(data, i);
-        case TokenGroup -> TokenGroup.read(data, i);
-        case GroupMemberPointer -> GroupMemberPointer.read(data, i);
-        case TokenGroupMember -> TokenGroupMember.read(data, i);
-        case ConfidentialMintBurn -> ConfidentialMintBurn.read(data, i);
-        case ScaledUiAmount -> ScaledUiAmountConfig.read(data, i);
-        case Pausable -> PausableConfig.read(data, i);
-        case PausableAccount -> PausableAccount.INSTANCE;
-        case PermissionedBurn -> PermissionedBurnConfig.read(data, i);
-      };
+      final var type = EXTENSION_NAMES[extensionType];
       if (extensionData == null) {
         throw new IllegalArgumentException(String.format(
             "Extension %s claims %d bytes, but contains no value.", type, length
         ));
       }
       final int parsedLength = extensionData.l();
-      if (type != ExtensionType.TokenMetadata && parsedLength != length) {
+      if (!(extensionData instanceof TokenMetadata) && parsedLength != length) {
         throw new IllegalArgumentException(String.format(
             "Extension %s claims %d bytes, expected %d.",
             type, length, parsedLength
@@ -103,7 +133,7 @@ public record Token2022(Mint mint,
     return extensions;
   }
 
-  private static void requireLength(final ExtensionType type,
+  private static void requireLength(final String type,
                                     final int actual,
                                     final int expected) {
     if (actual != expected) {
@@ -111,21 +141,6 @@ public record Token2022(Mint mint,
           "Extension %s claims %d bytes, expected %d.", type, actual, expected
       ));
     }
-  }
-
-  /// Deprecated with [ExtensionType], use [#parseExtensions] which includes
-  /// [UnknownTokenExtension] entries for extensions released after [ExtensionType] was
-  /// last synced. Unknown extensions are dropped here as they cannot be keyed by
-  /// [ExtensionType].
-  @Deprecated(forRemoval = true)
-  static Map<ExtensionType, TokenExtension> parseExtensionsMap(final Set<TokenExtension> extensions) {
-    final var extensionMap = new EnumMap<ExtensionType, TokenExtension>(ExtensionType.class);
-    for (final var extension : extensions) {
-      if (!(extension instanceof UnknownTokenExtension)) {
-        extensionMap.put(extension.extensionType(), extension);
-      }
-    }
-    return extensionMap;
   }
 
   static AccountType parseAccountType(final byte[] data, final int offset) {
@@ -143,14 +158,6 @@ public record Token2022(Mint mint,
     final var accountType = parseAccountType(data, i);
     ++i;
     return new Token2022(mint, accountType, parseExtensions(data, i));
-  }
-
-  /// Deprecated with [ExtensionType], use [#tokenExtensions()] and switch on the sealed
-  /// [TokenExtension] type. Built dynamically on each call, [UnknownTokenExtension]
-  /// entries are dropped since they cannot be keyed by [ExtensionType].
-  @Deprecated(forRemoval = true)
-  public Map<ExtensionType, TokenExtension> extensions() {
-    return parseExtensionsMap(tokenExtensions);
   }
 
   @Override

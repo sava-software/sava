@@ -15,8 +15,8 @@ public record TransferFeeAmount(long withHeldAmount) implements AccountTokenExte
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.TransferFeeAmount;
+  public int ordinal() {
+    return 2;
   }
 
   @Override

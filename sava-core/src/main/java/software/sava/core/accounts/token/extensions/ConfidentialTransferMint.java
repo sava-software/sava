@@ -27,8 +27,8 @@ public record ConfidentialTransferMint(PublicKey authority,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.ConfidentialTransferMint;
+  public int ordinal() {
+    return 4;
   }
 
   @Override

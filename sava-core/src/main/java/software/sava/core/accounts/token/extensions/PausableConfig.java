@@ -19,8 +19,8 @@ public record PausableConfig(PublicKey authority, boolean paused) implements Min
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.Pausable;
+  public int ordinal() {
+    return 26;
   }
 
   @Override

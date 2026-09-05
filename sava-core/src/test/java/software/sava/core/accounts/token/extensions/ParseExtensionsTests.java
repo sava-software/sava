@@ -18,6 +18,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class ParseExtensionsTests {
 
+  // On-chain IDs pinned by solana-token2022-extensions.tsv.
+  private static final int TOKEN_METADATA_TYPE = 19;
+  private static final int PERMANENT_DELEGATE_TYPE = 12;
+
   private static byte[] mainnetFixture(final String name) throws IOException {
     try (final var input = ParseExtensionsTests.class.getResourceAsStream("/fuzz/token2022/" + name)) {
       assertNotNull(input, "missing Token-2022 mainnet fixture " + name);
@@ -25,7 +29,6 @@ final class ParseExtensionsTests {
     }
   }
 
-  // extensions are keyed by their sealed type now that the ExtensionType map is deprecated
   private static <T extends TokenExtension> T assertExtension(final Set<TokenExtension> extensions, final Class<T> type) {
     for (final var extension : extensions) {
       if (type.isInstance(extension)) {
@@ -107,10 +110,9 @@ final class ParseExtensionsTests {
   /// `TokenMetadata::unpack_from_slice`; an empty slice cannot decode the required Borsh
   /// fields and is rejected. It is not an absent extension once its TLV header is present.
   @Test
-  @SuppressWarnings("removal") // the wire ordinal is owned by the deprecated compatibility enum until its removal
   void zeroLengthTokenMetadataIsRejected() {
     final byte[] data = new byte[Integer.BYTES];
-    ByteUtil.putInt16LE(data, 0, ExtensionType.TokenMetadata.ordinal());
+    ByteUtil.putInt16LE(data, 0, TOKEN_METADATA_TYPE);
 
     final var exception = assertThrows(
         IllegalArgumentException.class,
@@ -124,7 +126,6 @@ final class ParseExtensionsTests {
 
   /// Builds a canonical TokenMetadata value followed by TLV-shaped bytes, under a caller-supplied
   /// declared length for the metadata entry.
-  @SuppressWarnings("removal") // the wire ordinal is owned by the deprecated compatibility enum until its removal
   private static byte[] metadataThenPermanentDelegate(final int declaredMetadataLength) {
     final var metadata = new TokenMetadata(
         PublicKey.createPubKey(new byte[PublicKey.PUBLIC_KEY_LENGTH]),
@@ -135,12 +136,12 @@ final class ParseExtensionsTests {
     final int canonical = metadata.l();
     final byte[] data = new byte[4 + canonical + 4 + PermanentDelegate.BYTES];
 
-    ByteUtil.putInt16LE(data, 0, ExtensionType.TokenMetadata.ordinal());
+    ByteUtil.putInt16LE(data, 0, TOKEN_METADATA_TYPE);
     ByteUtil.putInt16LE(data, 2, declaredMetadataLength);
     metadata.write(data, 4);
 
     final int delegateOffset = 4 + canonical;
-    ByteUtil.putInt16LE(data, delegateOffset, ExtensionType.PermanentDelegate.ordinal());
+    ByteUtil.putInt16LE(data, delegateOffset, PERMANENT_DELEGATE_TYPE);
     ByteUtil.putInt16LE(data, delegateOffset + 2, PermanentDelegate.BYTES);
     Arrays.fill(data, delegateOffset + 4, data.length, (byte) 0x7E);
     return data;

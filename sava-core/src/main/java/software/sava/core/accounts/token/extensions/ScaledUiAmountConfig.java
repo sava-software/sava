@@ -33,8 +33,8 @@ public record ScaledUiAmountConfig(PublicKey authority,
   }
 
   @Override
-  public ExtensionType extensionType() {
-    return ExtensionType.ScaledUiAmount;
+  public int ordinal() {
+    return 25;
   }
 
   @Override
