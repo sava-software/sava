@@ -33,8 +33,7 @@ comparing.
 - **transaction-v1-examples** — `https://github.com/solana-foundation/transaction-v1-examples`
   — the Solana Foundation's SIMD-0385 examples: `@solana/kit`, Rust, Python and Go clients
   driving a local 4.2.1 validator. `ts/src/estimate.ts` is the reference for kit's v1
-  resource-limit flow and `scripts/validator.sh` the model for sava's
-  `sava-rpc/src/test/solana/v1-live/` scripts.
+  resource-limit flow.
 
 Repo-relative paths below are prefixed with the repo name (e.g. `agave:rpc/src/rpc.rs`).
 
@@ -262,10 +261,12 @@ requests and all `getTransaction` requests send
 ### Observed on Agave 4.2.1
 
 Raw JSON-RPC bodies captured 2026-08-24 from a `solana-test-validator` 4.2.1 (feature-set
-`565236538`, the same set mainnet 4.2.0 reports) with `enable_tx_v1` active and then inactive.
-The gate-on rows are re-checked by `LiveV1ValidatorCheck` (sava-rpc; run instructions in
-`sava-rpc/src/test/solana/v1-live/README.md`); the gate-off rows were captured once by hand,
-because the validator that check starts activates every gate at genesis.
+`565236538`, the same set mainnet 4.2.0 reported) with `enable_tx_v1` active and then inactive.
+These are historical observations; the raw captures remain in the committed Agave fixtures and
+offline RPC tests. The broader original live checks have been reduced to one optional local smoke check
+(`sava-rpc/src/test/solana/v1-live/README.md`): a large transaction is simulated, tightened in
+place, sent and read back. It does not recheck every observation below. The gate-off rows were
+captured once by hand; the local test-validator activates every gate at genesis.
 
 1. **Version ceiling.** `getTransaction` and full `getBlock` with `maxSupportedTransactionVersion`
    omitted or `0` fail the *whole* response with `-32015` when any transaction is v1 — one v1
@@ -273,7 +274,7 @@ because the validator that check starts activates every gate at genesis.
    (1) is not supported by the requesting client. Please try the request again with the following
    configuration parameter: "maxSupportedTransactionVersion": 1`. The `signatures` and `none`
    detail levels are served regardless. A ceiling above every version present is accepted:
-   mainnet 4.2.0 today serves full `getBlock` at ceiling 1 and 2 on legacy/v0-only blocks, so
+   mainnet 4.2.0 served full `getBlock` at ceiling 1 and 2 on legacy/v0-only blocks, so
    `MAX_SUPPORTED_TRANSACTION_VERSION = 1` is safe to send before activation. The version the
    message names is that of the *first* transaction the request could not serve, not the highest
    one present — so on a shared cluster (see "Observed on public devnet" below) a full `getBlock`
@@ -281,8 +282,8 @@ because the validator that check starts activates every gate at genesis.
    block, and only a ledger carrying nothing but sava's own v1 transactions always names `1`.
 2. **Pre-activation write path** (`enable_tx_v1` inactive — mainnet, devnet and testnet as of
    2026-08-24; the feature account `txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL` did not exist
-   on any of them. Superseded for devnet and testnet on 2026-09-03, see below; still current for
-   mainnet, and still the behaviour any pre-activation cluster shows). `simulateTransaction` returns `err: "UnsupportedVersion"` with
+   on any of them. Superseded for devnet and testnet on 2026-09-03, see below; mainnet remained
+   inactive in that observation). `simulateTransaction` returns `err: "UnsupportedVersion"` with
    `unitsConsumed: 0` and no logs. `sendTransaction` with preflight returns `-32002`
    `Transaction simulation failed: Transaction version is unsupported` (`data.err:
    "UnsupportedVersion"`). `sendTransaction` with `skipPreflight` returns the signature, but the
@@ -312,13 +313,13 @@ because the validator that check starts activates every gate at genesis.
 ### Observed on public devnet, Agave 4.3.0-beta.3
 
 `enable_tx_v1` activated on the public clusters: testnet at slot 437,276,256 (2026-09-02
-10:39:27 UTC) and devnet at slot 492,480,000 (2026-09-03 11:38:04 UTC). Both nodes report
-4.3.0-beta.3, feature-set `2409014235`. Mainnet still returns `value: null` for the feature
-account on 4.2.2, feature-set `565236538`.
+10:39:27 UTC) and devnet at slot 492,480,000 (2026-09-03 11:38:04 UTC). At the 2026-09-03
+observation, both nodes reported 4.3.0-beta.3, feature-set `2409014235`. Mainnet returned
+`value: null` for the feature account on 4.2.2, feature-set `565236538`.
 
-On 2026-09-03 all seven `LiveV1ValidatorCheck` cases were run against `api.devnet.solana.com`
-and passed, so every gate-on row above now holds on a production cluster and not only on a
-`solana-test-validator`: byte-exact `getTransaction` round trip, fee `5000` base plus the
+On 2026-09-03 the original seven-case `LiveV1ValidatorCheck` was run against
+`api.devnet.solana.com` and passed. That run observed the gate-on behavior on the public cluster:
+byte-exact `getTransaction` round trip, fee `5000` base plus the
 priority lamports verbatim (`fees=[5000, 10000]` for priority 0 and 5000), a 3236-byte v1
 transaction accepted and landed byte-exact, `simulateTransaction` → in-place tighten → execution
 agreeing on units, the cleared compute-unit limit refused with `-32002`, and two signatures
@@ -326,8 +327,8 @@ charged `2 × 5000 + 5000`. Two differences from a private ledger, neither a v1 
 
 - **The named ceiling is context-dependent**, per the refinement in row 1 above. Measured on
   devnet block 492,653,301: ceiling omitted → `-32015` naming `0`; ceiling `0` → `-32015` naming
-  `1`; ceiling `1` → the block is served. `LiveV1ValidatorCheck.versionCeiling` therefore accepts
-  either `0` or `1` for the omitted-ceiling call alone.
+  `1`; ceiling `1` → the block is served. The original live `versionCeiling` case therefore
+  accepted either `0` or `1` for the omitted-ceiling call alone.
 - **`loadedAccountsDataSize` is a per-ledger constant** — 142 bytes on devnet for the transfer
   that loads 149 on a fresh local ledger. Not a busy-cluster effect, and nothing to do with the
   recipient, which is a fresh key that exists on neither cluster and so loads nothing
@@ -342,8 +343,9 @@ charged `2 × 5000 + 5000`. Two differences from a private ledger, neither a v1 
   simulate-then-tighten flow is what makes this a non-issue: the landed limit is whatever that
   cluster measured.
 
-`api.devnet.solana.com` also enforces a per-method rate limit (`Too many requests for a specific
-RPC call`) that a whole-class run trips within seconds; the cases have to be run one at a time.
+During that run, `api.devnet.solana.com` enforced a per-method rate limit (`Too many requests for
+a specific RPC call`) that the whole-class run tripped within seconds; the cases were run one at
+a time. The current smoke check is local-only and has no public-cluster funding support.
 
 ## Other sync surfaces (sava-core)
 
@@ -358,7 +360,7 @@ RPC call`) that a whole-class run trips within seconds; the cases have to be run
 | `accounts/token/Mint.java` | SPL Mint, 82-byte packed layout with u32-tag COptions | `spl-token-interface` `state::Mint`; `agave:account-decoder/src/parse_token.rs` |
 | `accounts/token/TokenAccount.java`, `AccountState.java` | SPL Account, 165 bytes, explicit memcmp offsets used for `getProgramAccounts` filters | `spl-token-interface` `state::Account`/`AccountState` |
 | `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest upstream parser: `agave-sdk:transaction-view/` |
-| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and the live `LiveV1ValidatorCheck` in sava-rpc, run against local 4.2.1/4.2.2/4.3.0-beta.3 validators and against public devnet — see "Observed on Agave 4.2.1" and "Observed on public devnet" above |
+| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and committed Agave RPC captures. Original live checks ran against local 4.2.1/4.2.2/4.3.0-beta.3 validators and public devnet — see "Observed on Agave 4.2.1" and "Observed on public devnet" above. `LiveV1ValidatorCheck` now retains one optional local smoke check |
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
@@ -782,11 +784,12 @@ files in the solana-improvement-documents repo.
 - Live parser drift check: `DRIFT_CHECK=true ./gradlew :sava-rpc:test --tests
   '*LiveMainNetDriftCheck'` exercises the production parsers against current main-net
   responses; rate-limited methods are skipped and reported.
-- Live transaction v1 check: `SAVA_V1_LIVE=true ./gradlew :sava-rpc:test --tests
-  '*LiveV1ValidatorCheck'` sends sava-built v1 transactions to a local 4.2.1+ validator
-  (`SAVA_V1_RPC_URL`, default `http://127.0.0.1:8899`) and reads them back; it decodes the
-  `enable_tx_v1` feature account first and skips itself when the gate is inactive.
-  `sava-rpc/src/test/solana/v1-live/` holds the start/stop scripts and README.
+- Local transaction v1 smoke check: `SAVA_V1_LIVE=true ./gradlew :sava-rpc:test --tests
+  '*LiveV1ValidatorCheck.basicV1Transfer' --rerun` simulates a large v1 transaction,
+  tightens its resource limits in place, sends it and checks the confirmed bytes, config and fee
+  through `getTransaction` and `getBlock`. It requires a local 4.2.1+ test-validator with v1 active
+  and a faucet (`SAVA_V1_RPC_URL`, default `http://127.0.0.1:8899`, loopback endpoints only).
+  `sava-rpc/src/test/solana/v1-live/README.md` documents manual startup with a disposable ledger.
 - Compute-budget instruction builders live outside sava-core; constants reference
   `agave:compute-budget/src/compute_budget_limits.rs` and
   `solana-sdk:compute-budget-interface/` (watch SIMD-0268 default changes).

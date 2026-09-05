@@ -44,7 +44,7 @@ final class V1AgaveTestFixtures {
   /// A transfer whose instruction data carries `trailingBytes` of filler after the 12-byte
   /// payload. Agave's `limited_deserialize` ignores trailing bytes, so this is the cheapest way to
   /// push a v1 transaction past the legacy 1232-byte packet limit: the runtime still executes a
-  /// 150 CU transfer (verified on 4.2.1, `LiveV1ValidatorCheck#largeV1Transaction`).
+  /// 150 CU transfer (see the historical Agave 4.2.1 observations in `AGAVE_SYNC.md`).
   static Instruction transfer(final PublicKey from, final PublicKey to, final long lamports, final int trailingBytes) {
     final byte[] data = new byte[SYSTEM_TRANSFER_DATA_LENGTH + trailingBytes];
     ByteUtil.putInt32LE(data, 0, 2);

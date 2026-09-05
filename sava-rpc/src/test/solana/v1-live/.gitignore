@@ -1,4 +1,5 @@
-# start.sh output: the validator's ledger, pid and log. The ledger is reset on every start.
+# Historical local artifacts from the removed lifecycle scripts.
+# New smoke-check ledgers belong under sava-rpc/build/.
 /test-ledger/
 /validator.pid
 /validator.log

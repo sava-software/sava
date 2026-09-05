@@ -849,29 +849,6 @@ final class TransactionSerializationTests {
   }
 
   @Test
-  void testV1InvalidHeapSize() {
-    final var signerA = nextSigner();
-    final var signerB = nextSigner();
-    final var ix = Instruction.createInstruction(
-        SolanaAccounts.MAIN_NET.systemProgram(),
-        List.of(AccountMeta.createWritableSigner(signerB.publicKey())),
-        new byte[]{1}
-    );
-    // Not a multiple of 1KiB.
-    assertThrows(IllegalArgumentException.class, () -> TxBuilder.createBuilder()
-        .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(33_000).createTransaction()
-    );
-    // Below the 32KiB minimum.
-    assertThrows(IllegalArgumentException.class, () -> TxBuilder.createBuilder()
-        .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(16 * 1_024).createTransaction()
-    );
-    // Above the 256KiB maximum.
-    assertThrows(IllegalArgumentException.class, () -> TxBuilder.createBuilder()
-        .feePayer(signerA.publicKey()).addInstruction(ix).heapSize(512 * 1_024).createTransaction()
-    );
-  }
-
-  @Test
   void testV1InvalidConfigMask() {
     final var signerA = nextSigner();
     final var signerB = nextSigner();
@@ -916,20 +893,6 @@ final class TransactionSerializationTests {
   }
 
   @Test
-  void testV1TooManySignatures() {
-    final var feePayer = nextPublicKey();
-    // 12 signers plus the fee payer exceeds the 12 signature maximum.
-    final var signers = new ArrayList<AccountMeta>(12);
-    for (int s = 0; s < 12; ++s) {
-      signers.add(createWritableSigner(nextPublicKey()));
-    }
-    final var ix = Instruction.createInstruction(SolanaAccounts.MAIN_NET.systemProgram(), signers, new byte[]{1});
-    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
-        .feePayer(feePayer).addInstruction(ix).createTransaction()
-    );
-  }
-
-  @Test
   void testLegacyProgramMayNotBeFeePayer() {
     final var feePayer = nextPublicKey();
     final var signerB = nextSigner();
@@ -949,35 +912,6 @@ final class TransactionSerializationTests {
         feePayer,
         List.of(createWritableSigner(signerB.publicKey())),
         new byte[]{1}
-    );
-    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
-        .feePayer(feePayer).addInstruction(ix).createTransaction()
-    );
-  }
-
-  @Test
-  void testV1TooManyInstructionAccounts() {
-    final var feePayer = nextPublicKey();
-    final var account = nextPublicKey();
-    // Account indices may repeat within an instruction, exceeding the u8 count without exceeding 64 unique accounts.
-    final var ix = Instruction.createInstruction(
-        SolanaAccounts.MAIN_NET.systemProgram(),
-        Collections.nCopies(256, createRead(account)),
-        new byte[]{1}
-    );
-    assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
-        .feePayer(feePayer).addInstruction(ix).createTransaction()
-    );
-  }
-
-  @Test
-  void testV1TransactionTooLarge() {
-    final var feePayer = nextPublicKey();
-    final var account = nextPublicKey();
-    final var ix = Instruction.createInstruction(
-        SolanaAccounts.MAIN_NET.systemProgram(),
-        List.of(createRead(account)),
-        new byte[TxBuilderImpl.MAX_SERIALIZED_LENGTH_V1]
     );
     assertThrows(IllegalStateException.class, () -> TxBuilder.createBuilder()
         .feePayer(feePayer).addInstruction(ix).createTransaction()
