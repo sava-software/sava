@@ -9,7 +9,7 @@ method churns nothing. Full policy — the three legal outcomes for a new
 survivor, determinism requirements, targeting rules — lives in sava-build's
 `HARDENING.md`.
 
-## Newly adopted suite — 2026-08-04, seeded debt, not acceptance
+## Newly adopted suite — 2026-08-04, seeded untriaged debt
 
 `encoding` (targets `json.*` and `json.http.request.*`, subtracting the three
 sibling suites' packages) was registered to close `mutationOwnershipAudit`: every
@@ -61,11 +61,12 @@ detected). The 2026-07-31 transport-harness pass resolved the coverage debt:
 
 The 2026-08-11 fresh, full, history-free pass generated 586 mutants: 579 killed
 and 7 survived, with zero `NO_COVERAGE`, timeout, or invalid outcomes. All seven
-current survivors are argued below. The 18-row file is deliberately larger than
-the current survivor set: ten freshly killed rows are marked `# killed retained`,
+survivors from that observation are argued below. The 18-row file is deliberately
+larger than that observed survivor set: ten killed rows are marked `# killed retained`,
 and one row generated only by the old unlicensed toolchain is marked
-`# unlicensed-only retained`. Those eleven rows are historical evidence, not
-acceptance of current mutants; the reason they remain is recorded below.
+`# unlicensed-only retained`. Those eleven rows preserve historical evidence and
+still contribute active baseline matching capacity; their labels do not disable
+matching. The reason they remain is recorded below.
 
 **Transport paths not driven by the harness — RESOLVED 2026-07-31, the whole
 family (38 NO_COVERAGE, the baseline's bulk) left in the refresh.** The escape
@@ -192,24 +193,25 @@ absent-value cursor branch, empty-account rejection, the immutable empty leader
 schedule, and both `sendTransaction` boolean encodings. The named prune/update
 writers cannot remove only those rows: they would also delete the protected
 unlicensed-only `joinKeys` evidence. Because baseline structure is never edited
-by hand, the killed rows remain with an explicit non-acceptance label until a
-sanctioned selective writer exists.
+by hand, the killed rows remain until a sanctioned selective writer exists.
+Their labels record unfinished pruning, and each row still contributes active
+baseline matching capacity. This writer gap remains outstanding client baseline debt.
 
 ## Triaged mutants — ws suite
 
 The suite was seeded on 2026-07-21 over
 `software.sava.rpc.json.http.ws.*` and then hardened through the connection,
-registry, parser, ping, close, and reconnect rewrites. The current state is the
-fresh, full, history-free 2026-08-11 observation: 1,248 mutants, 1,163 killed,
-82 survived, 3 timed out, and zero `NO_COVERAGE` or invalid outcomes. Every
-current survivor is argued below; no row remains `# untriaged`.
+registry, parser, ping, close, and reconnect rewrites. The fresh, full, history-free
+2026-08-11 observation recorded 1,248 mutants, 1,163 killed, 82 survived, 3 timed
+out, and zero `NO_COVERAGE` or invalid outcomes. Every survivor from that
+observation is argued below; no row remains `# untriaged`.
 
-The 159-row accepted file is deliberately larger than the current survivor
-set: 82 rows represent current survivors, 40 `# killed retained` rows and 28
-`# retired implementation retained` rows are historical records that no
-longer match an unkilled mutant, and 9 `# unlicensed-only retained` rows
-preserve the old open-source-PIT population. All 77 retained rows are records,
-not acceptances of current behavior.
+The 159-row accepted file is deliberately larger than that observed survivor
+set: 82 rows represent those survivors, 40 `# killed retained` rows and 28
+`# retired implementation retained` rows are historical records that no longer
+matched an unkilled mutant in that observation, and 9 `# unlicensed-only retained`
+rows preserve the old open-source-PIT population. All 77 retained rows still
+contribute active baseline matching capacity; historical labels do not deactivate them.
 
 ### Current accepted survivors
 
@@ -294,8 +296,11 @@ behavior as killed. `# retired implementation retained` means the mutation
 site or its containing helper no longer exists. They remain because the named
 update/prune writers cannot delete only those 68 rows without also deleting
 protected unlicensed evidence; hand-editing baseline record structure is not a
-sanctioned substitute. Their status fields remain historical by design and do
-not describe the current report.
+sanctioned substitute. Their labels and status fields record historical observations,
+but each row still contributes active baseline matching capacity and can accept a
+later mutant with the same class, method, mutator, and status. This writer gap remains
+outstanding ws baseline debt until those 68 rows can be retired without deleting
+the nine protected rows.
 
 The nine `# unlicensed-only retained` rows are the two
 `lambda$queueUnsubscribe$0 EQUAL_IF` siblings, `ensureCapacity ORDER_IF`,
