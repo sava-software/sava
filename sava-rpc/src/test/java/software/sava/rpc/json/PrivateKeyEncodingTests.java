@@ -4,17 +4,24 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.Signer;
 import software.sava.core.encoding.Base58;
+import systems.comodal.jsoniter.JsonException;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Properties;
 import java.util.StringJoiner;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class PrivateKeyEncodingTests {
+
+  // RFC 8032 section 7.1, test 1: public test material, also used by Ed25519UtilTests.
+  private static final byte[] EXPECTED_PUBLIC_KEY = HexFormat.of().parseHex(
+      "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 
   private static String EXPECTED_PUB_KEY;
 
@@ -26,10 +33,11 @@ final class PrivateKeyEncodingTests {
 
   @BeforeAll
   static void setup() {
-    final byte[] keyPair = Signer.generatePrivateKeyPairBytes();
-    final byte[] privateKey = Arrays.copyOfRange(keyPair, 0, Signer.KEY_LENGTH);
-    final var signer = Signer.createFromKeyPair(keyPair);
-    EXPECTED_PUB_KEY = signer.publicKey().toBase58();
+    final byte[] privateKey = HexFormat.of().parseHex(
+        "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+    final byte[] keyPair = Arrays.copyOf(privateKey, Signer.KEY_LENGTH << 1);
+    System.arraycopy(EXPECTED_PUBLIC_KEY, 0, keyPair, Signer.KEY_LENGTH, Signer.KEY_LENGTH);
+    EXPECTED_PUB_KEY = Base58.encode(EXPECTED_PUBLIC_KEY);
 
     final var joiner = new StringJoiner(",", "[", "]");
     for (final byte b : keyPair) {
@@ -44,7 +52,7 @@ final class PrivateKeyEncodingTests {
   }
 
   private static void verifySigner(final Signer signer) {
-    assertEquals(EXPECTED_PUB_KEY, signer.publicKey().toBase58());
+    assertArrayEquals(EXPECTED_PUBLIC_KEY, signer.publicKey().copyByteArray());
   }
 
   // --- JSON object tests ---
@@ -101,6 +109,80 @@ final class PrivateKeyEncodingTests {
   void jsonArrayDirectParsing() {
     final var ji = JsonIterator.parse(JSON_ARRAY.getBytes(StandardCharsets.UTF_8));
     verifySigner(PrivateKeyEncoding.fromJsonPrivateKey(ji));
+  }
+
+  @Test
+  void jsonEncodingBeforeSecretPreservesSignerAndOuterArrayCursor() {
+    final String[][] secrets = {
+        {"jsonKeyPairArray", JSON_ARRAY},
+        {"base64PrivateKey", '"' + BASE64_PRIVATE_KEY + '"'},
+        {"base64KeyPair", '"' + BASE64_KEY_PAIR + '"'},
+        {"base58PrivateKey", '"' + BASE58_PRIVATE_KEY + '"'},
+        {"base58KeyPair", '"' + BASE58_KEY_PAIR + '"'}
+    };
+    for (final var secret : secrets) {
+      final var json = "[{\"pubKey\":\"%s\",\"encoding\":\"%s\",\"secret\":%s},73]"
+          .formatted(EXPECTED_PUB_KEY, secret[0], secret[1]);
+      final var ji = JsonIterator.parse(json.getBytes(StandardCharsets.UTF_8));
+      assertTrue(ji.readArray());
+      verifySigner(PrivateKeyEncoding.fromJsonPrivateKey(ji));
+      assertTrue(ji.readArray(), secret[0]);
+      assertEquals(73, ji.readInt(), secret[0]);
+      assertFalse(ji.readArray(), secret[0]);
+    }
+  }
+
+  @Test
+  void jsonSecretBeforeEncodingIsRejectedPendingOwnerDecision() {
+    // JSON field order should not affect import. This pins the published bug pending
+    // owner approval: the deferred reader leaves the secret value unconsumed.
+    final String[][] secrets = {
+        {"jsonKeyPairArray", JSON_ARRAY},
+        {"base64PrivateKey", '"' + BASE64_PRIVATE_KEY + '"'},
+        {"base64KeyPair", '"' + BASE64_KEY_PAIR + '"'},
+        {"base58PrivateKey", '"' + BASE58_PRIVATE_KEY + '"'},
+        {"base58KeyPair", '"' + BASE58_KEY_PAIR + '"'}
+    };
+    for (final var secret : secrets) {
+      final var json = "{\"secret\":%s,\"encoding\":\"%s\"}".formatted(secret[1], secret[0]);
+      assertThrows(JsonException.class,
+          () -> PrivateKeyEncoding.fromJsonPrivateKey(JsonIterator.parse(json)), secret[0]);
+    }
+  }
+
+  @Test
+  void anUnrecognizedFieldCannotSupplyTheRequiredSecret() {
+    final var json = "{\"encoding\":\"base64PrivateKey\",\"notSecret\":\"%s\"}"
+        .formatted(BASE64_PRIVATE_KEY);
+    assertThrows(RuntimeException.class,
+        () -> PrivateKeyEncoding.fromJsonPrivateKey(JsonIterator.parse(json)));
+  }
+
+  @Test
+  void aClosedKeyArrayCannotImportBytesThatFollowIt() {
+    final String[] bytes = JSON_ARRAY.substring(1, JSON_ARRAY.length() - 1).split(",");
+    // All 64 values would make a valid pair if concatenated. Closing the array after
+    // 31 values must prevent later tokens from supplying the rest of that pair.
+    final var malformed = "[" + String.join(",", Arrays.copyOfRange(bytes, 0, 31)) + "]"
+        + String.join(",", Arrays.copyOfRange(bytes, 31, bytes.length)) + "]";
+    assertThrows(RuntimeException.class,
+        () -> PrivateKeyEncoding.fromJsonArray(JsonIterator.parse(malformed)));
+  }
+
+  @Test
+  void jsonObjectWithoutSecretOrEncodingNamesTheRequiredEncoding() {
+    for (final var json : List.of("{}", "{\"pubKey\":\"%s\"}".formatted(EXPECTED_PUB_KEY))) {
+      final var error = assertThrows(IllegalStateException.class,
+          () -> PrivateKeyEncoding.fromJsonPrivateKey(JsonIterator.parse(json)));
+      assertEquals("Must configure 'encoding' field [jsonKeyPairArray, base64PrivateKey, base64KeyPair, base58PrivateKey, base58KeyPair]",
+          error.getMessage());
+    }
+  }
+
+  @Test
+  void jsonObjectWithEncodingButNoSecretIsRejected() {
+    final var ji = JsonIterator.parse("{\"encoding\":\"base64PrivateKey\"}");
+    assertThrows(IllegalStateException.class, () -> PrivateKeyEncoding.fromJsonPrivateKey(ji));
   }
 
   // --- Properties tests ---
@@ -169,6 +251,49 @@ final class PrivateKeyEncodingTests {
     props.setProperty("secret", BASE58_KEY_PAIR);
     props.setProperty("pubKey", EXPECTED_PUB_KEY);
     verifySigner(PrivateKeyEncoding.fromProperties(props));
+  }
+
+  @Test
+  void propertiesTreatBlankPrefixesAsUnprefixed() {
+    final var props = new Properties();
+    props.setProperty("encoding", "base64PrivateKey");
+    props.setProperty("secret", BASE64_PRIVATE_KEY);
+    for (final var prefix : List.of("", " ", "\t\n", "\u2003")) {
+      verifySigner(PrivateKeyEncoding.fromProperties(prefix, props));
+    }
+  }
+
+  @Test
+  void propertiesStripWhitespaceAroundEncodingSecretAndPublicKey() {
+    final var props = new Properties();
+    props.setProperty("signer.encoding", "\u2003 base64PrivateKey\t");
+    props.setProperty("signer.secret", "\n" + BASE64_PRIVATE_KEY + " \u2003");
+    props.setProperty("signer.pubKey", "\t" + EXPECTED_PUB_KEY + "\u2003");
+    verifySigner(PrivateKeyEncoding.fromProperties("signer", props));
+  }
+
+  @Test
+  void propertiesRejectBlankEncodingWithThePropertyName() {
+    for (final var blank : List.of("", " \t", "\u2003")) {
+      final var props = new Properties();
+      props.setProperty("signer.encoding", blank);
+      props.setProperty("signer.secret", BASE64_PRIVATE_KEY);
+      final var error = assertThrows(IllegalArgumentException.class,
+          () -> PrivateKeyEncoding.fromProperties("signer", props));
+      assertEquals("Missing required property: signer.encoding", error.getMessage());
+    }
+  }
+
+  @Test
+  void propertiesRejectBlankSecretWithThePropertyName() {
+    for (final var blank : List.of("", " \t", "\u2003")) {
+      final var props = new Properties();
+      props.setProperty("signer.encoding", "base64PrivateKey");
+      props.setProperty("signer.secret", blank);
+      final var error = assertThrows(IllegalArgumentException.class,
+          () -> PrivateKeyEncoding.fromProperties("signer", props));
+      assertEquals("Missing required property: signer.secret", error.getMessage());
+    }
   }
 
   @Test

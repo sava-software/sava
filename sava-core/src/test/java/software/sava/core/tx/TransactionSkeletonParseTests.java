@@ -207,6 +207,29 @@ final class TransactionSkeletonParseTests {
     assertTrue(programIndex >= 0, "the vote program is a non signer account");
     assertFalse(accounts[skeleton.numSignatures() + programIndex].invoked(),
         "legacy parseAccounts() has no invoked indexes to consult");
+    final var withNoLoadedAccounts = skeleton.parseAccounts(List.of(), List.of());
+    assertArrayEquals(accounts, withNoLoadedAccounts);
+    assertFalse(withNoLoadedAccounts[skeleton.numSignatures() + programIndex].invoked(),
+        "empty loaded-account lists preserve the published legacy account flags");
+  }
+
+  @Test
+  void legacyDeserializationRejectsMissingInstructionLengthPrefixesEagerly() {
+    final var complete = skeleton(LEGACY_TX);
+    final byte[] data = complete.data();
+    final int accountCountOffset = complete.instructionsOffset() + 1;
+    final int dataLengthOffset = accountCountOffset
+        + CompactU16Encoding.getByteLen(data, accountCountOffset)
+        + CompactU16Encoding.decode(data, accountCountOffset);
+
+    // Compatibility with the published parser: these missing compact-u16 prefixes
+    // fail during deserialization, before any instruction accessor is called.
+    // This deliberately makes no claim that every truncated payload is rejected here.
+    for (final int truncatedLength : new int[]{accountCountOffset, dataLengthOffset}) {
+      final byte[] truncated = Arrays.copyOf(data, truncatedLength);
+      assertThrows(IndexOutOfBoundsException.class,
+          () -> TransactionSkeleton.deserializeSkeleton(truncated));
+    }
   }
 
   @Test

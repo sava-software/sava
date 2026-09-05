@@ -71,6 +71,10 @@ public enum PrivateKeyEncoding {
     };
   }
 
+  /// Imports a key-pair array or an object with `encoding` and `secret` fields.
+  /// The current object reader requires `encoding` to precede `secret`; reversing
+  /// those fields fails while reading the object. This field-order limitation is
+  /// retained pending an owner decision. Put `encoding` first to import the object.
   public static Signer fromJsonPrivateKey(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
       case ARRAY -> fromJsonPrivateKey(ji, jsonKeyPairArray);

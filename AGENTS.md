@@ -412,7 +412,7 @@ leaves a baseline only when the same licensed mutant is observed and killed** â€
 under one toolchain is not evidence of a kill, and the nine such `ws` rows are itemised
 in `sava-rpc/config/pitest/README.md`.
 
-**Baseline schema.** All fifteen accepted records carry the schema-1 marker, stamped by
+**Baseline schema.** Accepted records carry the schema-1 marker, stamped by
 `migrateMutationBaselines` once all three pins had moved together; `downgradeMutationBaselines`
 is the rollback half. The round trip was exercised on 2026-08-04: migration added only the
 marker (0 rows canonicalized), a second migration was a byte-for-byte fixed point, and

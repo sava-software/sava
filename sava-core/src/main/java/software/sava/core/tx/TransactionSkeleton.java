@@ -30,6 +30,10 @@ public interface TransactionSkeleton {
    * by an instruction's {@code program_id_index} as invoked. This also holds when the address-table
    * lookup count is zero or the data ends immediately after the instruction section.</p>
    *
+   * <p>Legacy deserialization reads each instruction's account-count and data-length prefixes
+   * eagerly: a missing prefix throws before a skeleton is returned. This is not complete
+   * validation of instruction payloads; the final payload is skipped without checking its end.</p>
+   *
    * <p>A message whose first byte is the SIMD-0385 v1 version byte is dispatched to the v1
    * skeleton instead; v1 transactions carry no address lookup tables and expose their compute
    * budget as config values.</p>
@@ -303,6 +307,10 @@ public interface TransactionSkeleton {
     return parseAccounts(lookupTableMap);
   }
 
+  /// Parses included accounts and appends the supplied loaded accounts. For a built-in legacy
+  /// skeleton, pass empty lists; this preserves [#parseAccounts()] flags, including read-only
+  /// program accounts with `invoked() == false`. Instruction views identify their programs
+  /// as invoked separately.
   AccountMeta[] parseAccounts(final List<PublicKey> writableLoaded, final List<PublicKey> readonlyLoaded);
 
   PublicKey feePayer();

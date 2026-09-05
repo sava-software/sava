@@ -16,10 +16,41 @@ sibling suites' packages) was registered to close `mutationOwnershipAudit`: ever
 compiled production class in this module now sits in some suite's target
 universe, with no `declineExclusionAudit` anywhere. It measured 62 mutants, 72%
 detected, and its first baseline was seeded from the full unkilled population —
-17 rows (12 `SURVIVED`, 5 `NO_COVERAGE`), all `# untriaged`. That is debt made
-explicit, not equivalence: nothing below argues those rows yet. `RpcEncoding` is
+17 rows (12 `SURVIVED`, 5 `NO_COVERAGE`), all `# untriaged`. Those rows recorded
+debt rather than equivalence claims. `RpcEncoding` is
 the one to read first, since its missing `jsonParsed` constant is a deliberate
 API invariant (`AGENTS.md`) rather than an omission.
+
+### Key-import triage — 2026-09-05, field-order decision outstanding
+
+The focused tests now use the fixed RFC 8032 test-1 key pair rather than random
+keys. They assert imported public bytes, Properties whitespace/prefix handling,
+required-field rejection, the key array's closing boundary, the enclosing JSON
+cursor, and configured network endpoint values. The fresh full Encoding report
+contained 62 mutants: 59 killed, two uncovered, and one survivor. Fourteen of the
+17 retained rows corresponded to killed mutants, including the already-killed
+WebSocket endpoint getter; the baseline remains untouched pending the gate below.
+
+The new field-order regression failed against unmodified production:
+`PrivateKeyEncoding.fromJsonPrivateKey` records a deferred `secret` position but
+leaves its value unconsumed when `secret` precedes `encoding`. Valid string and
+array secrets therefore fail in `testObject`. The desired import/cursor test and
+failure are preserved at `/private/tmp/sava-triage-rpc-field-order-regression.java`,
+`/private/tmp/sava-triage-rpc-tests-red.xml`, and
+`/private/tmp/sava-triage-rpc-tests-red.log`. The compatibility test is explicitly
+named `jsonSecretBeforeEncodingIsRejectedPendingOwnerDecision`; it records a bug,
+not the intended semantics of JSON objects. The declaration documents putting
+`encoding` first as the current workaround. No parser behavior was changed.
+
+Two `PrivateKeyEncoding$Parser.createSigner` `NakedReceiverMutator` rows remain
+`NO_COVERAGE` at the deferred iterator resets. Its `RemoveConditionalMutator_EQUAL_IF`
+on the missing-secret-mark guard changed from `NO_COVERAGE` to `SURVIVED` once the
+missing-field tests reached it. That newly covered survivor still fails the gate;
+it has not been accepted or hidden by a baseline rewrite. The field-order fix
+requires owner approval under the published-library rule before this triage can
+finish. Evidence: `/private/tmp/sava-triage-rpc-tests.log` and
+`/private/tmp/sava-triage-rpc-encoding-first.log`. All retained rows continue to
+provide active baseline matching capacity, including the observed killed rows.
 
 Never run a `pitest<Suite>BaselineUpdate` task just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence

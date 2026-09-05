@@ -16,7 +16,7 @@ widened from its `Subsequence*` allowlist to the whole package, to close
 `mutationOwnershipAudit` — every compiled production class in this module now
 sits in some suite's target universe, with no `declineExclusionAudit` anywhere.
 Adding a suite is expected to go red first, and these did. Their first baselines
-were seeded from the full unkilled population and every row carries
+were seeded from the full unkilled population and every row initially carried
 `# untriaged`:
 
 | Suite | Population | Detected | Seeded rows |
@@ -41,13 +41,24 @@ it that must be rejected, which is the only shape that separates `<` from `<=`.
 **No accepted row was added for the version bump** — every new mutant was killed,
 not argued.
 
-**Those 413 rows are debt made explicit, not equivalence claims.** Nothing below
-argues them yet, which is exactly what `# untriaged` means, and the
-`NO_COVERAGE` majority is mechanical work — untested lines, not judgement calls.
-Triage replaces the label with a family label whose argument is written here.
-The heavy `NO_COVERAGE` counts are honest: `primitives` has one covering test
-(`FilterTests`) for four packages, and `accounts` covers the library's central
-value types with three test classes.
+**Those 413 seeded rows recorded untriaged debt, not equivalence claims.** The
+`NO_COVERAGE` majority represented untested lines. At that observation,
+`primitives` had one covering test (`FilterTests`) for four packages, and
+`accounts` covered the library's central value types with three test classes.
+Rows still labelled `# untriaged` remain debt and active baseline matching capacity.
+
+**Primitive triage, 2026-09-05.** Fixed byte vectors, nonzero-offset destination
+sentinels, discriminator value comparisons, and a mutable `Serializable` fixture
+now cover the factories, interface defaults, and reusable serialization snapshot.
+The full population stayed at 64: 29 killed / 35 uncovered became **64 killed**.
+Every one of the 35 retained rows (29 unique keys) corresponded to a killed mutant;
+none was retired merely because it disappeared. Two matching fresh history-free
+previews, first alone and then after the Tx suite, preceded the matching
+`pitestPrimitivesBaselinePrune` run. The writer removed the empty baseline and its
+orphan provenance pair. Evidence: `/private/tmp/sava-triage-primitives-first.log`,
+`/private/tmp/sava-triage-core-preview1.log`, and
+`/private/tmp/sava-triage-primitives-prune.log`. The suite has no retained acceptance
+rows or untriaged debt after that retirement.
 
 Never run a `pitest<Suite>BaselineUpdate` task just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence
@@ -561,12 +572,12 @@ reaches the identical result:
   from the same ordered instructions and carry over the same blockhash. The copy
   executes; no zero-iteration loop is involved.
 
-## Untriaged debt (tx suite)
+## Transaction parsing triage
 
-The current baseline has two `# untriaged` rows, both in
-`TransactionSkeleton.deserializeSkeleton`: the forced versioned walk and the removed
-legacy instruction walk described below. The first two entries record closed findings
-from the earlier seven-row triage; they are historical evidence, not retained debt.
+The final two `# untriaged` rows in `TransactionSkeleton.deserializeSkeleton`
+were killed on 2026-09-05 by compatibility assertions for behavior also present in
+25.10.0. The entries below record closed findings; they are historical evidence,
+not retained debt.
 
 - `TransactionSkeletonImpl.invokedProgramAccount`
   `RemoveConditionalMutator_EQUAL_ELSE` — **killed by the v1 merge.** The
@@ -595,21 +606,32 @@ from the earlier seven-row triage; they are historical evidence, not retained de
   the latter including the oversized-caller-array case, since the
   caller's array must not widen what the wire declares.
 - `TransactionSkeleton.deserializeSkeleton`
-  `RemoveConditionalMutator_ORDER_IF` — **kill candidate.** Forcing the versioned
+  `RemoveConditionalMutator_ORDER_IF` — **killed 2026-09-05.** Forcing the versioned
   walk for a legacy message leaves `version` untouched, so `isLegacy()` still
   agrees, but `invokedIndexes` becomes populated instead of remaining empty.
   The public `parseAccounts(writableLoaded, readonlyLoaded)` overload uses
   `parseVersionedIncludedAccounts` even for a legacy skeleton; empty loaded-account
   lists expose the changed invoked flag on a read-only program account.
+  `TransactionSkeletonParseTests#legacyProgramAccountsAreInvoked` now checks that
+  this account view agrees with the ordinary legacy view and keeps that flag false;
+  the instruction view still identifies its program as invoked.
 - `TransactionSkeleton.deserializeSkeleton`
   `RemoveConditionalMutator_ORDER_ELSE` (legacy instruction walk) —
-  **owner decision.** Whether the walk is dead for well-formed input
-  depends on whether eager validation of the legacy instruction section
-  is wanted; unlike the precedents above it reads `data`.
+  **killed 2026-09-05.** The walk's reads have an observable published rejection
+  boundary, even though its final cursor is unused.
+  `TransactionSkeletonParseTests#legacyDeserializationRejectsMissingInstructionLengthPrefixesEagerly`
+  truncates a valid transaction before its account-count and data-length prefixes
+  and asserts that deserialization itself rejects each truncation. This preserves
+  existing selective validation; it does not promise validation of the final payload.
 
-These two rows remain untriaged. No other current tx baseline row carries
-`# untriaged`; the retired entries above are historical evidence.
-Baseline shrinkage requires row-specific evidence, and growth requires a reason here.
+Two matching fresh full history-free previews and the matching writer run reported
+1704 mutants: 1665 killed, 38 survived, and one existing audited timeout. The
+`pitestTxBaselinePrune` writer retired exactly these two rows, taking the baseline
+from 40 rows / 33 unique keys to 38 / 31, and refreshed the remaining matching
+deserializer line tag. No `# untriaged` rows remain in this suite. Evidence:
+`/private/tmp/sava-triage-core-preview1.log`,
+`/private/tmp/sava-triage-tx-preview2.log`, and
+`/private/tmp/sava-triage-tx-prune.log`.
 
 ## Timed-out mutants (audited set)
 

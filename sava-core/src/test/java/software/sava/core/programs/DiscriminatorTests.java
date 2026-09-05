@@ -5,6 +5,7 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.tx.Instruction;
 
+import java.util.HashMap;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -61,6 +62,95 @@ final class DiscriminatorTests {
     mutable[0] = (byte) 0xFF;
 
     assertArrayEquals(ANCHOR_EIGHT, copied.data(), "the ranged overload copies into a fresh array");
+  }
+
+  @Test
+  void convenienceFactoriesCopyOnlyTheRequestedPrefixOrAnchorSpan() {
+    final byte[] source = {9, 8, 1, 2, 3, 4, 5, 6, 7, 8, 99};
+    final var prefix = Discriminator.createDiscriminator(source, 3);
+    final var anchorAtStart = Discriminator.createAnchorDiscriminator(source);
+    final var anchorAtOffset = Discriminator.createAnchorDiscriminator(source, 2);
+    source[0] = 42;
+    source[2] = 43;
+
+    assertArrayEquals(new byte[]{9, 8, 1}, prefix.data());
+    assertArrayEquals(new byte[]{9, 8, 1, 2, 3, 4, 5, 6}, anchorAtStart.data());
+    assertArrayEquals(new byte[]{1, 2, 3, 4, 5, 6, 7, 8}, anchorAtOffset.data());
+  }
+
+  @Test
+  void integerDiscriminatorsPreserveByteValuesAndAllowAnEmptySequence() {
+    final var discriminator = Discriminator.toDiscriminator(0, 128, 255, 7);
+    assertArrayEquals(new byte[]{0, (byte) 0x80, (byte) 0xFF, 7}, discriminator.data());
+    assertArrayEquals(new byte[0], Discriminator.toDiscriminator().data());
+  }
+
+  private enum NativeInstruction {
+    FIRST, SECOND, THIRD
+  }
+
+  @Test
+  void nativeDiscriminatorsWriteTheOrdinalAsFourLittleEndianBytes() {
+    assertArrayEquals(new byte[]{2, 0, 0, 0}, Discriminator.serializeDiscriminator(NativeInstruction.THIRD));
+
+    final byte[] destination = {9, 9, 9, 9, 8, 7};
+    Discriminator.serializeDiscriminator(destination, NativeInstruction.THIRD);
+    assertArrayEquals(new byte[]{2, 0, 0, 0, 8, 7}, destination);
+  }
+
+  @Test
+  void defaultAndRecordWritersReportTheirLengthAndPreserveSurroundingBytes() {
+    final Discriminator defaults = () -> new byte[]{1, (byte) 0x80, (byte) 0xFF};
+    final var record = Discriminator.createDiscriminator(new byte[]{1, (byte) 0x80, (byte) 0xFF});
+    for (final var discriminator : List.of(defaults, record)) {
+      assertEquals(3, discriminator.length());
+      final byte[] framed = {9, 8, 7, 6, 5, 4};
+      assertEquals(3, discriminator.write(framed, 2));
+      assertArrayEquals(new byte[]{9, 8, 1, (byte) 0x80, (byte) 0xFF, 4}, framed);
+
+      final byte[] atStart = {9, 8, 7, 6};
+      assertEquals(3, discriminator.write(atStart));
+      assertArrayEquals(new byte[]{1, (byte) 0x80, (byte) 0xFF, 6}, atStart);
+    }
+  }
+
+  @Test
+  void defaultUnsignedConversionReturnsIndependentByteValues() {
+    final Discriminator defaults = () -> new byte[]{0, (byte) 0x80, (byte) 0xFF, 7};
+    final int[] first = defaults.toIntArray();
+    assertArrayEquals(new int[]{0, 128, 255, 7}, first);
+    first[1] = 42;
+    assertArrayEquals(new int[]{0, 128, 255, 7}, defaults.toIntArray());
+
+    final Discriminator empty = () -> new byte[0];
+    assertArrayEquals(new int[0], empty.toIntArray());
+  }
+
+  @Test
+  void factoryDiscriminatorsUseByteValuesForEqualityAndHashKeys() {
+    final var first = Discriminator.createDiscriminator(new byte[]{1, 2, 3});
+    final var equal = Discriminator.createDiscriminator(new byte[]{1, 2, 3});
+    final var different = Discriminator.createDiscriminator(new byte[]{1, 2, 4});
+    assertTrue(first.equals(first));
+    assertEquals(first, equal);
+    assertEquals(equal, first);
+    assertNotEquals(first, different);
+    assertNotEquals(first, Discriminator.createDiscriminator(new byte[]{1, 2}));
+    assertFalse(first.equals(null));
+    assertFalse(first.equals("not a discriminator"));
+    assertEquals(first.hashCode(), equal.hashCode());
+    assertNotEquals(first.hashCode(), different.hashCode(), "these one-byte changes should not collapse to one hash");
+
+    final var values = new HashMap<Discriminator, String>();
+    values.put(first, "instruction");
+    assertEquals("instruction", values.get(equal));
+    assertNull(values.get(different));
+  }
+
+  @Test
+  void diagnosticStringShowsUnsignedDiscriminatorBytes() {
+    final var discriminator = Discriminator.createDiscriminator(new byte[]{0, (byte) 0x80, (byte) 0xFF});
+    assertTrue(discriminator.toString().contains("[0, 128, 255]"));
   }
 
   @Test

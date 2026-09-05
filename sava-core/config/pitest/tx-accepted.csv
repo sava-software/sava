@@ -12,9 +12,7 @@ software.sava.core.tx.TransactionRecord,lambda$static$0,RemoveConditionalMutator
 software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 134
 software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # short circuit already returned # line 132
 software.sava.core.tx.TransactionRecord,setComputeBudgetValues,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # prepend path is a no-op when nothing is prepended # line 274
-software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,ConditionalsBoundaryMutator,SURVIVED # result identical routing # line 99
-software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # untriaged # line 157
-software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,RemoveConditionalMutator_ORDER_IF,SURVIVED # untriaged # line 80
+software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,ConditionalsBoundaryMutator,SURVIVED # result identical routing # line 103
 software.sava.core.tx.TransactionSkeletonImpl,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 404
 software.sava.core.tx.TransactionSkeletonImpl,filterInstructionsWithoutAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 429
 software.sava.core.tx.TransactionSkeletonImpl,parseAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # legacy parse routes converge # line 216
