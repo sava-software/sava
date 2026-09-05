@@ -9,6 +9,31 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.5.32 — 2026-09-05
+
+All three plugin pins now resolve the published `software.sava:sava-build:21.5.32`
+artifact, including the separate JMH build. Dependency refresh confirmed the
+GitHub Packages artifact; its JAR SHA-256 is
+`ef174f509d8f83a84b6669e47b59d41a9619daa09d70824ce75ba5ed8dbb1a0f`.
+Every adoption invocation explicitly cleared `savaBuildLocalRepo`. The installed
+agent template was reviewed and synchronized at digest `714041431f01`.
+
+The first public `:hardeningCertifyAll` invocation refused all 15 recorded
+toolchain transitions together before child PIT execution. Each named suite then
+received a full history-free observation and an individual `BaselineRebase` run,
+moving PIT `1.25.9` to `1.30.0` and ArcMutate base `1.7.1` to `1.7.2`.
+All 15 accepted CSVs remained byte-for-byte unchanged: **682 rows, 459 unique
+line-less keys, and 375 existing `untriaged` rows**. No new acceptance debt was
+observed. Duplicate siblings, reasons, timeout records, and the committed
+ArcMutate certificate were preserved. Borsh and Crypto still have no accepted
+records; they are part of the 17-suite certification inventory, not extra rebases.
+
+The 15 initial transition observations produced **7,876 mutants**: 7,303 `KILLED`,
+303 `SURVIVED`, 258 `NO_COVERAGE`, and 12 audited `TIMED_OUT`, with no invalid
+outcomes or new unaudited timeouts. These are transition observations, not a
+release certification. JMH compilation also passed; no benchmark campaign was run.
+The existing local certification and fuzz receipts record their own later outcomes.
+
 ## sava-core
 
 | Suite | Target | Notes |
