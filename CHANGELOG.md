@@ -2,54 +2,24 @@
 
 ## [25.11.0](https://github.com/sava-software/sava/compare/25.10.0...25.11.0) (2026-09-06)
 
-
 ### ⚠ BREAKING CHANGES
 
-* Consumers of the removed APIs must migrate using MIGRATION.md.
+* Remove deprecated APIs for string signatures, one-shot HMAC-SHA512, Token-2022 extension maps and type enums, Base58 RPC requests, and the fixed transaction-size constant. Affected applications require source changes and recompilation; see the [migration guide](https://github.com/sava-software/sava/blob/main/MIGRATION.md) for replacements.
 
 ### Features
 
-* **rpc:** enhance getTransaction with max transaction version support ([39cfa56](https://github.com/sava-software/sava/commit/39cfa5645078461fc18d6007e5fd36e88be886de))
-* **rpc:** expand LiveV1ValidatorCheck to support public clusters ([d4c776d](https://github.com/sava-software/sava/commit/d4c776d65ebf82d41be954cea21bea5043e3d0c0))
-* **rpc:** expose the skeleton of getBlock entries ([b5d5d98](https://github.com/sava-software/sava/commit/b5d5d98904594ab7a88b2db84a244c1de881db99))
-* **tx:** add explicit signing APIs ([09aaaf1](https://github.com/sava-software/sava/commit/09aaaf13a37a14bd406fda27719f7b352fae0622))
-* **tx:** add setInstruction and insertInstruction to TxBuilder ([5aa18c5](https://github.com/sava-software/sava/commit/5aa18c5b17851157167c160c02eed9cd6d9d74f3))
-* **tx:** add SIMD-0385 v1 transaction support with TxBuilder and V1Transaction ([1fff465](https://github.com/sava-software/sava/commit/1fff465a398048c25b0a887cb3a406a66858377f))
-* **tx:** add strict mode to enforce SIMD-0385 v1 compliance ([360f5d1](https://github.com/sava-software/sava/commit/360f5d138a53925e41cfdfee625b7b3aa64087c7))
-* **tx:** add support for priority fee and config value updates ([8d4d5c5](https://github.com/sava-software/sava/commit/8d4d5c5e283ee8c1afc1718ee21c8255287d924e))
-* **tx:** add support for priority fee conversion methods ([210a83e](https://github.com/sava-software/sava/commit/210a83ef50fca74140ba6174d7eae6f4dd5ccfc1))
-* **tx:** centralize comparators and account meta merging in TransactionRecord ([a1b9088](https://github.com/sava-software/sava/commit/a1b9088850ec564f2d43166c9fc94becf8dc5bc5))
-* **tx:** enhance heap size and account data size limit validations ([23e27b5](https://github.com/sava-software/sava/commit/23e27b5edac13a5c3577fc2c215a49128ad7b89f))
-* **tx:** enhance v1 transaction support and budget validations ([82987fe](https://github.com/sava-software/sava/commit/82987fefbd5defa61ac4316f1f6763b410ec1f0d))
-* **tx:** preserve config values in derived V1 transactions ([ce50c9f](https://github.com/sava-software/sava/commit/ce50c9fe0a4778743568a5f91ce6a98c2c8dc4b7))
-* **tx:** refactor and modularize account merging, sorting, and transaction signing ([b3bf8eb](https://github.com/sava-software/sava/commit/b3bf8eb9113726d9a560fd12b02197788f60d123))
-* **tx:** refactor transaction model into modular skeletons ([15b885f](https://github.com/sava-software/sava/commit/15b885fe1a01d51c21a0b4638ef11963f4a77b7e))
-* **tx:** unify config value handling and enhance v1 transaction skeleton ([cfce281](https://github.com/sava-software/sava/commit/cfce281922c2c5a6be1415adac8e074531f3754c))
-* **tx:** validate priority fee bits and skip unknown config mask values ([924d2fa](https://github.com/sava-software/sava/commit/924d2fa74dcb6281d7b81ec11b6a3ee47182ff89))
+* **Transactions:** Build, parse, and sign SIMD-0385 v1 transactions. `TxBuilder` supports instruction editing, strict validation, priority fees, compute limits, heap size, and loaded-account data limits, including conversion from legacy compute-unit pricing. Legacy and v0 transaction support remains available; sending v1 transactions requires activation on the target cluster.
+* **Signing:** Use `signInOrder` for positional signing or `signByKey` to match signers by public key, with corresponding Base64 conveniences.
+* **RPC:** `getTransaction` and `getBlock` requests with full transaction details now allow v1 transactions. Use `BlockTx.skeleton()` to parse transaction bytes returned by `getBlock` into a `TransactionSkeleton`.
 
+### Deprecations
+
+* The positional `SequencedCollection<Signer>` overloads of `sign` and `signAndBase64Encode` are deprecated for removal. Use `signInOrder` and its conveniences to preserve the existing behavior; use `signByKey` when key matching is intended.
 
 ### Bug Fixes
 
-* address compatibility cleanup review ([666c164](https://github.com/sava-software/sava/commit/666c164cf411dd2bfa7847ac2daffaa65079498b))
-* **core:** bound the v1 wire count fields regardless of strict ([6e70c7d](https://github.com/sava-software/sava/commit/6e70c7dc73605166ca0843d0aca6e9b02460a40f))
-* **core:** bound v1 instruction account indices by the wire, not the array ([f91ad69](https://github.com/sava-software/sava/commit/f91ad6902a18e952398e0047987a750acc02a63a))
-* **core:** budget builtin instructions at the rate the runtime does ([fa0e8f6](https://github.com/sava-software/sava/commit/fa0e8f64f5d6484d64d29feb9be052306b8b0b60))
-* **core:** keep the v1 interface additions binary compatible ([dabfe20](https://github.com/sava-software/sava/commit/dabfe20bf6822ec9c326cd708790ea84e388d2f2))
-* **core:** port the length-bounded discriminator matching from main ([197239a](https://github.com/sava-software/sava/commit/197239aa630837b5ee9515023e7b35f339b6cdb5))
-* **core:** port the two-bound instruction account resolution from main ([2b5d75e](https://github.com/sava-software/sava/commit/2b5d75eb2ab8a8c9231e60718a156b304ba5fe3b))
-* **core:** reject an out-of-range v1 instruction account index ([2771e7d](https://github.com/sava-software/sava/commit/2771e7dfc0dcb374957d9b43a5c7dfda7610c401))
-* **core:** reject unknown v1 TransactionConfigMask bits ([27bd050](https://github.com/sava-software/sava/commit/27bd0504db1a9192c1325f60dd5f765e23cdac2c))
-* **core:** treat an explicit zero compute unit limit as unstated ([ab9e80d](https://github.com/sava-software/sava/commit/ab9e80dbb774aa220afff7471c4f8efd5fff471c))
-* ignore extra fields when importing JSON keys ([1c8a2e1](https://github.com/sava-software/sava/commit/1c8a2e14d4759a0f587a90d88362cbdc02db54ea))
-* import JSON keys regardless of field order ([20b741f](https://github.com/sava-software/sava/commit/20b741fe83dbd5507a72b171cd4e630fc6d0210c))
-* keep equal instructions interchangeable as hash keys ([fff9ba4](https://github.com/sava-software/sava/commit/fff9ba4e7a3f1236a02d6e3b989887f3fbb4e6bb))
-* **rpc:** handle non-numeric values in JSON parsing with ValueType checks ([b1754b0](https://github.com/sava-software/sava/commit/b1754b023ed4b4d357594c28f6d9f27e7aa61e05))
-* **tx:** update terminology and validation for v1 transaction accounts ([b3a2a1c](https://github.com/sava-software/sava/commit/b3a2a1c36083326ac4a3fcfe9e47a82e2285d1a6))
-
-
-### Code Refactoring
-
-* remove deprecated compatibility APIs ([042025c](https://github.com/sava-software/sava/commit/042025c737135719167e1e13ac669243f74fa448))
+* **Key import:** Import keys from JSON with fields in any order and ignore extra fields, including nested objects and arrays. Nested fields cannot supply or override the imported key, and missing-field errors now name the required field.
+* **Instructions:** Equal instructions with valid data spans now have equal hash codes, allowing interchangeable use as `HashMap` keys and `HashSet` entries even with different backing arrays or offsets. Keep retained data and account inputs unchanged while an instruction is stored in a hash-based collection.
 
 ## [25.10.0](https://github.com/sava-software/sava/compare/25.9.1...25.10.0) (2026-08-18)
 
