@@ -72,9 +72,9 @@ public enum PrivateKeyEncoding {
   }
 
   /// Imports a key-pair array or an object with `encoding` and `secret` fields.
-  /// The current object reader requires `encoding` to precede `secret`; reversing
-  /// those fields fails while reading the object. This field-order limitation is
-  /// retained pending an owner decision. Put `encoding` first to import the object.
+  /// Object fields may appear in any order. On success, the iterator remains
+  /// immediately after the imported value so an enclosing array or object can continue.
+  /// If `encoding` is repeated, a secret decoded before a later encoding is not reinterpreted.
   public static Signer fromJsonPrivateKey(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
       case ARRAY -> fromJsonPrivateKey(ji, jsonKeyPairArray);
@@ -134,7 +134,7 @@ public enum PrivateKeyEncoding {
 
     Signer createSigner(final JsonIterator ji) {
       if (signer == null) {
-        if (secretMark == 0) {
+        if (encoding == null || secretMark == 0) {
           throw new IllegalStateException("Must configure 'encoding' field " + Arrays.toString(PrivateKeyEncoding.values()));
         }
         final int mark = ji.mark();
@@ -156,6 +156,7 @@ public enum PrivateKeyEncoding {
       } else if (fieldEquals("secret", buf, offset, len)) {
         if (encoding == null) {
           secretMark = ji.mark();
+          ji.skip();
         } else {
           signer = fromJsonPrivateKey(ji, encoding);
         }

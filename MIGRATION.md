@@ -25,6 +25,15 @@ do not persist them as identifiers. Keep the retained account list, public keys,
 data unchanged while an instruction is stored in a hash-based collection. Copy mutable
 inputs before construction if their original owners will reuse them.
 
+## JSON key import
+
+`PrivateKeyEncoding.fromJsonPrivateKey` accepts `secret`, `encoding`, and the
+optional `pubKey` in any order. Valid objects that previously failed because
+`secret` preceded `encoding` now import successfully. A supplied public key is
+still checked against the imported key, and successful imports leave the iterator
+after the object so an enclosing array or object can continue. Objects with a
+secret but no encoding now report the missing encoding with `IllegalStateException`.
+
 ## Signature verification
 
 A signature is binary data. Decode a textual signature using its actual encoding
