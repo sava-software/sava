@@ -7,6 +7,7 @@ import software.sava.core.encoding.Base58;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -213,6 +214,60 @@ final class PrivateKeyEncodingTests {
   }
 
   @Test
+  void repeatedEncodingBeforeSecretUsesTheLatestEncodingForCompatibility() {
+    final var json = """
+        [{"encoding":"jsonKeyPairArray","encoding":"base64PrivateKey","secret":"%s"},73]
+        """.formatted(BASE64_PRIVATE_KEY);
+    final var ji = JsonIterator.parse(json);
+    assertTrue(ji.readArray());
+    assertImportedSignerAndOuterArrayCursor(ji, "base64PrivateKey");
+  }
+
+  private static void assertUnknownValueDoesNotAffectImport(final String value) {
+    final var encoding = "\"encoding\":\"base64PrivateKey\"";
+    final var secret = "\"secret\":\"%s\"".formatted(BASE64_PRIVATE_KEY);
+    for (final var knownFields : List.of(List.of(encoding, secret), List.of(secret, encoding))) {
+      for (int position = 0; position <= knownFields.size(); ++position) {
+        final var fields = new ArrayList<>(knownFields);
+        fields.add(position, "\"metadata\":" + value);
+        final var json = "[{" + String.join(",", fields) + "},73]";
+        for (final var ji : List.of(JsonIterator.parse(json), JsonIterator.parse(json.getBytes(StandardCharsets.UTF_8)))) {
+          assertTrue(ji.readArray());
+          assertImportedSignerAndOuterArrayCursor(ji, json);
+        }
+      }
+    }
+  }
+
+  @Test
+  void unknownScalarFieldsPreserveTheImportedSignerAndOuterArrayCursor() {
+    for (final var value : List.of("\"memo\"", "73", "-1.25e2", "true", "false", "null")) {
+      assertUnknownValueDoesNotAffectImport(value);
+    }
+  }
+
+  @Test
+  void unknownNestedFieldsCannotOverrideKeyFieldsOrConsumeTheOuterArray() {
+    for (final var value : List.of("{}", "[]", """
+        {"encoding":"jsonKeyPairArray","secret":"not a key","pubKey":"11111111111111111111111111111111"}
+        """, """
+        [{"secret":"not a key"},null,[3,true]]
+        """)) {
+      assertUnknownValueDoesNotAffectImport(value);
+    }
+  }
+
+  @Test
+  void unknownNestedFieldsCannotSupplyTheRequiredSecret() {
+    final var json = """
+        {"encoding":"base64PrivateKey","metadata":{"secret":"%s"}}
+        """.formatted(BASE64_PRIVATE_KEY);
+    final var error = assertThrows(IllegalStateException.class,
+        () -> PrivateKeyEncoding.fromJsonPrivateKey(JsonIterator.parse(json)));
+    assertEquals("Must configure 'secret' field", error.getMessage());
+  }
+
+  @Test
   void anUnrecognizedFieldCannotSupplyTheRequiredSecret() {
     final var json = "{\"encoding\":\"base64PrivateKey\",\"notSecret\":\"%s\"}"
         .formatted(BASE64_PRIVATE_KEY);
@@ -242,9 +297,10 @@ final class PrivateKeyEncodingTests {
   }
 
   @Test
-  void jsonObjectWithEncodingButNoSecretIsRejected() {
+  void jsonObjectWithEncodingButNoSecretNamesTheRequiredSecret() {
     final var ji = JsonIterator.parse("{\"encoding\":\"base64PrivateKey\"}");
-    assertThrows(IllegalStateException.class, () -> PrivateKeyEncoding.fromJsonPrivateKey(ji));
+    final var error = assertThrows(IllegalStateException.class, () -> PrivateKeyEncoding.fromJsonPrivateKey(ji));
+    assertEquals("Must configure 'secret' field", error.getMessage());
   }
 
   // --- Properties tests ---

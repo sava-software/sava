@@ -33,6 +33,9 @@ optional `pubKey` in any order. Valid objects that previously failed because
 still checked against the imported key, and successful imports leave the iterator
 after the object so an enclosing array or object can continue. Objects with a
 secret but no encoding now report the missing encoding with `IllegalStateException`.
+Unrecognized fields are skipped, including nested objects and arrays. When encoding
+is present but secret is absent, the exception now correctly names the missing
+`secret` field.
 
 ## Signature verification
 

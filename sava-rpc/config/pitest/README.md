@@ -21,7 +21,7 @@ debt rather than equivalence claims. `RpcEncoding` is
 the one to read first, since its missing `jsonParsed` constant is a deliberate
 API invariant (`AGENTS.md`) rather than an omission.
 
-### Key-import triage — 2026-09-05, field-order fix verified
+### Key-import triage — 2026-09-05, JSON parsing fixes verified
 
 The initial focused triage used the fixed RFC 8032 test-1 key pair rather than
 random keys. It reached 59 killed, two uncovered, and one survivor out of 62
@@ -48,26 +48,53 @@ value and end. The duplicate-encoding test preserves the behavior shipped in
 case kills the always-defer mutant; eager and deferred decoding are not universally
 equivalent. The declaration documents this retained behavior.
 
-The final fresh, full, history-free Encoding report contains **63 killed out of
-63 mutants**, with no survivors, uncovered mutants, timeouts, or invalid outcomes.
-`check` also passes. Evidence is in `/private/tmp/sava-key-field-order-final.log`
-and the ordinary `build/reports/pitest/encoding/` report. The old field-order gate
-failure is resolved without accepting its survivor.
+The field-order fix measured **63 killed out of 63 mutants**, with no survivors,
+uncovered mutants, timeouts, or invalid outcomes. Its evidence remains in
+`/private/tmp/sava-key-field-order-final.log` as an optional machine-local diagnostic.
 
-**Baseline retirement remains outstanding.** All 17 rows and their provenance
-files remain unchanged. Sixteen earlier mutation instances were observed killed.
-The former `PrivateKeyEncoding$Parser.createSigner` missing-secret guard's
-`RemoveConditionalMutator_EQUAL_IF` instance, recorded as `NO_COVERAGE` at line
-133, is no longer emitted after the guard change. The current killed mutant with
-the same class/method/mutator targets the outer `signer == null` check; it is not
-proof that the earlier missing-secret mutation was killed.
+The owner-approved follow-up skips unknown fields and reports a missing `secret`
+separately from a missing `encoding`. The committed tests first failed against the
+unchanged parser: an unknown string broke traversal, a nested object could supply
+the secret, and a missing secret was reported as missing encoding. The same tests
+now pass. They cover scalar values, objects, and arrays before, between, and after
+the recognized fields in both orders, through byte- and char-backed iterators.
+Nested recognized field names cannot supply or override the outer key fields.
+Another compatibility test preserves the latest encoding seen before an eagerly
+decoded secret; duplicate encoding handling has not changed.
 
-The prune writer proposes all 17 rows together. It cannot retire only the sixteen
-proven kills while preserving the unproven row under sava's stricter retirement
-rule, so no prune was performed. This writer gap remains outstanding Encoding
-baseline debt. Every retained row still contributes active baseline matching
-capacity and can accept a later mutant with the same class, method, mutator, and
-status. The green mutation gate does not deactivate these rows.
+Property: unknown fields cannot change the imported signer or consume the enclosing
+array's next value. Oracle: the owner-approved field-skipping contract, the RFC 8032
+public-key fixture, and the enclosing array's explicit next value/end. Outcome:
+production bug fixed.
+
+Property: missing required fields name the missing field. Oracle: the key-import
+object's required `encoding` and `secret` fields and the owner-approved diagnostic
+correction. Outcome: production bug fixed.
+
+**Encoding baseline retirement is complete.** The field-order fix initially left
+all 17 rows in place: sixteen earlier instances were killed, but the former
+`PrivateKeyEncoding$Parser.createSigner` missing-secret guard's
+`RemoveConditionalMutator_EQUAL_IF` instance was no longer emitted. A killed mutant
+at the outer `signer == null` check did not prove that missing-secret mutation was
+killed. Splitting the guards to give the correct missing-field diagnostic restores
+the actual `secretMark == 0` mutation; the deferred-import regression now kills it.
+All 17 retained instances therefore have observed killed counterparts.
+
+Two distinct fresh, full, history-free previews — one following `check`, one
+standalone — had the identical **66 killed** population and the same 17-row candidate
+multiset. The named `:sava-rpc:pitestEncodingBaselinePrune` writer's third fresh run
+matched both. It removed **17 rows / 12 unique keys**, the empty baseline, and its
+orphan provenance pair. No row was retired solely because its mutation disappeared.
+No survivors, uncovered mutants, timeouts, or invalid outcomes occurred in these
+three runs. `check` passed; the affected RPC tests executed with 893 passed and the
+two existing opt-in live checks skipped.
+
+Optional machine-local diagnostics are `/private/tmp/sava-key-unknown-fields-red.log`
+and `.xml`, `/private/tmp/sava-key-unknown-fields-check-pit.log`,
+`/private/tmp/sava-key-unknown-fields-preview2.log`, and
+`/private/tmp/sava-key-unknown-fields-prune.log`. The ordinary
+`build/reports/pitest/encoding/` report contains the writer observation; the committed
+regression tests reproduce the behavior without depending on temporary files.
 
 Never run a `pitest<Suite>BaselineUpdate` task just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence
