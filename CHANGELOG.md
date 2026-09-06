@@ -1,5 +1,26 @@
 # Changelog
 
+## [25.11.0](https://github.com/sava-software/sava/compare/25.10.0...25.11.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* Remove deprecated APIs for string signatures, one-shot HMAC-SHA512, Token-2022 extension maps and type enums, Base58 RPC requests, and the fixed transaction-size constant. Affected applications require source changes and recompilation; see the [migration guide](https://github.com/sava-software/sava/blob/main/MIGRATION.md) for replacements.
+
+### Features
+
+* **Transactions:** Build, parse, and sign SIMD-0385 v1 transactions. `TxBuilder` supports instruction editing, strict validation, priority fees, compute limits, heap size, and loaded-account data limits, including conversion from legacy compute-unit pricing. Legacy and v0 transaction support remains available; sending v1 transactions requires activation on the target cluster.
+* **Signing:** Use `signInOrder` for positional signing or `signByKey` to match signers by public key, with corresponding Base64 conveniences.
+* **RPC:** `getTransaction` and `getBlock` requests with full transaction details now allow v1 transactions. Use `BlockTx.skeleton()` to parse transaction bytes returned by `getBlock` into a `TransactionSkeleton`.
+
+### Deprecations
+
+* The positional `SequencedCollection<Signer>` overloads of `sign` and `signAndBase64Encode` are deprecated for removal. Use `signInOrder` and its conveniences to preserve the existing behavior; use `signByKey` when key matching is intended.
+
+### Bug Fixes
+
+* **Key import:** Import keys from JSON with fields in any order and ignore extra fields, including nested objects and arrays. Nested fields cannot supply or override the imported key, and missing-field errors now name the required field.
+* **Instructions:** Equal instructions with valid data spans now have equal hash codes, allowing interchangeable use as `HashMap` keys and `HashSet` entries even with different backing arrays or offsets. Keep retained data and account inputs unchanged while an instruction is stored in a hash-based collection.
+
 ## [25.10.0](https://github.com/sava-software/sava/compare/25.9.1...25.10.0) (2026-08-18)
 
 
