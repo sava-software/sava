@@ -204,9 +204,11 @@ final class Token2022PreInitializationTests {
     assertNull(Token2022.read(PublicKey.NONE, future).accountType());
   }
 
-  /// Every buffer above is a committed fuzz seed, because the mainnet corpus cannot hold one:
-  /// these states exist only between two instructions of the same transaction. Asserting the
-  /// two copies are identical is what stops the seed and the regression from drifting apart.
+  /// These synthetic lifecycle buffers are committed fuzz seeds. Extension initialization
+  /// must precede base initialization, but the program does not require both to occur in one
+  /// transaction. The current mainnet corpus has no such state, and the node's `jsonParsed`
+  /// decoder excludes uninitialized bases. Comparing the buffers with their seeds prevents
+  /// the two copies from drifting apart.
   @Test
   void preInitializationBuffersAreCommittedFuzzSeeds() throws IOException {
     assertArrayEquals(

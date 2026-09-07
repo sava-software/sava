@@ -11,6 +11,9 @@ import java.util.function.BiFunction;
 /// A Token-2022 mint: the [Mint] base state, the account-type discriminant that follows it,
 /// and the TLV extensions after that.
 ///
+/// The writer clears the 83 mint-padding bytes to satisfy the program's layout rule. The
+/// reader does not validate that region and continues to accept nonzero padding.
+///
 /// @param mint            the 82-byte base mint state.
 /// @param accountType     `null` when the account carries no discriminant — either because
 ///                        the account is exactly [Mint#BYTES] long with no remainder at all,

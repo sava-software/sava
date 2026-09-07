@@ -120,9 +120,10 @@ giving PIT's mutants the same round-trip oracle as the fuzzer:
   Extension initializers run before `InitializeMint`, so this is what a mint looks
   like between `InitializeMetadataPointer` and the instruction that initializes its
   base. Reproduced from the official interface crate's `unpack_uninitialized` /
-  `init_extension` path rather than captured: the state exists only between two
-  instructions of one transaction, so neither the mainnet corpus nor the node's
-  initialized-only `jsonParsed` decoder can supply it.
+  `init_extension` path. The program does not require extension and base
+  initialization to occur in one transaction, so this state can persist across
+  transactions. The current mainnet corpus has no such capture, and the node's
+  `jsonParsed` decoder excludes uninitialized bases.
 - `pre_init_immutable_owner_account` — 170 bytes: the token-account half of the same
   lifecycle stage, an `InitializeImmutableOwner` before `InitializeAccount`.
   Reproduced the same way, for the same reason.
