@@ -5,7 +5,10 @@ import software.sava.core.accounts.token.extensions.*;
 import software.sava.core.encoding.ByteUtil;
 import software.sava.core.serial.Serializable;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.function.BiFunction;
 
 /// A Token-2022 mint: the [Mint] base state, the account-type discriminant that follows it,
@@ -78,8 +81,7 @@ public record Token2022(Mint mint,
     final var seenExtensionTypes = new HashSet<Integer>();
     // Too few bytes left for a type word ends the walk rather than failing it: "the last byte
     // could be used during a realloc" — try_for_each_tlv_extension_type.
-    for (int i = offset; data.length - i >= Short.BYTES; ) {
-      final int remaining = data.length - i;
+    for (int i = offset, remaining = data.length - i; remaining >= Short.BYTES; remaining = data.length - i) {
       final int extensionType = ByteUtil.getUInt16LE(data, i);
       if (extensionType == 0) {
         // Trailing zeroed padding, e.g. re-allocated but not yet initialized extension space.
