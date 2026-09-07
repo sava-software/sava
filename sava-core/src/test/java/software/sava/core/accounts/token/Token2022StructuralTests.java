@@ -230,16 +230,70 @@ final class Token2022StructuralTests {
     assertEquals(0, dirty[MULTISIG_BYTES], "the pad must be written, not assumed zero");
     assertEquals(0, dirty[MULTISIG_BYTES + 1], "the pad must be written, not assumed zero");
 
-    // The 357-byte on-chain shape reads back equal and re-serializes byte for byte. The
-    // comparison starts from a clean buffer because write skips the mint's 83 padding bytes
-    // rather than clearing them, so a dirty buffer keeps whatever was in that region.
+    // The 357-byte on-chain shape reads back equal and re-serializes byte for byte, from a
+    // reused buffer as well as a fresh one: writing a mint has to leave the same bytes behind
+    // whatever the caller's array held.
     final byte[] data = new byte[token2022.l()];
     assertEquals(MULTISIG_BYTES + Short.BYTES, token2022.write(data, 0));
-    final var parsed = Token2022.read(address, data);
+    assertArrayEquals(data, dirty, "a reused buffer must serialize to the same bytes");
+    final var parsed = Token2022.read(address, dirty);
     assertEquals(token2022, parsed);
     final byte[] again = new byte[parsed.l()];
     assertEquals(data.length, parsed.write(again, 0));
     assertArrayEquals(data, again);
+  }
+
+  /// `type_and_tlv_indices` — interface/src/extension/mod.rs — reads the account-type byte only
+  /// when every byte of the gap before it is zero, and answers `InvalidAccountData` otherwise.
+  /// That gap is therefore part of a mint's serialized form: writing into a buffer the caller
+  /// has used before must clear it, or the emitted account is one the program will not unpack
+  /// and this library's own reader would happily accept.
+  @Test
+  void mintPaddingIsClearedRatherThanInherited() {
+    final var address = key(1);
+    final var pausableConfig = new PausableConfig(key(70), true);
+    final var token2022 = new Token2022(mint(address), AccountType.Mint, Set.of(pausableConfig));
+
+    final byte[] dirty = new byte[token2022.l()];
+    Arrays.fill(dirty, (byte) 0xFF);
+    assertEquals(dirty.length, token2022.write(dirty, 0));
+
+    for (int i = Mint.BYTES; i < MINT_ACCOUNT_TYPE_OFFSET; ++i) {
+      assertEquals(0, dirty[i], "padding byte " + i + " must be cleared");
+    }
+    assertEquals(token2022, Token2022.read(address, dirty));
+
+    final byte[] clean = new byte[token2022.l()];
+    assertEquals(clean.length, token2022.write(clean, 0));
+    assertArrayEquals(clean, dirty, "a reused buffer must serialize to the same bytes");
+
+    // The gap is cleared relative to the write offset, not the start of the array.
+    final int offset = 7;
+    final byte[] offsetDirty = new byte[offset + token2022.l()];
+    Arrays.fill(offsetDirty, (byte) 0xFF);
+    assertEquals(token2022.l(), token2022.write(offsetDirty, offset));
+    for (int i = offset + Mint.BYTES; i < offset + MINT_ACCOUNT_TYPE_OFFSET; ++i) {
+      assertEquals(0, offsetDirty[i], "padding byte " + i + " must be cleared");
+    }
+    for (int i = 0; i < offset; ++i) {
+      assertEquals((byte) 0xFF, offsetDirty[i], "bytes before the offset must be untouched");
+    }
+  }
+
+  /// The base-length shortcut writes the 82-byte mint and nothing else: there is no padding
+  /// region in that shape, so clearing one would overrun the account.
+  @Test
+  void anExtensionFreeMintWritesNothingBeyondItsBaseState() {
+    final var address = key(1);
+    final var token2022 = new Token2022(mint(address), null, Set.of());
+    assertEquals(Mint.BYTES, token2022.l());
+
+    final byte[] dirty = new byte[Mint.BYTES + 8];
+    Arrays.fill(dirty, (byte) 0xFF);
+    assertEquals(Mint.BYTES, token2022.write(dirty, 0));
+    for (int i = Mint.BYTES; i < dirty.length; ++i) {
+      assertEquals((byte) 0xFF, dirty[i], "byte " + i + " is past the account and must be untouched");
+    }
   }
 
   @Test

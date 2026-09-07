@@ -26,7 +26,11 @@ public record Token2022(Mint mint,
                         AccountType accountType,
                         Set<TokenExtension> tokenExtensions) implements Serializable {
 
-  private static final int PADDING_AFTER_MINT = 83;
+  /// The gap between the base mint state and the account-type byte, sized so an extended mint
+  /// cannot collide with `Account::LEN`. `type_and_tlv_indices` — interface/src/extension/mod.rs
+  /// — refuses a buffer whose padding holds any non-zero byte, so this region is part of the
+  /// serialized form and has to be written, not skipped.
+  static final int PADDING_AFTER_MINT = 83;
   /// `Multisig::LEN` — interface/src/state.rs. A multisig is never extensible, so a buffer of
   /// exactly this length cannot be told apart from an extended mint or token account.
   static final int MULTISIG_BYTES = 355;
@@ -287,6 +291,9 @@ public record Token2022(Mint mint,
       return mintLength;
     }
     int i = offset + mintLength + PADDING_AFTER_MINT;
+    // Clear the gap rather than leaving whatever the caller's buffer held: the program reads
+    // an extended mint only when every padding byte is zero.
+    Arrays.fill(data, offset + mintLength, i, (byte) 0);
     data[i] = (byte) accountType.ordinal();
     ++i;
     final int written = (i - offset) + writeExtensions(tokenExtensions, data, i);
