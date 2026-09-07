@@ -1,0 +1,10 @@
+{
+  "info": {
+    "decimals": 2,
+    "freezeAuthority": null,
+    "isInitialized": true,
+    "mintAuthority": "77uC7KzD53PryuXSCTxYjatNqESzgFV2z5xb5iNAtVVG",
+    "supply": "740368"
+  },
+  "type": "mint"
+}

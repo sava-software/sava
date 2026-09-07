@@ -1,0 +1,26 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "immutableOwner"
+      },
+      {
+        "extension": "transferFeeAmount",
+        "state": {
+          "withheldAmount": 1334509610181448
+        }
+      }
+    ],
+    "isNative": false,
+    "mint": "26VveFqoByWdsAb7D9pvJbDQBr42q5KV2f6gpDs7kyok",
+    "owner": "2kx8k2DYoNJuKnc83LkRF1AniXTcKjHiwijbka5hCwFv",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "0",
+      "decimals": 9,
+      "uiAmount": 0.0,
+      "uiAmountString": "0"
+    }
+  },
+  "type": "account"
+}

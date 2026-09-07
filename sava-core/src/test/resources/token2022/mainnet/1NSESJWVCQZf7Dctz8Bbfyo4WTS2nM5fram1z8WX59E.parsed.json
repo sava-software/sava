@@ -1,0 +1,22 @@
+{
+  "info": {
+    "delegate": "H448WpJZ3Sfz3iNytH7bYeNHn7QyPhSBWEopQztqP6Xt",
+    "delegatedAmount": {
+      "amount": "18446731894612433242",
+      "decimals": 6,
+      "uiAmount": 18446731894612.434,
+      "uiAmountString": "18446731894612.433242"
+    },
+    "isNative": false,
+    "mint": "d4VnSVqaUBf3dTxUqdeD4L2ix3rvsEcis4kNv3npump",
+    "owner": "A6JgeY2eGX5PABCegkHvkuPUPDQTHQAJAsz2PhvccYLf",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "0",
+      "decimals": 6,
+      "uiAmount": 0.0,
+      "uiAmountString": "0"
+    }
+  },
+  "type": "account"
+}

@@ -1,0 +1,16 @@
+{
+  "info": {
+    "closeAuthority": "EDPNMGHnoJuMC2UfaHYGE9BNVSRFzC1rT93jNJMMhhp4",
+    "isNative": false,
+    "mint": "BnDE4DrsfAKMru5zCoX4deiJVSe5tY77bBWfLBz5oQmE",
+    "owner": "8c2VWqiTmAjXBQp37QHes1c9JEbQoDceenG4z519BjMY",
+    "state": "frozen",
+    "tokenAmount": {
+      "amount": "1000000000000000",
+      "decimals": 6,
+      "uiAmount": 1000000000.0,
+      "uiAmountString": "1000000000"
+    }
+  },
+  "type": "account"
+}

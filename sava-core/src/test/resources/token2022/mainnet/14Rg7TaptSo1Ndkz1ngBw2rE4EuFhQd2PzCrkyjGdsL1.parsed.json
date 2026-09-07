@@ -1,0 +1,66 @@
+{
+  "info": {
+    "decimals": 5,
+    "extensions": [
+      {
+        "extension": "defaultAccountState",
+        "state": {
+          "accountState": "frozen"
+        }
+      },
+      {
+        "extension": "permanentDelegate",
+        "state": {
+          "delegate": "EeJqADE9Xqkqoyjid6H1GmbwDZ4Bz1qyC7ySpmFq849m"
+        }
+      },
+      {
+        "extension": "metadataPointer",
+        "state": {
+          "authority": "E5pzf6p7n3UYP8B6q7LdG7sT8GfQcwbZ8beFDqZ26Y75",
+          "metadataAddress": "14Rg7TaptSo1Ndkz1ngBw2rE4EuFhQd2PzCrkyjGdsL1"
+        }
+      },
+      {
+        "extension": "pausableConfig",
+        "state": {
+          "authority": "3wVzYmWt79gBpPtWBK8GHvRfii1SARpP8SKqEKuzJsDY",
+          "paused": false
+        }
+      },
+      {
+        "extension": "mintCloseAuthority",
+        "state": {
+          "closeAuthority": "7ano9sb3YoEPkYc18uDphWVLYyxvVCNVz31QSAcf3B6C"
+        }
+      },
+      {
+        "extension": "permissionedBurnConfig",
+        "state": {
+          "authority": "5CgAHs1K779jzqgB1K5kgTYozcexBGF9voi9zo2WCPMd"
+        }
+      },
+      {
+        "extension": "tokenMetadata",
+        "state": {
+          "additionalMetadata": [
+            [
+              "token_acl",
+              "GATEzzqxhJnsWF6vHRsgtixxSB8PaQdcqGEVTEHWiULz"
+            ]
+          ],
+          "mint": "14Rg7TaptSo1Ndkz1ngBw2rE4EuFhQd2PzCrkyjGdsL1",
+          "name": "Spiko Digital Assets Cash and Carry Fund",
+          "symbol": "SPKCC",
+          "updateAuthority": "9sM8XStBdZnXqNsKfNfqkHE8ggr7U1koDeEDqMXCFBLg",
+          "uri": "https://spiko.io"
+        }
+      }
+    ],
+    "freezeAuthority": "7jCcxvpZWFD1jJJW3uDXjRtQDoD3L9tbmwUfMDY1ij8Q",
+    "isInitialized": true,
+    "mintAuthority": "BDvZMhgdCAv1HooiymSCkgH2Rupoqv8Yf15gneHMyWcZ",
+    "supply": "0"
+  },
+  "type": "mint"
+}

@@ -1,0 +1,37 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "immutableOwner"
+      },
+      {
+        "extension": "confidentialTransferAccount",
+        "state": {
+          "actualPendingBalanceCreditCounter": 1,
+          "allowConfidentialCredits": true,
+          "allowNonConfidentialCredits": true,
+          "approved": true,
+          "availableBalance": "+qAyT7uGpU6pknHHUuJAzSxDpZCv8Uegrwy3LrJHA1H09W/Sx+6lCXth3ELFIun+sUNeiklb1235bZJVWI8efg==",
+          "decryptableAvailableBalance": "RWcFUwYZ+XswiBOuPy2ZjKHbPBY1fahZCigCqTg2IcrV7X8x",
+          "elgamalPubkey": "JJXx9zD+dAvIkFrIkcH5QJg88+g2QKV9AvH+IUGq9BU=",
+          "expectedPendingBalanceCreditCounter": 1,
+          "maximumPendingBalanceCreditCounter": 65536,
+          "pendingBalanceCreditCounter": 1,
+          "pendingBalanceHi": "LiYrTO2poHXZAQWeNcmRK8UgdUCwxxHyAi8SR7zDfE+MTNAvO07oaCweCGeWuUtIXqUA69LU2Uhtb5CWH7CURQ==",
+          "pendingBalanceLo": "AmXmv7UFCY11M7oWWvTE/0mEsdyVHE3tkaMweLfcQFFEB5pvlUiDRJIiIijWYBxatPJAihLSrmvMypcRrCDCCA=="
+        }
+      }
+    ],
+    "isNative": false,
+    "mint": "5nWfeifw56n8mhpLp4b3BHW2foLdbF9PCo4Y6MJPdyEB",
+    "owner": "7a8aotmeu1J11XCBBmXUorDeTDbVmxfBY23C4GUxvqVy",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "0",
+      "decimals": 6,
+      "uiAmount": 0.0,
+      "uiAmountString": "0"
+    }
+  },
+  "type": "account"
+}

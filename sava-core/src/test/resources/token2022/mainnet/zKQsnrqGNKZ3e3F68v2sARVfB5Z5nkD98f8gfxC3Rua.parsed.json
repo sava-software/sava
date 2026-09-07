@@ -1,0 +1,29 @@
+{
+  "info": {
+    "decimals": 6,
+    "extensions": [
+      {
+        "extension": "confidentialTransferMint",
+        "state": {
+          "auditorElgamalPubkey": null,
+          "authority": "wARvfUk1LS97HZDF8G2MXXETCrbraSoAmwLw5R2kpnv",
+          "autoApproveNewAccounts": true
+        }
+      },
+      {
+        "extension": "confidentialMintBurn",
+        "state": {
+          "confidentialSupply": "IDwkaxc8sOiq5wyRJoWPppqwgNcUNIqEVMlxMIhceX/M4muwd8woAW0fa9cRx/1oWOIAnIA1jV/zzMpcppaPJw==",
+          "decryptableSupply": "GggX4xL955R+SSHchZRE2gZhchwfuvdfaFNdFl3BO1chl3xn",
+          "pendingBurn": "BmBR6eHCz8CB1Diq0fDlRNvL5Fp1iF2NdCBCaH71ITS27xtVG3LlD61ozcayZwfQhh7C+NLmP7JTcPGslR+SRQ==",
+          "supplyElgamalPubkey": "6m9WA0DftlC9tbd+ZMuIre4atds1UdrjRLvXuIKJSwU="
+        }
+      }
+    ],
+    "freezeAuthority": null,
+    "isInitialized": true,
+    "mintAuthority": "wARvfUk1LS97HZDF8G2MXXETCrbraSoAmwLw5R2kpnv",
+    "supply": "0"
+  },
+  "type": "mint"
+}

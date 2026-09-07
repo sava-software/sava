@@ -1,0 +1,23 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "immutableOwner"
+      },
+      {
+        "extension": "nonTransferableAccount"
+      }
+    ],
+    "isNative": false,
+    "mint": "17Ry5gcAJW5x9XnHqx8yF8soUpdGKaEzcXSViPNB6gp",
+    "owner": "3ouvLNfXwFgENoRe881T9D8yDysLTKb2Fat5bpEQZA9B",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "1",
+      "decimals": 0,
+      "uiAmount": 1.0,
+      "uiAmountString": "1"
+    }
+  },
+  "type": "account"
+}

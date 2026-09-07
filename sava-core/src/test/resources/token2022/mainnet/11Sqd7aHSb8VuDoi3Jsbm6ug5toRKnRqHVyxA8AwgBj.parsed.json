@@ -1,0 +1,23 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "transferHookAccount",
+        "state": {
+          "transferring": false
+        }
+      }
+    ],
+    "isNative": false,
+    "mint": "CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH",
+    "owner": "E91xQtdWUq3Mqe5VnhYCXoSf2VpheU5w28R3MfBioYNF",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "0",
+      "decimals": 6,
+      "uiAmount": 0.0,
+      "uiAmountString": "0"
+    }
+  },
+  "type": "account"
+}

@@ -1,0 +1,26 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "immutableOwner"
+      }
+    ],
+    "isNative": true,
+    "mint": "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP",
+    "owner": "8uPiTv26bXwLxPfvJ3gqATctauxWg6rDz8UDhU7fLgQz",
+    "rentExemptReserve": {
+      "amount": "2074080",
+      "decimals": 9,
+      "uiAmount": 0.00207408,
+      "uiAmountString": "0.00207408"
+    },
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "3756020",
+      "decimals": 9,
+      "uiAmount": 0.00375602,
+      "uiAmountString": "0.00375602"
+    }
+  },
+  "type": "account"
+}

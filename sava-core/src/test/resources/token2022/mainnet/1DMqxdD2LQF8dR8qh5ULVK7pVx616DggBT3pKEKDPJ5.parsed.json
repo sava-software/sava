@@ -1,0 +1,30 @@
+{
+  "info": {
+    "decimals": 6,
+    "extensions": [
+      {
+        "extension": "metadataPointer",
+        "state": {
+          "authority": null,
+          "metadataAddress": "1DMqxdD2LQF8dR8qh5ULVK7pVx616DggBT3pKEKDPJ5"
+        }
+      },
+      {
+        "extension": "tokenMetadata",
+        "state": {
+          "additionalMetadata": [],
+          "mint": "1DMqxdD2LQF8dR8qh5ULVK7pVx616DggBT3pKEKDPJ5",
+          "name": "Moon Pup",
+          "symbol": "MPUP",
+          "updateAuthority": null,
+          "uri": "https://mwgy.us/m/AWp7.json"
+        }
+      }
+    ],
+    "freezeAuthority": null,
+    "isInitialized": true,
+    "mintAuthority": null,
+    "supply": "1000000000000000"
+  },
+  "type": "mint"
+}

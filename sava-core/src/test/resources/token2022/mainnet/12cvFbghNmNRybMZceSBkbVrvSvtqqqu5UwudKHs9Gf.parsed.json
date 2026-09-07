@@ -1,0 +1,26 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "pausableAccount"
+      },
+      {
+        "extension": "transferHookAccount",
+        "state": {
+          "transferring": false
+        }
+      }
+    ],
+    "isNative": false,
+    "mint": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+    "owner": "FzJjCZf5GmLVosVsKmjzLXvK4c5JMuephHrp5HAN3dZ",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "0",
+      "decimals": 8,
+      "uiAmount": 0.0,
+      "uiAmountString": "0"
+    }
+  },
+  "type": "account"
+}

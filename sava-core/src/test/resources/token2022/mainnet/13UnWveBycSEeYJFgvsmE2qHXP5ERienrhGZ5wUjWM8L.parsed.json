@@ -1,0 +1,57 @@
+{
+  "info": {
+    "decimals": 0,
+    "extensions": [
+      {
+        "extension": "groupPointer",
+        "state": {
+          "authority": "CK71vmhXVNcs4qcgpp2z3wkdUF3o1Nv5dvJwT5TX5rzB",
+          "groupAddress": "13UnWveBycSEeYJFgvsmE2qHXP5ERienrhGZ5wUjWM8L"
+        }
+      },
+      {
+        "extension": "groupMemberPointer",
+        "state": {
+          "authority": "CK71vmhXVNcs4qcgpp2z3wkdUF3o1Nv5dvJwT5TX5rzB",
+          "memberAddress": "13UnWveBycSEeYJFgvsmE2qHXP5ERienrhGZ5wUjWM8L"
+        }
+      },
+      {
+        "extension": "metadataPointer",
+        "state": {
+          "authority": "CK71vmhXVNcs4qcgpp2z3wkdUF3o1Nv5dvJwT5TX5rzB",
+          "metadataAddress": "13UnWveBycSEeYJFgvsmE2qHXP5ERienrhGZ5wUjWM8L"
+        }
+      },
+      {
+        "extension": "transferHook",
+        "state": {
+          "authority": "E4CboixnoQWHz2EfoPW2QDjMGofRmQ8PQ5cjXscaDrrq",
+          "programId": "6yEnqdEjX3zBBDkzhwTRGJwv1jRaN4QE4gywmgdcfPBZ"
+        }
+      },
+      {
+        "extension": "permanentDelegate",
+        "state": {
+          "delegate": "CK71vmhXVNcs4qcgpp2z3wkdUF3o1Nv5dvJwT5TX5rzB"
+        }
+      },
+      {
+        "extension": "tokenMetadata",
+        "state": {
+          "additionalMetadata": [],
+          "mint": "13UnWveBycSEeYJFgvsmE2qHXP5ERienrhGZ5wUjWM8L",
+          "name": "Animoca",
+          "symbol": "AB1",
+          "updateAuthority": "E4CboixnoQWHz2EfoPW2QDjMGofRmQ8PQ5cjXscaDrrq",
+          "uri": "https://arweave.net/nQKUB0x_3JIEN4k8hHErSWUCJub2Q9JC1UQyHo_8SfA"
+        }
+      }
+    ],
+    "freezeAuthority": "CK71vmhXVNcs4qcgpp2z3wkdUF3o1Nv5dvJwT5TX5rzB",
+    "isInitialized": true,
+    "mintAuthority": "CK71vmhXVNcs4qcgpp2z3wkdUF3o1Nv5dvJwT5TX5rzB",
+    "supply": "33293758"
+  },
+  "type": "mint"
+}

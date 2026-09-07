@@ -1,0 +1,67 @@
+{
+  "info": {
+    "decimals": 9,
+    "extensions": [
+      {
+        "extension": "scaledUiAmountConfig",
+        "state": {
+          "authority": "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD",
+          "multiplier": "1",
+          "newMultiplier": "1",
+          "newMultiplierEffectiveTimestamp": 1788344044
+        }
+      },
+      {
+        "extension": "metadataPointer",
+        "state": {
+          "authority": "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD",
+          "metadataAddress": "15SsCZqCsM9fZGhTmP4rdJTPT9WGZKazDSsgeQ8ondo"
+        }
+      },
+      {
+        "extension": "pausableConfig",
+        "state": {
+          "authority": "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD",
+          "paused": false
+        }
+      },
+      {
+        "extension": "defaultAccountState",
+        "state": {
+          "accountState": "initialized"
+        }
+      },
+      {
+        "extension": "confidentialTransferMint",
+        "state": {
+          "auditorElgamalPubkey": null,
+          "authority": "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD",
+          "autoApproveNewAccounts": false
+        }
+      },
+      {
+        "extension": "transferHook",
+        "state": {
+          "authority": "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD",
+          "programId": null
+        }
+      },
+      {
+        "extension": "tokenMetadata",
+        "state": {
+          "additionalMetadata": [],
+          "mint": "15SsCZqCsM9fZGhTmP4rdJTPT9WGZKazDSsgeQ8ondo",
+          "name": "Arm Holdings plc (Ondo Tokenized)",
+          "symbol": "ARMon",
+          "updateAuthority": "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD",
+          "uri": "https://app.ondo.finance/api/v2/assets/ARMon/sol_metadata.json"
+        }
+      }
+    ],
+    "freezeAuthority": "51QVCuHfL1FeNjd8BDeffCKhCcAYoULnVB3yjNhShiuK",
+    "isInitialized": true,
+    "mintAuthority": "9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD",
+    "supply": "109507607167"
+  },
+  "type": "mint"
+}

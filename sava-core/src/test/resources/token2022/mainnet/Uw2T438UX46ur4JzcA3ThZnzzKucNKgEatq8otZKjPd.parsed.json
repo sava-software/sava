@@ -1,0 +1,52 @@
+{
+  "info": {
+    "decimals": 0,
+    "extensions": [
+      {
+        "extension": "permanentDelegate",
+        "state": {
+          "delegate": "7mHcqK6pJa3e8HmsYHveV8Vgdvgy9veibDPjzYiqod4v"
+        }
+      },
+      {
+        "extension": "groupPointer",
+        "state": {
+          "authority": "7mHcqK6pJa3e8HmsYHveV8Vgdvgy9veibDPjzYiqod4v",
+          "groupAddress": "Uw2T438UX46ur4JzcA3ThZnzzKucNKgEatq8otZKjPd"
+        }
+      },
+      {
+        "extension": "metadataPointer",
+        "state": {
+          "authority": "7mHcqK6pJa3e8HmsYHveV8Vgdvgy9veibDPjzYiqod4v",
+          "metadataAddress": "Uw2T438UX46ur4JzcA3ThZnzzKucNKgEatq8otZKjPd"
+        }
+      },
+      {
+        "extension": "tokenMetadata",
+        "state": {
+          "additionalMetadata": [],
+          "mint": "Uw2T438UX46ur4JzcA3ThZnzzKucNKgEatq8otZKjPd",
+          "name": "#01a00c76e9827720a95c94c0777e2e9e",
+          "symbol": "PROTOCOL",
+          "updateAuthority": "7mHcqK6pJa3e8HmsYHveV8Vgdvgy9veibDPjzYiqod4v",
+          "uri": "data:application/json,{\"protocol_id\":\"01a00c76e9827720a95c94c0777e2e9e\",\"protocol_creation_seed\":4114747266,\"unix_timestamp\":1786915776}"
+        }
+      },
+      {
+        "extension": "tokenGroup",
+        "state": {
+          "maxSize": 18446744073709551615,
+          "mint": "Uw2T438UX46ur4JzcA3ThZnzzKucNKgEatq8otZKjPd",
+          "size": 0,
+          "updateAuthority": "7mHcqK6pJa3e8HmsYHveV8Vgdvgy9veibDPjzYiqod4v"
+        }
+      }
+    ],
+    "freezeAuthority": "7mHcqK6pJa3e8HmsYHveV8Vgdvgy9veibDPjzYiqod4v",
+    "isInitialized": true,
+    "mintAuthority": null,
+    "supply": "1"
+  },
+  "type": "mint"
+}

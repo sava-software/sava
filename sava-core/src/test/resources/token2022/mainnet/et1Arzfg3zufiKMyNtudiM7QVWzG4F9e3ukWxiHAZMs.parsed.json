@@ -1,0 +1,13 @@
+{
+  "info": {
+    "isInitialized": true,
+    "numRequiredSigners": 2,
+    "numValidSigners": 3,
+    "signers": [
+      "7RSpBL8HCtyxDTpqvwAR4jzWndZ81Fes7sGnyjUGL5n8",
+      "sANPQpQFb4Qoy6EYNyctkUCWpxEr4EoH16tJj16dwzd",
+      "GbGYcWeqRxpMBAcbeLjiqqdAujyU9gU3As12GTsfCXKt"
+    ]
+  },
+  "type": "multisig"
+}

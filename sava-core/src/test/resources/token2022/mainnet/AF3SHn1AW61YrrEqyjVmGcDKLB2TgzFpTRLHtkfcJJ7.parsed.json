@@ -1,0 +1,28 @@
+{
+  "info": {
+    "decimals": 6,
+    "extensions": [
+      {
+        "extension": "groupPointer",
+        "state": {
+          "authority": "FqVBoU8VHZWCLP96puvkEQ6tb7MPycoLSDNt7DV23ATi",
+          "groupAddress": "AF3SHn1AW61YrrEqyjVmGcDKLB2TgzFpTRLHtkfcJJ7"
+        }
+      },
+      {
+        "extension": "tokenGroup",
+        "state": {
+          "maxSize": 5,
+          "mint": "AF3SHn1AW61YrrEqyjVmGcDKLB2TgzFpTRLHtkfcJJ7",
+          "size": 2,
+          "updateAuthority": "FqVBoU8VHZWCLP96puvkEQ6tb7MPycoLSDNt7DV23ATi"
+        }
+      }
+    ],
+    "freezeAuthority": null,
+    "isInitialized": true,
+    "mintAuthority": "FqVBoU8VHZWCLP96puvkEQ6tb7MPycoLSDNt7DV23ATi",
+    "supply": "0"
+  },
+  "type": "mint"
+}

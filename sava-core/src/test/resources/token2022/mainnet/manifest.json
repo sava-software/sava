@@ -1,0 +1,319 @@
+{
+  "program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+  "accounts": [
+    {
+      "address": "113Dbys19a4PMNYt5v1153Kwta5aQSD6VFu5sqQw5tz",
+      "slot": 445057013,
+      "length": 82,
+      "kind": "mint",
+      "extensions": [],
+      "sha256": "a53d68420fd4062753a109b7fc2bdeb6c26196200a8463450ad4c3eb77bb54b6",
+      "note": "extension-free mint with a mint authority, no freeze authority and a non-zero supply"
+    },
+    {
+      "address": "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP",
+      "slot": 445057013,
+      "length": 82,
+      "kind": "mint",
+      "extensions": [],
+      "sha256": "b0f919425a529f4971ef8dabd535aec34947d5c8c4885df80dae91635b98c5f3",
+      "note": "native mint: Mint::LEN exactly, both COption authorities absent"
+    },
+    {
+      "address": "1NSESJWVCQZf7Dctz8Bbfyo4WTS2nM5fram1z8WX59E",
+      "slot": 445057013,
+      "length": 165,
+      "kind": "account",
+      "extensions": [],
+      "sha256": "a38acd1b88eee4a90d9a8940eaf8e1e8f64b64ab6ade1aa69d3a70d1a0024df8",
+      "note": "a delegated token account whose delegated amount is above Long.MAX_VALUE as a signed long"
+    },
+    {
+      "address": "1TeeextCMbWvAYDShphXyg9macWQCJkowqeU4iR9nUa",
+      "slot": 445057013,
+      "length": 165,
+      "kind": "account",
+      "extensions": [],
+      "sha256": "332d68ee54351aaac9e75de4b078014225006aa7dfaefb39f3f9f15d6e347e99",
+      "note": "extension-free token account: Account::LEN exactly, frozen, with a close authority"
+    },
+    {
+      "address": "111LpjByCA598qgAyRQfv4maJJCFzAKpu23G1dqocb",
+      "slot": 445057013,
+      "length": 170,
+      "kind": "account",
+      "extensions": [
+        7
+      ],
+      "sha256": "5a0e8e767e76fd5686604f8c207c3b6fee7546216384bf2a96fcad6b19f9495c",
+      "note": "an associated token account carrying only ImmutableOwner"
+    },
+    {
+      "address": "7KnAmPFf1EJ1xcrEQBqBjhmqsSysXt9JLDx7YkX4uKF",
+      "slot": 445057013,
+      "length": 170,
+      "kind": "account",
+      "extensions": [
+        7
+      ],
+      "sha256": "3ef6eadc43328fcb4505c7c06099a1bcb58b0a748de3425edecba5705b2759b8",
+      "note": "wrapped SOL: the is-native option is set and carries the rent-exempt reserve"
+    },
+    {
+      "address": "11Sqd7aHSb8VuDoi3Jsbm6ug5toRKnRqHVyxA8AwgBj",
+      "slot": 445057013,
+      "length": 171,
+      "kind": "account",
+      "extensions": [
+        15
+      ],
+      "sha256": "e3cbc21a7c87738d849de9c82995ffe704dcae80912b6af35a6e11d47628f428",
+      "note": "a transfer-hook account flag"
+    },
+    {
+      "address": "DFECr53299QPTEssjcAywRCMo978SqRum24rjDvmTF3z",
+      "slot": 445057013,
+      "length": 174,
+      "kind": "account",
+      "extensions": [
+        7,
+        13
+      ],
+      "sha256": "be99bbf023e993c04b69d132de76130a16934c4048500300059f6212f59f6f9a",
+      "note": "a non-transferable token account behind ImmutableOwner"
+    },
+    {
+      "address": "12cvFbghNmNRybMZceSBkbVrvSvtqqqu5UwudKHs9Gf",
+      "slot": 445057013,
+      "length": 175,
+      "kind": "account",
+      "extensions": [
+        27,
+        15
+      ],
+      "sha256": "5eade07a3b0df4c586b7a1862171826200638aff6d46c49dd32f52c4f6a3ed5b",
+      "note": "a pausable account marker ahead of a transfer-hook account flag"
+    },
+    {
+      "address": "6DbyAiRL6p6x1F1JxLBLdQA9jfp56nVyoN5G4RMgNDx",
+      "slot": 445057013,
+      "length": 175,
+      "kind": "account",
+      "extensions": [
+        7,
+        8
+      ],
+      "sha256": "c29551029e542ed6ba2ca21785461b37ddf0a45516fa3dad4cea12ed95c7a0a5",
+      "note": "an account requiring an incoming transfer memo"
+    },
+    {
+      "address": "12JVgXfDkvB2JrPDtHEiqECneGQYSUPpYUW5Dcss7XW",
+      "slot": 445057013,
+      "length": 182,
+      "kind": "account",
+      "extensions": [
+        7,
+        2
+      ],
+      "sha256": "25d8639c20845fc6959ebf887417763b49ffb5ec9dc6849bf984a924d208f2ea",
+      "note": "a non-zero withheld transfer-fee amount behind ImmutableOwner"
+    },
+    {
+      "address": "iUNTPZxdDuZjtebeBtTzymAb598rXHsWCWQxBjmUULe",
+      "slot": 445057013,
+      "length": 187,
+      "kind": "account",
+      "extensions": [
+        7,
+        2,
+        11
+      ],
+      "sha256": "f2b951562b4598a9b4bc227017821ae87d5581847a98fdd89a76a815bbbee0d8",
+      "note": "a token account with the CPI guard locked, behind ImmutableOwner and a withheld fee amount"
+    },
+    {
+      "address": "AF3SHn1AW61YrrEqyjVmGcDKLB2TgzFpTRLHtkfcJJ7",
+      "slot": 445057013,
+      "length": 318,
+      "kind": "mint",
+      "extensions": [
+        20,
+        21
+      ],
+      "sha256": "4fa289475ffc94322b864bb80dab02b7efc71d14aa1c4ea1ca15da4cfd25e08d",
+      "note": "a token group with a populated size and maximum size"
+    },
+    {
+      "address": "et1Arzfg3zufiKMyNtudiM7QVWzG4F9e3ukWxiHAZMs",
+      "slot": 445057013,
+      "length": 355,
+      "kind": "multisig",
+      "extensions": [],
+      "sha256": "74a7eb63426f767318e77b8a78874df72e92a6673277fc202411b5b70d879b94",
+      "note": "a real 2-of-3 multisig: Multisig::LEN, which both readers must refuse"
+    },
+    {
+      "address": "1DMqxdD2LQF8dR8qh5ULVK7pVx616DggBT3pKEKDPJ5",
+      "slot": 445057013,
+      "length": 357,
+      "kind": "mint",
+      "extensions": [
+        18,
+        19
+      ],
+      "sha256": "c48be99e69e3fea5153fa95486fb362beabb226a0051d7f759ea2290720ed217",
+      "note": "357 bytes: a mint whose extensions land on Multisig::LEN, so the program allocated the two-byte pad"
+    },
+    {
+      "address": "zKQsnrqGNKZ3e3F68v2sARVfB5Z5nkD98f8gfxC3Rua",
+      "slot": 445057013,
+      "length": 435,
+      "kind": "mint",
+      "extensions": [
+        4,
+        24
+      ],
+      "sha256": "2139367a7d5c5655bb049e712edc633d2628abf3e93154c51cbbc0ccbc8b1063",
+      "note": "a confidential mint-burn supply beside a confidential transfer mint"
+    },
+    {
+      "address": "A9JXuXgm62QG3kTT5waRdEMiGw1w7TY2ovs8MoFWetmZ",
+      "slot": 445057013,
+      "length": 469,
+      "kind": "account",
+      "extensions": [
+        7,
+        5
+      ],
+      "sha256": "d67432dec51c306865dcc19c207407fef71016a049f9b4e115745253a9c3c533",
+      "note": "a populated confidential-transfer token account"
+    },
+    {
+      "address": "11oU7odA6rNfKbNuEfSSdndW1Gt27zEsuTLqmWcdE7z",
+      "slot": 445057013,
+      "length": 519,
+      "kind": "mint",
+      "extensions": [
+        18,
+        22,
+        19,
+        23
+      ],
+      "sha256": "feee07b79985ecbd9a4ae86abbdf34d81c6e96b429278243038be669373626cb",
+      "note": "a token group member with a non-zero member number"
+    },
+    {
+      "address": "14Rg7TaptSo1Ndkz1ngBw2rE4EuFhQd2PzCrkyjGdsL1",
+      "slot": 445057013,
+      "length": 590,
+      "kind": "mint",
+      "extensions": [
+        6,
+        12,
+        18,
+        26,
+        3,
+        28,
+        19
+      ],
+      "sha256": "c09ee9feef24e2ab5211df6ab510a2eaceb57bc6a537836e88c061682fe4a11a",
+      "note": "a permissioned burn authority beside six other extensions"
+    },
+    {
+      "address": "1nbWT8JqE4MUJoZsTsqT5bo3dMXP3WHsZkNy1sGBchn",
+      "slot": 445057013,
+      "length": 600,
+      "kind": "mint",
+      "extensions": [
+        1,
+        10,
+        9,
+        18,
+        19
+      ],
+      "sha256": "c40306d594e3dfdece749958b8af973b62d90dc04a93b4b852c2ae937c1b96d7",
+      "note": "non-zero transfer fee basis points and maximum fee, an interest-bearing rate, non-transferable"
+    },
+    {
+      "address": "13UnWveBycSEeYJFgvsmE2qHXP5ERienrhGZ5wUjWM8L",
+      "slot": 445057013,
+      "length": 631,
+      "kind": "mint",
+      "extensions": [
+        20,
+        22,
+        18,
+        14,
+        12,
+        19
+      ],
+      "sha256": "b1f13c7359fcb3cbfd6261f925f9d059efaef69b50af56a353fa36ba7c63b237",
+      "note": "group and group-member pointers, and a transfer hook naming a real program"
+    },
+    {
+      "address": "15YGYD1afQzrdjuzJBDonV7U5yPyBJs7qT5MQBLP49b",
+      "slot": 445057013,
+      "length": 631,
+      "kind": "mint",
+      "extensions": [
+        18,
+        6,
+        3,
+        12,
+        19
+      ],
+      "sha256": "8f46890d23a237eb91cc487461eb60288dcbe1b791fb5543a348ce3db96662f0",
+      "note": "a five-entry additional-metadata map and a frozen default account state"
+    },
+    {
+      "address": "15SsCZqCsM9fZGhTmP4rdJTPT9WGZKazDSsgeQ8ondo",
+      "slot": 445057013,
+      "length": 657,
+      "kind": "mint",
+      "extensions": [
+        25,
+        18,
+        26,
+        6,
+        4,
+        14,
+        19
+      ],
+      "sha256": "d201bd84186ea14f807387f70af1d3c6dc2c3408751f24f4d6ed63e5e8a97edc",
+      "note": "a scaled UI amount multiplier, a pausable config and a confidential transfer mint"
+    },
+    {
+      "address": "Uw2T438UX46ur4JzcA3ThZnzzKucNKgEatq8otZKjPd",
+      "slot": 445057013,
+      "length": 683,
+      "kind": "mint",
+      "extensions": [
+        12,
+        20,
+        18,
+        19,
+        21
+      ],
+      "sha256": "3e387a10e5c5fdf4584d87366f4f9b52e4a24d98f70bc7165f6e7edd79a40376",
+      "note": "a token group whose maximum size is u64::MAX, and a metadata URI carrying escaped quotes"
+    },
+    {
+      "address": "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
+      "slot": 445057013,
+      "length": 866,
+      "kind": "mint",
+      "extensions": [
+        3,
+        12,
+        1,
+        4,
+        16,
+        14,
+        18,
+        19
+      ],
+      "sha256": "95fc07426ac6f1c9bc00966b75466e6f095b3c6cb7c5c7067825aae3b93ecb0a",
+      "note": "PYUSD: eight extensions including confidential transfer fees and embedded metadata"
+    }
+  ]
+}

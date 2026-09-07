@@ -1,0 +1,20 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "immutableOwner"
+      }
+    ],
+    "isNative": false,
+    "mint": "BQLM5Nc8hRRHCgGJHwuKBVxkGByu91uKtX9RUgGnpump",
+    "owner": "5aAfCJTGSY9MZbe6kT6FN2PXRchQvHvqKS8Lxb4UxnGK",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "0",
+      "decimals": 6,
+      "uiAmount": 0.0,
+      "uiAmountString": "0"
+    }
+  },
+  "type": "account"
+}

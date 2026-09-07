@@ -1,0 +1,32 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "immutableOwner"
+      },
+      {
+        "extension": "transferFeeAmount",
+        "state": {
+          "withheldAmount": 0
+        }
+      },
+      {
+        "extension": "cpiGuard",
+        "state": {
+          "lockCpi": true
+        }
+      }
+    ],
+    "isNative": false,
+    "mint": "9pNvh6swDypqQwKpkTvT8om4nuMqK7VSaZyE2oaMiN6y",
+    "owner": "7iVEzd5susFLkuk4PK8zBA2mDi3JtMqVmDnFXNNDpVvf",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "100000000",
+      "decimals": 0,
+      "uiAmount": 100000000.0,
+      "uiAmountString": "100000000"
+    }
+  },
+  "type": "account"
+}

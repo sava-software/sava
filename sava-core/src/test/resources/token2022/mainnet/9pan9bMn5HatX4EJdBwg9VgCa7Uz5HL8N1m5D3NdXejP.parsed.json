@@ -1,0 +1,10 @@
+{
+  "info": {
+    "decimals": 9,
+    "freezeAuthority": null,
+    "isInitialized": true,
+    "mintAuthority": null,
+    "supply": "0"
+  },
+  "type": "mint"
+}

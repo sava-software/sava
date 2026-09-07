@@ -1,0 +1,26 @@
+{
+  "info": {
+    "extensions": [
+      {
+        "extension": "immutableOwner"
+      },
+      {
+        "extension": "memoTransfer",
+        "state": {
+          "requireIncomingTransferMemos": true
+        }
+      }
+    ],
+    "isNative": false,
+    "mint": "Fqia5VoxukJeH4mnRGpom9ERSyYMunh6JvSwzrKVZbVZ",
+    "owner": "9GPUFBTem8EBCXgyQrz6Hc78CBMHR1dZ9v4onVycFZf7",
+    "state": "initialized",
+    "tokenAmount": {
+      "amount": "999999777000000",
+      "decimals": 6,
+      "uiAmount": 999999777.0,
+      "uiAmountString": "999999777"
+    }
+  },
+  "type": "account"
+}

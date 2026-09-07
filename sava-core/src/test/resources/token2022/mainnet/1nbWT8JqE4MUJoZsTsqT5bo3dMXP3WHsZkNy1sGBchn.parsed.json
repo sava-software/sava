@@ -1,0 +1,61 @@
+{
+  "info": {
+    "decimals": 6,
+    "extensions": [
+      {
+        "extension": "transferFeeConfig",
+        "state": {
+          "newerTransferFee": {
+            "epoch": 735,
+            "maximumFee": 2328306436538696192,
+            "transferFeeBasisPoints": 1000
+          },
+          "olderTransferFee": {
+            "epoch": 735,
+            "maximumFee": 2328306436538696192,
+            "transferFeeBasisPoints": 1000
+          },
+          "transferFeeConfigAuthority": "HHL3YaESVUftpHaajQ3pLgGgkAfeDmwmyca1NsfLtPsy",
+          "withdrawWithheldAuthority": "HHL3YaESVUftpHaajQ3pLgGgkAfeDmwmyca1NsfLtPsy",
+          "withheldAmount": 0
+        }
+      },
+      {
+        "extension": "interestBearingConfig",
+        "state": {
+          "currentRate": 9900,
+          "initializationTimestamp": 1738362257,
+          "lastUpdateTimestamp": 1738362257,
+          "preUpdateAverageRate": 9900,
+          "rateAuthority": "HHL3YaESVUftpHaajQ3pLgGgkAfeDmwmyca1NsfLtPsy"
+        }
+      },
+      {
+        "extension": "nonTransferable"
+      },
+      {
+        "extension": "metadataPointer",
+        "state": {
+          "authority": "HHL3YaESVUftpHaajQ3pLgGgkAfeDmwmyca1NsfLtPsy",
+          "metadataAddress": "1nbWT8JqE4MUJoZsTsqT5bo3dMXP3WHsZkNy1sGBchn"
+        }
+      },
+      {
+        "extension": "tokenMetadata",
+        "state": {
+          "additionalMetadata": [],
+          "mint": "1nbWT8JqE4MUJoZsTsqT5bo3dMXP3WHsZkNy1sGBchn",
+          "name": "Gain's Honeypot",
+          "symbol": "Honeypot",
+          "updateAuthority": "HHL3YaESVUftpHaajQ3pLgGgkAfeDmwmyca1NsfLtPsy",
+          "uri": "https://i.degencdn.com/ipfs/bafkreiac43osjymfvn5sgeqcn4pqgeyxfvygfm2l5fs4jn7vfwxajxtczq"
+        }
+      }
+    ],
+    "freezeAuthority": "HHL3YaESVUftpHaajQ3pLgGgkAfeDmwmyca1NsfLtPsy",
+    "isInitialized": true,
+    "mintAuthority": "HHL3YaESVUftpHaajQ3pLgGgkAfeDmwmyca1NsfLtPsy",
+    "supply": "0"
+  },
+  "type": "mint"
+}

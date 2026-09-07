@@ -1,0 +1,45 @@
+{
+  "info": {
+    "decimals": 0,
+    "extensions": [
+      {
+        "extension": "metadataPointer",
+        "state": {
+          "authority": "9seA2aEusuEkC9qs6sQorrpKBf8aL3kifJgr9bn7xqLT",
+          "metadataAddress": "11oU7odA6rNfKbNuEfSSdndW1Gt27zEsuTLqmWcdE7z"
+        }
+      },
+      {
+        "extension": "groupMemberPointer",
+        "state": {
+          "authority": "9seA2aEusuEkC9qs6sQorrpKBf8aL3kifJgr9bn7xqLT",
+          "memberAddress": "11oU7odA6rNfKbNuEfSSdndW1Gt27zEsuTLqmWcdE7z"
+        }
+      },
+      {
+        "extension": "tokenMetadata",
+        "state": {
+          "additionalMetadata": [],
+          "mint": "11oU7odA6rNfKbNuEfSSdndW1Gt27zEsuTLqmWcdE7z",
+          "name": "PUPILMON #1347",
+          "symbol": "PUPILS",
+          "updateAuthority": "9seA2aEusuEkC9qs6sQorrpKBf8aL3kifJgr9bn7xqLT",
+          "uri": "https://metadata.pupils.fun/1347.json"
+        }
+      },
+      {
+        "extension": "tokenGroupMember",
+        "state": {
+          "group": "45sevaxEaY57emcEVN32tsAwp95VBBNASio6oeE7phB5",
+          "memberNumber": 67,
+          "mint": "11oU7odA6rNfKbNuEfSSdndW1Gt27zEsuTLqmWcdE7z"
+        }
+      }
+    ],
+    "freezeAuthority": null,
+    "isInitialized": true,
+    "mintAuthority": null,
+    "supply": "1"
+  },
+  "type": "mint"
+}
