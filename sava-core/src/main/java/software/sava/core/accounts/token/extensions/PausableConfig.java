@@ -5,6 +5,9 @@ import software.sava.core.accounts.PublicKey;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+/// @param authority the authority that may pause and resume the mint; all-zero means none, so
+///                  compare with [PublicKey#NONE] rather than testing for `null`.
+/// @param paused    whether transfers, minting and burning are currently paused.
 public record PausableConfig(PublicKey authority, boolean paused) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + 1;

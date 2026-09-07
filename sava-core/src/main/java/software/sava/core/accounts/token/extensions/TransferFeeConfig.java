@@ -6,6 +6,14 @@ import software.sava.core.encoding.ByteUtil;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+/// @param transferFeeConfigAuthority the authority that may update the fee; all-zero means
+///                                   none, so compare with [PublicKey#NONE] rather than
+///                                   testing for `null`.
+/// @param withdrawWithheldAuthority  the authority that may withdraw withheld fees; all-zero
+///                                   means none, compared the same way.
+/// @param withheldAmount             fees withheld on the mint itself.
+/// @param olderTransferFee           the fee in force before the newer one took effect.
+/// @param newerTransferFee           the fee in force from its own epoch onwards.
 public record TransferFeeConfig(PublicKey transferFeeConfigAuthority,
                                 PublicKey withdrawWithheldAuthority,
                                 long withheldAmount,

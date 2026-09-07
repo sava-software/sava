@@ -6,6 +6,11 @@ import software.sava.core.encoding.ByteUtil;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+/// @param updateAuthority the authority that may update the group; all-zero means none, so
+///                        compare with [PublicKey#NONE] rather than testing for `null`.
+/// @param mint            the mint backing the group.
+/// @param size            the number of members in the group.
+/// @param maxSize         the maximum number of members the group admits.
 public record TokenGroup(PublicKey updateAuthority,
                          PublicKey mint,
                          long size,

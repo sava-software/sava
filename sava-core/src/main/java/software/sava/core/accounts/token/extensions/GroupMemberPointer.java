@@ -5,6 +5,10 @@ import software.sava.core.accounts.PublicKey;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+/// @param authority     the authority that may update the pointer; all-zero means none, so
+///                      compare with [PublicKey#NONE] rather than testing for `null`.
+/// @param memberAddress the account holding the group membership; all-zero means none,
+///                      compared the same way.
 public record GroupMemberPointer(PublicKey authority, PublicKey memberAddress) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH;

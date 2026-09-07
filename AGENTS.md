@@ -539,7 +539,7 @@ Machine-specific context (local clone paths, environment notes) belongs in
 ## Where the detail lives
 
 - **`CONVENTIONS.md`** — API behaviours that are not guessable from a signature: how
-  absence is represented (four different ways), unsigned/sentinel handling, argument
+  absence is represented (five different ways), unsigned/sentinel handling, argument
   order traps, wire-field vs accessor renames, and the existing test harnesses.
 - **`HARDENING_NOTES.md`** — per-suite scope decisions, deliberate exceptions, and
   the per-package hardening history.

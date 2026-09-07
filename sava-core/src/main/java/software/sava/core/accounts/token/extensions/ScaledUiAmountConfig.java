@@ -6,6 +6,12 @@ import software.sava.core.encoding.ByteUtil;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+/// @param authority                       the authority that may update the multiplier;
+///                                        all-zero means none, so compare with
+///                                        [PublicKey#NONE] rather than testing for `null`.
+/// @param multiplier                      the multiplier in force now.
+/// @param newMultiplierEffectiveTimestamp when the new multiplier takes effect.
+/// @param newMultiplier                   the multiplier that takes effect at that timestamp.
 public record ScaledUiAmountConfig(PublicKey authority,
                                    double multiplier,
                                    long newMultiplierEffectiveTimestamp,

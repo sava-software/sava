@@ -5,6 +5,8 @@ import software.sava.core.accounts.PublicKey;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+/// @param authority the authority permitted to burn; all-zero means none, so compare with
+///                  [PublicKey#NONE] rather than testing for `null`.
 public record PermissionedBurnConfig(PublicKey authority) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH;

@@ -163,6 +163,25 @@ unknown-extension add-and-advance branch reduced the population from 623;
 unknown values now use the common path, and diagnostic names are looked up only
 on errors. No `Token2022.parseExtensions` null-guard acceptance remains.
 
+The 2026-09-06 Token-2022 structural-check work (base-length accounts, the
+short-buffer and multisig-length rejections, the multisig-length write padding, the
+two-sided account-type rule that admits the pre-initialization state, the TLV walk's
+short-tail exit, `Uninitialized` written last, and the bounds-checked token-account
+state byte) took the population to **696 mutants: 676 killed** and **the same 20
+accepted survivors** — every new branch is killed by a test, and no row was added,
+removed or relabelled. One boundary mutant was refactored out rather than accepted:
+the short-tail guard inside `parseExtensions`' loop made the loop's own
+`i < data.length` boundary redundant and therefore equivalent, and folding the guard
+into the loop condition (`data.length - i >= Short.BYTES`) restored a killable
+distinction. Two runs, both fresh and history-free, agreed exactly, with zero
+`TIMED_OUT`, `RUN_ERROR` and `NO_COVERAGE`, on a machine whose unrelated load
+average ranged from 6 to 108 across the measurement series. `BaselineRetag`
+refreshed four
+`# line` tags that the new javadoc above `ConfidentialTransferFeeConfig.hashCode` and
+`TokenMetadata.read` had shifted; both methods are byte-identical to their previous
+versions, so the `# hash mixing` and `# slow path routing` arguments carry over
+unchanged.
+
 **Static-initializer construction** — baseline label `# static init`
 (`Ed25519Util$PointAccum.create`,
 `$PointExtended.create`): called only while the `static {}` block builds

@@ -8,7 +8,7 @@ watching it fail.
 None of it is a bug list. Where a convention is surprising it is documented at
 the declaration too; this file exists so the family is visible in one place.
 
-## How absence is represented — four different ways
+## How absence is represented — five different ways
 
 There is no single convention, and the differences are deliberate. Picking the
 wrong one silently misattributes data rather than failing.
@@ -19,6 +19,7 @@ wrong one silently misattributes data rather than failing.
 | `getMultipleAccounts(...)` | **omitted**, so later entries shift | you cannot from the list shape — dispatch on each entry's `pubKey()`, or use `getAccounts` for indexed correlation |
 | `getAccountInfo(...)` | a non-null `AccountInfo` with empty fields | `owner() == null` |
 | `getSignatureStatuses(...)` | a sentinel `TxStatus` in the map | `status.nil()` |
+| Token-2022 extension authorities | a **non-null** all-zero `PublicKey` | `PublicKey.NONE.equals(key)` |
 
 The two account-list families send a **byte-identical request** and differ only
 in the parser, so nothing at the call site hints at it. Correlating results back
@@ -27,6 +28,21 @@ to the keys you passed by index is only safe with `getAccounts`.
 `getAccountInfo` returning a hollow record means `if (info == null)` as an
 "account does not exist" check is *always false*. This is long-standing
 published behaviour and is not being changed — read `owner()` or `data()`.
+
+Every optional address inside a Token-2022 extension is a `MaybeNull<Address>` on
+the wire (`OptionalNonZeroPubkey` in older revisions, `zeroableOption` in the
+Anchor IDL): the field is always present and absence is 32 zero bytes, not a
+discriminant. sava decodes that faithfully, so `MintCloseAuthority.closeAuthority`,
+both `TransferFeeConfig` authorities, `PermanentDelegate.delegate`,
+`TransferHook.authority`/`programId`, `InterestBearingConfig.rateAuthority`,
+`ConfidentialTransferMint.authority`/`auditorElGamalKey`,
+`ConfidentialTransferFeeConfig.authority`, both components of `MetadataPointer`,
+`GroupPointer` and `GroupMemberPointer`, `TokenGroup.updateAuthority`,
+`TokenMetadata.updateAuthority`, `PausableConfig.authority`,
+`PermissionedBurnConfig.authority` and `ScaledUiAmountConfig.authority` are
+**never `null`** — an absent one equals `PublicKey.NONE`. `null` checks on them
+are always false; the reverse mistake treats an unset authority as a real key and
+happily encodes a transaction naming the all-zero address.
 
 ## Unsigned longs and sentinel zeros
 

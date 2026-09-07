@@ -6,6 +6,12 @@ import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
 
+/// @param authority              the authority that may update the configuration; all-zero
+///                               means none, so compare with [PublicKey#NONE] rather than
+///                               testing for `null`.
+/// @param autoApproveNewAccounts whether new confidential accounts are approved on creation.
+/// @param auditorElGamalKey      the auditor's ElGamal key; all-zero means none, compared the
+///                               same way.
 public record ConfidentialTransferMint(PublicKey authority,
                                        boolean autoApproveNewAccounts,
                                        PublicKey auditorElGamalKey) implements MintTokenExtension {

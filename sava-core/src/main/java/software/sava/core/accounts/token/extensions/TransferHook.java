@@ -5,6 +5,9 @@ import software.sava.core.accounts.PublicKey;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
+/// @param authority the authority that may update the hook program; all-zero means none, so
+///                  compare with [PublicKey#NONE] rather than testing for `null`.
+/// @param programId the transfer hook program; all-zero means none, compared the same way.
 public record TransferHook(PublicKey authority, PublicKey programId) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH + PUBLIC_KEY_LENGTH;

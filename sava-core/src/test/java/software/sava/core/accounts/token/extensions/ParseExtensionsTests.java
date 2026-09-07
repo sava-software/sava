@@ -21,6 +21,7 @@ final class ParseExtensionsTests {
   // On-chain IDs pinned by solana-token2022-extensions.tsv.
   private static final int TOKEN_METADATA_TYPE = 19;
   private static final int PERMANENT_DELEGATE_TYPE = 12;
+  private static final int METADATA_POINTER_TYPE = 18;
 
   private static byte[] mainnetFixture(final String name) throws IOException {
     try (final var input = ParseExtensionsTests.class.getResourceAsStream("/fuzz/token2022/" + name)) {
@@ -101,6 +102,23 @@ final class ParseExtensionsTests {
           error.getMessage()
       );
     }
+  }
+
+  /// Every Token-2022 authority is a `MaybeNull<Address>` on the wire: absence is written as
+  /// 32 zero bytes, not as a shorter or absent field. sava decodes that to a non-null
+  /// [PublicKey] equal to [PublicKey#NONE] rather than to `null`, so an absence test is a
+  /// comparison, never a null check. See CONVENTIONS.md.
+  @Test
+  void zeroableOptionAuthoritiesDecodeAsPublicKeyNone() {
+    final byte[] data = new byte[Integer.BYTES + MetadataPointer.BYTES];
+    ByteUtil.putInt16LE(data, 0, METADATA_POINTER_TYPE);
+    ByteUtil.putInt16LE(data, Short.BYTES, MetadataPointer.BYTES);
+
+    final var pointer = assertExtension(Token2022.parseExtensions(data, 0), MetadataPointer.class);
+    assertNotNull(pointer.authority());
+    assertEquals(PublicKey.NONE, pointer.authority());
+    assertNotNull(pointer.metadataAddress());
+    assertEquals(PublicKey.NONE, pointer.metadataAddress());
   }
 
   @Test
