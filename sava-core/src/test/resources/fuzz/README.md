@@ -111,6 +111,36 @@ giving PIT's mutants the same round-trip oracle as the fuzzer:
   `A9JXuXgm62QG3kTT5waRdEMiGw1w7TY2ovs8MoFWetmZ`, captured from RPC. It has
   ImmutableOwner and a populated ConfidentialTransferAccount and is replayed by the
   named confidential-account regression as well as the fuzz harness.
+- `extension_free_mint` — the first 82 bytes of `pyusd_mint`, which is a complete
+  legal mint: `Mint::LEN` with no remainder at all, so `type_and_tlv_indices`
+  answers `None` and there is no account-type byte to read. Both readers used to
+  index past the end of a buffer this shape.
+- `pre_init_metadata_pointer_mint` — 234 bytes: a zeroed 82-byte base, the 83-byte
+  padding, an `AccountType::Uninitialized` byte, and one MetadataPointer TLV entry.
+  Extension initializers run before `InitializeMint`, so this is what a mint looks
+  like between `InitializeMetadataPointer` and the instruction that initializes its
+  base. Reproduced from the official interface crate's `unpack_uninitialized` /
+  `init_extension` path rather than captured: the state exists only between two
+  instructions of one transaction, so neither the mainnet corpus nor the node's
+  initialized-only `jsonParsed` decoder can supply it.
+- `pre_init_immutable_owner_account` — 170 bytes: the token-account half of the same
+  lifecycle stage, an `InitializeImmutableOwner` before `InitializeAccount`.
+  Reproduced the same way, for the same reason.
+- `pre_init_transfer_fee_and_pointer_mint` — 346 bytes: two initializers already run
+  before the base, TransferFeeConfig then MetadataPointer, so the TLV chain rather
+  than a single entry is walked at this lifecycle stage. Reproduced the same way.
+- `multisig_length_mint` — 357 bytes: the real PYUSD base mint state, a
+  MetadataPointer, and a TokenMetadata whose 37-character name lands the account
+  exactly on `Multisig::LEN`. The program's `adjust_len_for_multisig` allocates two
+  extra zero bytes at that size, so this is what such an account looks like on
+  chain, and it is the one length where sizing and writing must not agree with the
+  naive sum. Synthesised from the PYUSD capture rather than captured: the boundary
+  is a function of the name length, so no real mint need sit on it.
+- `extension_free_token_account` — the first 165 bytes of `confidential_account`,
+  the same shape for `Account::LEN`. It is also the last length at which a *mint*'s
+  remainder is too short to hold the account-type byte, so the two readers
+  deliberately disagree about it: the account reader decodes it, the mint reader
+  rejects it.
 
 These bootstrap captures predate slot/date metadata. The PYUSD address, complete 866-byte
 layout, and embedded metadata are independently pinned as real mainnet data by

@@ -56,6 +56,53 @@ final class ParseExtensionsTests {
     assertArrayEquals(new byte[]{(byte) 0xAB, (byte) 0xCD}, extension.data());
   }
 
+  /// `try_for_each_tlv_extension_type` — interface/src/extension/mod.rs — has three exits, and
+  /// they are the whole rule. Fewer than two bytes left ends the walk and keeps what it has,
+  /// because "the last byte could be used during a realloc". A zero type word ends it as
+  /// trailing padding, including where the four header bytes would not fit after it. A
+  /// non-zero type with no room for its length is `InvalidAccountData`, as is a value reaching
+  /// past the end — the latter pinned by `unsignedTypeAndLength` and
+  /// `unknownExtensionLengthBeyondDataEnd`, which name the length that overran.
+  @Test
+  void theTlvWalkEndsOnAShortTailAndRejectsATypeWithNoLength() {
+    // Fewer than two bytes: the walk ends, exactly as an exhausted region does.
+    assertEquals(Set.of(), Token2022.parseExtensions(new byte[]{7}, 0));
+    assertEquals(Set.of(), Token2022.parseExtensions(new byte[0], 0));
+    assertEquals(
+        Set.of(ImmutableOwner.INSTANCE),
+        Token2022.parseExtensions(new byte[]{7, 0, 0, 0, 3}, 0)
+    );
+
+    // A zero type word is trailing padding, whether or not a header would fit after it.
+    assertEquals(Set.of(Uninitialized.INSTANCE), Token2022.parseExtensions(new byte[]{0, 0}, 0));
+    assertEquals(Set.of(Uninitialized.INSTANCE), Token2022.parseExtensions(new byte[]{0, 0, 0}, 0));
+    assertEquals(
+        Set.of(ImmutableOwner.INSTANCE),
+        Token2022.parseExtensions(new byte[]{7, 0, 0, 0, 0, 0}, 0)
+    );
+
+    // A non-zero type with no room for its length is malformed, at the start of the walk or
+    // after a complete entry.
+    record Case(byte[] data, int type, int remaining) {
+    }
+    for (final var malformed : new Case[]{
+        new Case(new byte[]{7, 0}, 7, 2),
+        new Case(new byte[]{7, 0, 1}, 7, 3),
+        new Case(new byte[]{7, 0, 0, 0, 9, 0}, 9, 2)
+    }) {
+      final var error = assertThrows(
+          IllegalArgumentException.class,
+          () -> Token2022.parseExtensions(malformed.data(), 0),
+          () -> "extension " + malformed.type() + " has no length behind it"
+      );
+      assertEquals(
+          "Extension " + malformed.type() + " has no length: only " + malformed.remaining()
+              + " of the 4 header bytes remain.",
+          error.getMessage()
+      );
+    }
+  }
+
   @Test
   void unknownExtensionLengthBeyondDataEnd() {
     // an unknown extension claiming one byte more than remains must throw like known

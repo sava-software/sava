@@ -74,7 +74,7 @@ public record TokenAccount(PublicKey address,
         ? PublicKey.readPubKey(data, i)
         : null;
     i += PUBLIC_KEY_LENGTH;
-    final var state = AccountState.values()[data[i]];
+    final var state = parseState(data[i]);
     ++i;
     final int isNativeOption = ByteUtil.getInt32LE(data, i);
     i += Integer.BYTES;
@@ -103,6 +103,18 @@ public record TokenAccount(PublicKey address,
         closeAuthorityOption,
         closeAuthority
     );
+  }
+
+  /// The state byte is an unsigned discriminant with three defined values; anything else is
+  /// corrupt account data. Reading it unchecked indexed the enum with the raw byte, so the
+  /// top half of the range arrived as a negative index.
+  private static AccountState parseState(final byte state) {
+    final var states = AccountState.values();
+    final int ordinal = state & 0xFF;
+    if (ordinal >= states.length) {
+      throw new IllegalArgumentException("Invalid token account state: " + ordinal);
+    }
+    return states[ordinal];
   }
 
   @Override

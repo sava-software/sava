@@ -73,9 +73,10 @@ public final class Token2022Fuzz {
       }
       return;
     }
-    // parseAccountType returns null for ordinals released after AccountType was last
-    // synced; such a value cannot be re-serialized, which is the write side's contract
-    if (token2022.accountType() == null) {
+    // parseAccountType returns null both for a base-length account, which re-serializes as
+    // its base state, and for ordinals released after AccountType was last synced; only the
+    // latter, which still carries extensions, cannot be re-serialized
+    if (token2022.accountType() == null && !token2022.tokenExtensions().isEmpty()) {
       return;
     }
     final byte[] out = new byte[token2022.l()];
@@ -101,7 +102,7 @@ public final class Token2022Fuzz {
       }
       return;
     }
-    if (account.type() == null) {
+    if (account.type() == null && !account.tokenExtensions().isEmpty()) {
       return;
     }
     final byte[] out = new byte[account.l()];
