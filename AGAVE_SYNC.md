@@ -347,6 +347,39 @@ During that run, `api.devnet.solana.com` enforced a per-method rate limit (`Too 
 a specific RPC call`) that the whole-class run tripped within seconds; the cases were run one at
 a time. The current smoke check is local-only and has no public-cluster funding support.
 
+#### A v1 transaction sava did not write, devnet slot 495,643,187
+
+Everything above was observed on transactions sava itself built. On 2026-09-09 a **third party's**
+v1 transaction was captured from the same cluster and committed as
+`sava-rpc/src/test/resources/rpc_response_data/getBlock-v1-devnet-4.3.0-beta.3.json`, read by
+`RoundTripRpcRequestTests.getBlockWithDevnetV1Transaction`. It is a live `getBlock` body for
+finalized slot 495,643,187, trimmed from 20 transactions to three — the v1 entry (original index
+12), the legacy vote before it (11), and the block's only v0 entry (19) — each byte-verbatim, with
+no other member of the response touched.
+
+What that entry carries, none of which sava chose:
+
+- **3,723 bytes**, three times the legacy 1,232-byte packet limit, in a single Memo v3 instruction
+  whose 3,541-byte payload takes **no accounts at all**; the whole message names two addresses.
+- **`TransactionConfigMask` `0x0000000c`** — compute unit limit (1,400,000) and account data size
+  limit (1 MiB, not the 64 MiB `TxBuilder` reserves) set; the priority fee and heap bits absent, so
+  `priorityFeeLamports()` and `heapSize()` read 0 and the node charged the 5,000 lamport base fee
+  alone. The 1,242,354 units it consumed fit under the limit it declared.
+- Rebuilding the parsed skeleton with `createTransaction()` reproduces those 3,723 bytes exactly:
+  instruction headers, ConfigValues block and trailing signature included.
+
+The v0 entry in the same fixture cross-checks the legacy/v0 fee derivation against the cluster: a
+4,000 unit limit at 10,000 micro-lamports per unit is 40 lamports, and devnet charged 5,040. It also
+sits *after* the v1 in the block, the mirror of slot 492,653,301 above — the pair is what shows the
+version `-32015` names is the first entry the request could not serve, not the lowest or the highest
+version the block holds.
+
+A devnet reset reuses slot numbers, so the block this fixture came from is identified by its
+blockhash `D62XQpRbzMUxQMknTRonhir9nsn2PL1pmBbVod4sUbS7`, not by slot 495,643,187 alone.
+
+v1 traffic on devnet is still sparse — a scan of eight recent slots on 2026-09-09 found one v1
+transaction among 181 — so a capture is worth keeping rather than re-derived on demand.
+
 ## Other sync surfaces (sava-core)
 
 | Java (under `sava-core/.../software/sava/core/`) | Models | Canonical source |
@@ -360,7 +393,7 @@ a time. The current smoke check is local-only and has no public-cluster funding 
 | `accounts/token/Mint.java` | SPL Mint, 82-byte packed layout with u32-tag COptions | `spl-token-interface` `state::Mint`; `agave:account-decoder/src/parse_token.rs` |
 | `accounts/token/TokenAccount.java`, `AccountState.java` | SPL Account, 165 bytes, explicit memcmp offsets used for `getProgramAccounts` filters | `spl-token-interface` `state::Account`/`AccountState` |
 | `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest upstream parser: `agave-sdk:transaction-view/` |
-| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and committed Agave RPC captures. Original live checks ran against local 4.2.1/4.2.2/4.3.0-beta.3 validators and public devnet — see "Observed on Agave 4.2.1" and "Observed on public devnet" above. `LiveV1ValidatorCheck` now retains one optional local smoke check |
+| `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and committed RPC captures: a local Agave 4.2.1 validator block and a public-devnet block carrying a third party's v1 transaction (`sava-rpc/src/test/resources/rpc_response_data/`). Original live checks ran against local 4.2.1/4.2.2/4.3.0-beta.3 validators and public devnet — see "Observed on Agave 4.2.1" and "Observed on public devnet" above. `LiveV1ValidatorCheck` now retains one optional local smoke check |
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
 | `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
 | `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |

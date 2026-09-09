@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.client;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.TokenAccount;
+import software.sava.core.encoding.Base58;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.http.request.BlockTxDetails;
@@ -16,12 +17,9 @@ import software.sava.rpc.json.http.response.TransactionError;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
-import java.util.List;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.OptionalInt;
-import java.util.OptionalLong;
+import java.util.*;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 import static software.sava.rpc.json.http.client.ParseRpcResponseTests.readFileString;
 
@@ -675,7 +673,8 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertTrue(absentSchedule.isEmpty());
     assertThrows(UnsupportedOperationException.class,
         () -> absentSchedule.put(identity, new long[]{1}),
-        "the null-result sentinel must be immutable just like Map.of()");
+        "the null-result sentinel must be immutable just like Map.of()"
+    );
   }
 
   @Test
@@ -1029,10 +1028,11 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     final byte[] wire = tx.data();
     final int messageLength = wire.length - Transaction.SIGNATURE_LENGTH;
     assertTrue(PublicKey.verifySignature(
-        skeleton.feePayer().toByteArray(), 0,
-        wire, 0, messageLength,
-        Arrays.copyOfRange(wire, messageLength, wire.length)
-    ), "fee payer signature verifies over the v1 message");
+            skeleton.feePayer().toByteArray(), 0,
+            wire, 0, messageLength,
+            Arrays.copyOfRange(wire, messageLength, wire.length)
+        ), "fee payer signature verifies over the v1 message"
+    );
     assertEquals(1, skeleton.numInstructions());
     assertEquals(3, skeleton.numAccounts());
     // The four config slots were all set on this transaction; each reads back the value sent.
@@ -1056,7 +1056,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
   @Test
   void getBlockWithV1Transaction() {
     registerRequest("""
-        {"jsonrpc":"2.0","id":753,"method":"getBlock","params":[6,{"encoding":"base64","commitment":"confirmed","transactionDetails":"full","rewards":false,"maxSupportedTransactionVersion":1}]}""",
+            {"jsonrpc":"2.0","id":753,"method":"getBlock","params":[6,{"encoding":"base64","commitment":"confirmed","transactionDetails":"full","rewards":false,"maxSupportedTransactionVersion":1}]}""",
         readFileString("getBlock-v1-agave-4.2.1.json")
     );
 
@@ -1072,7 +1072,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     final var transactions = block.transactions();
     assertEquals(3, transactions.size());
 
-    final var vote = transactions.get(0);
+    final var vote = transactions.getFirst();
     assertEquals(2_100, vote.meta().computeUnitsConsumed());
     assertEquals(10_000L, vote.meta().fee());
     assertNull(vote.meta().error());
@@ -1080,7 +1080,8 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertTrue(voteSkeleton.isLegacy());
     assertEquals(2, voteSkeleton.numSignatures());
     assertEquals("Vote111111111111111111111111111111111111111",
-        voteSkeleton.parseInstructions(voteSkeleton.parseAccounts())[0].programId().publicKey().toBase58());
+        voteSkeleton.parseInstructions(voteSkeleton.parseAccounts())[0].programId().publicKey().toBase58()
+    );
 
     final var v1 = transactions.get(1);
     assertEquals(150, v1.meta().computeUnitsConsumed());
@@ -1115,6 +1116,176 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(V1AgaveTestFixtures.GATE_ON_LEGACY_CONTROL_SIGNATURE, Transaction.getBase58Id(legacyControl.data()));
     assertTrue(Objects.requireNonNull(legacyControl.skeleton()).isLegacy());
     assertEquals(0L, legacyControl.skeleton().priorityFeeLamports());
+  }
+
+  /// A live public-devnet `getBlock`, trimmed to three transactions: one legacy, one transaction v1
+  /// and one v0.
+  ///
+  /// Captured 2026-09-09 from `https://api.devnet.solana.com` (Agave 4.3.0-beta.3) for finalized
+  /// devnet slot 495,643,187, by the request this test registers — the one
+  /// [SolanaRpcClient#getBlock(long, BlockTxDetails, boolean)] emits. The block held 20
+  /// transactions; `rpc_response_data/getBlock-v1-devnet-4.3.0-beta.3.json` keeps three of them
+  /// byte-verbatim: the v1 entry (original index 12), the legacy vote immediately before it (11),
+  /// and the block's only v0 entry, seven transactions later (19). They are a subset, not a
+  /// contiguous slice. Only the `transactions` array was cut — every other member of the body,
+  /// the `id` included, is as the node sent it. A devnet reset reuses slot numbers, so what
+  /// identifies this block for a re-capture is its blockhash, not its slot.
+  ///
+  /// Its value over the local-validator capture in [#getBlockWithV1Transaction()] is that **sava did
+  /// not build the v1 transaction**: a third party's encoder produced 3,723 bytes — three times the
+  /// legacy 1,232-byte packet limit — carrying a 3,541-byte memo in a single instruction that takes
+  /// no accounts, and a TransactionConfigMask that sets only the compute-unit and account-data-size
+  /// bits, so the priority fee and heap ConfigValues are absent rather than zero. The local capture
+  /// pins bytes sava wrote; this one pins bytes sava must read — which is why nothing here rebuilds
+  /// the transaction from a seed the way [#getBlockWithV1Transaction()] does. There is no seed to
+  /// rebuild it from, and that is the point.
+  @Test
+  void getBlockWithDevnetV1Transaction() {
+    registerRequest("""
+            {"jsonrpc":"2.0","id":754,"method":"getBlock","params":[495643187,{"encoding":"base64","commitment":"confirmed","transactionDetails":"full","rewards":false,"maxSupportedTransactionVersion":1}]}""",
+        readFileString("getBlock-v1-devnet-4.3.0-beta.3.json")
+    );
+
+    final var block = rpcClient.getBlock(495_643_187L, BlockTxDetails.full, false).join();
+    assertEquals(483_416_010L, block.blockHeight());
+    assertEquals(1_788_959_810L, block.blockTime());
+    assertEquals("D62XQpRbzMUxQMknTRonhir9nsn2PL1pmBbVod4sUbS7", block.blockHash());
+    assertEquals("14gTqYBN8ygnnu9NHyV83XEwjz1whmm3AvJR9K1iudaP", block.previousBlockHash());
+    assertEquals(495_643_186L, block.parentSlot());
+    assertTrue(block.rewards().isEmpty(), "rewards were not requested");
+    assertTrue(block.signatures().isEmpty(), "full details carry transactions, not a signature list");
+
+    final var transactions = block.transactions();
+    assertEquals(3, transactions.size());
+
+    // One entry of each version the ceiling admits, read by its own rules from the same array.
+    final var vote = Objects.requireNonNull(transactions.getFirst().skeleton());
+    final var v1 = Objects.requireNonNull(transactions.get(1).skeleton());
+    final var v0 = Objects.requireNonNull(transactions.getLast().skeleton());
+    assertTrue(vote.isLegacy());
+    assertFalse(vote.isVersioned());
+    assertEquals(1, v1.version());
+    assertTrue(v1.isVersioned());
+    assertFalse(v1.isLegacy());
+    assertEquals(0, v0.version());
+    assertTrue(v0.isVersioned());
+    assertFalse(v0.isLegacy());
+
+    // Every entry's balance list is exactly as long as its own message's address list. Trimming
+    // removed whole entries; it did not disturb a byte inside the ones that stayed.
+    for (int i = 0; i < 3; ++i) {
+      final var entry = transactions.get(i);
+      final int numAccounts = Objects.requireNonNull(entry.skeleton()).numAccounts();
+      assertEquals(numAccounts, entry.meta().preBalances().size());
+      assertEquals(numAccounts, entry.meta().postBalances().size());
+    }
+
+    // Legacy: a vote, the transaction that fills a real block. No compute budget instructions, so
+    // the derived values are all zero and the fee is one signature at the base rate.
+    final var voteEntry = transactions.getFirst();
+    assertEquals(5_000L, voteEntry.meta().fee());
+    assertEquals(2_100, voteEntry.meta().computeUnitsConsumed());
+    assertEquals(1, vote.numSignatures());
+    assertEquals(3, vote.numAccounts());
+    assertEquals("8PiCqdtRaPePYMzZjt4SMaipjcZNKrHCXc77qZmP1B15j6yXmhujxrR1j7Z9gZg86FZqUu94Yh1aQeo75ovFdHP", vote.id());
+    final var voteInstructions = vote.parseInstructions(vote.parseAccounts());
+    assertEquals(1, voteInstructions.length);
+    assertEquals("Vote111111111111111111111111111111111111111",
+        voteInstructions[0].programId().publicKey().toBase58()
+    );
+    // 148 bytes of vote state is why this entry is here rather than a second small transfer: a
+    // length past 127 is the only two-byte compact-u16 instruction length in any RPC fixture.
+    assertEquals(148, voteInstructions[0].len());
+    assertEquals(0L, vote.priorityFeeLamports());
+    assertEquals(0, vote.computeUnitLimit());
+    assertEquals(3_465L, voteEntry.meta().costUnits());
+    // The vote account holds 25.4 million SOL. That balance is above 2^53, so it survives the round
+    // trip only if the lamport lists are read as longs and never pass through a double.
+    assertEquals(25_430_483_800_683_079L, voteEntry.meta().preBalances().get(1));
+    assertEquals(25_430_483_800_683_079L, voteEntry.meta().postBalances().get(1));
+
+    // v1: 3,723 bytes of someone else's encoding.
+    final var v1Entry = transactions.get(1);
+    final byte[] wire = v1Entry.data();
+    assertEquals(3_723, wire.length);
+    assertTrue(wire.length > 1_232, "the legacy packet limit is what v1 exists to exceed");
+    assertEquals((byte) 0x81, wire[0]);
+    assertEquals("2c16thYfAuyHBXKN4CMAmcv9mbUd1UsbgMibSvuyYNAJazHbK9zo6NFYYY7ZNGSsW8kHnG4dupgkSMeizDJeE36X",
+        Transaction.getBase58Id(wire)
+    );
+    assertEquals(Transaction.getBase58Id(wire), v1.id());
+    assertEquals(1, v1.numSignatures());
+    assertEquals(2, v1.numAccounts());
+    assertEquals(1, v1.numInstructions());
+    assertEquals("D7XRuYGY7TmAUT92qACDMNMGfSfjnE1UrrTGPZdjogqP", Base58.encode(v1.blockHash()));
+    assertEquals("6ZZecuC9M7khPZzZZSN8o4vpa2bds6cFJiCSziVVf7e9", v1.feePayer().toBase58());
+
+    // TransactionConfigMask 0x0000000c: compute unit limit and account data size only. The two
+    // unset bits read as 0 — the value SIMD-0385 gives an absent ConfigValue, not a default.
+    assertEquals(1_400_000, v1.computeUnitLimit());
+    assertEquals(1_048_576, v1.accountDataSizeLimit());
+    // The validator printed the same limit it metered against, so the ConfigValue read out of the
+    // wire is corroborated by the node itself and not only by this test's expectation.
+    assertEquals(
+        "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 1242354 of 1400000 compute units",
+        v1Entry.meta().logMessages().get(2)
+    );
+    assertEquals(0L, v1.priorityFeeLamports(), "no priority fee ConfigValue");
+    assertEquals(0, v1.heapSize(), "no heap ConfigValue; the runtime gives it the 32KiB minimum");
+    // ...and the node charged one signature at the base rate, with nothing added for priority.
+    assertEquals(5_000L, v1Entry.meta().fee());
+    assertEquals(1_242_354, v1Entry.meta().computeUnitsConsumed());
+    assertEquals(1_244_283L, v1Entry.meta().costUnits());
+    // A memo moves nothing: the fee payer is out exactly the fee, and the program account is level.
+    assertEquals(List.of(284_109_121_923L, 41_499_609_334L), v1Entry.meta().preBalances());
+    assertEquals(List.of(284_109_116_923L, 41_499_609_334L), v1Entry.meta().postBalances());
+    assertTrue(v1Entry.meta().computeUnitsConsumed() <= v1.computeUnitLimit(),
+        "the runtime metered against the limit the ConfigValue declared"
+    );
+
+    // A single memo instruction that takes no accounts at all.
+    final var v1Instructions = v1.parseInstructions(v1.parseAccounts());
+    assertEquals(1, v1Instructions.length);
+    final var memo = v1Instructions[0];
+    assertEquals("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr", memo.programId().publicKey().toBase58());
+    assertEquals(0, memo.accounts().size(), "the memo is signed by the fee payer, not by an account it names");
+    assertEquals(3_541, memo.len());
+    // The payload is one publisher's opaque digest record. Its length and its program are the
+    // protocol facts worth pinning; its content means nothing here and is not decoded.
+    assertTrue(new String(memo.data(), memo.offset(), memo.len(), UTF_8).startsWith("ZMLS1:"));
+
+    // The one signature must verify over the message it trails, with the fee payer's key: this is
+    // what proves the entry survived the capture and the trim byte-for-byte, and that sava puts the
+    // message/signature boundary of a foreign v1 message exactly where its author did.
+    final int messageLength = wire.length - Transaction.SIGNATURE_LENGTH;
+    assertTrue(PublicKey.verifySignature(
+            v1.feePayer().toByteArray(), 0,
+            wire, 0, messageLength,
+            Arrays.copyOfRange(wire, messageLength, wire.length)
+        ), "fee payer signature verifies over the v1 message"
+    );
+
+    // Rebuilding the parsed skeleton reproduces the third party's bytes exactly — instruction
+    // headers, ConfigValues block and signature placement included. sava's v1 serializer and this
+    // encoder agree on every byte of a message neither wrote for the other.
+    assertArrayEquals(wire, v1.createTransaction().serialized());
+
+    // v0: the priority fee sava derives from the compute budget instructions is what devnet
+    // actually charged above the base fee — 10,000 micro-lamports over a 4,000 unit limit.
+    final var v0Entry = transactions.getLast();
+    assertEquals(1, v0.numSignatures());
+    assertEquals(7, v0.numAccounts());
+    assertEquals(0, v0.numIndexedAccounts(), "no address table lookups");
+    assertEquals(3, v0.numInstructions());
+    assertEquals(4_000, v0.computeUnitLimit());
+    assertEquals(40L, v0.priorityFeeLamports());
+    assertEquals(5_040L, v0Entry.meta().fee());
+    assertEquals(5_000L + v0.priorityFeeLamports(), v0Entry.meta().fee(),
+        "base fee plus the derived priority fee is the fee the cluster charged"
+    );
+    assertEquals(6_889L, v0Entry.meta().costUnits());
+    assertTrue(v0Entry.meta().loadedAddresses().writable().isEmpty());
+    assertTrue(v0Entry.meta().loadedAddresses().readonly().isEmpty());
   }
 
   @Test
