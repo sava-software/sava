@@ -1,5 +1,20 @@
 # Changelog
 
+## [25.11.1](https://github.com/sava-software/sava/compare/25.11.0...25.11.1) (2026-09-12)
+
+
+### Features
+
+* **rpc:** add devnet v1 transaction test fixture and validator checks ([674e2ed](https://github.com/sava-software/sava/commit/674e2edbad0c82e2a39810ffae95bf1980d2d885))
+
+
+### Bug Fixes
+
+* clear the padding a Token-2022 mint writes before its account type ([c44f084](https://github.com/sava-software/sava/commit/c44f084ab2129939a215496536a860f33b25e508))
+* decode extension-free Token-2022 mints and token accounts ([28e30ad](https://github.com/sava-software/sava/commit/28e30ada8d4e47a771d5572794864ca3ceed4811))
+* **token:** refuse a COption presence tag that is neither 0 nor 1 ([935945e](https://github.com/sava-software/sava/commit/935945e4073fcdc0a22938046b23cf8554ee1d0a))
+* **token:** simplify extension parsing loop condition ([053e989](https://github.com/sava-software/sava/commit/053e989fbdfc8eda85e1054e7494baaa32c429b2))
+
 ## [25.11.0](https://github.com/sava-software/sava/compare/25.10.0...25.11.0) (2026-09-06)
 
 ### ⚠ BREAKING CHANGES
