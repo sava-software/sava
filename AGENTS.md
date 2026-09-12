@@ -524,12 +524,12 @@ copying a possibly newer block out of sava-build's moving `main`.
 
 **This repo pins a published sava-build release.** The three pins — both ids in
 the root `settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read
-`21.5.32`, and the marker above is that release's digest, reconciled bullet by
-bullet on 2026-09-05. **The pins must move together**; a settings-only bump has
-silently missed the jmh pin more than once. This combination resolves from the
-ordinary published repository; `-PsavaBuildLocalRepo` is needed only while
-evaluating an unpublished candidate. The sequence for the next bump is: move all
-three pins, run
+`21.5.35`, and the marker above is that release's digest, unchanged since 21.5.32
+and re-diffed against the installed template on 2026-09-12. **The pins must move
+together**; a settings-only bump has silently missed the jmh pin more than once.
+This combination resolves from the ordinary published repository;
+`-PsavaBuildLocalRepo` is needed only while evaluating an unpublished candidate.
+The sequence for the next bump is: move all three pins, run
 `hardeningAgentTemplate`, re-diff this block against what it prints, act on each
 changed bullet, then stamp the digest it prints.
 

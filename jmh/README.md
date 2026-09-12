@@ -19,8 +19,9 @@ cd jmh
 ```
 
 Configuration comes from the shared `software.sava.build.feature.jmh`
-convention plugin (resolved from the sibling `../sava-build` checkout); every
-default is overridable per invocation (`-PjmhFork`, `-PjmhIncludes`,
+convention plugin, pinned to a published sava-build release in `build.gradle.kts`
+(`-PsavaBuildLocalRepo` redirects it to a local test publication; see
+`../AGENTS.md`); every default is overridable per invocation (`-PjmhFork`, `-PjmhIncludes`,
 `-PjmhWarmupIterations`, `-PjmhWarmup`, `-PjmhIterations`,
 `-PjmhTimeOnIteration`, `-PjmhFailOnError`, `-PjmhJvmArgsAppend`). The forked
 benchmark JVMs run the long-running-service flag set (generational ZGC,

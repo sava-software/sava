@@ -9,6 +9,42 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.5.35 — 2026-09-12
+
+All three plugin pins now read the published `software.sava:sava-build:21.5.35`. In the
+root build, `:sava-core:savaBuildIdentity` reported that resolved coordinate, the
+Gradle-cache path of the loaded jar, and JAR SHA-256
+`1502c1c61ac55bc3cb28d65332a80c15c97319f00df43b4f3ee60092bce6d844`; the separate JMH
+build registers no identity task and was exercised by a fresh configure and compile
+against the same pin. Every adoption invocation passed an empty `-PsavaBuildLocalRepo=`,
+and the identity's "local override: not verified" line records that no local test
+publication was resolved — it is not a provenance failure. `gh attestation verify` bound
+that JAR (with its sources and javadoc jars) to a SLSA v1 provenance statement signed by
+`.github/workflows/gradle_plugin_publish.yml` at `refs/tags/21.5.35`, source commit
+`0624cb9e7e8c571d4bbf3ff73b6218763f824663`.
+
+The installed template digest is unchanged at `714041431f01`:
+`hardeningAgentTemplateDiff` reported that the bounded block matches, an independent
+byte comparison of the printed block against `AGENTS.md` agreed, and
+`agentsTemplateInSync` passed, so the marker was retained without a bullet-by-bullet
+reconciliation.
+
+Of the 21.5.33–21.5.35 changes, the ones that reach this repo are richer fuzz receipts
+(schema 5, binding each target's retained logs and source identity), the aggregate
+certification manifest's completion barrier, and reviewed key-subset pruning;
+sava-build's CHANGELOG and the installed `hardeningHelp` are the authorities on the
+details. Nothing in the range touches a baseline, a timeout set, or the PIT/ArcMutate
+toolchain — sava-build's version catalog is unchanged across it — so no
+`BaselineRebase` was expected.
+
+`test --rerun check` executed 1,675 tests — sava-core 764, sava-rpc 896, sava-vanity 15 —
+with 0 failures and 0 errors and no test task restored from cache; the two skips are the
+environment-gated `LiveV1ValidatorCheck` and `LiveMainNetDriftCheck`. JMH compilation
+also passed; no benchmark campaign was run. This entry records no mutation or fuzz
+observation of its own: the release checklist's `:hardeningCertifyAll` and bounded
+`fuzzAll` campaigns run against the commit that carries it, and their machine-local,
+git-ignored receipts under `.pitest-history/` record their own outcomes.
+
 ## Released sava-build 21.5.32 — 2026-09-05
 
 All three plugin pins now resolve the published `software.sava:sava-build:21.5.32`
