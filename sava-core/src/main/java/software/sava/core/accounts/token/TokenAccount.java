@@ -68,7 +68,10 @@ public record TokenAccount(PublicKey address,
     i += PUBLIC_KEY_LENGTH;
     final long amount = ByteUtil.getInt64LE(data, i);
     i += Long.BYTES;
-    final int delegateOption = ByteUtil.getInt32LE(data, i);
+    // The three tags are kept as read, so a record decoded from the chain writes back the bytes
+    // it came from; a value other than 0 or 1 never gets that far, because no token program
+    // writes one (COption).
+    final int delegateOption = COption.readTag(data, i, "delegate");
     i += Integer.BYTES;
     final var delegate = delegateOption == 1
         ? PublicKey.readPubKey(data, i)
@@ -76,7 +79,7 @@ public record TokenAccount(PublicKey address,
     i += PUBLIC_KEY_LENGTH;
     final var state = parseState(data[i]);
     ++i;
-    final int isNativeOption = ByteUtil.getInt32LE(data, i);
+    final int isNativeOption = COption.readTag(data, i, "is-native");
     i += Integer.BYTES;
     final long isNative = isNativeOption == 1
         ? ByteUtil.getInt64LE(data, i)
@@ -84,7 +87,7 @@ public record TokenAccount(PublicKey address,
     i += Long.BYTES;
     final long delegatedAmount = ByteUtil.getInt64LE(data, i);
     i += Long.BYTES;
-    final int closeAuthorityOption = ByteUtil.getInt32LE(data, i);
+    final int closeAuthorityOption = COption.readTag(data, i, "close authority");
     i += Integer.BYTES;
     final var closeAuthority = closeAuthorityOption == 1
         ? PublicKey.readPubKey(data, i)

@@ -24,8 +24,7 @@ public record Mint(PublicKey address,
     if (data == null || data.length == 0) {
       return null;
     }
-    final boolean hasMintAuthority = ByteUtil.getInt32LE(data, 0) == 1;
-    final var mintAuthority = hasMintAuthority
+    final var mintAuthority = COption.readTag(data, 0, "mint authority") == 1
         ? readPubKey(data, Integer.BYTES)
         : null;
     int i = Integer.BYTES + PUBLIC_KEY_LENGTH;
@@ -35,7 +34,7 @@ public record Mint(PublicKey address,
     ++i;
     final boolean initialized = data[i] == 1;
     ++i;
-    final boolean hasFreezeAuthority = ByteUtil.getInt32LE(data, i) == 1;
+    final boolean hasFreezeAuthority = COption.readTag(data, i, "freeze authority") == 1;
     i += Integer.BYTES;
     final var freezeAuthority = hasFreezeAuthority
         ? readPubKey(data, i)
