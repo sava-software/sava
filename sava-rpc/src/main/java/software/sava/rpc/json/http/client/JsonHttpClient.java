@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -20,7 +21,7 @@ import java.util.zip.GZIPInputStream;
 
 import static java.lang.System.Logger.Level.DEBUG;
 import static java.net.http.HttpRequest.BodyPublishers.ofString;
-import static java.net.http.HttpResponse.BodyHandlers.ofInputStream;
+import static java.net.http.HttpResponse.BodyHandlers.ofByteArray;
 
 public abstract class JsonHttpClient {
 
@@ -52,6 +53,9 @@ public abstract class JsonHttpClient {
 
   protected final URI endpoint;
   protected final HttpClient httpClient;
+  /// Passed to the JDK as [HttpRequest.Builder#timeout], which only bounds the wait for the
+  /// response headers. The routes that read the body themselves also bound the whole
+  /// exchange at twice this: see [#withResponseDeadline].
   protected final Duration requestTimeout;
   protected final UnaryOperator<HttpRequest.Builder> extendRequest;
   protected final BiPredicate<HttpResponse<?>, byte[]> testResponse;
@@ -87,6 +91,43 @@ public abstract class JsonHttpClient {
         .newBuilder(endpoint)
         .header("Content-Type", "application/json")
         .timeout(requestTimeout);
+  }
+
+  /// The exchange deadline for the routes that read the body themselves: the JDK timer
+  /// bounds the headers to `requestTimeout`, and the body gets the same budget again.
+  // package-private for tests
+  static long responseDeadlineNanos(final Duration requestTimeout) {
+    return requestTimeout.toNanos() << 1;
+  }
+
+  /// Bounds the whole exchange, body included. [HttpRequest.Builder#timeout] only bounds the
+  /// wait for the response headers; a body that stalled after the headers arrived used to
+  /// keep a thread parked in `readAllBytes` on the input-stream body path with nothing to
+  /// end it (six days, in one 2026-08-11 outage). The body is now accumulated by the JDK
+  /// (`ofByteArray`), so nothing parks, and this timer cancels the exchange -- closing its
+  /// stream -- when the body is still outstanding at [#responseDeadlineNanos]: the future
+  /// then completes with a `CancellationException` instead of pending forever.
+  ///
+  /// The timer is a sentinel future on the JDK's shared delayer (`orTimeout`): its timeout
+  /// cancels the response, and completing it when the response arrives removes the scheduled
+  /// task, so a finished response is not retained until the deadline would have fired.
+  /// Cancelling the returned future still relays to the exchange exactly as the JDK's own does.
+  // package-private for tests
+  static <T> CompletableFuture<HttpResponse<T>> withResponseDeadline(final CompletableFuture<HttpResponse<T>> responseFuture,
+                                                                      final CompletableFuture<Void> deadline) {
+    deadline.exceptionally(_ -> {
+      responseFuture.cancel(true);
+      return null;
+    });
+    responseFuture.whenComplete((_, _) -> deadline.complete(null));
+    return responseFuture;
+  }
+
+  private <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
+                                                                  final HttpResponse.BodyHandler<T> bodyHandler,
+                                                                  final Duration requestTimeout) {
+    final var deadline = new CompletableFuture<Void>().orTimeout(responseDeadlineNanos(requestTimeout), TimeUnit.NANOSECONDS);
+    return withResponseDeadline(httpClient.sendAsync(request, bodyHandler), deadline);
   }
 
   private static boolean isGzipEncoded(final HttpResponse<?> response) {
@@ -279,8 +320,7 @@ public abstract class JsonHttpClient {
                                                            final Function<HttpResponse<?>, R> parser,
                                                            final Duration requestTimeout,
                                                            final String body) {
-    return httpClient
-        .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofInputStream())
+    return sendWithDeadline(newPostRequest(endpoint, requestTimeout, body), ofByteArray(), requestTimeout)
         .thenApply(wrapResponseParser(parser));
   }
 
@@ -303,15 +343,13 @@ public abstract class JsonHttpClient {
 
   protected final <R> CompletableFuture<R> sendGetRequest(final Function<HttpResponse<?>, R> parser,
                                                           final String path) {
-    return httpClient
-        .sendAsync(newRequest(path).build(), ofInputStream())
+    return sendWithDeadline(newRequest(path).build(), ofByteArray(), requestTimeout)
         .thenApply(wrapResponseParser(parser));
   }
 
   protected final <R> CompletableFuture<R> sendGetRequest(final URI endpoint,
                                                           final Function<HttpResponse<?>, R> parser) {
-    return httpClient
-        .sendAsync(newRequest(endpoint).build(), ofInputStream())
+    return sendWithDeadline(newRequest(endpoint).build(), ofByteArray(), requestTimeout)
         .thenApply(wrapResponseParser(parser));
   }
 
@@ -319,8 +357,7 @@ public abstract class JsonHttpClient {
                                                                  final Function<HttpResponse<?>, R> parser,
                                                                  final Duration requestTimeout,
                                                                  final String body) {
-    return httpClient
-        .sendAsync(newPostRequest(endpoint, requestTimeout, body), ofInputStream())
+    return sendWithDeadline(newPostRequest(endpoint, requestTimeout, body), ofByteArray(), requestTimeout)
         .thenApply(parser);
   }
 
@@ -343,18 +380,18 @@ public abstract class JsonHttpClient {
 
   protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final Function<HttpResponse<?>, R> parser,
                                                                 final String path) {
-    return httpClient
-        .sendAsync(newRequest(path).build(), ofInputStream())
+    return sendWithDeadline(newRequest(path).build(), ofByteArray(), requestTimeout)
         .thenApply(parser);
   }
 
   protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final URI endpoint,
                                                                 final Function<HttpResponse<?>, R> parser) {
-    return httpClient
-        .sendAsync(newRequest(endpoint).build(), ofInputStream())
+    return sendWithDeadline(newRequest(endpoint).build(), ofByteArray(), requestTimeout)
         .thenApply(parser);
   }
 
+  /// The body-handler routes keep the JDK's headers-only timeout: the caller's handler owns
+  /// the body, which may legitimately stream for longer than any request budget.
   protected final <H, R> CompletableFuture<R> sendPostRequestNoWrap(final URI endpoint,
                                                                     final HttpResponse.BodyHandler<H> bodyHandler,
                                                                     final Function<HttpResponse<H>, R> parser,

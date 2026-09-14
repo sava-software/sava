@@ -17,9 +17,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Deque;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -63,6 +67,9 @@ final class JsonHttpClientTransportTests {
   }
 
   private final Deque<Recorded> recorded = new ConcurrentLinkedDeque<>();
+  /// Held by every `/stall` handler after it has sent its headers and the first bytes of the
+  /// body; released at shutdown so the server can stop.
+  private final CountDownLatch releaseStalls = new CountDownLatch(1);
   private final HttpServer httpServer;
   private final URI endpoint;
   /// `testResponse` configured (accepts any non-empty body) and an
@@ -92,6 +99,7 @@ final class JsonHttpClientTransportTests {
     }
     httpServer.setExecutor(HTTP_EXECUTOR);
     httpServer.createContext("/", this::echo);
+    httpServer.createContext("/stall", this::stall);
     httpServer.start();
     final var serverAddress = httpServer.getAddress();
     this.endpoint = URI.create(String.format("http://[%s]:%d", serverAddress.getHostString(), serverAddress.getPort()));
@@ -127,8 +135,26 @@ final class JsonHttpClientTransportTests {
     }
   }
 
+  /// Headers and the opening of a JSON body, then nothing: the shape of a node whose response
+  /// stalls mid-stream, which the JDK request timeout (headers only) never ends.
+  private void stall(final HttpExchange exchange) throws IOException {
+    exchange.getRequestBody().readAllBytes();
+    exchange.sendResponseHeaders(200, 0);
+    final var os = exchange.getResponseBody();
+    os.write("{\"result\":".getBytes(UTF_8));
+    os.flush();
+    try {
+      releaseStalls.await();
+    } catch (final InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } finally {
+      exchange.close();
+    }
+  }
+
   @AfterAll
   void shutdown() {
+    releaseStalls.countDown();
     httpServer.stop(0);
   }
 
@@ -310,5 +336,73 @@ final class JsonHttpClientTransportTests {
     assertEquals("PUT", request.method());
     assertEquals(timeout, request.timeout().orElseThrow());
     assertEquals("application/json", request.headers().firstValue("Content-Type").orElseThrow());
+  }
+
+  // the exchange deadline
+
+  /// A body that stalls after the headers must not leave the request pending (or a thread
+  /// parked reading it) for good: the exchange is cancelled at twice the request timeout,
+  /// and the future the route hands back fails -- with the JDK's cancellation as the cause,
+  /// an ordinary failed call to a retrying caller -- instead of hanging. Checked on the
+  /// wrapped GET and POST routes, the two the JSON-RPC clients use.
+  @Test
+  void aBodyThatStallsAfterTheHeadersIsCancelledAtTwiceTheRequestTimeout() {
+    final var requestTimeout = Duration.ofMillis(200);
+    final var client = new TransportClient(endpoint, requestTimeout, null, (_, body) -> body.length > 0);
+
+    for (final var route : new String[]{"GET", "POST"}) {
+      final long started = System.nanoTime();
+      final var response = route.equals("GET")
+          ? client.sendGetRequest(WRAPPED_PARSER, "/stall")
+          : client.sendPostRequest(endpoint.resolve("/stall"), WRAPPED_PARSER, "{}");
+      final var failure = assertThrows(ExecutionException.class, () -> response.get(3, TimeUnit.SECONDS), route);
+      assertInstanceOf(CancellationException.class, failure.getCause(), route);
+      final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+      assertTrue(elapsedMillis >= requestTimeout.toMillis() * 2,
+          () -> route + ": cancelled after " + elapsedMillis + "ms, before the body had its own budget");
+      assertTrue(response.isCompletedExceptionally(), route);
+    }
+  }
+
+  /// The no-wrap routes carry the same deadline (they read the body too), while a
+  /// body-handler route leaves the body to its handler: with a streaming handler the
+  /// response completes at the headers, the stalled body is the handler's to read, and the
+  /// exchange deadline never touches it.
+  @Test
+  void theNoWrapRoutesShareTheDeadlineAndTheBodyHandlerRoutesDoNot() throws Exception {
+    final var requestTimeout = Duration.ofMillis(200);
+    final var client = new TransportClient(endpoint, requestTimeout, null, null);
+
+    final var noWrap = client.sendGetRequestNoWrap(RAW_PARSER, "/stall");
+    final var failure = assertThrows(ExecutionException.class, () -> noWrap.get(3, TimeUnit.SECONDS));
+    assertInstanceOf(CancellationException.class, failure.getCause());
+
+    final var handled = client.sendGetRequestNoWrap(HttpResponse.BodyHandlers.ofInputStream(), HttpResponse::statusCode, "/stall");
+    assertEquals(200, handled.get(3, TimeUnit.SECONDS),
+        "a caller-supplied handler completes at the headers; the body and its timing are the handler's");
+    Thread.sleep(requestTimeout.toMillis() * 3); // past the exchange deadline: nothing cancels a handler route
+    assertFalse(handled.isCompletedExceptionally());
+  }
+
+  /// A response that completes in time is untouched by the deadline: the timer is released
+  /// when the response arrives, and waiting past the deadline changes nothing.
+  @Test
+  void aTimelyResponseIsUnaffectedByTheDeadline() throws InterruptedException {
+    final var requestTimeout = Duration.ofMillis(200);
+    final var client = new TransportClient(endpoint, requestTimeout, null, null);
+
+    final var response = client.sendGetRequest(RAW_PARSER, "/timely");
+    assertEquals(echoOf("GET", "/timely"), response.join());
+    Thread.sleep(requestTimeout.toMillis() * 3);
+    assertEquals(echoOf("GET", "/timely"), response.join());
+    assertFalse(response.isCancelled());
+  }
+
+  /// The deadline is a whole-exchange bound of twice the request timeout, not a second
+  /// headers-only timer.
+  @Test
+  void theResponseDeadlineIsTwiceTheRequestTimeout() {
+    assertEquals(Duration.ofSeconds(16).toNanos(), JsonHttpClient.responseDeadlineNanos(Duration.ofSeconds(8)));
+    assertEquals(Duration.ofMillis(500).toNanos(), JsonHttpClient.responseDeadlineNanos(Duration.ofMillis(250)));
   }
 }
