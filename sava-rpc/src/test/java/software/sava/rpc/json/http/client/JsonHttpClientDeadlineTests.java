@@ -2,7 +2,10 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
@@ -49,5 +52,35 @@ final class JsonHttpClientDeadlineTests {
 
     assertTrue(deadline.isDone());
     assertFalse(deadline.isCompletedExceptionally());
+  }
+
+  /// The deadline follows the timeout on the built request, which `extendRequest` may have
+  /// replaced in either direction, and falls back to the client default only when the request
+  /// carries none.
+  @Test
+  void theDeadlineFollowsTheBuiltRequestsTimeoutNotTheClientDefault() {
+    final var uri = URI.create("http://127.0.0.1:1/");
+    final var overridden = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30)).build();
+    assertEquals(Duration.ofSeconds(60).toNanos(), JsonHttpClient.responseDeadlineNanos(overridden, Duration.ofSeconds(1)));
+
+    final var shortened = HttpRequest.newBuilder(uri).timeout(Duration.ofMillis(200)).build();
+    assertEquals(Duration.ofMillis(400).toNanos(), JsonHttpClient.responseDeadlineNanos(shortened, Duration.ofSeconds(5)));
+
+    final var none = HttpRequest.newBuilder(uri).build();
+    assertEquals(Duration.ofSeconds(2).toNanos(), JsonHttpClient.responseDeadlineNanos(none, Duration.ofSeconds(1)),
+        "a request without a timeout falls back to the client default");
+  }
+
+  /// Doubling saturates instead of overflowing: the largest timeout that doubles exactly is
+  /// Long.MAX_VALUE >> 1 ns; one nanosecond more, Long.MAX_VALUE ns, and a duration past
+  /// `toNanos`' own range all pin to Long.MAX_VALUE rather than a negative deadline (which
+  /// would cancel every request on the spot) or an ArithmeticException.
+  @Test
+  void theDeadlineSaturatesInsteadOfOverflowing() {
+    assertEquals(Long.MAX_VALUE - 1, JsonHttpClient.responseDeadlineNanos(Duration.ofNanos(Long.MAX_VALUE >> 1)));
+    assertEquals(Long.MAX_VALUE, JsonHttpClient.responseDeadlineNanos(Duration.ofNanos((Long.MAX_VALUE >> 1) + 1)));
+    assertEquals(Long.MAX_VALUE, JsonHttpClient.responseDeadlineNanos(Duration.ofNanos(Long.MAX_VALUE)));
+    assertEquals(Long.MAX_VALUE, JsonHttpClient.responseDeadlineNanos(Duration.ofDays(365L * 1_000)));
+    assertEquals(Duration.ofSeconds(16).toNanos(), JsonHttpClient.responseDeadlineNanos(Duration.ofSeconds(8)));
   }
 }

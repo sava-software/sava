@@ -262,4 +262,29 @@ final class JsonHttpClientBodyTests {
         gzip(raw), "Content-Encoding", "gzip", "Content-Length", "2147483648"))
     );
   }
+
+  /// A body already in memory knows its compressed length exactly, but its inflate buffer is
+  /// clamped to the same band as the stream path's: below the floor, unchanged inside it, and
+  /// capped above it, so an 8 MiB compressed body does not add an 8 MiB buffer to the 8 MiB it
+  /// already holds.
+  @Test
+  void theInMemoryInflateBufferIsClampedLikeTheStreamPath() {
+    assertEquals(4_096, JsonHttpClient.gzipBufferSize(10));
+    assertEquals(4_096, JsonHttpClient.gzipBufferSize(4_096));
+    assertEquals(4_097, JsonHttpClient.gzipBufferSize(4_097));
+    assertEquals(1 << 20, JsonHttpClient.gzipBufferSize(1 << 20));
+    assertEquals(1 << 20, JsonHttpClient.gzipBufferSize((1 << 20) + 1));
+    assertEquals(1 << 20, JsonHttpClient.gzipBufferSize(8 << 20));
+  }
+
+  /// An incompressible body larger than the buffer cap still inflates back to the original:
+  /// the cap bounds the chunk size, never the output.
+  @Test
+  void aCompressedBodyLargerThanTheBufferCapStillInflatesCompletely() {
+    final byte[] raw = new byte[3 << 20];
+    new java.util.Random(7).nextBytes(raw);
+    final byte[] compressed = gzip(raw);
+    assertTrue(compressed.length > (1 << 20), "the fixture must exceed the cap to exercise it");
+    assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(compressed, "Content-Encoding", "gzip")));
+  }
 }

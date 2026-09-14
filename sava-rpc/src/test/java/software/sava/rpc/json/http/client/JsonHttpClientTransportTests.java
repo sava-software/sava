@@ -355,7 +355,7 @@ final class JsonHttpClientTransportTests {
       final var response = route.equals("GET")
           ? client.sendGetRequest(WRAPPED_PARSER, "/stall")
           : client.sendPostRequest(endpoint.resolve("/stall"), WRAPPED_PARSER, "{}");
-      final var failure = assertThrows(ExecutionException.class, () -> response.get(3, TimeUnit.SECONDS), route);
+      final var failure = assertThrows(ExecutionException.class, () -> response.get(2, TimeUnit.SECONDS), route);
       assertInstanceOf(CancellationException.class, failure.getCause(), route);
       final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
       assertTrue(elapsedMillis >= requestTimeout.toMillis() * 2,
@@ -374,11 +374,11 @@ final class JsonHttpClientTransportTests {
     final var client = new TransportClient(endpoint, requestTimeout, null, null);
 
     final var noWrap = client.sendGetRequestNoWrap(RAW_PARSER, "/stall");
-    final var failure = assertThrows(ExecutionException.class, () -> noWrap.get(3, TimeUnit.SECONDS));
+    final var failure = assertThrows(ExecutionException.class, () -> noWrap.get(2, TimeUnit.SECONDS));
     assertInstanceOf(CancellationException.class, failure.getCause());
 
     final var handled = client.sendGetRequestNoWrap(HttpResponse.BodyHandlers.ofInputStream(), HttpResponse::statusCode, "/stall");
-    assertEquals(200, handled.get(3, TimeUnit.SECONDS),
+    assertEquals(200, handled.get(2, TimeUnit.SECONDS),
         "a caller-supplied handler completes at the headers; the body and its timing are the handler's");
     Thread.sleep(requestTimeout.toMillis() * 3); // past the exchange deadline: nothing cancels a handler route
     assertFalse(handled.isCompletedExceptionally());
@@ -396,6 +396,23 @@ final class JsonHttpClientTransportTests {
     Thread.sleep(requestTimeout.toMillis() * 3);
     assertEquals(echoOf("GET", "/timely"), response.join());
     assertFalse(response.isCancelled());
+  }
+
+  /// `extendRequest` may replace the request timeout; the exchange deadline follows the
+  /// timeout on the built request, not the client default. Pinned end to end in the fast
+  /// direction: a five-second default overridden down to 200 ms is cancelled at 400 ms, where
+  /// a deadline derived from the default would still be waiting well past this test's bound.
+  @Test
+  void theDeadlineRespectsATimeoutOverriddenByExtendRequest() {
+    final var overridden = Duration.ofMillis(200);
+    final var client = new TransportClient(endpoint, Duration.ofSeconds(5), request -> request.timeout(overridden), null);
+
+    final long started = System.nanoTime();
+    final var response = client.sendGetRequest(RAW_PARSER, "/stall");
+    final var failure = assertThrows(ExecutionException.class, () -> response.get(2, TimeUnit.SECONDS));
+    assertInstanceOf(CancellationException.class, failure.getCause());
+    final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+    assertTrue(elapsedMillis >= overridden.toMillis() * 2, () -> "cancelled after " + elapsedMillis + "ms");
   }
 
   /// The deadline is a whole-exchange bound of twice the request timeout, not a second

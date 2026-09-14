@@ -50,6 +50,8 @@ public abstract class JsonHttpClient {
   /// raising either bound has no measured upside.
   private static final int MIN_GZIP_BUFFER = 4_096;
   private static final int MAX_GZIP_BUFFER = 1 << 20;
+  /// The largest request timeout the exchange deadline can double without overflowing a long.
+  private static final Duration MAX_DOUBLED_TIMEOUT = Duration.ofNanos(Long.MAX_VALUE >> 1);
 
   protected final URI endpoint;
   protected final HttpClient httpClient;
@@ -93,11 +95,23 @@ public abstract class JsonHttpClient {
         .timeout(requestTimeout);
   }
 
-  /// The exchange deadline for the routes that read the body themselves: the JDK timer
-  /// bounds the headers to `requestTimeout`, and the body gets the same budget again.
+  /// The exchange deadline for the routes that read the body themselves: the JDK timer bounds
+  /// the headers to the timeout on the built request -- the one `extendRequest` may have
+  /// replaced, not the client default -- and the body gets the same budget again. A request
+  /// without a timeout (only an extender can produce one) falls back to the client default.
+  // package-private for tests
+  static long responseDeadlineNanos(final HttpRequest request, final Duration defaultTimeout) {
+    return responseDeadlineNanos(request.timeout().orElse(defaultTimeout));
+  }
+
+  /// Twice the timeout, saturating at `Long.MAX_VALUE` instead of overflowing: `toNanos` throws
+  /// past about 292 years and the doubling wraps negative past about 146, and a negative
+  /// deadline would cancel every request on the spot.
   // package-private for tests
   static long responseDeadlineNanos(final Duration requestTimeout) {
-    return requestTimeout.toNanos() << 1;
+    return requestTimeout.compareTo(MAX_DOUBLED_TIMEOUT) > 0
+        ? Long.MAX_VALUE
+        : requestTimeout.toNanos() << 1;
   }
 
   /// Bounds the whole exchange, body included. [HttpRequest.Builder#timeout] only bounds the
@@ -124,9 +138,9 @@ public abstract class JsonHttpClient {
   }
 
   private <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
-                                                                  final HttpResponse.BodyHandler<T> bodyHandler,
-                                                                  final Duration requestTimeout) {
-    final var deadline = new CompletableFuture<Void>().orTimeout(responseDeadlineNanos(requestTimeout), TimeUnit.NANOSECONDS);
+                                                                  final HttpResponse.BodyHandler<T> bodyHandler) {
+    final var deadline = new CompletableFuture<Void>()
+        .orTimeout(responseDeadlineNanos(request, requestTimeout), TimeUnit.NANOSECONDS);
     return withResponseDeadline(httpClient.sendAsync(request, bodyHandler), deadline);
   }
 
@@ -144,7 +158,7 @@ public abstract class JsonHttpClient {
       return body;
     }
     if (JsonHttpClient.isGzipEncoded(response)) {
-      try (final var gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(body), body.length)) {
+      try (final var gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(body), gzipBufferSize(body.length))) {
         return gzipInputStream.readAllBytes();
       } catch (final IOException e) {
         throw new UncheckedIOException(e);
@@ -176,6 +190,15 @@ public abstract class JsonHttpClient {
   ///
   /// @return a size between [#MIN_GZIP_BUFFER] and [#MAX_GZIP_BUFFER], falling
   /// back to the minimum when the header is absent or unparseable.
+  /// The inflate buffer for a body already in memory. Its compressed length is exact rather
+  /// than a header, but the measurements above still apply -- nothing over [#MAX_GZIP_BUFFER]
+  /// inflates faster -- and without the clamp an 8 MiB compressed body would add an 8 MiB
+  /// buffer to the 8 MiB it already holds.
+  // package-private for tests
+  static int gzipBufferSize(final int compressedLength) {
+    return Math.clamp(compressedLength, MIN_GZIP_BUFFER, MAX_GZIP_BUFFER);
+  }
+
   private static int gzipBufferSize(final HttpResponse<?> response) {
     final long contentLength;
     try {
@@ -320,7 +343,7 @@ public abstract class JsonHttpClient {
                                                            final Function<HttpResponse<?>, R> parser,
                                                            final Duration requestTimeout,
                                                            final String body) {
-    return sendWithDeadline(newPostRequest(endpoint, requestTimeout, body), ofByteArray(), requestTimeout)
+    return sendWithDeadline(newPostRequest(endpoint, requestTimeout, body), ofByteArray())
         .thenApply(wrapResponseParser(parser));
   }
 
@@ -343,13 +366,13 @@ public abstract class JsonHttpClient {
 
   protected final <R> CompletableFuture<R> sendGetRequest(final Function<HttpResponse<?>, R> parser,
                                                           final String path) {
-    return sendWithDeadline(newRequest(path).build(), ofByteArray(), requestTimeout)
+    return sendWithDeadline(newRequest(path).build(), ofByteArray())
         .thenApply(wrapResponseParser(parser));
   }
 
   protected final <R> CompletableFuture<R> sendGetRequest(final URI endpoint,
                                                           final Function<HttpResponse<?>, R> parser) {
-    return sendWithDeadline(newRequest(endpoint).build(), ofByteArray(), requestTimeout)
+    return sendWithDeadline(newRequest(endpoint).build(), ofByteArray())
         .thenApply(wrapResponseParser(parser));
   }
 
@@ -357,7 +380,7 @@ public abstract class JsonHttpClient {
                                                                  final Function<HttpResponse<?>, R> parser,
                                                                  final Duration requestTimeout,
                                                                  final String body) {
-    return sendWithDeadline(newPostRequest(endpoint, requestTimeout, body), ofByteArray(), requestTimeout)
+    return sendWithDeadline(newPostRequest(endpoint, requestTimeout, body), ofByteArray())
         .thenApply(parser);
   }
 
@@ -380,13 +403,13 @@ public abstract class JsonHttpClient {
 
   protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final Function<HttpResponse<?>, R> parser,
                                                                 final String path) {
-    return sendWithDeadline(newRequest(path).build(), ofByteArray(), requestTimeout)
+    return sendWithDeadline(newRequest(path).build(), ofByteArray())
         .thenApply(parser);
   }
 
   protected final <R> CompletableFuture<R> sendGetRequestNoWrap(final URI endpoint,
                                                                 final Function<HttpResponse<?>, R> parser) {
-    return sendWithDeadline(newRequest(endpoint).build(), ofByteArray(), requestTimeout)
+    return sendWithDeadline(newRequest(endpoint).build(), ofByteArray())
         .thenApply(parser);
   }
 
