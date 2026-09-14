@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
@@ -87,7 +88,15 @@ final class JsonHttpClientTransportTests {
                     final Duration requestTimeout,
                     final UnaryOperator<HttpRequest.Builder> extendRequest,
                     final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
-      super(endpoint, HTTP_CLIENT, requestTimeout, extendRequest, testResponse);
+      this(endpoint, HTTP_CLIENT, requestTimeout, extendRequest, testResponse);
+    }
+
+    TransportClient(final URI endpoint,
+                    final HttpClient httpClient,
+                    final Duration requestTimeout,
+                    final UnaryOperator<HttpRequest.Builder> extendRequest,
+                    final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
+      super(endpoint, httpClient, requestTimeout, extendRequest, testResponse);
     }
   }
 
@@ -413,6 +422,24 @@ final class JsonHttpClientTransportTests {
     assertInstanceOf(CancellationException.class, failure.getCause());
     final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
     assertTrue(elapsedMillis >= overridden.toMillis() * 2, () -> "cancelled after " + elapsedMillis + "ms");
+  }
+
+  /// A submission the client's executor rejects fails synchronously, before any deadline
+  /// exists: the sentinel is scheduled only once `sendAsync` has returned the future that
+  /// releases it, so a burst of rejected attempts leaves nothing on the JDK delayer. The
+  /// retention itself is not observable without reflection; this pins the path the ordering
+  /// protects, on the wrapped and the no-wrap routes.
+  @Test
+  void aRejectedSubmissionThrowsSynchronously() {
+    final var rejecting = HttpClient.newBuilder()
+        .executor(_ -> {
+          throw new RejectedExecutionException("no threads");
+        })
+        .build();
+    final var client = new TransportClient(endpoint, rejecting, TIMEOUT, null, null);
+
+    assertThrows(RejectedExecutionException.class, () -> client.sendGetRequest(RAW_PARSER, "/timely"));
+    assertThrows(RejectedExecutionException.class, () -> client.sendPostRequestNoWrap(RAW_PARSER, "{}"));
   }
 
   /// The deadline is a whole-exchange bound of twice the request timeout, not a second

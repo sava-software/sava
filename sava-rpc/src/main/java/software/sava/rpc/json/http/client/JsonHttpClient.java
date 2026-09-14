@@ -139,9 +139,13 @@ public abstract class JsonHttpClient {
 
   private <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
                                                                   final HttpResponse.BodyHandler<T> bodyHandler) {
+    // Submit first. sendAsync throws synchronously when the client's executor rejects the
+    // request, and a sentinel scheduled before that would sit on the delayer until the
+    // deadline with nothing to release it: one leaked timer per rejected attempt.
+    final var responseFuture = httpClient.sendAsync(request, bodyHandler);
     final var deadline = new CompletableFuture<Void>()
         .orTimeout(responseDeadlineNanos(request, requestTimeout), TimeUnit.NANOSECONDS);
-    return withResponseDeadline(httpClient.sendAsync(request, bodyHandler), deadline);
+    return withResponseDeadline(responseFuture, deadline);
   }
 
   private static boolean isGzipEncoded(final HttpResponse<?> response) {
