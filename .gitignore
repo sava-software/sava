@@ -18,6 +18,7 @@
 !/gradlew.bat
 !/jmh/
 !/logging.properties
+!/plans/
 !/release-please-config.json
 !/sava-*/
 !/settings.gradle.kts
