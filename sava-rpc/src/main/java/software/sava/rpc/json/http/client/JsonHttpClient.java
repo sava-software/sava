@@ -57,9 +57,10 @@ public abstract class JsonHttpClient {
 
   protected final URI endpoint;
   protected final HttpClient httpClient;
-  /// Passed to the JDK as [HttpRequest.Builder#timeout], which only bounds the wait for the
-  /// response headers. The routes that read the body themselves also bound the whole
-  /// exchange at twice this: see [#withResponseDeadline].
+  /// Passed to the JDK as [HttpRequest.Builder#timeout]. On JDK 25 that only bounds the wait
+  /// for the response headers; JDK 26 extends it over body consumption. The routes that read
+  /// the body themselves also bound the whole exchange at twice this, the JDK 25 backstop:
+  /// see [#withResponseDeadline].
   protected final Duration requestTimeout;
   protected final UnaryOperator<HttpRequest.Builder> extendRequest;
   protected final BiPredicate<HttpResponse<?>, byte[]> testResponse;
@@ -97,8 +98,8 @@ public abstract class JsonHttpClient {
         .timeout(requestTimeout);
   }
 
-  /// The exchange deadline for the routes that read the body themselves: the JDK timer bounds
-  /// the headers to the timeout on the built request -- the one `extendRequest` may have
+  /// The exchange deadline for the routes that read the body themselves: on JDK 25 the JDK
+  /// timer bounds only the headers to the timeout on the built request -- the one `extendRequest` may have
   /// replaced, not the client default -- and the body gets the same budget again. A request
   /// without a timeout (only an extender can produce one) falls back to the client default.
   // package-private for tests
@@ -421,8 +422,9 @@ public abstract class JsonHttpClient {
         .thenApply(parser);
   }
 
-  /// The body-handler routes keep the JDK's headers-only timeout: the caller's handler owns
-  /// the body, which may legitimately stream for longer than any request budget.
+  /// The body-handler routes carry only the JDK's own request timeout (headers on JDK 25,
+  /// body consumption too on JDK 26): the caller's handler owns the body, which may
+  /// legitimately stream for longer than any budget this client would pick.
   protected final <H, R> CompletableFuture<R> sendPostRequestNoWrap(final URI endpoint,
                                                                     final HttpResponse.BodyHandler<H> bodyHandler,
                                                                     final Function<HttpResponse<H>, R> parser,

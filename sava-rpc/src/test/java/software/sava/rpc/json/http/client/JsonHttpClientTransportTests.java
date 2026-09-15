@@ -147,7 +147,7 @@ final class JsonHttpClientTransportTests {
   }
 
   /// Headers and the opening of a JSON body, then nothing: the shape of a node whose response
-  /// stalls mid-stream, which the JDK request timeout (headers only) never ends.
+  /// stalls mid-stream, which JDK 25's request timeout (headers only) never ends.
   private void stall(final HttpExchange exchange) throws IOException {
     exchange.getRequestBody().readAllBytes();
     exchange.sendResponseHeaders(200, 0);
@@ -395,8 +395,10 @@ final class JsonHttpClientTransportTests {
 
   /// The no-wrap routes carry the same deadline (they read the body too), while a
   /// body-handler route leaves the body to its handler: with a streaming handler the
-  /// response completes at the headers, the stalled body is the handler's to read, and the
-  /// exchange deadline never touches it.
+  /// response completes at the headers and this client schedules no deadline for it, so the
+  /// completed future is untouched however long the body stalls. That is all this pins:
+  /// whether the stalled stream itself survives is the runtime's -- JDK 26's request
+  /// timeout ends it, JDK 25's does not -- and is not asserted here.
   @Test
   void theNoWrapRoutesShareTheDeadlineAndTheBodyHandlerRoutesDoNot() throws Exception {
     final var requestTimeout = Duration.ofMillis(200);
@@ -409,8 +411,8 @@ final class JsonHttpClientTransportTests {
     final var handled = client.sendGetRequestNoWrap(HttpResponse.BodyHandlers.ofInputStream(), HttpResponse::statusCode, "/stall");
     assertEquals(200, handled.get(2, TimeUnit.SECONDS),
         "a caller-supplied handler completes at the headers; the body and its timing are the handler's");
-    Thread.sleep(requestTimeout.toMillis() * 3); // past the exchange deadline: nothing cancels a handler route
-    assertFalse(handled.isCompletedExceptionally());
+    Thread.sleep(requestTimeout.toMillis() * 3); // past the exchange deadline: this client schedules nothing for a handler route
+    assertFalse(handled.isCompletedExceptionally(), "the completed future is untouched; the stream's fate is the runtime's");
   }
 
   /// A response that completes in time is untouched by the deadline: the timer is released
@@ -459,8 +461,8 @@ final class JsonHttpClientTransportTests {
     assertThrows(RejectedExecutionException.class, () -> client.sendPostRequestNoWrap(RAW_PARSER, "{}"));
   }
 
-  /// The deadline is a whole-exchange bound of twice the request timeout, not a second
-  /// headers-only timer.
+  /// The deadline is a whole-exchange bound of twice the request timeout: one for the headers
+  /// (all the JDK 25 timer covers) and the same again for the body.
   @Test
   void theResponseDeadlineIsTwiceTheRequestTimeout() {
     assertEquals(Duration.ofSeconds(16).toNanos(), JsonHttpClient.responseDeadlineNanos(Duration.ofSeconds(8)));
