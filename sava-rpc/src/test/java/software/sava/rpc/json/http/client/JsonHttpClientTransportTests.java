@@ -15,9 +15,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Deque;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -349,11 +351,34 @@ final class JsonHttpClientTransportTests {
 
   // the exchange deadline
 
+  /// On JDK 25 the JDK request timeout stops at the headers, so a stalled body is ended by
+  /// this client's scheduled cancellation at twice the request timeout and the failure's
+  /// cause is the JDK's `CancellationException`. On JDK 26 the request timeout covers the
+  /// body itself, so the JDK ends the stall at one timeout with an `HttpTimeoutException`
+  /// and the cancellation never fires. Both are the contract; which one applies is the
+  /// runtime's.
+  private static void assertStallEnded(final CompletableFuture<?> response,
+                                       final Duration requestTimeout,
+                                       final long startedNanos,
+                                       final String route) {
+    final var failure = assertThrows(ExecutionException.class, () -> response.get(2, TimeUnit.SECONDS), route);
+    final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+    if (Runtime.version().feature() >= 26) {
+      assertInstanceOf(HttpTimeoutException.class, failure.getCause(), route + ": JDK 26 ends a stalled body itself");
+      assertTrue(elapsedMillis >= requestTimeout.toMillis(), () -> route + ": ended after " + elapsedMillis + "ms");
+    } else {
+      assertInstanceOf(CancellationException.class, failure.getCause(), route + ": the scheduled cancellation ends it on JDK 25");
+      assertTrue(elapsedMillis >= requestTimeout.toMillis() * 2,
+          () -> route + ": cancelled after " + elapsedMillis + "ms, before the body had its own budget");
+    }
+    assertTrue(response.isCompletedExceptionally(), route);
+  }
+
   /// A body that stalls after the headers must not leave the request pending (or a thread
-  /// parked reading it) for good: the exchange is cancelled at twice the request timeout,
-  /// and the future the route hands back fails -- with the JDK's cancellation as the cause,
-  /// an ordinary failed call to a retrying caller -- instead of hanging. Checked on the
-  /// wrapped GET and POST routes, the two the JSON-RPC clients use.
+  /// parked reading it) for good: the future the route hands back fails -- an ordinary
+  /// failed call to a retrying caller -- instead of hanging; see [#assertStallEnded] for
+  /// which mechanism ends it on which JDK. Checked on the wrapped GET and POST routes, the
+  /// two the JSON-RPC clients use.
   @Test
   void aBodyThatStallsAfterTheHeadersIsCancelledAtTwiceTheRequestTimeout() {
     final var requestTimeout = Duration.ofMillis(200);
@@ -364,12 +389,7 @@ final class JsonHttpClientTransportTests {
       final var response = route.equals("GET")
           ? client.sendGetRequest(WRAPPED_PARSER, "/stall")
           : client.sendPostRequest(endpoint.resolve("/stall"), WRAPPED_PARSER, "{}");
-      final var failure = assertThrows(ExecutionException.class, () -> response.get(2, TimeUnit.SECONDS), route);
-      assertInstanceOf(CancellationException.class, failure.getCause(), route);
-      final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
-      assertTrue(elapsedMillis >= requestTimeout.toMillis() * 2,
-          () -> route + ": cancelled after " + elapsedMillis + "ms, before the body had its own budget");
-      assertTrue(response.isCompletedExceptionally(), route);
+      assertStallEnded(response, requestTimeout, started, route);
     }
   }
 
@@ -382,9 +402,9 @@ final class JsonHttpClientTransportTests {
     final var requestTimeout = Duration.ofMillis(200);
     final var client = new TransportClient(endpoint, requestTimeout, null, null);
 
+    final long started = System.nanoTime();
     final var noWrap = client.sendGetRequestNoWrap(RAW_PARSER, "/stall");
-    final var failure = assertThrows(ExecutionException.class, () -> noWrap.get(2, TimeUnit.SECONDS));
-    assertInstanceOf(CancellationException.class, failure.getCause());
+    assertStallEnded(noWrap, requestTimeout, started, "no-wrap GET");
 
     final var handled = client.sendGetRequestNoWrap(HttpResponse.BodyHandlers.ofInputStream(), HttpResponse::statusCode, "/stall");
     assertEquals(200, handled.get(2, TimeUnit.SECONDS),
@@ -409,8 +429,8 @@ final class JsonHttpClientTransportTests {
 
   /// `extendRequest` may replace the request timeout; the exchange deadline follows the
   /// timeout on the built request, not the client default. Pinned end to end in the fast
-  /// direction: a five-second default overridden down to 200 ms is cancelled at 400 ms, where
-  /// a deadline derived from the default would still be waiting well past this test's bound.
+  /// direction: a five-second default overridden down to 200 ms ends within this test's
+  /// two-second bound, where a deadline derived from the default would still be waiting.
   @Test
   void theDeadlineRespectsATimeoutOverriddenByExtendRequest() {
     final var overridden = Duration.ofMillis(200);
@@ -418,10 +438,7 @@ final class JsonHttpClientTransportTests {
 
     final long started = System.nanoTime();
     final var response = client.sendGetRequest(RAW_PARSER, "/stall");
-    final var failure = assertThrows(ExecutionException.class, () -> response.get(2, TimeUnit.SECONDS));
-    assertInstanceOf(CancellationException.class, failure.getCause());
-    final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
-    assertTrue(elapsedMillis >= overridden.toMillis() * 2, () -> "cancelled after " + elapsedMillis + "ms");
+    assertStallEnded(response, overridden, started, "overridden GET");
   }
 
   /// A submission the client's executor rejects fails synchronously, before any deadline

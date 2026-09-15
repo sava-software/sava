@@ -12,6 +12,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -114,38 +116,40 @@ public abstract class JsonHttpClient {
         : requestTimeout.toNanos() << 1;
   }
 
-  /// Bounds the whole exchange, body included. [HttpRequest.Builder#timeout] only bounds the
-  /// wait for the response headers; a body that stalled after the headers arrived used to
-  /// keep a thread parked in `readAllBytes` on the input-stream body path with nothing to
-  /// end it (six days, in one 2026-08-11 outage). The body is now accumulated by the JDK
-  /// (`ofByteArray`), so nothing parks, and this timer cancels the exchange -- closing its
-  /// stream -- when the body is still outstanding at [#responseDeadlineNanos]: the future
-  /// then completes with a `CancellationException` instead of pending forever.
+  /// Bounds the whole exchange, body included, on JDK 25. There [HttpRequest.Builder#timeout]
+  /// only bounds the wait for the response headers, and a body that stalled after the headers
+  /// arrived used to keep a thread parked in `readAllBytes` on the input-stream body path with
+  /// nothing to end it (six days, in one 2026-08-11 outage). The body is now accumulated by
+  /// the JDK (`ofByteArray`), so nothing parks, and a scheduled cancellation closes the exchange
+  /// -- stream included -- when the body is still outstanding at [#responseDeadlineNanos]: the
+  /// future then fails with a `CancellationException` instead of pending forever. Completing
+  /// the response cancels the scheduled task, which the delay scheduler unlinks at once, so a
+  /// finished response is not retained until the deadline would have fired.
   ///
-  /// The timer is a sentinel future on the JDK's shared delayer (`orTimeout`): its timeout
-  /// cancels the response, and completing it when the response arrives removes the scheduled
-  /// task, so a finished response is not retained until the deadline would have fired.
-  /// Cancelling the returned future still relays to the exchange exactly as the JDK's own does.
+  /// JDK 26 extends the request timeout over body consumption itself (the timer stops when the
+  /// body subscriber terminates), so there the JDK fails a stalled body with an
+  /// `HttpTimeoutException` at one timeout and this cancellation never fires. Once the minimum
+  /// runtime is 26 the whole mechanism can go; until then it is the JDK 25 backstop.
   // package-private for tests
-  static <T> CompletableFuture<HttpResponse<T>> withResponseDeadline(final CompletableFuture<HttpResponse<T>> responseFuture,
-                                                                      final CompletableFuture<Void> deadline) {
-    deadline.exceptionally(_ -> {
-      responseFuture.cancel(true);
-      return null;
-    });
-    responseFuture.whenComplete((_, _) -> deadline.complete(null));
-    return responseFuture;
+  static <T> CompletableFuture<HttpResponse<T>> withResponseDeadline(final CompletableFuture<HttpResponse<T>> response,
+                                                                      final ScheduledExecutorService scheduler,
+                                                                      final long deadlineNanos) {
+    // a block body: cancel(boolean) returns a value, and an expression lambda would bind the
+    // Callable overload of schedule instead of the Runnable one
+    final var cancellation = scheduler.schedule(() -> {
+      response.cancel(true);
+    }, deadlineNanos, TimeUnit.NANOSECONDS);
+    response.whenComplete((_, _) -> cancellation.cancel(false));
+    return response;
   }
 
   private <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
                                                                   final HttpResponse.BodyHandler<T> bodyHandler) {
     // Submit first. sendAsync throws synchronously when the client's executor rejects the
-    // request, and a sentinel scheduled before that would sit on the delayer until the
+    // request, and a cancellation scheduled before that would sit on the scheduler until the
     // deadline with nothing to release it: one leaked timer per rejected attempt.
-    final var responseFuture = httpClient.sendAsync(request, bodyHandler);
-    final var deadline = new CompletableFuture<Void>()
-        .orTimeout(responseDeadlineNanos(request, requestTimeout), TimeUnit.NANOSECONDS);
-    return withResponseDeadline(responseFuture, deadline);
+    final var response = httpClient.sendAsync(request, bodyHandler);
+    return withResponseDeadline(response, ForkJoinPool.commonPool(), responseDeadlineNanos(request, requestTimeout));
   }
 
   private static boolean isGzipEncoded(final HttpResponse<?> response) {
