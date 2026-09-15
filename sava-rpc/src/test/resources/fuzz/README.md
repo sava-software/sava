@@ -10,12 +10,34 @@ is only closed by a committed seed here **plus** a named regression test.
 This file lives next to the corpus directories, never inside one: every file
 inside a corpus directory is fed to the harness as a seed.
 
-Both corpora here are **bootstrap** corpora (see sava-core's fuzz README for
-the bootstrap/regression distinction): a JSON-RPC envelope with a method or
-result body a parser accepts — let alone a subscription id matching the
+These are **bootstrap** corpora (see sava-core's fuzz README for the
+bootstrap/regression distinction). For `responses` and `ws`, a JSON-RPC envelope
+with a method or result body a parser accepts — let alone a subscription id matching the
 harness's confirmed subscriptions, or a base64 account payload — is far more
 structure than a from-scratch mutator assembles, so the seeds buy coverage as
 well as being the regression home for findings.
+
+## `httpBody` — [JsonHttpClientBodyFuzz](../../java/software/sava/rpc/json/http/client/JsonHttpClientBodyFuzz.java)
+
+The first five bytes select the body mode, encoding-header shape, Content-Length
+shape, maximum stream read size, and concatenated-member split point. The remaining
+bytes are the original payload, capped at 8 KiB. The harness generates gzip from
+that payload, keeping decompressed sizes bounded independently of fuzz mutations.
+
+Plain bodies, single gzip members, and concatenated gzip members must decode to
+the original payload through both `byte[]` and fragmented `InputStream` routes.
+The malformed modes corrupt the gzip magic or checksum, or remove trailer bytes;
+both routes must fail with `UncheckedIOException`. Missing, extreme, or malformed
+Content-Length hints must not change these results. Streams are finite and report
+their remaining bytes through `available()`; this target does not model network
+timing or stalls.
+
+The seeds select each mode and include empty payloads, binary data, repeated
+encoding headers, size-hint boundaries, and a payload larger than the minimum
+inflate buffer. An empty *payload* is encoded as a valid gzip member. An empty
+*wire body* marked gzip has different published behavior for byte arrays and
+streams; that distinction is pinned in `JsonHttpClientBodyTests`, outside the
+round-trip oracle.
 
 ## `responses` — [SolanaRpcResponseFuzz](../../java/software/sava/rpc/json/http/client/SolanaRpcResponseFuzz.java)
 

@@ -443,22 +443,20 @@ final class JsonHttpClientTransportTests {
     assertStallEnded(response, overridden, started, "overridden GET");
   }
 
-  /// A submission the client's executor rejects fails synchronously, before any deadline
-  /// exists: the sentinel is scheduled only once `sendAsync` has returned the future that
-  /// releases it, so a burst of rejected attempts leaves nothing on the JDK delayer. The
-  /// retention itself is not observable without reflection; this pins the path the ordering
-  /// protects, on the wrapped and the no-wrap routes.
+  /// Executor rejection remains synchronous on the wrapped and no-wrap routes. The
+  /// recording-scheduler tests separately assert that rejection schedules no deadline.
   @Test
   void aRejectedSubmissionThrowsSynchronously() {
-    final var rejecting = HttpClient.newBuilder()
+    try (final var rejecting = HttpClient.newBuilder()
         .executor(_ -> {
           throw new RejectedExecutionException("no threads");
         })
-        .build();
-    final var client = new TransportClient(endpoint, rejecting, TIMEOUT, null, null);
+        .build()) {
+      final var client = new TransportClient(endpoint, rejecting, TIMEOUT, null, null);
 
-    assertThrows(RejectedExecutionException.class, () -> client.sendGetRequest(RAW_PARSER, "/timely"));
-    assertThrows(RejectedExecutionException.class, () -> client.sendPostRequestNoWrap(RAW_PARSER, "{}"));
+      assertThrows(RejectedExecutionException.class, () -> client.sendGetRequest(RAW_PARSER, "/timely"));
+      assertThrows(RejectedExecutionException.class, () -> client.sendPostRequestNoWrap(RAW_PARSER, "{}"));
+    }
   }
 
   /// The deadline is a whole-exchange bound of twice the request timeout: one for the headers

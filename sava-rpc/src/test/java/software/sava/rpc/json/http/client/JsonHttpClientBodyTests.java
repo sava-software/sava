@@ -44,11 +44,15 @@ final class JsonHttpClientBodyTests {
   }
 
   @Test
-  void emptyBodyShortCircuitsBeforeTheGzipPath() {
+  void emptyGzipBodyBehaviourDependsOnItsRepresentation() {
     final byte[] empty = new byte[0];
     // an empty body with a gzip header is not a valid gzip stream; the length
     // check has to come first or this would throw
     assertSame(empty, JsonHttpClient.readBody(StubHttpResponse.of(empty, "Content-Encoding", "gzip")));
+    // The published stream path still attempts gzip decoding for the same empty
+    // wire body. A differential fuzzer must account for this existing difference.
+    assertThrows(UncheckedIOException.class, () -> JsonHttpClient.readBody(
+        StubHttpResponse.of(new ByteArrayInputStream(empty), "Content-Encoding", "gzip")));
   }
 
   @Test

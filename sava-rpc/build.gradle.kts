@@ -96,6 +96,13 @@ hardening {
     mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
 
+  fuzz.register("httpBody") {
+    targetClass = "software.sava.rpc.json.http.client.JsonHttpClientBodyFuzz"
+    // Five selector bytes plus at most 8 KiB of raw payload. The harness generates
+    // gzip itself, so both the wire input and decompressed output remain bounded.
+    maxLen = 8197
+    seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/httpBody")
+  }
   fuzz.register("responses") {
     targetClass = "software.sava.rpc.json.http.client.SolanaRpcResponseFuzz"
     // response boundaries live well under real payload sizes; big enough to hold the

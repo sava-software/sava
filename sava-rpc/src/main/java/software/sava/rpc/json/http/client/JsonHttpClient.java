@@ -146,11 +146,18 @@ public abstract class JsonHttpClient {
 
   private <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
                                                                   final HttpResponse.BodyHandler<T> bodyHandler) {
+    return sendWithDeadline(request, bodyHandler, ForkJoinPool.commonPool());
+  }
+
+  // Package-private scheduler seam for submission and timer-lifecycle tests.
+  final <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
+                                                                final HttpResponse.BodyHandler<T> bodyHandler,
+                                                                final ScheduledExecutorService scheduler) {
     // Submit first. sendAsync throws synchronously when the client's executor rejects the
     // request, and a cancellation scheduled before that would sit on the scheduler until the
     // deadline with nothing to release it: one leaked timer per rejected attempt.
     final var response = httpClient.sendAsync(request, bodyHandler);
-    return withResponseDeadline(response, ForkJoinPool.commonPool(), responseDeadlineNanos(request, requestTimeout));
+    return withResponseDeadline(response, scheduler, responseDeadlineNanos(request, requestTimeout));
   }
 
   private static boolean isGzipEncoded(final HttpResponse<?> response) {
@@ -236,6 +243,9 @@ public abstract class JsonHttpClient {
     }
   }
 
+  /// Reads the response body, inflating a body marked with the supported gzip encoding.
+  /// An empty byte-array body is returned unchanged even when marked gzip. An empty
+  /// input stream marked gzip is instead parsed as gzip and fails with [UncheckedIOException].
   protected static byte[] readBody(final HttpResponse<?> response) {
     if (response instanceof ReadHttpResponse<?> readHttpResponse) {
       return readHttpResponse.readBody();

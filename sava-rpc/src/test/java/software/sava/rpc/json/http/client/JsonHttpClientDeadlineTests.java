@@ -2,12 +2,15 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.lang.reflect.Proxy;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -30,6 +33,7 @@ final class JsonHttpClientDeadlineTests {
     long delayNanos = -1;
     final AtomicInteger scheduleCalls = new AtomicInteger();
     final AtomicInteger timerCancels = new AtomicInteger();
+    Boolean timerCancelMayInterrupt;
 
     ScheduledExecutorService executor() {
       return (ScheduledExecutorService) Proxy.newProxyInstance(
@@ -48,6 +52,7 @@ final class JsonHttpClientDeadlineTests {
                 (p, m, a) -> switch (m.getName()) {
                   case "cancel" -> {
                     timerCancels.incrementAndGet();
+                    timerCancelMayInterrupt = (boolean) a[0];
                     yield Boolean.TRUE;
                   }
                   default -> throw new UnsupportedOperationException(m.getName());
@@ -58,9 +63,22 @@ final class JsonHttpClientDeadlineTests {
     }
   }
 
+  private static final class RecordingResponseFuture<T> extends CompletableFuture<HttpResponse<T>> {
+
+    int cancellationCalls;
+    Boolean mayInterruptIfRunning;
+
+    @Override
+    public boolean cancel(final boolean mayInterruptIfRunning) {
+      cancellationCalls++;
+      this.mayInterruptIfRunning = mayInterruptIfRunning;
+      return super.cancel(mayInterruptIfRunning);
+    }
+  }
+
   @Test
   void theCancellationIsScheduledForExactlyTheDeadlineAndCancelsAPendingResponse() {
-    final var response = new CompletableFuture<HttpResponse<byte[]>>();
+    final var response = new RecordingResponseFuture<byte[]>();
     final var scheduler = new RecordingScheduler();
 
     assertSame(response, JsonHttpClient.withResponseDeadline(response, scheduler.executor(), 123_456_789L));
@@ -71,7 +89,13 @@ final class JsonHttpClientDeadlineTests {
 
     scheduler.scheduled.run();
 
+    assertEquals(1, response.cancellationCalls);
+    assertEquals(Boolean.TRUE, response.mayInterruptIfRunning,
+        "the JDK only relays cancellation to the underlying exchange when interruption is requested");
     assertTrue(response.isCancelled(), "the deadline must cancel, not merely fail, so the JDK relays it to the exchange");
+    assertEquals(1, scheduler.timerCancels.get());
+    assertEquals(Boolean.FALSE, scheduler.timerCancelMayInterrupt,
+        "response completion unlinks the timer without asking to interrupt its task");
   }
 
   @Test
@@ -80,8 +104,11 @@ final class JsonHttpClientDeadlineTests {
     final var scheduler = new RecordingScheduler();
     JsonHttpClient.withResponseDeadline(response, scheduler.executor(), 1L);
 
-    response.complete(null);
+    final var expected = StubHttpResponse.of(
+        202, new byte[]{44, 55}, "X-Deadline-Test", "completed-after-setup");
+    assertTrue(response.complete(expected));
 
+    assertSame(expected, response.join());
     assertEquals(1, scheduler.timerCancels.get(), "a finished response must release its timer, or it is retained until the deadline");
     scheduler.scheduled.run();
     assertFalse(response.isCancelled(), "a timer that fires late finds a completed response and changes nothing");
@@ -96,6 +123,56 @@ final class JsonHttpClientDeadlineTests {
     response.completeExceptionally(new IllegalStateException("connection reset"));
 
     assertEquals(1, scheduler.timerCancels.get());
+  }
+
+  @Test
+  void anAlreadyCompletedResponseImmediatelyCancelsTheTimerAndKeepsItsResult() {
+    final var expected = StubHttpResponse.of(
+        207, new byte[]{11, 22, 33}, "X-Deadline-Test", "already-complete");
+    final var response = CompletableFuture.<HttpResponse<byte[]>>completedFuture(expected);
+    final var scheduler = new RecordingScheduler();
+
+    final var returned = JsonHttpClient.withResponseDeadline(response, scheduler.executor(), 99L);
+
+    assertSame(response, returned);
+    assertSame(expected, returned.join());
+    assertEquals(scheduler.scheduleCalls.get(), scheduler.timerCancels.get(),
+        "no timer may remain armed when completion won the setup race");
+  }
+
+  @Test
+  void anAlreadyFailedResponseImmediatelyCancelsTheTimerAndKeepsItsCause() {
+    final var cause = new IllegalStateException("response failed before deadline setup");
+    final var response = CompletableFuture.<HttpResponse<byte[]>>failedFuture(cause);
+    final var scheduler = new RecordingScheduler();
+
+    final var returned = JsonHttpClient.withResponseDeadline(response, scheduler.executor(), 101L);
+
+    assertSame(response, returned);
+    assertSame(cause, assertThrows(CompletionException.class, returned::join).getCause());
+    assertEquals(scheduler.scheduleCalls.get(), scheduler.timerCancels.get(),
+        "no timer may remain armed when failure won the setup race");
+  }
+
+  @Test
+  void aRejectedSubmissionDoesNotScheduleADeadline() {
+    final var rejection = new RejectedExecutionException("no request threads");
+    try (final var httpClient = HttpClient.newBuilder()
+        .executor(_ -> {
+          throw rejection;
+        })
+        .build()) {
+      final var uri = URI.create("http://127.0.0.1:1/");
+      final var request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(3)).build();
+      final var scheduler = new RecordingScheduler();
+      final var client = new JsonHttpClient(uri, httpClient, Duration.ofSeconds(5)) {
+      };
+
+      assertSame(rejection, assertThrows(RejectedExecutionException.class,
+          () -> client.sendWithDeadline(request, HttpResponse.BodyHandlers.ofByteArray(), scheduler.executor())));
+      assertEquals(0, scheduler.scheduleCalls.get(),
+          "a request rejected before sendAsync returns has no response future for a timer to release");
+    }
   }
 
   /// The deadline follows the timeout on the built request, which `extendRequest` may have

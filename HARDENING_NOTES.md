@@ -1059,3 +1059,52 @@ client types, and Solana SDK `RewardType` | Outcome: full blocks omitted
 `maxSupportedTransactionVersion: 0`, while `DeactivatedStake` and basis-point commissions were
 dropped; production fixed with the old `TxReward` constructor retained and the same value-plus-unit
 representation used by `InflationReward`.
+
+### HTTP body differential fuzzing — 2026-09-15
+
+`fuzzHttpBody` exercises `JsonHttpClient.readBody` through both byte-array and
+fragmented-stream bodies. Its 14 synthetic bootstrap seeds replay inside `check`.
+The input selects encoding/header shapes, stream read sizes, gzip member splits,
+and controlled corruptions; the harness generates compressed bytes from at most
+8 KiB of raw payload, so decompressed output stays bounded. This target covers
+finite in-memory streams, while the transport tests own deadlines and connection
+cancellation.
+
+Property: plain and valid gzip bodies recover the original bytes independently
+of body representation, read fragmentation, or Content-Length hints | Oracle:
+the raw payload retained separately from the supplied wire body | Outcome:
+missing assertions added through generated round trips, including concatenated
+gzip members and empty payloads.
+
+Property: corrupt gzip magic, CRC, and truncated trailers fail through the
+existing I/O exception wrapper on both routes | Oracle: controlled damage to
+an otherwise valid generated member and the existing `UncheckedIOException`
+contract | Outcome: missing assertions added; unexpected exception types and
+accepted corruptions fail the harness.
+
+The existing empty *wire-body* distinction remains explicit: an empty byte array
+marked gzip is returned unchanged, while an empty gzip input stream fails. The
+declaration and `emptyGzipBodyBehaviourDependsOnItsRepresentation` now record both
+paths. A valid gzip member encoding an empty payload still decodes successfully
+through both representations.
+
+Validation: the RPC `check` executed 912 passing tests with two live-network
+checks skipped. All 68 focused JsonHttpClient tests, including corpus replay,
+passed on JDK 25 and JDK 26. Isolated negative controls showed the harness rejects
+in-place mutation of a plain body and bypassed gzip decoding on each route for
+both valid and corrupt inputs. Fresh, full, history-free `pitestClient` observed
+597 killed and the same seven accepted survivors from 604 mutants, with no
+uncovered mutants, timeouts, or invalid outcomes. The prescribed retag writer
+refreshed source-line metadata without changing any accepted row's meaning.
+
+The final local campaign used the 14 bootstrap seeds and the retained local
+working corpus, with a 120-second budget and one target running:
+
+```sh
+NO_DNA=1 ./gradlew :sava-rpc:fuzzHttpBody -PmaxFuzzTime=120 -PmaxParallelFuzzTargets=1
+```
+
+Jazzer completed 11,162,719 executions in 121 seconds, with no findings and a
+successful task exit. Its reported random seed was 631708680. This is development
+evidence for the bounded HTTP-body target; the repository-wide release campaign
+remains owned by the release checklist.
