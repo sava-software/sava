@@ -160,10 +160,43 @@ public abstract class JsonHttpClient {
     return withResponseDeadline(response, scheduler, responseDeadlineNanos(request, requestTimeout));
   }
 
+  /// A Content-Encoding field value is a comma-separated list of codings (RFC 9110 §8.4), and
+  /// an intermediary may fold several field lines into one, so `identity, gzip` on one line
+  /// must read like `identity` and `gzip` on two. A `gzip` element anywhere in the list --
+  /// or its legacy alias `x-gzip`, which §8.4.1.3 says to treat as equivalent -- selects
+  /// inflation whatever its position: a no-op coding such as `identity` beside it is ignored,
+  /// and a list where gzip is not the outermost coding (`gzip, br`) is still handed to the
+  /// inflater, which rejects the outer coding's bytes. Nothing else is decoded.
   private static boolean isGzipEncoded(final HttpResponse<?> response) {
     for (final var header : response.headers().allValues("content-encoding")) {
-      if (header.equalsIgnoreCase("gzip")) {
+      if (listsGzip(header)) {
         return true;
+      }
+    }
+    return false;
+  }
+
+  /// Whether `gzip` or `x-gzip` is one of the comma-separated elements of `codings`, ignoring
+  /// case and the optional whitespace around each element. Scanned in place rather than split:
+  /// the value is provider-sized, and this class does not let a header size an allocation.
+  private static boolean listsGzip(final String codings) {
+    final int length = codings.length();
+    int start = 0;
+    for (int i = 0; i <= length; ++i) {
+      if (i == length || codings.charAt(i) == ',') {
+        int end = i;
+        while (start < end && codings.charAt(start) <= ' ') {
+          ++start;
+        }
+        while (end > start && codings.charAt(end - 1) <= ' ') {
+          --end;
+        }
+        final int span = end - start;
+        if ((span == 4 || span == 6 && codings.regionMatches(true, start, "x-", 0, 2))
+            && codings.regionMatches(true, end - 4, "gzip", 0, 4)) {
+          return true;
+        }
+        start = i + 1;
       }
     }
     return false;

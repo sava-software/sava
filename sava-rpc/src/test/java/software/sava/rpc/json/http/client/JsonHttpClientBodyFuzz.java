@@ -122,22 +122,29 @@ public final class JsonHttpClientBodyFuzz {
                                   final int wireLength) {
     final List<String> headers = new ArrayList<>(6);
     if (mode == 0) {
-      switch (unsigned(encodingSelector) % 4) {
+      switch (unsigned(encodingSelector) % 6) {
         case 1 -> addHeader(headers, "Content-Encoding", "identity");
         case 2 -> addHeader(headers, "content-encoding", "deflate");
         case 3 -> addHeader(headers, "CONTENT-ENCODING", "br");
+        case 4 -> addHeader(headers, "Content-Encoding", "identity, br");
+        case 5 -> addHeader(headers, "Content-Encoding", "x-compress");
         default -> {
         }
       }
     } else {
-      switch (unsigned(encodingSelector) % 4) {
+      switch (unsigned(encodingSelector) % 6) {
         case 0 -> addHeader(headers, "Content-Encoding", "gzip");
         case 1 -> addHeader(headers, "content-encoding", "GZIP");
         case 2 -> addHeader(headers, "CONTENT-ENCODING", "GzIp");
+        // shapes 3 and 4 are the same two-coding list as repeated field lines and as one
+        // comma-folded field value, which an intermediary may produce (RFC 9110 §8.4)
         case 3 -> {
           addHeader(headers, "CoNtEnT-EnCoDiNg", "IdEnTiTy");
           addHeader(headers, "CoNtEnT-EnCoDiNg", "gZiP");
         }
+        case 4 -> addHeader(headers, "Content-Encoding", "identity, gzip");
+        // the legacy alias RFC 9110 §8.4.1.3 says to treat as gzip
+        case 5 -> addHeader(headers, "Content-Encoding", "X-Gzip");
         default -> throw new AssertionError("unreachable encoding shape");
       }
     }

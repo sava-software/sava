@@ -32,12 +32,12 @@ Content-Length hints must not change these results. Streams are finite and repor
 their remaining bytes through `available()`; this target does not model network
 timing or stalls.
 
-The seeds select each mode and include empty payloads, binary data, repeated
-encoding headers, size-hint boundaries, and a payload larger than the minimum
-inflate buffer. An empty *payload* is encoded as a valid gzip member. An empty
-*wire body* marked gzip has different published behavior for byte arrays and
-streams; that distinction is pinned in `JsonHttpClientBodyTests`, outside the
-round-trip oracle.
+The seeds select each mode and include empty payloads, binary data, repeated,
+comma-folded, and `x-gzip`-aliased encoding headers, size-hint boundaries, and a
+payload larger than the minimum inflate buffer. An empty *payload* is encoded as
+a valid gzip member. An empty *wire body* marked gzip has different published
+behavior for byte arrays and streams; that distinction is pinned in
+`JsonHttpClientBodyTests`, outside the round-trip oracle.
 
 ## `responses` — [SolanaRpcResponseFuzz](../../java/software/sava/rpc/json/http/client/SolanaRpcResponseFuzz.java)
 

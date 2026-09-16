@@ -85,6 +85,29 @@ final class JsonHttpClientBodyTests {
     );
   }
 
+  /// The same list folded into one field value, which an intermediary may do (RFC 9110 §8.4),
+  /// must read like the two field lines above: the JDK hands it over as one value, gzip counts
+  /// in any position, its legacy alias `x-gzip` counts too (§8.4.1.3), and the optional
+  /// whitespace around each element is not significant. A list without an exact `gzip` or
+  /// `x-gzip` element must not inflate, whatever else it carries.
+  @Test
+  void gzipIsFoundInAFoldedEncodingList() {
+    final byte[] raw = ascii("{\"ok\":true}");
+    final byte[] compressed = gzip(raw);
+    for (final String list : new String[]{
+        "identity, gzip", " GZIP ,identity", "identity,\tgzip", "gzip,", ",gzip", "gzip , br", "identity,,gzip",
+        "x-gzip", " X-GZIP ", "identity, x-gzip", "X-gZiP,br"}) {
+      assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(compressed, "Content-Encoding", list)), list);
+      assertArrayEquals(raw, JsonHttpClient.readBody(
+          StubHttpResponse.of(new ByteArrayInputStream(compressed), "Content-Encoding", list)), list);
+    }
+    for (final String list : new String[]{
+        "identity, br", "gzipx, identity", "identity, agzip", "gzi,p", ",", " , ", "", "gzap", "GZIQ, br",
+        "xxgzip", "y-gzip", "x-gzi", "-gzip", "xx-gzip", "x-gzipx", "x- gzip", "x-brot", "x-gzap"}) {
+      assertSame(raw, JsonHttpClient.readBody(StubHttpResponse.of(raw, "Content-Encoding", list)), list);
+    }
+  }
+
   @Test
   void nonGzipEncodingsLeaveTheBodyAlone() {
     final byte[] body = ascii("{\"ok\":true}");
