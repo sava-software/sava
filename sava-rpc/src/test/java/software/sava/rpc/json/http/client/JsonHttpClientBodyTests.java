@@ -209,6 +209,23 @@ final class JsonHttpClientBodyTests {
     assertInstanceOf(java.util.zip.ZipException.class, ex.getCause());
   }
 
+  /// [java.util.zip.GZIPInputStream] drops whatever follows a complete member when it does not
+  /// start another member -- padding, a stray byte, a member with a bad magic -- and reports a
+  /// clean end of stream, so both routes return the first member and throw nothing. Pinned so
+  /// the silence is a recorded choice rather than an accident; the fuzz target cannot reach this
+  /// shape because it only ever generates whole members.
+  @Test
+  void bytesAfterACompleteGzipMemberThatStartNoMemberAreDroppedSilently() {
+    final byte[] raw = ascii("{\"result\":[1,2,3]}");
+    final byte[] member = gzip(raw);
+    final byte[] badMagicTail = {0x1e, (byte) 0x8b, 8, 0, 0, 0, 0, 0, 0, 0};
+    final byte[] body = Arrays.copyOf(member, member.length + badMagicTail.length);
+    System.arraycopy(badMagicTail, 0, body, member.length, badMagicTail.length);
+    assertArrayEquals(raw, JsonHttpClient.readBody(StubHttpResponse.of(body, "Content-Encoding", "gzip")));
+    assertArrayEquals(raw, JsonHttpClient.readBody(
+        StubHttpResponse.of(new ByteArrayInputStream(body), "Content-Encoding", "gzip")));
+  }
+
   @Test
   void truncatedGzipStreamFails() {
     final byte[] full = gzip(ascii("{\"result\":\"a body that gets cut off part way through\"}"));

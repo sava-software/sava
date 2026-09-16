@@ -149,7 +149,8 @@ public abstract class JsonHttpClient {
     return sendWithDeadline(request, bodyHandler, ForkJoinPool.commonPool());
   }
 
-  // Package-private scheduler seam for submission and timer-lifecycle tests.
+  // Package-private scheduler seam: lets a test observe the one timer this route arms, and
+  // that a submission the executor rejects arms none.
   final <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
                                                                 final HttpResponse.BodyHandler<T> bodyHandler,
                                                                 final ScheduledExecutorService scheduler) {
@@ -279,6 +280,9 @@ public abstract class JsonHttpClient {
   /// Reads the response body, inflating a body marked with the supported gzip encoding.
   /// An empty byte-array body is returned unchanged even when marked gzip. An empty
   /// input stream marked gzip is instead parsed as gzip and fails with [UncheckedIOException].
+  /// Bytes after a complete gzip member that do not start another member are dropped
+  /// silently on both routes, as [GZIPInputStream] drops them; a tail that does begin a member
+  /// but ends early is rejected or dropped depending on the JDK's read-ahead rule.
   protected static byte[] readBody(final HttpResponse<?> response) {
     if (response instanceof ReadHttpResponse<?> readHttpResponse) {
       return readHttpResponse.readBody();

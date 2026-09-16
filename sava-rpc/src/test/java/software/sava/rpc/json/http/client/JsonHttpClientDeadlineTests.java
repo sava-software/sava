@@ -175,6 +175,37 @@ final class JsonHttpClientDeadlineTests {
     }
   }
 
+  /// The seam's positive half: a submission the executor accepts arms exactly one timer on the
+  /// injected scheduler, for twice the built request's timeout rather than the client default,
+  /// and settling the response releases it. The executor swallows the exchange, so the response
+  /// stays pending until the test cancels it and nothing here touches the network.
+  @Test
+  void anAcceptedSubmissionArmsOneDeadlineOnTheInjectedScheduler() {
+    final var httpClient = HttpClient.newBuilder().executor(_ -> {
+    }).build();
+    try {
+      final var uri = URI.create("http://127.0.0.1:1/");
+      final var request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(3)).build();
+      final var scheduler = new RecordingScheduler();
+      final var client = new JsonHttpClient(uri, httpClient, Duration.ofSeconds(5)) {
+      };
+
+      final var response = client.sendWithDeadline(request, HttpResponse.BodyHandlers.ofByteArray(), scheduler.executor());
+
+      assertFalse(response.isDone(), "the swallowed exchange must leave the response pending");
+      assertEquals(1, scheduler.scheduleCalls.get(), "one accepted submission arms exactly one timer");
+      assertEquals(Duration.ofSeconds(6).toNanos(), scheduler.delayNanos,
+          "the timer follows the built request's timeout, not the client default");
+      assertEquals(0, scheduler.timerCancels.get(), "a pending response keeps its timer armed");
+
+      assertTrue(response.cancel(true));
+      assertEquals(1, scheduler.timerCancels.get(), "settling the response releases its timer");
+    } finally {
+      // close() would wait for the swallowed exchange, which never runs
+      httpClient.shutdownNow();
+    }
+  }
+
   /// The deadline follows the timeout on the built request, which `extendRequest` may have
   /// replaced in either direction, and falls back to the client default only when the request
   /// carries none.
