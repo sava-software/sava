@@ -10,12 +10,15 @@ is only closed by a committed seed here **plus** a named regression test.
 This file lives next to the corpus directories, never inside one: every file
 inside a corpus directory is fed to the harness as a seed.
 
-These are **bootstrap** corpora (see sava-core's fuzz README for the
-bootstrap/regression distinction). For `responses` and `ws`, a JSON-RPC envelope
-with a method or result body a parser accepts — let alone a subscription id matching the
-harness's confirmed subscriptions, or a base64 account payload — is far more
-structure than a from-scratch mutator assembles, so the seeds buy coverage as
-well as being the regression home for findings.
+`responses` and `ws` are **bootstrap** corpora (see sava-core's fuzz README for
+the bootstrap/regression distinction): a JSON-RPC envelope with a method or result
+body a parser accepts — let alone a subscription id matching the harness's
+confirmed subscriptions, or a base64 account payload — is far more structure than
+a from-scratch mutator assembles, so the seeds buy coverage as well as being the
+regression home for findings. `httpBody` is a **regression** corpus: any input of
+five or more bytes is valid and the harness synthesises the gzip itself, so a
+mutator reaches every mode from scratch in seconds; its seeds buy deterministic
+`check` replay and a landing place for findings, not coverage.
 
 ## `httpBody` — [JsonHttpClientBodyFuzz](../../java/software/sava/rpc/json/http/client/JsonHttpClientBodyFuzz.java)
 
@@ -29,8 +32,9 @@ the original payload through both `byte[]` and fragmented `InputStream` routes.
 The malformed modes corrupt the gzip magic or checksum, or remove trailer bytes;
 both routes must fail with `UncheckedIOException`. Missing, extreme, or malformed
 Content-Length hints must not change these results. Streams are finite and report
-their remaining bytes through `available()`; this target does not model network
-timing or stalls.
+their remaining bytes honestly through `available()`, which JDK 26 and 27 consult
+before probing for a following gzip member (the 25.0.2 reader probes
+unconditionally); this target does not model network timing or stalls.
 
 The seeds select each mode and include empty payloads, binary data, repeated,
 comma-folded, and `x-gzip`-aliased encoding headers, size-hint boundaries, and a

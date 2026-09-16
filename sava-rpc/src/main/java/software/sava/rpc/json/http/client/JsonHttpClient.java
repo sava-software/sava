@@ -218,6 +218,15 @@ public abstract class JsonHttpClient {
     }
   }
 
+  /// The inflate buffer for a body already in memory. Its compressed length is exact rather
+  /// than a header, but the measurements above still apply -- nothing over [#MAX_GZIP_BUFFER]
+  /// inflates faster -- and without the clamp an 8 MiB compressed body would add an 8 MiB
+  /// buffer to the 8 MiB it already holds.
+  // package-private for tests
+  static int gzipBufferSize(final int compressedLength) {
+    return Math.clamp(compressedLength, MIN_GZIP_BUFFER, MAX_GZIP_BUFFER);
+  }
+
   /// Clamps the declared Content-Length into a sane buffer size. Nothing about
   /// this header is trustworthy: it is server controlled, unrelated to the bytes
   /// actually sent, and need not even be a number. A value past int range used to
@@ -240,15 +249,6 @@ public abstract class JsonHttpClient {
   ///
   /// @return a size between [#MIN_GZIP_BUFFER] and [#MAX_GZIP_BUFFER], falling
   /// back to the minimum when the header is absent or unparseable.
-  /// The inflate buffer for a body already in memory. Its compressed length is exact rather
-  /// than a header, but the measurements above still apply -- nothing over [#MAX_GZIP_BUFFER]
-  /// inflates faster -- and without the clamp an 8 MiB compressed body would add an 8 MiB
-  /// buffer to the 8 MiB it already holds.
-  // package-private for tests
-  static int gzipBufferSize(final int compressedLength) {
-    return Math.clamp(compressedLength, MIN_GZIP_BUFFER, MAX_GZIP_BUFFER);
-  }
-
   private static int gzipBufferSize(final HttpResponse<?> response) {
     final long contentLength;
     try {

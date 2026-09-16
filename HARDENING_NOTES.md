@@ -785,7 +785,7 @@ membership uses curve25519-dalek decompression semantics. A JDK point parser is
 therefore not an oracle for `isNotOnCurve`. The targets also use separate
 committed corpora so either minimize task can rewrite its own corpus without
 discarding seeds that only exercise the other's oracle paths. The manual fuzz
-workflow and its timeout budget now cover eight targets.
+workflow and its timeout budget cover this target too.
 
 Property: every 32-byte RFC 8032 seed derives the same compressed public key in
 Sava and SunEC | Oracle: SunEC key generation, conditioned on exact seed
@@ -1063,7 +1063,7 @@ representation used by `InflationReward`.
 ### HTTP body differential fuzzing — 2026-09-15
 
 `fuzzHttpBody` exercises `JsonHttpClient.readBody` through both byte-array and
-fragmented-stream bodies. Its 14 synthetic bootstrap seeds replay inside `check`.
+fragmented-stream bodies. Its synthetic regression seeds replay inside `check`.
 The input selects encoding/header shapes, stream read sizes, gzip member splits,
 and controlled corruptions; the harness generates compressed bytes from at most
 8 KiB of raw payload, so decompressed output stays bounded. This target covers
@@ -1095,10 +1095,16 @@ in-place mutation of a plain body and bypassed gzip decoding on each route for
 both valid and corrupt inputs. Fresh, full, history-free `pitestClient` observed
 597 killed and the same seven accepted survivors from 604 mutants, with no
 uncovered mutants, timeouts, or invalid outcomes. The prescribed retag writer
-refreshed source-line metadata without changing any accepted row's meaning.
+refreshed the `# line` tags of the two rows this report gated (`newPostRequest`,
+`readInputStream`) without changing any accepted row's meaning. The three
+`# killed retained` JsonHttpClient rows (`gzipBufferSize`, both `wrapResponseParser`)
+keep the tags of their last gated observation, which this branch's source additions
+have since displaced: retag cannot reach rows the report does not match, and
+baseline identity is line-less, so the stale tags are cosmetic until a selective
+writer exists.
 
-The final local campaign used the 14 bootstrap seeds and the retained local
-working corpus, with a 120-second budget and one target running:
+The final local campaign used the seed corpus as committed that day and the retained
+local working corpus, with a 120-second budget and one target running:
 
 ```sh
 NO_DNA=1 ./gradlew :sava-rpc:fuzzHttpBody -PmaxFuzzTime=120 -PmaxParallelFuzzTargets=1
@@ -1107,4 +1113,43 @@ NO_DNA=1 ./gradlew :sava-rpc:fuzzHttpBody -PmaxFuzzTime=120 -PmaxParallelFuzzTar
 Jazzer completed 11,162,719 executions in 121 seconds, with no findings and a
 successful task exit. Its reported random seed was 631708680. This is development
 evidence for the bounded HTTP-body target; the repository-wide release campaign
-remains owned by the release checklist.
+remains owned by the release checklist. The manual fuzz workflow now sizes its
+step timeout from the length of its single target list instead of a hand-bumped
+multiplier, so registering a target there cannot leave the budget behind; targets
+run sequentially under the plugin's default parallelism of one.
+
+Review follow-ups, closed 2026-09-16. Property: a comma-folded
+`Content-Encoding: identity, gzip` field value, which an intermediary may produce
+from two field lines (RFC 9110 §8.4), selects inflation exactly as the two lines
+do | Oracle: java.net.http hands a folded list over as one value, so the RFC's
+list syntax and the existing repeated-field-line test are the reference |
+Outcome: production bug — `isGzipEncoded` matched whole values only and handed
+the parser still-compressed bytes; fixed by scanning the list in place for a
+`gzip` element, or its legacy alias `x-gzip` (§8.4.1.3), with no allocation from a
+provider-sized header; pinned by `gzipIsFoundInAFoldedEncodingList`, folded and
+aliased encoding shapes in the harness, and the `gzip_folded_encoding` and
+`gzip_x_alias` seeds. Property: bytes after a complete
+gzip member that start no member are dropped silently on both routes | Oracle:
+`GZIPInputStream` on JDK 25, 26, and 27 | Outcome: accepted JDK behaviour, now
+named in `readBody`'s javadoc and pinned by
+`bytesAfterACompleteGzipMemberThatStartNoMemberAreDroppedSilently`. The scheduler
+seam gained its positive half,
+`anAcceptedSubmissionArmsOneDeadlineOnTheInjectedScheduler`: one timer, twice the
+built request's timeout, released when the response settles. The harness's
+`available()` rationale now records the JDK split it actually covers (25.0.2
+reads ahead unconditionally; 26 and 27 only when `available()` reports bytes or
+the inflater holds more than 26 leftover bytes), the corpus is
+labelled regression rather than bootstrap, the Content-Length javadoc sits on the
+overload that reads the header, and the stale `# killed retained` line tags are
+named above.
+
+Validation: 71 focused JsonHttpClient tests, including seed replay, passed on
+JDK 25 and JDK 26; `docsInSync` and `agentsTemplateInSync` passed.
+Fresh, full, history-free `pitestClient` observed 630 mutants, 623 killed and the
+same seven accepted survivors, with no uncovered mutants or timeouts; every
+mutant of the rewritten encoding scan is killed by the body tests (the first pass
+left one alive -- the `gzip` suffix check replaced with true -- until four-character
+and `x-` near misses joined the negatives), and `pitestClientBaselineRetag`
+refreshed the two gated rows' line tags while preserving all 18 rows. A 60-second
+`fuzzHttpBody` campaign (`-PmaxParallelFuzzTargets=1`, Jazzer seed 4269373147)
+completed 4,980,641 executions with no findings.

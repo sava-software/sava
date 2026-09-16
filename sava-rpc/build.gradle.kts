@@ -101,6 +101,11 @@ hardening {
     // Five selector bytes plus at most 8 KiB of raw payload. The harness generates
     // gzip itself, so both the wire input and decompressed output remain bounded.
     maxLen = 8197
+    // NOT a bootstrap corpus — any input of five or more bytes is valid and the harness
+    // synthesises the gzip itself, so a mutator reaches every mode from scratch in seconds
+    // and these seeds buy no coverage. They are the regression half: deterministic replay
+    // inside check and the landing place for a finding (AGENTS.md: a finding is closed by
+    // a seed *and* a named test).
     seedCorpus = layout.projectDirectory.dir("src/test/resources/fuzz/httpBody")
   }
   fuzz.register("responses") {

@@ -108,8 +108,10 @@ then let the next refresh rewrite the tag.
 Arguments below name **methods and constructs, not line numbers**: prose
 anchors are not machine-checked and rot silently on the first refactor (the
 ws family's did, wholesale, before 2026-08-01). The authoritative anchor is
-each row's `# line` tag in the CSV, which every refresh rewrites and the
-line-drift advisory checks. Cite a line here only where it is the historical
+each row's `# line` tag in the CSV, which every refresh rewrites for the rows
+the report gates and the line-drift advisory checks; a `# killed retained` row
+keeps the tag of its last gated observation, so its anchor can lag source drift
+until a selective writer exists. Cite a line here only where it is the historical
 record of a past state.
 
 **Identical rows are sibling mutants — never dedupe these files.** One

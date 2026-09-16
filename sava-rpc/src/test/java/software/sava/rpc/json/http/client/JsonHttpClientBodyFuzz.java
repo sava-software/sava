@@ -24,10 +24,14 @@ import java.util.zip.GZIPOutputStream;
 /// truncated gzip trailer. Compression is generated here so malformed cases cannot
 /// expand an attacker-controlled compressed stream without the payload bound.
 ///
-/// The stream model is deliberately finite and in-memory. It varies short reads and
-/// `available()` accurately reports the remaining bytes, which lets the JDK gzip reader
-/// discover a following concatenated member without introducing blocking or timing into
-/// the campaign.
+/// The stream model is deliberately finite and in-memory. It varies short reads, and
+/// `available()` reports the remaining bytes honestly because whether the JDK gzip reader
+/// probes for a following member can depend on that answer: JDK 26 and 27 only read ahead
+/// when the source reports more bytes or the inflater holds more than 26 bytes of leftover
+/// input (this member's trailer plus a minimal next member; 27 documents the rule and offers
+/// `jdk.util.gzip.tryReadAheadAfterTrailer` to read ahead unconditionally), while the 25.0.2
+/// reader reads ahead unconditionally. An honest count makes concatenated members decode
+/// identically on all of them without introducing blocking or timing into the campaign.
 ///
 /// Deliberately free of Jazzer imports so it compiles with the regular test sources.
 public final class JsonHttpClientBodyFuzz {
