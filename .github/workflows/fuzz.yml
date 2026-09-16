@@ -18,6 +18,14 @@ concurrency:
 jobs:
   fuzz:
     runs-on: ubuntu-latest
+    env:
+      # The one list of fuzz targets: the Fuzz step runs it and the budget step sizes the
+      # step timeout from its length, so registering a target here cannot leave the budget
+      # behind. Targets run one at a time (the plugin's default parallelism).
+      FUZZ_TARGETS: >-
+        :sava-core:fuzzBase58 :sava-core:fuzzBorsh :sava-core:fuzzEd25519 :sava-core:fuzzEd25519Jdk
+        :sava-core:fuzzToken2022 :sava-core:fuzzTxSkeleton
+        :sava-rpc:fuzzHttpBody :sava-rpc:fuzzResponses :sava-rpc:fuzzWs
     steps:
       - id: setup
         uses: sava-software/sava-build@main
@@ -28,7 +36,7 @@ jobs:
 
       # Integer ceiling in bash rather than expression math, which has no rounding
       # and would hand the runner a fraction whenever max-fuzz-time is not a
-      # multiple of 60.
+      # multiple of 60. One max-fuzz-time per target in FUZZ_TARGETS, plus setup slack.
       - id: budget
         name: Compute fuzz time budget
         env:
@@ -37,7 +45,9 @@ jobs:
         # garbage as an unset variable, silently budgeting 0 seconds of fuzzing
         run: |
           [[ "$MAX_FUZZ_TIME" =~ ^[1-9][0-9]*$ ]] || { echo "max-fuzz-time must be positive whole seconds, no leading zeros: '$MAX_FUZZ_TIME'" >&2; exit 1; }
-          echo "timeout-minutes=$(( (9 * MAX_FUZZ_TIME + 59) / 60 + 30 ))" >> "$GITHUB_OUTPUT"
+          TARGET_COUNT=$(wc -w <<< "$FUZZ_TARGETS")
+          [[ "$TARGET_COUNT" -gt 0 ]] || { echo "FUZZ_TARGETS is empty" >&2; exit 1; }
+          echo "timeout-minutes=$(( (TARGET_COUNT * MAX_FUZZ_TIME + 59) / 60 + 30 ))" >> "$GITHUB_OUTPUT"
 
       - name: Fuzz
         # --continue: a crashing target must not skip the remaining targets — the
@@ -50,9 +60,7 @@ jobs:
           ./gradlew --stacktrace --continue
           -PjavaVersion=${{ steps.setup.outputs.java-version }}
           -PmaxFuzzTime=${{ inputs.max-fuzz-time || '900' }}
-          :sava-core:fuzzBase58 :sava-core:fuzzBorsh :sava-core:fuzzEd25519 :sava-core:fuzzEd25519Jdk
-          :sava-core:fuzzToken2022 :sava-core:fuzzTxSkeleton
-          :sava-rpc:fuzzHttpBody :sava-rpc:fuzzResponses :sava-rpc:fuzzWs
+          $FUZZ_TARGETS
         env:
           ORG_GRADLE_PROJECT_savaGithubPackagesUsername: ${{ github.actor }}
           ORG_GRADLE_PROJECT_savaGithubPackagesPassword: ${{ secrets.READ_SAVA_PACKAGES }}

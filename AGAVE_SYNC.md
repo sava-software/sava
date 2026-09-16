@@ -705,7 +705,10 @@ input). The plugin passes `seedCorpus` to libFuzzer as a trailing read-only corp
 replayed every run, but only newly interesting inputs are written back to the writable
 `build/fuzz/<name>-corpus`. Omit `seedCorpus` only when every prefix of the input is
 already valid (e.g. a raw codec like Base58); leaving a structured target seedless is the
-single most common reason a fuzzer plateaus at low coverage.
+single most common reason a fuzzer plateaus at low coverage. Then add the task to
+`FUZZ_TARGETS` in `.github/workflows/fuzz.yml`; the job sizes its step timeout from that
+list. Only a target in a module the workflow's "Upload findings" step does not already
+list needs more: add that module's `crash-*`, `oom-*`, `timeout-*` and `build/fuzz/` paths.
 
 Tooling notes (also explained by comments in the hardening plugin): the plugin recompiles
 the main and test sources into one plain, module-info-free classpath root per tool —
