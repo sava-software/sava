@@ -54,7 +54,8 @@ final class ParseErrorVariantsTests {
       "ResanitizationNeeded",
       "UnbalancedTransaction",
       "ProgramCacheHitMaxLimit",
-      "CommitCancelled"
+      "CommitCancelled",
+      "BailOut"
   );
 
   /// Unit variants only; Custom and BorshIoError may carry data.
@@ -110,7 +111,8 @@ final class ParseErrorVariantsTests {
       "MaxAccountsDataAllocationsExceeded",
       "MaxAccountsExceeded",
       "MaxInstructionTraceLengthExceeded",
-      "BuiltinProgramsMustConsumeComputeUnits"
+      "BuiltinProgramsMustConsumeComputeUnits",
+      "BailOut"
   );
 
   @Test

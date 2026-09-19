@@ -46,6 +46,7 @@ public sealed interface TransactionError permits
     TransactionError.UnbalancedTransaction,
     TransactionError.ProgramCacheHitMaxLimit,
     TransactionError.CommitCancelled,
+    TransactionError.BailOut,
     TransactionError.Unknown {
 
   record Unknown(String type) implements TransactionError {
@@ -203,6 +204,10 @@ public sealed interface TransactionError permits
     static final CommitCancelled INSTANCE = new CommitCancelled();
   }
 
+  record BailOut() implements TransactionError {
+    static final BailOut INSTANCE = new BailOut();
+  }
+
   static TransactionError parseError(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
       case STRING -> ji.applyChars(PARSER);
@@ -254,7 +259,8 @@ public sealed interface TransactionError permits
       "ResanitizationNeeded",
       "UnbalancedTransaction",
       "ProgramCacheHitMaxLimit",
-      "CommitCancelled"
+      "CommitCancelled",
+      "BailOut"
   );
 
   TransactionError[] VARIANTS = {
@@ -292,7 +298,8 @@ public sealed interface TransactionError permits
       ResanitizationNeeded.INSTANCE,
       UnbalancedTransaction.INSTANCE,
       ProgramCacheHitMaxLimit.INSTANCE,
-      CommitCancelled.INSTANCE
+      CommitCancelled.INSTANCE,
+      BailOut.INSTANCE
   };
 
   CharBufferFunction<TransactionError> PARSER = (buf, offset, len) -> {

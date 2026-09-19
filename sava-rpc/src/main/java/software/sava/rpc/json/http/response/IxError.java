@@ -62,6 +62,7 @@ public sealed interface IxError permits
     IxError.MaxAccountsExceeded,
     IxError.MaxInstructionTraceLengthExceeded,
     IxError.BuiltinProgramsMustConsumeComputeUnits,
+    IxError.BailOut,
     IxError.Unknown {
 
   record Unknown(String type) implements IxError {
@@ -281,6 +282,10 @@ public sealed interface IxError permits
     static final BuiltinProgramsMustConsumeComputeUnits INSTANCE = new BuiltinProgramsMustConsumeComputeUnits();
   }
 
+  record BailOut() implements IxError {
+    static final BailOut INSTANCE = new BailOut();
+  }
+
   static IxError parseError(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
       case STRING -> ji.applyChars(PARSER);
@@ -346,7 +351,8 @@ public sealed interface IxError permits
       "MaxAccountsDataAllocationsExceeded",
       "MaxAccountsExceeded",
       "MaxInstructionTraceLengthExceeded",
-      "BuiltinProgramsMustConsumeComputeUnits"
+      "BuiltinProgramsMustConsumeComputeUnits",
+      "BailOut"
   );
 
   IxError[] VARIANTS = {
@@ -403,7 +409,8 @@ public sealed interface IxError permits
       MaxAccountsDataAllocationsExceeded.INSTANCE,
       MaxAccountsExceeded.INSTANCE,
       MaxInstructionTraceLengthExceeded.INSTANCE,
-      BuiltinProgramsMustConsumeComputeUnits.INSTANCE
+      BuiltinProgramsMustConsumeComputeUnits.INSTANCE,
+      BailOut.INSTANCE
   };
 
   CharBufferFunction<IxError> PARSER = (buf, offset, len) -> {
