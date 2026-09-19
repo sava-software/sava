@@ -41,7 +41,7 @@ final class CompactU16EncodingTest {
 
   @Test
   void testAgaveVectors() {
-    // https://github.com/anza-xyz/solana-sdk short-vec/src/lib.rs test_short_vec_encode_decode
+    // https://github.com/anza-xyz/solana-sdk short-vec/src/lib.rs test_short_vec_encode_len + test_deserialize
     final int[][] vectors = {
         {0x0000, 0x00},
         {0x007f, 0x7f},

@@ -24,15 +24,19 @@ comparing.
   `compute-budget-interface`, and friends.
 - **agave-sdk** — `https://github.com/anza-xyz/agave-sdk.git` — the wire-format parsers and
   sanitizers split out of agave: `transaction-view` (the zero-copy legacy/v0/v1 transaction
-  parser and its `sanitize`), `short-vec`. **`transaction-view` is here, not inside `agave`** —
-  citing `agave:transaction-view/` sends a reader to a path that does not exist.
+  parser and its `sanitize`). **`transaction-view` is here, not inside `agave`** —
+  citing `agave:transaction-view/` sends a reader to a path that does not exist. `short-vec`
+  is *not* here; it stayed in solana-sdk (`solana-sdk:short-vec/`).
+- **solana-improvement-documents** — `https://github.com/solana-foundation/solana-improvement-documents`
+  — the SIMD texts; the Alpenglow section below is read against these. It has a row in "Last
+  verified sync points" and belongs in this list for that row to point back at.
 - **solana-com** — `https://github.com/solana-foundation/solana-com` — solana.com docs; RPC
   method pages at `apps/docs/content/docs/en/rpc/http/*.mdx` and
   `apps/docs/content/docs/en/rpc/websocket/*.mdx` (canonical request/response examples in
   `jsonc !response` blocks).
 - **transaction-v1-examples** — `https://github.com/solana-foundation/transaction-v1-examples`
   — the Solana Foundation's SIMD-0385 examples: `@solana/kit`, Rust, Python and Go clients
-  driving a local 4.2.1 validator. `ts/src/estimate.ts` is the reference for kit's v1
+  driving a local 4.2.1 validator. `ts/kit/src/estimate.ts` is the reference for kit's v1
   resource-limit flow.
 
 Repo-relative paths below are prefixed with the repo name (e.g. `agave:rpc/src/rpc.rs`).
@@ -300,7 +304,7 @@ captured once by hand; the local test-validator activates every gate at genesis.
    empirical basis for the `TxBuilder` defaults row in "Deliberate divergences: v1 compute budget
    values" below.
 4. **kit parity.** `@solana/kit`'s recommended v1 flow
-   (`transaction-v1-examples:ts/src/estimate.ts`: `fillTransactionMessageProvisoryResourceLimits`,
+   (`transaction-v1-examples:ts/kit/src/estimate.ts`: `fillTransactionMessageProvisoryResourceLimits`,
    then `estimateAndSetResourceLimits`) also fills both limits with provisory maxima before
    simulating, so that the message simulates at its final size and cannot fail for want of the
    resources being measured. `TxBuilder`'s default-to-max shape is therefore kit-conformant, not a
@@ -395,8 +399,8 @@ transaction among 181 — so a capture is worth keeping rather than re-derived o
 | `tx/Transaction*.java`, `tx/TransactionSkeleton*.java` | legacy + v0 message wire format: 3-byte header, `0x80` version bit, compact-u16 arrays, address-table lookups | `solana-sdk:message/`, `solana-sdk:transaction/`; nearest upstream parser: `agave-sdk:transaction-view/` |
 | `tx/V1Transaction.java`, `tx/V1TransactionSkeleton.java`, `tx/TxBuilder*.java` | SIMD-0385 v1 message wire format: `129` version byte, `TransactionConfigMask` + `ConfigValues`, fixed-width instruction headers, trailing signatures, no address-table lookups | `solana-improvement-documents:proposals/0385-transaction-v1.md`; `agave:runtime-transaction/src/runtime_transaction/transaction_view.rs` (`TransactionVersion::V1`) and `agave-sdk:transaction-view/`. Oracles: `sava-core/src/test/solana/v1-message-vectors/` (Rust `solana-message` `v1`, consumed by `V1MessageConformanceTests`), `sava-core/src/test/solana/kit-v1-vectors/` (`@solana/kit` 8 differential), and committed RPC captures: a local Agave 4.2.1 validator block and a public-devnet block carrying a third party's v1 transaction (`sava-rpc/src/test/resources/rpc_response_data/`). Original live checks ran against local 4.2.1/4.2.2/4.3.0-beta.3 validators and public devnet — see "Observed on Agave 4.2.1" and "Observed on public devnet" above. `LiveV1ValidatorCheck` now retains one optional local smoke check |
 | `encoding/CompactU16Encoding.java` | short_vec / ShortU16 encoding | `solana-sdk:short-vec/` |
-| `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-api/src/filter.rs` + server enforcement in `agave:rpc/` |
-| `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` (agave repo `zk-sdk/` or crates.io) |
+| `rpc/Filter.java`, `MemCmpFilter.java`, `DataSizeFilter.java` | `getProgramAccounts` filters; 128-byte memcmp cap | `agave:rpc-client-types/src/filter.rs` (`MAX_DATA_SIZE = 128`, checked in `RpcFilterType::verify`; `rpc-client-api` only re-exports it) + server enforcement in `agave:rpc/src/filter.rs` (`filter_allows`) |
+| `zk/ElGamal.java` | ElGamal/Pedersen/AE byte-length constants used by confidential extensions | `solana-zk-sdk` `encryption::*` — crates.io only, version pinned in `agave:Cargo.toml` (`solana-zk-sdk = "8.0.0"`); agave's `zk-sdk/` was deleted in `a2ce908cfa` |
 | `accounts/PublicKey.java`, `accounts/PublicKeyBytes.java`, `accounts/AccountWithSeed.java` | PDA derivation (32-byte seeds; 16 total seeds including the bump, so canonical find accepts 15 caller seeds; bump search 255..1; `"ProgramDerivedAddress"` marker; off-curve check); system create-with-seed UTF-8 bytes, rejection of unpaired Java UTF-16 surrogates to preserve Rust `&str` semantics, and illegal-owner marker guard; the ASCII off-curve helper reserves one of the 32 seed bytes for its nonce and applies the same owner guard | `solana-sdk:address/src/lib.rs` (`create_program_address`, `create_with_seed`); `address/src/syscalls.rs` |
 | `crypto/ed25519/Ed25519Util.java` | ed25519 decompression verdict backing the PDA off-curve check, plus public-key derivation for `Signer` | TweetNaCl/curve25519-dalek `decompress` semantics per `solana-sdk:pubkey/` `is_on_curve` — see Ed25519 hardening below |
 | `borsh/Borsh.java`, `borsh/RustEnum.java` | borsh spec: u32-prefixed strings/vecs, 1-byte Option tags, enum discriminants — see Borsh hardening below | `borsh` crate spec as used by agave/SPL |
@@ -671,7 +675,8 @@ convention when extending them:
 - `JexTests` — every entry-point family cross-validated against `java.util.HexFormat`.
 - `CompactU16EncodingTest` — exhaustive sweep of every value through every entry point,
   plus the canonical byte vectors from `solana-sdk:short-vec/src/lib.rs`
-  (`test_short_vec_encode_decode`).
+  (`test_short_vec_encode_len` and the good-value half of `test_deserialize`; their union is
+  exactly the ten vectors in `testAgaveVectors`).
 - Decode-into tests use dirty (non-zero) output buffers so dropped writes are observable.
 - Randomized tests seed a `Random` from `SecureRandom` and embed the seed in failure
   messages; replay a failure by pinning the seed.
@@ -772,7 +777,10 @@ compute-metering, or feature-activation coverage.
 Alpenglow (SIMD-0326 Votor consensus, plus SIMD-0357 VAT, SIMD-0384 migration, SIMD-0387
 BLS vote keys, SIMD-0388 BLS syscalls — all in Review as of 2026-07) replaces TowerBFT and
 PoH with off-chain BLS-signed votes and finalization certificates. Feature gates exist in
-agave (`alpenglow` = `a1p3RiCfMmzm5jgCva97UUNwUiVLq5EJhtusRWHDBsp`) but are NOT activated.
+agave (`alpenglow` = `A1pengvuM6JEcyNuTnMqepBKhwHE3N6PmUrdATGawhJS`, plus
+`alpenglow_fast_leader_handover` and, governing the `VoterWithBLS` path below,
+`bls_pubkey_management_in_vote_account` = `AnAP9zPV4KL7czAPQbFhpDKV2tx7g4UGNbK9wvXwjaRo`, all
+in `agave:feature-set/src/lib.rs`) but are NOT activated.
 **Policy: do not implement Alpenglow-specific surfaces until activation on main-net is
 likely** (per project owner).
 
@@ -811,7 +819,8 @@ files in the solana-improvement-documents repo.
   for a real-world example. Do not add typed wrappers without a supporting provider.
 - `SolanaAccounts` deliberately omits deprecated/dormant reserved keys
   (`bpf_loader_deprecated`, `bpf_loader` v2, `loader_v4`, `native_loader`, `feature`,
-  `incinerator`, `sysvar::rewards`) — do not add without need.
+  `sysvar::rewards`) — do not add without need. `incinerator` is *not* among them: it is an
+  sdk id, never a reserved account key, so there is nothing to omit.
 - Sysvar decoders: Clock and EpochRewards are public; Rent, EpochSchedule, StakeHistory,
   SlotHashes, LastRestartSlot are package-private (make public on demand). SlotHistory
   (131KB bit-vector) is not modeled. Fixture-backed tests in
@@ -878,6 +887,8 @@ completes.**
 | solana-sdk | `4fb3a9a3` | 2026-07-14 | `transaction-error/`, `instruction-error/` (all variants), `sdk-ids/` (address constants) |
 | solana-com | `7719729df` | 2026-07-14 | Documented HTTP/WebSocket method lists (`apps/docs/content/docs/en/rpc/`) confirmed to match the implemented client surface |
 | solana-improvement-documents | `05f2ae9` | 2026-07-14 | Alpenglow SIMDs 0326/0357/0384/0387/0388 read for the Alpenglow section above |
+| agave-sdk | — | — | **Never verified.** Declared as a reference repo and cited for `transaction-view/` (the zero-copy v1 parser and its `sanitize`), but no sync pass has ever recorded a hash here, so there is no diff base. |
+| transaction-v1-examples | — | — | **Never verified.** Cited for `ts/kit/src/estimate.ts` (kit's v1 resource-limit flow); no sync pass has ever recorded a hash, so there is no diff base. |
 
 Example diff commands, scoped to the watched paths:
 
