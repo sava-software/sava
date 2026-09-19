@@ -1,7 +1,7 @@
 !sava-hardening-baseline-schema,1
-software.sava.core.encoding.Base58,beginMutableEncode,ConditionalsBoundaryMutator,SURVIVED # surplus zero strip # line 380
-software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 380
-software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 380
+software.sava.core.encoding.Base58,beginMutableEncode,ConditionalsBoundaryMutator,SURVIVED # encode chunk split # line 380
+software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # encode chunk split # line 380
+software.sava.core.encoding.Base58,beginMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # encode chunk split # line 380
 software.sava.core.encoding.Base58,continueMutableEncode,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # surplus zero strip # line 359
 software.sava.core.encoding.Base58,continueMutableEncode,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # surplus zero strip # line 359
 software.sava.core.encoding.Base58,decode,MathMutator,SURVIVED # allocation size # line 199

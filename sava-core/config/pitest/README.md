@@ -146,16 +146,53 @@ result-identical and the mutant only changes which one runs:
 **Defensive code unreachable in context** (baseline labels `# surplus zero strip`
 for the Base58 encode family and `# pack25519 passes` for the dropped
 `car25519` passes):
-- `Base58` encode family (`encode`, `mutableEncode`,
-  `continueMutableEncode`, `beginMutableEncode`): the surplus-`ENCODED_ZERO`
-  strip loop after digit emission (and its boundary variant). No entry point
-  produces surplus zero digits for it to remove — corroborated by the
-  BigInteger-reference differential and Bitcoin Core vectors passing with
-  the strip disabled; retained as defense.
+- `Base58` encode family (`encode`, `mutableEncode`, `continueMutableEncode`):
+  the surplus-`ENCODED_ZERO` strip loop after digit emission (and its boundary
+  variant). No entry point produces surplus zero digits for it to remove —
+  corroborated by the BigInteger-reference differential and Bitcoin Core
+  vectors passing with the strip disabled; retained as defense.
+  `beginMutableEncode` is not in this family: it has no strip loop, and its
+  rows are argued under `# encode chunk split` below.
 - `Ed25519Util.pack25519`: dropping one of the three leading `car25519`
   passes, and its `changed conditional boundary`: the remaining passes plus
   the exact double conditional-subtract reduction still fully normalize
   every limb state reachable from 32-byte `Codec.decode32` inputs.
+
+**Chunked encode split** — baseline label `# encode chunk split` — the mutant
+moves the point at which one encoding is cut in two, never the encoding:
+- `Base58.beginMutableEncode` (two `RemoveConditionalMutator_ORDER_ELSE`
+  siblings and one `ConditionalsBoundaryMutator`, all on the chunked
+  digit-emission loop's `inputStart < input.length && len < maxLen` bound): the
+  bound only decides how many digits this call emits before returning packed
+  state; `continueMutableEncode` resumes from that state, so every split,
+  including an empty prefix, yields the same concatenated encoding, which
+  `Base58Tests.testMutableEncode` asserts against `Base58.encode` over a
+  `maxLen` sweep that reaches full consumption of the number. The two
+  `ORDER_ELSE` siblings are the two halves of the bound, each replaced with
+  false; either one makes the compound condition false on first evaluation, so
+  both produce the empty prefix. The surviving boundary sibling is the
+  `len <= maxLen` half, which emits one digit more. The
+  `inputStart <= input.length` boundary is killed: it runs the body once past
+  the exhausted input and reads off the end of it.
+  `continueMutableEncode`'s surplus-`ENCODED_ZERO` strip scans only what that
+  call itself wrote, so the split point would be observable if a surplus zero
+  digit could occur — the family above records that none can.
+  Noted follow-up, recorded rather than acted on: this acceptance is a choice,
+  not a proof. It is equivalence within what the encoding suite observes, and
+  the vanity `MaskWorker` reads its suffix window at a fixed offset in the short
+  buffer this loop fills, so an assertion that `beginMutableEncode` emits
+  `min(maxLen, digits)` characters — `digits` being the base-58 digit count of
+  the input's value below its leading zero bytes — would kill all three rows.
+
+**Acceptance-record audit, 2026-09-18.** A Jev-ranked, agent-verified review
+re-read the paragraph every accepted row's label points at. One group was
+mis-filed: `Base58.beginMutableEncode`'s two `RemoveConditionalMutator_ORDER_ELSE`
+siblings and its surviving `ConditionalsBoundaryMutator` sat under
+`# surplus zero strip`, whose argument is about a strip loop that member does not
+have; they are re-filed above under `# encode chunk split`, and
+`beginMutableEncode` is dropped from the surplus-zero-strip family list. Labels
+only: no row was added, removed or restructured, no other label changed, and no
+production or test code was touched.
 
 The fresh 2026-09-05 `token2022` run generated 620 mutants: 600 killed and the
 same 20 accepted survivors, all in extension classes. Removing the redundant
