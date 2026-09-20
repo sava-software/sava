@@ -1,0 +1,109 @@
+# format: sava-solana-error-variants-v1
+# property: every upstream error variant is mirrored by a Java record, and a variant with a payload by a record with components
+# solana-transaction-error: 4.0.0
+# solana-transaction-error-published-from: 9d02e6dc068042257360dceef3f1fa7edd9527e6
+# solana-instruction-error: 3.0.0
+# solana-instruction-error-published-from: 5bcc7778a4f3d5ebb95735efeb7f1bae49122f9a
+# solana-sdk-reviewed: 983858e1bb8ef9bd3c61f4a5172c705dae1f566b
+# cargo-lock-sha256: 81ce6dbbb0ee7824133bf47fd9a4dd198fafea2ab0d9a9276a8335d5b20cf043
+# cargo-manifest-sha256: c760420d25c5e3a427611b8077d3e68608f95f70ee99a2d0b7f7ff2ebc0be24d
+# generator-source-sha256: 7c3b1300e0dd4461057c7e94abefe2ed5637631a207d4a83b1af84a536610026
+# rust-toolchain-sha256: 6791dcb04edcb490caaf08590dbe1dd9d9954b46dab2095df12dc984f704f1a8
+# transaction-error-variants: 40
+# instruction-error-variants: 55
+enum	index	variant	shape
+TransactionError	0	AccountInUse	unit
+TransactionError	1	AccountLoadedTwice	unit
+TransactionError	2	AccountNotFound	unit
+TransactionError	3	ProgramAccountNotFound	unit
+TransactionError	4	InsufficientFundsForFee	unit
+TransactionError	5	InvalidAccountForFee	unit
+TransactionError	6	AlreadyProcessed	unit
+TransactionError	7	BlockhashNotFound	unit
+TransactionError	8	InstructionError	tuple
+TransactionError	9	CallChainTooDeep	unit
+TransactionError	10	MissingSignatureForFee	unit
+TransactionError	11	InvalidAccountIndex	unit
+TransactionError	12	SignatureFailure	unit
+TransactionError	13	InvalidProgramForExecution	unit
+TransactionError	14	SanitizeFailure	unit
+TransactionError	15	ClusterMaintenance	unit
+TransactionError	16	AccountBorrowOutstanding	unit
+TransactionError	17	WouldExceedMaxBlockCostLimit	unit
+TransactionError	18	UnsupportedVersion	unit
+TransactionError	19	InvalidWritableAccount	unit
+TransactionError	20	WouldExceedMaxAccountCostLimit	unit
+TransactionError	21	WouldExceedAccountDataBlockLimit	unit
+TransactionError	22	TooManyAccountLocks	unit
+TransactionError	23	AddressLookupTableNotFound	unit
+TransactionError	24	InvalidAddressLookupTableOwner	unit
+TransactionError	25	InvalidAddressLookupTableData	unit
+TransactionError	26	InvalidAddressLookupTableIndex	unit
+TransactionError	27	InvalidRentPayingAccount	unit
+TransactionError	28	WouldExceedMaxVoteCostLimit	unit
+TransactionError	29	WouldExceedAccountDataTotalLimit	unit
+TransactionError	30	DuplicateInstruction	tuple
+TransactionError	31	InsufficientFundsForRent	struct
+TransactionError	32	MaxLoadedAccountsDataSizeExceeded	unit
+TransactionError	33	InvalidLoadedAccountsDataSizeLimit	unit
+TransactionError	34	ResanitizationNeeded	unit
+TransactionError	35	ProgramExecutionTemporarilyRestricted	struct
+TransactionError	36	UnbalancedTransaction	unit
+TransactionError	37	ProgramCacheHitMaxLimit	unit
+TransactionError	38	CommitCancelled	unit
+TransactionError	39	BailOut	unit
+InstructionError	0	GenericError	unit
+InstructionError	1	InvalidArgument	unit
+InstructionError	2	InvalidInstructionData	unit
+InstructionError	3	InvalidAccountData	unit
+InstructionError	4	AccountDataTooSmall	unit
+InstructionError	5	InsufficientFunds	unit
+InstructionError	6	IncorrectProgramId	unit
+InstructionError	7	MissingRequiredSignature	unit
+InstructionError	8	AccountAlreadyInitialized	unit
+InstructionError	9	UninitializedAccount	unit
+InstructionError	10	UnbalancedInstruction	unit
+InstructionError	11	ModifiedProgramId	unit
+InstructionError	12	ExternalAccountLamportSpend	unit
+InstructionError	13	ExternalAccountDataModified	unit
+InstructionError	14	ReadonlyLamportChange	unit
+InstructionError	15	ReadonlyDataModified	unit
+InstructionError	16	DuplicateAccountIndex	unit
+InstructionError	17	ExecutableModified	unit
+InstructionError	18	RentEpochModified	unit
+InstructionError	19	NotEnoughAccountKeys	unit
+InstructionError	20	AccountDataSizeChanged	unit
+InstructionError	21	AccountNotExecutable	unit
+InstructionError	22	AccountBorrowFailed	unit
+InstructionError	23	AccountBorrowOutstanding	unit
+InstructionError	24	DuplicateAccountOutOfSync	unit
+InstructionError	25	Custom	tuple
+InstructionError	26	InvalidError	unit
+InstructionError	27	ExecutableDataModified	unit
+InstructionError	28	ExecutableLamportChange	unit
+InstructionError	29	ExecutableAccountNotRentExempt	unit
+InstructionError	30	UnsupportedProgramId	unit
+InstructionError	31	CallDepth	unit
+InstructionError	32	MissingAccount	unit
+InstructionError	33	ReentrancyNotAllowed	unit
+InstructionError	34	MaxSeedLengthExceeded	unit
+InstructionError	35	InvalidSeeds	unit
+InstructionError	36	InvalidRealloc	unit
+InstructionError	37	ComputationalBudgetExceeded	unit
+InstructionError	38	PrivilegeEscalation	unit
+InstructionError	39	ProgramEnvironmentSetupFailure	unit
+InstructionError	40	ProgramFailedToComplete	unit
+InstructionError	41	ProgramFailedToCompile	unit
+InstructionError	42	Immutable	unit
+InstructionError	43	IncorrectAuthority	unit
+InstructionError	44	BorshIoError	unit
+InstructionError	45	AccountNotRentExempt	unit
+InstructionError	46	InvalidAccountOwner	unit
+InstructionError	47	ArithmeticOverflow	unit
+InstructionError	48	UnsupportedSysvar	unit
+InstructionError	49	IllegalOwner	unit
+InstructionError	50	MaxAccountsDataAllocationsExceeded	unit
+InstructionError	51	MaxAccountsExceeded	unit
+InstructionError	52	MaxInstructionTraceLengthExceeded	unit
+InstructionError	53	BuiltinProgramsMustConsumeComputeUnits	unit
+InstructionError	54	BailOut	unit

@@ -885,6 +885,7 @@ completes.**
 |---|---|---|---|
 | agave | `e9a538e726` | 2026-07-14 | Token-2022 extensions (`account-decoder/src/parse_token_extension.rs`, `account-decoder-client-types/src/token.rs`), HTTP RPC method set (`rpc/src/rpc.rs`), pubsub methods (`rpc/src/rpc_pubsub.rs`), request/response shapes (`rpc-client-types/src/{config,response}.rs`), custom error codes (`rpc-client-api/src/custom_error.rs`), reserved accounts (`reserved-account-keys/src/lib.rs`), sysvar layouts (`account-decoder/src/parse_sysvar.rs`), `transaction-status-client-types/src/lib.rs` enums |
 | solana-sdk | `4fb3a9a3` | 2026-07-14 | `transaction-error/`, `instruction-error/` (all variants), `sdk-ids/` (address constants) |
+| solana-sdk, error enums only | `983858e1` | 2026-09-20 | `transaction-error/` and `instruction-error/` variant sets, via the committed error-variants fixture (crates 4.0.0 and 3.0.0, published from `9d02e6dc` and `5bcc7778`, source unchanged since). `sdk-ids/` and every other solana-sdk surface were not rechecked and keep the row above. |
 | solana-com | `7719729df` | 2026-07-14 | Documented HTTP/WebSocket method lists (`apps/docs/content/docs/en/rpc/`) confirmed to match the implemented client surface |
 | solana-improvement-documents | `05f2ae9` | 2026-07-14 | Alpenglow SIMDs 0326/0357/0384/0387/0388 read for the Alpenglow section above |
 | agave-sdk | — | — | **Never verified.** Declared as a reference repo and cited for `transaction-view/` (the zero-copy v1 parser and its `sanitize`), but no sync pass has ever recorded a hash here, so there is no diff base. |
@@ -927,6 +928,12 @@ git -C <solana-sdk-clone> diff 4fb3a9a3..HEAD -- \
 5. For RPC methods: compare `rpc.rs` registrations against `SolanaJsonRpcClient.java`
    literals; add interface method, request builder, response record + parser, and a
    `RoundTripRpcRequestTests` case.
-6. For errors: check `agave:rpc-client-api/src/custom_error.rs` for codes past `-32021`
-   and `solana-sdk:transaction-error/` for new variants.
+6. For errors: check `agave:rpc-client-api/src/custom_error.rs` for codes past `-32021`.
+   For `TransactionError` and `InstructionError` the mirror is gated by the committed
+   fixture under `sava-rpc/src/test/solana/error-variants/`: review the two crate pins in
+   its `Cargo.toml` against the newest published `solana-transaction-error` and
+   `solana-instruction-error`, bump them deliberately, regenerate with `--write`, and let
+   `UpstreamErrorVariantsConformanceTests` name any variant the Java side lacks. Exact
+   pins stay green after upstream adds a variant until someone bumps them, so the fixture
+   is the regression gate and this step is the discovery.
 7. Run `./gradlew :sava-core:test :sava-rpc:test` (integration tests via `integ.sh`).

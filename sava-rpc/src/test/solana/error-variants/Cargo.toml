@@ -1,0 +1,12 @@
+[package]
+name = "sava-solana-error-variants"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+sha2 = "=0.10.9"
+solana-instruction-error = "=3.0.0"
+solana-transaction-error = "=4.0.0"

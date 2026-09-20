@@ -150,3 +150,21 @@ hardening {
 providers.gradleProperty("trialMutators").orNull?.let { trial ->
   hardening.mutation.configureEach { mutators = trial }
 }
+
+// The conformance test verifies its fixture's provenance by hashing the generator's locked
+// inputs (Cargo.lock, Cargo.toml, src/main.rs, rust-toolchain.toml) straight from
+// src/test/solana, which is not on the test classpath. Without declaring those files as
+// inputs, a generator-only edit leaves the test task's cache key unchanged and the
+// provenance check is restored from the build cache instead of re-run.
+//
+// v1-live/test-ledger is a local Agave validator's working directory, left behind by the
+// live smoke check. It holds a unix socket (admin.rpc) that Gradle cannot hash, which
+// fails the whole task, and 145MB that is not an input to anything. It is git-ignored
+// locally; excluded here so a developer who has run the live check still gets a build.
+tasks.test {
+  inputs.files(fileTree("src/test/solana") {
+    exclude("**/node_modules/**", "**/target/**", "**/test-ledger/**", "**/*.log")
+  })
+    .withPropertyName("conformanceGeneratorInputs")
+    .withPathSensitivity(PathSensitivity.RELATIVE)
+}
