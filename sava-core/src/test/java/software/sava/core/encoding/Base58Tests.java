@@ -153,6 +153,14 @@ final class Base58Tests {
         Arrays.fill(key, 0, leadingZeros, (byte) 0);
         final var msg = "seed=" + seed + " leadingZeros=" + leadingZeros;
         final var expected = Base58.encode(key);
+        // one leading '1' per leading zero byte is the encoding's own rule, so the digit
+        // count of the value below the zero bytes is what encode() emits after those '1's;
+        // random bytes can add a zero byte beyond the fill, so count them, not the loop variable
+        int zeroBytes = 0;
+        while (zeroBytes < key.length && key[zeroBytes] == 0) {
+          ++zeroBytes;
+        }
+        final int digits = expected.length() - zeroBytes;
 
         final int outputStart = Base58.mutableEncode(key.clone(), output);
         assertEquals(expected, new String(output, outputStart, output.length - outputStart), msg);
@@ -165,6 +173,9 @@ final class Base58Tests {
           final long offsets = Base58.beginMutableEncode(mutable, maxLen, shortEncoded);
           final int shortStart = (int) offsets;
           final int shortLen = shortEncoded.length - shortStart;
+          // the split point is where the concatenation cannot see it: the first call emits
+          // exactly min(maxLen, digits) characters, never none and never one more
+          assertEquals(Math.min(maxLen, digits), shortLen, msg + " maxLen=" + maxLen + " emitted");
           final int encodedStart = encoded.length - shortLen;
           final int keyStart = Base58.continueMutableEncode(
               mutable,
