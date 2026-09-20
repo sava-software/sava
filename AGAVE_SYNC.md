@@ -819,8 +819,13 @@ files in the solana-improvement-documents repo.
   for a real-world example. Do not add typed wrappers without a supporting provider.
 - `SolanaAccounts` deliberately omits deprecated/dormant reserved keys
   (`bpf_loader_deprecated`, `bpf_loader` v2, `loader_v4`, `native_loader`, `feature`,
-  `sysvar::rewards`) — do not add without need. `incinerator` is *not* among them: it is an
-  sdk id, never a reserved account key, so there is nothing to omit.
+  `sysvar::rewards`, `sysvar::fees`, `zk_token_proof_program`) — do not add without need.
+  `sysvar::fees` is `#[allow(deprecated)]` in the reserved list itself: kept there because
+  keys cannot leave it without breaking consensus, read by nothing. `zk_token_proof_program`
+  is superseded by `zk_elgamal_proof_program`, which `SolanaAccounts` carries; Token-2022 no
+  longer references the old program, and upstream registers it with only a test-only
+  migration config. `incinerator` is *not* among them: it is an sdk id, never a reserved
+  account key, so there is nothing to omit.
 - Sysvar decoders: Clock and EpochRewards are public; Rent, EpochSchedule, StakeHistory,
   SlotHashes, LastRestartSlot are package-private (make public on demand). SlotHistory
   (131KB bit-vector) is not modeled. Fixture-backed tests in
