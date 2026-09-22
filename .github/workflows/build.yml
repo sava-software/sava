@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 concurrency:
   group: build-${{ github.ref_name }}
   cancel-in-progress: true
