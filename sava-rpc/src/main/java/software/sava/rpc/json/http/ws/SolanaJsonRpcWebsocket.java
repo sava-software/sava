@@ -9,7 +9,6 @@ import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
-import systems.comodal.jsoniter.ValueType;
 
 import java.math.BigInteger;
 import java.net.URI;
@@ -2141,14 +2140,16 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     try {
       if (ji.skipUntil("method") == null) {
         if (ji.reset(offset).skipUntil("error") != null) {
-          // The response id names the request being rejected. Member order is free in JSON-RPC,
-          // so scan for it from the top rather than assuming it trails the error — and a server
-          // that could not read the request at all answers with "id":null, which must not
-          // abandon this branch: that is the error class most likely to carry it.
-          long requestId = -1;
-          if (ji.reset(offset).skipUntil("id") != null && ji.whatIsNext() == ValueType.NUMBER) {
-            requestId = ji.readLong();
-          }
+          // The response id names the request being rejected. Read by the reader the HTTP client
+          // uses (JsonRpcException.envelopeRequestId), so both transports agree: member order is
+          // free, so it is scanned for from the top; a server that could not read the request at
+          // all answers with "id":null, which must not abandon this branch — that is the error
+          // class most likely to carry it — and an id the reader cannot carry (one no long can
+          // hold, a fraction, a negative) is simply uncorrelated, where reading it with readLong
+          // used to throw out of this handler and leave the rejection unclassified. -1 is the
+          // local absent sentinel; the correlation below matches only ids sava minted.
+          final var envelopeId = JsonRpcException.envelopeRequestId(ji, offset);
+          final long requestId = envelopeId.orElse(-1L);
           boolean dispatchException = true;
           boolean correlated = false;
           RuntimeException fatal = null;
@@ -2157,8 +2158,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           // retry-after header — and this path has no such hint. The second is the response id,
           // so a consumer handed a subscribe rejection can tell which registration it released;
           // an "id":null answer leaves it empty.
-          final var exception = JsonRpcException.parseException(ji, OptionalLong.empty(),
-              requestId >= 0 ? OptionalLong.of(requestId) : OptionalLong.empty());
+          final var exception = JsonRpcException.parseException(ji, OptionalLong.empty(), envelopeId);
           // A rejection the server blames on the request itself is that request's terminal
           // state: re-sending the same frame can only collect the same answer, so the entry is
           // retired and its registry slot freed for a corrected subscribe. Any other error —

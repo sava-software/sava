@@ -74,10 +74,11 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   the exchange instead of leaving it unbounded, and one that silently discards tasks leaves
   it unbounded.
 - `JsonRpcException.requestId()` is the answering envelope's `id` when the parser had the
-  envelope (the HTTP client and the websocket error path both do) and it was a non-negative
-  integer a long can hold — the only ids sava mints. Empty for `"id":null`, a string,
-  negative, fractional or out-of-range id, or an error object parsed on its own; reading it
-  is best effort and never costs the caller the error object itself.
+  envelope and it was a non-negative integer a long can hold — the only ids sava mints. One
+  reader, `JsonRpcException.envelopeRequestId(ji, start)`, serves the HTTP client and the
+  websocket error path, so both transports agree on every shape: empty for `"id":null`, a
+  string, negative, fractional or out-of-range id, or an error object parsed on its own;
+  reading it is best effort and never costs the caller the error object itself.
 - `SolanaRpcClientBuilder.compressResponses()` composes with a previously set
   `extendRequest` (it silently replaced it until 2026-07-21). `extendRequest`
   itself is still a plain setter: calling it *after* `compressResponses()`

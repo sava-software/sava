@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.response;
 
 import systems.comodal.jsoniter.FieldBufferPredicate;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.util.Objects;
 import java.util.OptionalLong;
@@ -61,6 +62,36 @@ public final class JsonRpcException extends RuntimeException {
       ji.reset(endMark);
     }
     return parser.create(retryAfterSeconds, requestId);
+  }
+
+  /// The envelope's `id` — the request being answered — when it is a non-negative integer
+  /// literal a long can hold, which are the only ids this client mints. Member order is free,
+  /// so it is scanned for from `start`, the offset of the envelope object in `ji`'s buffer; a
+  /// nested `id` is never reached, because the scan skips each member's value whole. Best
+  /// effort by design: a truncated envelope, an id no long can express, a fraction or exponent
+  /// form, a negative id, a string and `"id":null` (a request the server could not read) all
+  /// read as empty — and none of them may cost the caller the error object, which the caller
+  /// parses next as the JsonRpcException it always was. One reader for both transports, so
+  /// the HTTP client and the websocket agree on every shape: over the websocket an id that
+  /// used to throw out of the frame handler now reads as uncorrelated, and the rejection it
+  /// came with is still classified and dispatched. The cursor is left wherever the scan
+  /// stopped; callers reset before reading on.
+  public static OptionalLong envelopeRequestId(final JsonIterator ji, final int start) {
+    try {
+      if (ji.reset(start).skipUntil("id") == null || ji.whatIsNext() != ValueType.NUMBER) {
+        return OptionalLong.empty();
+      }
+      final var literal = ji.readNumberAsString();
+      for (int i = 0; i < literal.length(); ++i) {
+        final char c = literal.charAt(i);
+        if (c < '0' || c > '9') {
+          return OptionalLong.empty();
+        }
+      }
+      return OptionalLong.of(Long.parseLong(literal));
+    } catch (final RuntimeException unreadable) {
+      return OptionalLong.empty();
+    }
   }
 
   public long code() {

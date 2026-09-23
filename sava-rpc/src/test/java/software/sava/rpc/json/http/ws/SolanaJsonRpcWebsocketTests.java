@@ -992,6 +992,25 @@ final class SolanaJsonRpcWebsocketTests {
       );
       assertEquals(4, exceptions.size());
       assertTrue(assertInstanceOf(JsonRpcException.class, exceptions.getLast()).requestId().isEmpty());
+
+      // An id no long can hold is uncorrelated, not fatal: the rejection is still parsed and
+      // dispatched as the JsonRpcException it is. Reading it with readLong used to throw out of
+      // the frame handler, and the consumer got a raw JsonException instead.
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":18446744073709551615}"""
+      );
+      assertEquals(5, exceptions.size());
+      final var unreadable64 = assertInstanceOf(JsonRpcException.class, exceptions.getLast());
+      assertEquals(-32602, unreadable64.code());
+      assertTrue(unreadable64.requestId().isEmpty(), "an id sava never minted correlates with nothing");
+
+      // Member order is free: an id that precedes the error member is read from the top of the
+      // frame, not from wherever the error scan left the cursor.
+      feed(ws, socket, """
+          {"id":8,"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params: leading id"}}"""
+      );
+      assertEquals(6, exceptions.size());
+      assertEquals(OptionalLong.of(8), assertInstanceOf(JsonRpcException.class, exceptions.getLast()).requestId());
     }
   }
 
