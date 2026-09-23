@@ -18,20 +18,36 @@ public final class JsonRpcException extends RuntimeException {
   public static final int PARSE_ERROR = -32_700;
 
   private final OptionalLong retryAfterSeconds;
+  private final OptionalLong requestId;
   private final long code;
   private final RpcCustomError customError;
 
   private JsonRpcException(final long code,
                            final String message,
                            final OptionalLong retryAfterSeconds,
+                           final OptionalLong requestId,
                            final RpcCustomError customError) {
     super(message);
     this.code = code;
     this.retryAfterSeconds = Objects.requireNonNullElse(retryAfterSeconds, OptionalLong.empty());
+    this.requestId = Objects.requireNonNullElse(requestId, OptionalLong.empty());
     this.customError = customError;
   }
 
+  /// Parses the `error` object `ji` is positioned at, with no request id: the envelope's `id`
+  /// is outside that object, so a caller that has it passes it to
+  /// [#parseException(JsonIterator, OptionalLong, OptionalLong)].
   public static JsonRpcException parseException(final JsonIterator ji, final OptionalLong retryAfterSeconds) {
+    return parseException(ji, retryAfterSeconds, OptionalLong.empty());
+  }
+
+  /// Parses the `error` object `ji` is positioned at. `requestId` is the response envelope's
+  /// `id` when the caller read it and it was a number — the request this error answers — and
+  /// empty otherwise; `retryAfterSeconds` is the HTTP `retry-after` hint, empty over a
+  /// websocket. The cursor is left at the end of the error object.
+  public static JsonRpcException parseException(final JsonIterator ji,
+                                                final OptionalLong retryAfterSeconds,
+                                                final OptionalLong requestId) {
     final var parser = new Parser();
     ji.testObject(parser);
     if (parser.dataMark != null) {
@@ -44,7 +60,7 @@ public final class JsonRpcException extends RuntimeException {
       parser.customError = RpcCustomError.parseError(parser.code, ji.reset(parser.dataMark));
       ji.reset(endMark);
     }
-    return parser.create(retryAfterSeconds);
+    return parser.create(retryAfterSeconds, requestId);
   }
 
   public long code() {
@@ -53,6 +69,15 @@ public final class JsonRpcException extends RuntimeException {
 
   public OptionalLong retryAfterSeconds() {
     return retryAfterSeconds;
+  }
+
+  /// The `id` of the response envelope that carried this error, when it was a number: the
+  /// request being answered, which for a subscribe rejection delivered to an
+  /// `exceptionSubscribe` consumer is the `msgId` of the registration the engine released.
+  /// Empty for an `"id":null` answer — a request the server could not read at all — for a
+  /// string id, and for an error parsed without its envelope.
+  public OptionalLong requestId() {
+    return requestId;
   }
 
   public RpcCustomError customError() {
@@ -69,11 +94,12 @@ public final class JsonRpcException extends RuntimeException {
     private Parser() {
     }
 
-    private JsonRpcException create(final OptionalLong retryAfterSeconds) {
+    private JsonRpcException create(final OptionalLong retryAfterSeconds, final OptionalLong requestId) {
       return new JsonRpcException(
           code,
           message,
           retryAfterSeconds,
+          requestId,
           customError == null ? RpcCustomError.parseError(code) : customError
       );
     }

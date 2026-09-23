@@ -15,9 +15,10 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
 
   private static RuntimeException parseRpcException(final byte[] body,
                                                     final JsonIterator ji,
-                                                    final OptionalLong retryAfter) {
+                                                    final OptionalLong retryAfter,
+                                                    final OptionalLong requestId) {
     try {
-      return JsonRpcException.parseException(ji, retryAfter);
+      return JsonRpcException.parseException(ji, retryAfter, requestId);
     } catch (final RuntimeException ex) {
       logger.log(ERROR, "Failed to parse JSON-RPC exception: " + new String(body), ex);
       throw ex;
@@ -36,7 +37,14 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
         throw throwUncheckedIOException(httpResponse, new String(body));
       } else {
         final var retryAfter = httpResponse.headers().firstValueAsLong("retry-after");
-        throw parseRpcException(body, ji, retryAfter);
+        // The envelope's id names the request being answered; member order is free, so it is
+        // scanned for from the top, and only a numeric one is carried ("id":null is a request
+        // the server could not read).
+        final var requestId = ji.reset(0).skipUntil("id") != null && ji.whatIsNext() == ValueType.NUMBER
+            ? OptionalLong.of(ji.readLong())
+            : OptionalLong.empty();
+        ji.reset(0).skipUntil("error");
+        throw parseRpcException(body, ji, retryAfter, requestId);
       }
     } else {
       return ji;

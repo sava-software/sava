@@ -9,6 +9,7 @@ import software.sava.rpc.json.http.response.Context;
 import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
 import java.nio.charset.StandardCharsets;
+import java.util.OptionalLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -62,6 +63,25 @@ final class JsonRpcResponseParserTests {
         200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"Invalid params\"},\"id\":1}"));
     assertEquals(-32602, ex.code());
     assertTrue(ex.getMessage().contains("Invalid params"), ex.getMessage());
+    assertEquals(OptionalLong.of(1), ex.requestId(), "the envelope's id is the request being answered");
+  }
+
+  /// The envelope's id is scanned for from the top, so it is carried whether it leads or
+  /// trails the error object; only a numeric one is carried, and "id":null — the answer to a
+  /// request the server could not read — leaves it empty rather than inventing a request.
+  @Test
+  void theRequestIdFollowsTheEnvelopeWhateverTheMemberOrder() {
+    final var leading = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"id\":7,\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"Invalid params\"}}"));
+    assertEquals(OptionalLong.of(7), leading.requestId());
+
+    final var unreadable = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32700,\"message\":\"Parse error\"},\"id\":null}"));
+    assertTrue(unreadable.requestId().isEmpty());
+
+    final var stringId = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"Invalid params\"},\"id\":\"abc\"}"));
+    assertTrue(stringId.requestId().isEmpty(), "only a numeric id is carried");
   }
 
   /// A node may return an error envelope under a non-2xx status. The error object

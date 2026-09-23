@@ -15,6 +15,7 @@ import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -960,12 +961,24 @@ final class SolanaJsonRpcWebsocketTests {
       final var exception = assertInstanceOf(JsonRpcException.class, exceptions.getFirst());
       assertEquals(-32602, exception.code());
       assertEquals("Invalid params: unable to parse json", exception.getMessage());
+      assertEquals(OptionalLong.of(5), exception.requestId(),
+          "the response id names the rejected request, so a consumer can tell which registration was released");
 
       // Stale un-subscription errors are suppressed.
       feed(ws, socket, """
           {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid subscription id."},"id":6}"""
       );
       assertEquals(1, exceptions.size());
+
+      // A request the server could not read at all answers with "id":null: dispatched, and
+      // honestly attributable to no request.
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"},"id":null}"""
+      );
+      assertEquals(2, exceptions.size());
+      final var unreadable = assertInstanceOf(JsonRpcException.class, exceptions.getLast());
+      assertEquals(-32600, unreadable.code());
+      assertTrue(unreadable.requestId().isEmpty(), "an id:null answer names no request");
     }
   }
 

@@ -64,6 +64,9 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it
   also changes the `maxRetries` default (0 when skipping, 1 otherwise) and the
   preflight commitment. Use the three-argument overload to pin retries.
+- `JsonRpcException.requestId()` is the answering envelope's numeric `id` when the parser
+  had the envelope (the HTTP client and the websocket error path both do); empty for
+  `"id":null`, a string id, or an error object parsed on its own.
 - `SolanaRpcClientBuilder.compressResponses()` composes with a previously set
   `extendRequest` (it silently replaced it until 2026-07-21). `extendRequest`
   itself is still a plain setter: calling it *after* `compressResponses()`

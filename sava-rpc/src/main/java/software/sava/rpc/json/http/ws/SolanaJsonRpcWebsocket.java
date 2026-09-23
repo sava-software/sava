@@ -2153,10 +2153,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           boolean correlated = false;
           RuntimeException fatal = null;
           ji.reset(offset).skipUntil("error");
-          // The OptionalLong parameter is retry-after seconds — the HTTP client fills it from
-          // the retry-after header — and this path has no such hint. The request id stays local:
-          // JsonRpcException has no field for it, and it must not masquerade as a backoff.
-          final var exception = JsonRpcException.parseException(ji, OptionalLong.empty());
+          // The first OptionalLong is retry-after seconds — the HTTP client fills it from the
+          // retry-after header — and this path has no such hint. The second is the response id,
+          // so a consumer handed a subscribe rejection can tell which registration it released;
+          // an "id":null answer leaves it empty.
+          final var exception = JsonRpcException.parseException(ji, OptionalLong.empty(),
+              requestId >= 0 ? OptionalLong.of(requestId) : OptionalLong.empty());
           // A rejection the server blames on the request itself is that request's terminal
           // state: re-sending the same frame can only collect the same answer, so the entry is
           // retired and its registry slot freed for a corrected subscribe. Any other error —
