@@ -1,0 +1,73 @@
+# Negative controls for the sava RPC soak harness. `soak.sh --controls` runs every row below as
+# its own bounded run under the `control` profile - which is the `validate` profile's knobs plus
+# the row's overrides - and writes controls.md with expected vs actual; any miss exits non-zero
+# and blocks the pilot and the campaign.
+#
+# Why they exist: a green campaign is only evidence if the oracle could have seen a defect. Half
+# of these rows break the *client's* correctness so a named property must move; the other half
+# (D8-D14, filter-typo) break the *verdict machinery* itself, which is the part no amount of
+# client correctness can compensate for and the part most likely to be quietly wrong.
+#
+# Columns, tab separated:
+#   id          the control's name; soak.sh always exports SOAK_CONTROL=<id>, and the peer and
+#               the harness read it to decide what to inject
+#   kind        defect (the run must FAIL or be INVALID) | fault (the run must PASS) | i52 |
+#               selftest (no soak at all: soak.sh --selftest, bounded, scored on its exit code)
+#   expected    the verdict the run must produce: FAIL, PASS or INVALID
+#   property    a property id, which the run's own ledger must show failed or UNEXERCISED; or a
+#               `key=value` pair, which jfr-metrics.properties must carry; or any other substring,
+#               which must appear in the verdict-bearing prose of summary.md (the INVALID/
+#               INCOMPLETE/FAIL-reasons lines, never the ledger dump that every run prints).
+#               Scored on PASS rows too, so an injection that quietly did nothing cannot pass by
+#               producing a clean run; `-` where only the verdict is asserted
+#   overrides   space separated KEY=VALUE, exported before the run. The sheet sets no duration
+#               of its own: a control row is a `validate` run plus this column, because a control
+#               is the negative of the validation it guards and is only evidence about it when it
+#               was measured under the same knobs. A row whose gate needs a different window says
+#               so here
+#   metric      an expression over the run's own machine-readable artifacts, every term of which
+#               must hold (`-` for none). Terms, space separated:
+#                 <key><op><value>  jfr-metrics.properties, op in >= <= != == = > < ; numeric
+#                                   when both sides are numbers, an exact string match otherwise
+#                 present:<key>     jfr-metrics.properties measured it (neither empty nor n/a)
+#                 schedule:<KIND>   fault-schedule.tsv plans at least one fault of that kind
+#                 peer:<LINE>       logs/peer.log carries exactly that line
+#               A missing file or key is a miss: the row claimed a measurement and there is none
+#   mechanism   what is actually injected, and where
+#
+# Every row is injected by the peer or by the harness reading SOAK_CONTROL. Nothing here changes
+# sava-rpc: a control that needed a library change would not be testing the library.
+id	kind	expected	property	overrides	metric	mechanism
+D1	defect	FAIL	W1-A	SOAK_FAULT_RATE=10 SOAK_WS_SUBSCRIPTIONS=16	-	peer: from the second accepted connection onward, answers the replayed subscribe but records no sub_req row for it and never emits on the id it granted (DROP_REPLAYED_SUBSCRIBES), so the evidence W1-A reads says the registration was never replayed. Staging the defect the oracle reads is the point: an unanswered subscribe is a silence a correct client escalates out of before W1-A's bound, which supersedes the episode and judges nothing
+D2	defect	FAIL	W1-E	SOAK_FAULT_RATE=20	-	peer: writes every notification twice (DUPLICATE_NOTIFY), so the per-key sequence sees a DUP
+D3	defect	FAIL	W1-E	SOAK_FAULT_RATE=20	-	peer: swaps two adjacent notifications for one key (SWAP_ADJACENT_NOTIFY), so the sequence sees a REORDER
+D4	defect	FAIL	W1-J	SOAK_FAULT_RATE=10	-	peer: answers a programNotification with a pubkey the subscription was not granted (WRONG_KEY_ECHO), so the notification's key association breaks
+D5	defect	FAIL	W2-A	SOAK_LARGE_PERIOD_SECONDS=20 SOAK_LARGE_FRACTION=0.50	-	peer: flips one base64 byte inside a continuation frame (FLIP_CONTINUATION_BYTE), so reassembly is no longer byte exact and the payload checksum fails
+D6	defect	FAIL	W1-B	SOAK_FAULT_RATE=10	-	peer: writes a second sub_req row for the same request - same id, same fingerprint (DEDUPE_BREAK) - which is exactly the evidence a client re-send leaves behind, so W1-B is judged against that record. Granting a fresh id instead only made the peer behave oddly; a correct client never re-sends, so nothing the oracle reads would move
+D7	defect	FAIL	W1-D	SOAK_WS_CHURN_PER_MINUTE=240	-	harness: the registry tombstones a registration two seconds before its unsubscribe goes on the wire, so every delivery in that gap reaches a cancelled registration. A peer-side zombie cannot move W1-D on a correct client - sava's own tombstone filters it - so the defect is staged where the oracle looks
+D8	defect	FAIL	live threads grew	-	-	harness: 5 s into STEADY, starts 64 platform threads and never joins them, so the thread margin must fire against the STEADY baseline
+D9	defect	FAIL	descriptors grew	-	-	harness: 5 s into STEADY, opens 256 sockets to the peer and never closes them, so the descriptor margin must fire against the STEADY baseline
+D10	defect	FAIL	after-GC heap floor rose	SOAK_NMT_INTERVAL_SECONDS=15 SOAK_SAMPLE_SECONDS=5	-	harness: from a few seconds into STEADY, retains into a static list in 5 s ticks at the rate that fills a quarter of the heap by the end of STEADY, so the after-GC heap floor read at the STEADY-end full collection sits far above the one read at STEADY start and the gate must fire; this row is also the jdk.OldObjectSample viability proof for this heap configuration, and a run with no rooted sample means the retention lens is INCONCLUSIVE, not clean
+D11	defect	FAIL	UNEXERCISED	-	-	harness: suppresses one workload's driver entirely, so its properties are never evaluated and UNEXERCISED must fail rather than pass quietly
+D12	defect	FAIL	[SWALLOW_PING]	SOAK_FAULT_RATE=10 SOAK_FAULT_MIN_PER_KIND=1	schedule:SWALLOW_PING	peer: accepts one scheduled fault kind and never applies it (NEVER_APPLY_KIND on SWALLOW_PING), so the reached-and-never-applied gate must fire and must name that kind; the metric term requires the kind to have been planned at all, so a schedule that dropped it fails here rather than passing on some other kind
+D13	defect	INVALID	starved	SOAK_HTTP_RPS=200 SOAK_HTTP_INFLIGHT=1 SOAK_HTTP_CONCURRENCY=1	-	harness: an in-flight semaphore of 1 against a 200 rps token bucket, so most HTTP operations are skipped; a starved harness did not drive the subject and the run is INVALID, never a PASS
+D14	defect	INVALID	exited 4	-	-	harness: RunIdentity reports a code source outside sava-rpc/build, standing in for a run that soaked the published jar instead of the working tree
+filter-typo	defect	FAIL	resolved to nothing	-	-	runner: soak.sh appends one deliberately misspelled entry to the method-timing filter. A bad filter entry is silent on this JDK, so this row is what proves the launch gate reads jfr-methodtrace.log correctly rather than trusting the filter
+stall-callback	defect	FAIL	stuck	SOAK_DURATION_SECONDS=300	-	harness: one notification consumer parks for the rest of the run on the thread the subject delivers on (soak-hc-N, the client's own executor), so the same-top-frame-in-three-consecutive-thread-dumps detector must fire; the duration override pins the three 60 s thread-dump periods it needs, whatever the profile's own duration is
+no-faults	fault	PASS	fault_fidelity=n/a	SOAK_FAULT_RATE=0 SOAK_FAULT_MIN_PER_KIND=0	peer:SCHEDULE_PLANNED=0	nothing is injected: the noise baseline. It must PASS with an empty plan - an undefined fidelity and a peer that planned nothing - and its exception floor and unexpected-exception classes are what later runs are read against. Both halves are asserted because a rate of 0 that silently planned a dense schedule would still PASS
+gzip-wrong-twin	defect	FAIL	W3-C	SOAK_HTTP_RPS=40	-	peer: serves a different body under gzip than under identity for the same request, so the plain/gzipped differential must fail rather than both merely parsing
+crosstalk	defect	FAIL	W1-E	SOAK_FAULT_RATE=10	-	peer: writes, on one connection's own subscription, the sequence another live connection on any port has reached for that channel (CROSSTALK), so the per-(connection, key) sequence must see a gap or a duplicate
+F1	fault	PASS	-	SOAK_CONTROL=F1	-	STALL_BODY forever, on a schedule restricted to that kind and paced to the peer's stall-hold budget (one per hold-length per parkable hold): the exchange deadline on the default routes saves the run, and the paired caller-body-handler route is recorded NOT APPLICABLE rather than missed
+F2	fault	PASS	-	SOAK_CONTROL=F2	swallowed_ping_probe_retirements>=1 schedule:SWALLOW_PING	SWALLOW_PING, on a schedule restricted to that kind: the peer holds its stream and pongs, re-basing that window behind every answer it still writes until the engine idles for a ping window and pings; it swallows the ping and holds everything through the response window, so the two-phase ping probe retires the connection inside its own window. Under this row's knobs the window (7 s) is shorter than the unanswered-request deadline (12 s), so the probe's own deadline is the detector, and the metric asks for it by name
+F3	fault	PASS	-	SOAK_CONTROL=F3	-	SWALLOW_SUBSCRIBE, on a schedule restricted to that kind: escalation at four times the resend delay, with no duplicate request on that connection
+F4	fault	PASS	-	SOAK_CONTROL=F4	-	TCP_RESET, on a schedule restricted to that kind: retire, reconnect and full replay, every time
+F5	fault	PASS	-	SOAK_CONTROL=F5	-	MESSAGE_OVERFLOW on the dedicated overflow engine: abort and onError, no OOM, and the abort is expected so it is subtracted from the unexplained-retirement gate
+F6	fault	PASS	-	SOAK_CONTROL=F6	-	CONNECT_REFUSE, on a schedule restricted to that kind: reconnect pacing survives a peer that is simply down
+F7	fault	PASS	-	SOAK_CONTROL=F7	-	ZOMBIE_NOTIFICATION, on a schedule restricted to that kind: the cancellation tombstone drops it and the connection survives
+F8	fault	PASS	-	SOAK_CONTROL=F8	-	HTTP_503, on a schedule restricted to that kind: no wedge, and the calls after the burst succeed
+I1-sync	selftest	PASS	-	-	-	soak.sh --selftest: the synchronous polling-manager negative control and its positive control, driven in process with no threads. The negative one must be flagged double-claim and misattributed, the positive one must show a single accepted future claim with the callback fenced; the self-test exits non-zero unless every case printed PASS
+I1-forced	i52	PASS	-	SOAK_CONTROL=I1-forced	i52_misattributed>=1 i52_trigger_met=0	the forced reproduction: constant-zero backoff, the build future's completion deferred until after onOpen returned, a retirement injected inside adopt through the wrapper's request() hook on every attempt up to the ceiling (period 1, because a client-side control has no other retirement to move the attempt ordinal, so an injection armed for a later attempt is never reached), and the JUL handler blocking on the attempt-failed record until the successor's buildAsync is observed. The metric asserts both halves: the misattribution was realised, and being forced it can never claim the revisit trigger. On JDK 25 forcing is the only way to realise the residual condition at all, because the build future normally settles on the handshake thread before onOpen runs
+I1-natural	i52	PASS	-	SOAK_CONTROL=I1-natural	present:i52_natural_win_rate	200 unblocked repetitions of the same injection - again on every attempt up to the ceiling (period 1), so an arm does not have to win a race with the next constant-zero reconnect - without the blocking handler, which measures i52_natural_win_rate. The metric asserts the number was measured at all, not what it is: it is a property of this machine's timing, not of production, and is reported as such
+I1-jdk25	i52	PASS	-	SOAK_CONTROL=I1-jdk25	i52_double_claims_unexplained=0 i52_retirements>=1	the same injection, again on every attempt up to the ceiling (period 1), with the harness's build-completion deferral OFF. Measured 2026-09-22: that did not reproduce the future-first order (every row still opened before its build future settled) and it double-claimed most retirements anyway, because the future ravina claims through is sava's own connect bridge, which the retirement settles synchronously by cancelling the pending build; only a build future already done when the retirement runs removes the double claim (the self-test's jdkOrder rig). So the row reports its double-claim count and asserts only that none is unexplained (a double claim with no successor observed is a harness attribution defect, never a library finding)
+I2	selftest	PASS	-	-	-	soak.sh --selftest: the detector's unit test over synthetic frames, which also runs at every client start as a gate - the known-misattributed episode is flagged and the known-clean one is not. A detector that silently stops detecting halfway through an eight-hour campaign is the worst outcome available
+I3	i52	PASS	-	SOAK_DURATION_SECONDS=120 SOAK_WS_ENGINES=2 SOAK_FAULT_RATE=8	-	EXPONENTIAL and ZERO_INITIAL_ESCALATING managers under the ordinary fault rate, with no expectation asserted. This is the measurement issue #52 asked for, and pre-registering an expected answer would bias it

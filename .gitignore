@@ -21,6 +21,7 @@
 !/release-please-config.json
 !/sava-*/
 !/settings.gradle.kts
+!/soak/
 !AGENTS.md
 !AGAVE_SYNC.md
 !CONVENTIONS.md

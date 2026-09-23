@@ -37,6 +37,15 @@ library exists to provide, and only covers programs the node happens to know.
 for specific programs live in the sibling `idl-clients` project; check there before
 adding program-specific parsing here.
 
+`soak/` is an operational tool, not a module: a standalone Gradle build (like `jmh/`) that
+drives sava-rpc's HTTP and websocket clients against a local fault-injecting peer under JFR and
+judges the run with `soak/soak.sh` (`soak/README.md` is the manual, `soak/DESIGN.md` the
+contract). It is unpublished and outside the hardening gates — no PIT suite, no `check`
+wiring — and its sources live under `soak/src-main` on purpose: **never create `soak/src/`**,
+because the root build's module discovery would auto-include it and break the root build. What
+a soak finds about sava is an observation to report and pin, never a fix made from a soak task;
+`soak/build/` holds the run evidence and is ignored.
+
 ## Hardening work here is first-party and defensive
 
 sava is a library its authors own and publish. The hardening work in this repo —
