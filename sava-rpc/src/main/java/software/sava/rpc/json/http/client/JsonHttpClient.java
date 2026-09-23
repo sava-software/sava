@@ -72,8 +72,15 @@ public abstract class JsonHttpClient {
   /// availability: a common pool saturated with blocking work delays the cancellation it
   /// schedules, and the exchange runs past its deadline by that much. A caller who needs the
   /// deadline to fire on time whatever the common pool is doing supplies a dedicated scheduler;
-  /// the client never shuts it down, and a scheduler that rejects the deadline (one already
-  /// shut down) fails the exchange rather than leaving it unbounded.
+  /// the client never shuts it down. The cancellation completes the response future on the
+  /// scheduler's thread, so a caller's non-async continuations on a timed-out exchange run
+  /// there: give it more than one thread, or chain with the `*Async` forms. A
+  /// `ScheduledThreadPoolExecutor` wants `setRemoveOnCancelPolicy(true)`, or a completed
+  /// response's cancelled timer sits in its queue until the deadline would have fired (240 s on
+  /// the getProgramAccounts route). A scheduler that rejects the deadline by throwing (one
+  /// already shut down) fails the exchange rather than leaving it unbounded; one that silently
+  /// discards the task — a discarding rejection handler — leaves it unbounded, so do not
+  /// configure one.
   protected final ScheduledExecutorService deadlineScheduler;
 
   protected JsonHttpClient(final URI endpoint,
@@ -147,7 +154,9 @@ public abstract class JsonHttpClient {
   /// -- stream included -- when the body is still outstanding at [#responseDeadlineNanos]: the
   /// future then fails with a `CancellationException` instead of pending forever. Completing
   /// the response cancels the scheduled task, which the delay scheduler unlinks at once, so a
-  /// finished response is not retained until the deadline would have fired.
+  /// finished response is not retained until the deadline would have fired (the common pool's
+  /// delay scheduler unlinks at once; a `ScheduledThreadPoolExecutor` only with
+  /// `removeOnCancelPolicy` set).
   ///
   /// JDK 26 extends the request timeout over body consumption itself (the timer stops when the
   /// body subscriber terminates), so there the JDK fails a stalled body with an

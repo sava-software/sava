@@ -90,9 +90,12 @@ public final class SolanaRpcClientBuilder {
   /// `ForkJoinPool.commonPool()`, which on JDK 25 is also where the JDK HTTP client completes
   /// its `sendAsync` futures, so a common pool saturated with blocking work delays the
   /// cancellation and the exchange runs past its deadline by that much. Supply a dedicated
-  /// scheduler when the deadline must fire on time regardless; the client never shuts it
-  /// down, and one that rejects the deadline (already shut down) fails the exchange rather than
-  /// leaving it unbounded.
+  /// scheduler when the deadline must fire on time regardless. The client never shuts it down;
+  /// the cancellation completes the response future on its thread, so non-async continuations
+  /// on a timed-out exchange run there (give it more than one thread, or chain with the
+  /// `*Async` forms); a `ScheduledThreadPoolExecutor` wants `setRemoveOnCancelPolicy(true)`;
+  /// one that rejects the deadline by throwing (already shut down) fails the exchange rather
+  /// than leaving it unbounded, and one that silently discards tasks leaves it unbounded.
   public SolanaRpcClientBuilder deadlineScheduler(final ScheduledExecutorService deadlineScheduler) {
     this.deadlineScheduler = deadlineScheduler;
     return this;

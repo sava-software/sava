@@ -979,6 +979,19 @@ final class SolanaJsonRpcWebsocketTests {
       final var unreadable = assertInstanceOf(JsonRpcException.class, exceptions.getLast());
       assertEquals(-32600, unreadable.code());
       assertTrue(unreadable.requestId().isEmpty(), "an id:null answer names no request");
+
+      // Zero is a legal wire id and not the absent sentinel; a negative one answers nothing
+      // sava sent and reads as absent, the same as over HTTP.
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"},"id":0}"""
+      );
+      assertEquals(3, exceptions.size());
+      assertEquals(OptionalLong.of(0), assertInstanceOf(JsonRpcException.class, exceptions.getLast()).requestId());
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"},"id":-5}"""
+      );
+      assertEquals(4, exceptions.size());
+      assertTrue(assertInstanceOf(JsonRpcException.class, exceptions.getLast()).requestId().isEmpty());
     }
   }
 

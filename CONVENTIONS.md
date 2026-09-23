@@ -67,11 +67,17 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - `SolanaRpcClientBuilder.deadlineScheduler(...)` chooses where the whole-exchange
   deadline (twice the request timeout) is armed; unset means `ForkJoinPool.commonPool()`,
   which is also where the JDK completes `sendAsync` futures on JDK 25, so a saturated
-  common pool delays the cancellation. The client never shuts the scheduler down, and a
-  scheduler that rejects the deadline fails the exchange instead of leaving it unbounded.
-- `JsonRpcException.requestId()` is the answering envelope's numeric `id` when the parser
-  had the envelope (the HTTP client and the websocket error path both do); empty for
-  `"id":null`, a string id, or an error object parsed on its own.
+  common pool delays the cancellation. The client never shuts the scheduler down. The
+  cancellation completes the response future on the scheduler's thread, so non-async
+  continuations on a timed-out exchange run there; a `ScheduledThreadPoolExecutor` wants
+  `setRemoveOnCancelPolicy(true)`; a scheduler that rejects the deadline by throwing fails
+  the exchange instead of leaving it unbounded, and one that silently discards tasks leaves
+  it unbounded.
+- `JsonRpcException.requestId()` is the answering envelope's `id` when the parser had the
+  envelope (the HTTP client and the websocket error path both do) and it was a non-negative
+  integer a long can hold — the only ids sava mints. Empty for `"id":null`, a string,
+  negative, fractional or out-of-range id, or an error object parsed on its own; reading it
+  is best effort and never costs the caller the error object itself.
 - `SolanaRpcClientBuilder.compressResponses()` composes with a previously set
   `extendRequest` (it silently replaced it until 2026-07-21). `extendRequest`
   itself is still a plain setter: calling it *after* `compressResponses()`

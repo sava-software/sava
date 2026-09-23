@@ -82,6 +82,54 @@ final class JsonRpcResponseParserTests {
     final var stringId = assertThrows(JsonRpcException.class, () -> parseResult(
         200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"Invalid params\"},\"id\":\"abc\"}"));
     assertTrue(stringId.requestId().isEmpty(), "only a numeric id is carried");
+
+    final var zero = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"Invalid params\"},\"id\":0}"));
+    assertEquals(OptionalLong.of(0), zero.requestId(), "zero is a legal id, not an absent one");
+
+    final var noId = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}"));
+    assertEquals(-32601, noId.code());
+    assertTrue(noId.requestId().isEmpty(), "an envelope with no id names no request");
+
+    final var nestedOnly = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"x\",\"data\":{\"id\":99}}}"));
+    assertTrue(nestedOnly.requestId().isEmpty(), "an id nested inside the error is not the envelope's");
+  }
+
+  /// Reading the id is best effort and must never cost the caller the error object: an id the
+  /// scan cannot carry — one no long can hold, a fraction, a negative (sava mints none), or a
+  /// body truncated after the error object — still yields the JsonRpcException the `error`
+  /// member describes, with an empty id, exactly what the same bodies yielded before the id
+  /// was read at all. Digits 0 and 9 both appear in the carried id, so the literal check is
+  /// pinned at both ends of its range.
+  @Test
+  void anIdTheScanCannotCarryStillYieldsTheProtocolError() {
+    final var tooLarge = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32005,\"message\":\"Node is behind\"},\"id\":18446744073709551615}"));
+    assertEquals(-32005, tooLarge.code());
+    assertTrue(tooLarge.requestId().isEmpty(), "an id no long can hold annotates nothing");
+
+    final var fraction = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"x\"},\"id\":1.5}"));
+    assertTrue(fraction.requestId().isEmpty(), "a fractional id is not read as 1");
+
+    final var exponent = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"x\"},\"id\":1e3}"));
+    assertTrue(exponent.requestId().isEmpty(), "an exponent form is not one sava mints");
+
+    final var negative = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"x\"},\"id\":-5}"));
+    assertTrue(negative.requestId().isEmpty(), "a negative id answers nothing sava sent");
+
+    final var carried = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"x\"},\"id\":9034}"));
+    assertEquals(OptionalLong.of(9034), carried.requestId());
+
+    final var truncated = assertThrows(JsonRpcException.class, () -> parseResult(
+        503, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"boom\"}"));
+    assertEquals(-32000, truncated.code(), "a body cut off after the error object still delivers the error");
+    assertTrue(truncated.requestId().isEmpty());
   }
 
   /// A node may return an error envelope under a non-2xx status. The error object

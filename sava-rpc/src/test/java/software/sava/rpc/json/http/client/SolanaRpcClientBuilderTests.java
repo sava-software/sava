@@ -8,6 +8,8 @@ import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -124,6 +126,31 @@ final class SolanaRpcClientBuilderTests {
     assertSame(builder, builder.extendRequest(request -> request));
     assertSame(builder, builder.testResponse((_, _) -> true));
     assertSame(builder, builder.compressResponses());
+    assertSame(builder, builder.deadlineScheduler(null));
+  }
+
+  /// A scheduler that rejects the deadline by throwing — here one the caller already shut down
+  /// — fails the exchange synchronously through the public route, and the exchange it could
+  /// not bound is cancelled rather than left in flight. This test is the only guard on that
+  /// catch: PIT's mutator set generates no mutant for it, so a green pitestClient says nothing
+  /// about it.
+  @Test
+  void aShutDownDeadlineSchedulerFailsTheExchangeRatherThanLeavingItUnbounded() {
+    final var scheduler = Executors.newSingleThreadScheduledExecutor();
+    scheduler.shutdown();
+    final var swallowing = HttpClient.newBuilder().executor(_ -> {
+    }).build();
+    try {
+      final var client = SolanaRpcClient.build()
+          .endpoint(ENDPOINT)
+          .httpClient(swallowing)
+          .deadlineScheduler(scheduler)
+          .createClient();
+
+      assertThrows(RejectedExecutionException.class, client::getHealth);
+    } finally {
+      swallowing.shutdownNow();
+    }
   }
 
   /// extendRequest is the hook every outgoing request passes through, so what it

@@ -71,11 +71,13 @@ public final class JsonRpcException extends RuntimeException {
     return retryAfterSeconds;
   }
 
-  /// The `id` of the response envelope that carried this error, when it was a number: the
-  /// request being answered, which for a subscribe rejection delivered to an
-  /// `exceptionSubscribe` consumer is the `msgId` of the registration the engine released.
-  /// Empty for an `"id":null` answer — a request the server could not read at all — for a
-  /// string id, and for an error parsed without its envelope.
+  /// The `id` of the response envelope that carried this error, when it was a non-negative
+  /// integer a long can hold — the only ids this client mints — so it names the request being
+  /// answered. Over the websocket that is the `msgId` of the subscribe or unsubscribe the
+  /// server rejected: a request-defect code (-32600, -32601, -32602) retires that registration,
+  /// while any other code leaves it pending for the resend pacing. Empty for an `"id":null`
+  /// answer — a request the server could not read at all — for a string, negative, fractional
+  /// or out-of-range id, and for an error parsed without its envelope.
   public OptionalLong requestId() {
     return requestId;
   }

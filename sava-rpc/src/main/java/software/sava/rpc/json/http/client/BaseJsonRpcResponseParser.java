@@ -25,6 +25,33 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
     }
   }
 
+  /// The envelope's `id` — the request being answered — when it is a non-negative integer
+  /// literal a long can hold, which are the only ids this client mints. Member order is free,
+  /// so it is scanned for from the top of the object; a nested `id` is never reached, because
+  /// the scan skips each member's value whole. Best effort by design: a truncated envelope, an
+  /// id no long can express, a fraction or exponent form, a negative id, a string and
+  /// `"id":null` (a request the server could not read) all annotate nothing — and none of them
+  /// may cost the caller the error object, which still reaches it as the JsonRpcException it
+  /// always was. Measured in review: a 20-digit id and a truncated body under a 503 both used
+  /// to parse to their JsonRpcException and would have thrown a raw JsonException instead.
+  static OptionalLong envelopeRequestId(final JsonIterator ji) {
+    try {
+      if (ji.reset(0).skipUntil("id") == null || ji.whatIsNext() != ValueType.NUMBER) {
+        return OptionalLong.empty();
+      }
+      final var literal = ji.readNumberAsString();
+      for (int i = 0; i < literal.length(); ++i) {
+        final char c = literal.charAt(i);
+        if (c < '0' || c > '9') {
+          return OptionalLong.empty();
+        }
+      }
+      return OptionalLong.of(Long.parseLong(literal));
+    } catch (final RuntimeException unreadable) {
+      return OptionalLong.empty();
+    }
+  }
+
   @Override
   protected final JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
     final var ji = JsonIterator.parse(body);
@@ -37,12 +64,7 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
         throw throwUncheckedIOException(httpResponse, new String(body));
       } else {
         final var retryAfter = httpResponse.headers().firstValueAsLong("retry-after");
-        // The envelope's id names the request being answered; member order is free, so it is
-        // scanned for from the top, and only a numeric one is carried ("id":null is a request
-        // the server could not read).
-        final var requestId = ji.reset(0).skipUntil("id") != null && ji.whatIsNext() == ValueType.NUMBER
-            ? OptionalLong.of(ji.readLong())
-            : OptionalLong.empty();
+        final var requestId = envelopeRequestId(ji);
         ji.reset(0).skipUntil("error");
         throw parseRpcException(body, ji, retryAfter, requestId);
       }

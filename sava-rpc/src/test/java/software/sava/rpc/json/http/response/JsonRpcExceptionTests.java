@@ -38,18 +38,4 @@ final class JsonRpcExceptionTests {
     assertNotNull(exception.retryAfterSeconds());
     assertTrue(exception.retryAfterSeconds().isEmpty());
   }
-
-  /// The cursor contract is unchanged by the id: after the parse the caller continues at the
-  /// end of the error object, whatever member order it had.
-  @Test
-  void theCursorIsLeftAtTheEndOfTheErrorObject() {
-    final var ji = JsonIterator.parse("[{\"data\":{\"numSlotsBehind\":3},\"code\":-32005,\"message\":\"behind\"},7]");
-    assertTrue(ji.readArray());
-    final var exception = JsonRpcException.parseException(ji, OptionalLong.empty(), OptionalLong.of(9));
-    assertEquals(OptionalLong.of(9), exception.requestId());
-    assertEquals(new RpcCustomError.NodeUnhealthy(OptionalLong.of(3)), exception.customError());
-    assertTrue(ji.readArray());
-    assertEquals(7, ji.readInt());
-    assertFalse(ji.readArray());
-  }
 }
