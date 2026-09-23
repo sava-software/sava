@@ -257,6 +257,7 @@ final class TransactionSkeletonParseTests {
   }
 
   @Test
+  @SuppressWarnings("removal") // Pins the published instruction-list factories against the parsing ones.
   void createTransactionOverloadsAgree() {
     final var skeleton = skeleton(LEGACY_TX);
     final var accounts = skeleton.parseAccounts();
@@ -274,6 +275,34 @@ final class TransactionSkeletonParseTests {
     assertEquals(Arrays.asList(instructions), tx.instructions());
     // a transaction rebuilt from a parsed skeleton re-serializes to the original message
     assertArrayEquals(Base64.getDecoder().decode(LEGACY_TX), tx.serialized());
+  }
+
+  /// The replacement the deprecated instruction-list factories name: for every format that needs no
+  /// lookup table, `createTransaction()` builds what the list factory builds from the message's own
+  /// instructions.
+  @Test
+  @SuppressWarnings("removal") // Compares the deprecated factory with its documented replacement.
+  void createTransactionReplacesTheInstructionListFactoryWithoutLookupTables() {
+    final var feePayer = nextSigner();
+    final var ix = Instruction.createInstruction(
+        SolanaAccounts.MAIN_NET.systemProgram(),
+        List.of(AccountMeta.createWrite(feePayer.publicKey())),
+        new byte[]{1, 2, 3, 4}
+    );
+    final var v1 = TxBuilder.createBuilder().feePayer(feePayer.publicKey()).addInstruction(ix).createTransaction();
+    v1.setRecentBlockHash(new byte[Transaction.BLOCK_HASH_LENGTH]);
+    v1.sign(feePayer);
+
+    for (final byte[] data : List.of(Base64.getDecoder().decode(LEGACY_TX), versionedNoTableTx(), v1.serialized())) {
+      final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
+      final var viaList = skeleton.createTransaction(Arrays.asList(skeleton.parseInstructionsWithoutTableAccounts()));
+      final var replacement = skeleton.createTransaction();
+      assertSame(viaList.getClass(), replacement.getClass());
+      assertEquals(viaList.feePayer().publicKey(), replacement.feePayer().publicKey());
+      assertEquals(viaList.instructions(), replacement.instructions());
+      assertArrayEquals(viaList.serialized(), replacement.serialized());
+      assertArrayEquals(data, replacement.serialized());
+    }
   }
 
   @Test
@@ -393,6 +422,7 @@ final class TransactionSkeletonParseTests {
     );
   }
 
+  @SuppressWarnings("removal") // Every published factory must keep the layout guard.
   private static void assertEveryMutableCreationRejects(final TransactionSkeleton skeleton,
                                                         final List<Instruction> instructions,
                                                         final String expectedMessage) {

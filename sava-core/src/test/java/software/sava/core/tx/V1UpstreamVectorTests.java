@@ -323,6 +323,7 @@ final class V1UpstreamVectorTests {
   /// the point where refusal matters, building a signable transaction, because the envelope's zero
   /// signature slots cannot satisfy the one signature the header inside declares.
   @Test
+  @SuppressWarnings("removal") // Pins the published instruction-list factory's layout guard.
   void v1MessageInsideALegacyEnvelopeIsNotReadAsV1() {
     final byte[] malformedInput = {
         0x00,                   // 0 signatures via ShortU16 -> takes Legacy/V0 path

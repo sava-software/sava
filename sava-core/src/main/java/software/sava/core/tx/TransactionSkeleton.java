@@ -387,21 +387,27 @@ public interface TransactionSkeleton {
 
   Instruction[] filterInstructionsWithoutAccounts(final Discriminator discriminator);
 
-  /**
-   * Creates a mutable transaction from this parsed representation.
-   *
-   * @throws IllegalStateException if the serialized signature-slot count does not match the
-   *                               message header's required-signature count, or its prefix is
-   *                               not representable by a mutable transaction
-   */
+  /// Creates a mutable transaction from this parsed representation.
+  ///
+  /// @throws IllegalStateException if the serialized signature-slot count does not match the
+  ///                               message header's required-signature count, or its prefix is
+  ///                               not representable by a mutable transaction
+  /// @deprecated The instructions must be this message's own, which the skeleton parses itself.
+  ///             For legacy, v1, and v0 messages without lookup tables, [#createTransaction()]
+  ///             builds the same transaction. For v0 with lookup tables, use
+  ///             [#createTransaction(AddressLookupTable)] or
+  ///             [#createTransaction(LookupTableAccountMeta\[\])], which also keep the tables for
+  ///             later rebuilds, or [#createTransaction(AccountMeta\[\])] with accounts already
+  ///             resolved.
+  @Deprecated(forRemoval = true)
   Transaction createTransaction(final List<Instruction> instructions);
 
-  /**
-   * Creates a mutable transaction from the supplied instructions.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
+  /// Creates a mutable transaction from the supplied instructions.
+  ///
+  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
+  ///                               mutable transaction
+  /// @deprecated As for [#createTransaction(List)].
+  @Deprecated(forRemoval = true)
   default Transaction createTransaction(final Instruction[] instructions) {
     return createTransaction(Arrays.asList(instructions));
   }

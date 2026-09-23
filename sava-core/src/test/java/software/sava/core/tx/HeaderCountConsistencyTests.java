@@ -65,6 +65,7 @@ final class HeaderCountConsistencyTests {
   /// entirely, so guarding only those left this route open: a contradictory payload still produced a
   /// mutable, signable transaction whose fee payer was the blockhash.
   @Test
+  @SuppressWarnings("removal") // Pins the published instruction-list factory's layout guard.
   void theDirectCreateTransactionOverloadsAreGuardedToo() {
     final var skeleton = TransactionSkeleton.deserializeSkeleton(moreSignersThanAddresses());
     final String expected = "Header declares 1 required signatures but only 0 addresses are included.";

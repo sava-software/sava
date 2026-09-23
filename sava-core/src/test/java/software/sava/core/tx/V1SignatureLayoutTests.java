@@ -88,6 +88,7 @@ final class V1SignatureLayoutTests {
   /// Every `createTransaction` overload funnels through
   /// `V1TransactionSkeleton#createTransaction(List)`, which is the only guarded one, so all of them
   /// must reject a payload whose length does not corroborate the parsed message end.
+  @SuppressWarnings("removal") // Every published factory must keep the layout guard.
   private static void assertEveryV1MutableCreationRejects(final TransactionSkeleton skeleton) {
     final byte[] before = skeleton.data().clone();
     final var accounts = skeleton.parseAccounts();
@@ -267,6 +268,7 @@ final class V1SignatureLayoutTests {
   /// `IllegalStateException` rather than the `ArrayIndexOutOfBoundsException` the bare walk raises.
   /// Every other rejection test truncates in the payload region, which never reaches this branch.
   @Test
+  @SuppressWarnings("removal") // Reaches the layout guard without parsing instructions first.
   void aPayloadTruncatedInsideTheInstructionHeadersIsDiagnosed() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
@@ -310,6 +312,7 @@ final class V1SignatureLayoutTests {
   /// The lower half of the same guard: a buffer whose declared signature block starts before the
   /// header block even ends is rejected by the `signaturesOffset < headerBlockEnd` arm.
   @Test
+  @SuppressWarnings("removal") // Reaches the layout guard without parsing instructions first.
   void aSignatureBlockOverlappingTheInstructionHeadersIsDiagnosed() {
     final var feePayer = signer(11);
     final var signerB = signer(22);
@@ -340,6 +343,7 @@ final class V1SignatureLayoutTests {
   /// `headerBlockEnd`. The guard uses `<`, and this pins that it must stay `<` — widening it to
   /// `<=` would reject a legal, minimal transaction.
   @Test
+  @SuppressWarnings("removal") // Reaches the layout guard without parsing instructions first.
   void aTransactionWhoseInstructionsHaveNoAccountsOrDataSitsExactlyOnTheHeaderBound() {
     final var feePayer = signer(11);
     final var tx = TxBuilder.createBuilder()

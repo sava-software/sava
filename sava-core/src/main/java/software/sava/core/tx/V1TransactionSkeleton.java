@@ -500,6 +500,7 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   }
 
   @Override
+  @SuppressWarnings("removal") // Required implementation of the retained instruction-list factory.
   public Transaction createTransaction(final List<Instruction> instructions) {
     return new V1Transaction(
         AccountMeta.createFeePayer(feePayer()),

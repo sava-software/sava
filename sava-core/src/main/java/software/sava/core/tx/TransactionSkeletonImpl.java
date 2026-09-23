@@ -432,6 +432,7 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
   }
 
   @Override
+  @SuppressWarnings("removal") // Required implementation of the retained instruction-list factory.
   public Transaction createTransaction(final List<Instruction> instructions) {
     requireSignableSignatureLayout();
     return new TransactionRecord(
