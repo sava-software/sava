@@ -282,8 +282,34 @@ final class PrivateKeyEncodingTests {
     // 31 values must prevent later tokens from supplying the rest of that pair.
     final var malformed = "[" + String.join(",", Arrays.copyOfRange(bytes, 0, 31)) + "]"
         + String.join(",", Arrays.copyOfRange(bytes, 31, bytes.length)) + "]";
-    assertThrows(RuntimeException.class,
+    assertThrows(IllegalArgumentException.class,
         () -> PrivateKeyEncoding.fromJsonArray(JsonIterator.parse(malformed)));
+  }
+
+  private static String keyPairArrayOfLength(final int length) {
+    final String[] bytes = JSON_ARRAY.substring(1, JSON_ARRAY.length() - 1).split(",");
+    final var joiner = new StringJoiner(",", "[", "]");
+    for (int i = 0; i < length; ++i) {
+      joiner.add(i < bytes.length ? bytes[i] : "0");
+    }
+    return joiner.toString();
+  }
+
+  // solana-sdk read_keypair: a key-pair array holds exactly 64 elements, else
+  // "Expected 64 elements, found N". Longer arrays used to overrun the public key buffer.
+  @Test
+  void keyPairArraysMustHoldExactly64Elements() {
+    for (final int length : new int[]{0, 1, 31, 32, 33, 63, 65, 66, 96, 128}) {
+      final var json = keyPairArrayOfLength(length);
+      final var expected = "Expected 64 elements, found " + length;
+      final var direct = assertThrows(IllegalArgumentException.class,
+          () -> PrivateKeyEncoding.fromJsonArray(json.getBytes(StandardCharsets.US_ASCII)));
+      assertEquals(expected, direct.getMessage());
+      final var parsed = assertThrows(IllegalArgumentException.class,
+          () -> PrivateKeyEncoding.jsonKeyPairArray.parseSecret(json));
+      assertEquals(expected, parsed.getMessage());
+    }
+    verifySigner(PrivateKeyEncoding.fromJsonArray(keyPairArrayOfLength(64).getBytes(StandardCharsets.US_ASCII)));
   }
 
   @Test

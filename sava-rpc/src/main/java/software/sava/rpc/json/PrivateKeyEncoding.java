@@ -41,21 +41,28 @@ public enum PrivateKeyEncoding {
         throw new IllegalArgumentException(new String(buf, offset, len) + " private key encoding is not supported.");
   };
 
+  /// Reads a Solana CLI key-pair array: the 32 private-key bytes followed by the 32 public-key
+  /// bytes.
+  ///
+  /// @throws IllegalArgumentException if the array does not hold exactly 64 elements
+  /// @throws IllegalStateException    if the public key does not match the private key
   public static Signer fromJsonArray(final JsonIterator ji) {
-    final var privateKey = new byte[Signer.KEY_LENGTH];
-    for (int i = 0; ji.readArray(); ) {
-      privateKey[i] = (byte) ji.readInt();
-      if (++i == Signer.KEY_LENGTH) {
-        break;
+    final var keyPair = new byte[Signer.KEY_LENGTH << 1];
+    int length = 0;
+    while (ji.readArray()) {
+      final int value = ji.readInt();
+      if (length < keyPair.length) {
+        keyPair[length] = (byte) value;
       }
+      ++length;
     }
-    final var publicKey = new byte[Signer.KEY_LENGTH];
-    for (int i = 0; ji.readArray(); ) {
-      publicKey[i++] = (byte) ji.readInt();
+    if (length != keyPair.length) {
+      throw new IllegalArgumentException("Expected " + keyPair.length + " elements, found " + length);
     }
-    return Signer.createFromKeyPair(publicKey, privateKey);
+    return Signer.createFromKeyPair(keyPair);
   }
 
+  /// Parses `jsonArrayKeyPair` as [#fromJsonArray(JsonIterator)] does.
   public static Signer fromJsonArray(final byte[] jsonArrayKeyPair) {
     final var ji = JsonIterator.parse(jsonArrayKeyPair);
     return fromJsonArray(ji);
