@@ -18,7 +18,7 @@ software.sava.core.tx.TransactionSkeletonImpl,parseAccounts,RemoveConditionalMut
 software.sava.core.tx.TransactionSkeletonImpl,parseAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # legacy parse routes converge # line 223
 software.sava.core.tx.TxBuilder,computeUnitPriceToPriorityFeeLamports,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 103
 software.sava.core.tx.TxBuilder,computeUnitPriceToPriorityFeeLamports,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # redundant guard operand # line 101
-software.sava.core.tx.TxBuilderImpl,createTransaction,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # mergeAccounts rejects it identically # line 228
+software.sava.core.tx.TxBuilderImpl,createTransaction,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # mergeAccounts rejects it identically # line 226
 software.sava.core.tx.V1Transaction,configValueOffset,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 99
 software.sava.core.tx.V1Transaction,createTransaction,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 82
 software.sava.core.tx.V1Transaction,createTransaction,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 86

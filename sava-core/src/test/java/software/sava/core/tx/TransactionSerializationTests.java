@@ -1735,6 +1735,30 @@ final class TransactionSerializationTests {
     );
   }
 
+  /// A builder given only an empty collection holds no instructions, so index 0 adds the first
+  /// one exactly as it does on a fresh builder.
+  @Test
+  void setInstructionAtZeroAddsToABuilderGivenOnlyAnEmptyCollection() {
+    final var feePayer = nextSigner();
+
+    final var fromList = TxBuilder.createBuilder().addInstructions(List.of());
+    assertSame(fromList, fromList.setInstruction(0, markerInstruction(1)));
+    assertArrayEquals(new byte[]{1}, builtInstructionMarkers(fromList, feePayer));
+
+    final var fromArray = TxBuilder.createBuilder().addInstructions(new Instruction[0]);
+    fromArray.setInstruction(0, markerInstruction(2));
+    assertArrayEquals(new byte[]{2}, builtInstructionMarkers(fromArray, feePayer));
+
+    assertThrows(IndexOutOfBoundsException.class,
+        () -> TxBuilder.createBuilder().addInstructions(List.of()).setInstruction(1, markerInstruction(3))
+    );
+
+    // A rejected index leaves a fresh builder fresh rather than holding an empty collection.
+    final var fresh = TxBuilder.createBuilder().feePayer(feePayer.publicKey());
+    assertThrows(IndexOutOfBoundsException.class, () -> fresh.setInstruction(1, markerInstruction(4)));
+    assertThrows(IllegalStateException.class, fresh::createTransaction);
+  }
+
   @Test
   void testTxBuilderInsertInstruction() {
     final var feePayer = nextSigner();

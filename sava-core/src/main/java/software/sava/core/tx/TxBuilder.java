@@ -57,11 +57,11 @@ public interface TxBuilder {
     return this;
   }
 
-  /***
-   *
-   * @throws IndexOutOfBoundsException if the index is out of range
-   *         ({@code index < 0 || index >= size()})
-   */
+  /// Replaces the instruction at `index`. While the builder holds no instructions, index 0 adds the
+  /// first one, as [#addInstruction(Instruction)] does.
+  ///
+  /// @throws IndexOutOfBoundsException if `index` is negative or, outside that empty case, not
+  ///                                   below the instruction count
   TxBuilder setInstruction(final int index, final Instruction instruction);
 
   /***

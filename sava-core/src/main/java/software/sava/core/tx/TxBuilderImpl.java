@@ -130,15 +130,13 @@ final class TxBuilderImpl implements TxBuilder {
 
   @Override
   public TxBuilder setInstruction(final int index, final Instruction instruction) {
-    if (this.instructions == null) {
+    if (this.instructions == null || this.instructions.isEmpty()) {
       if (index != 0) {
         throw new IndexOutOfBoundsException(String.format("Index %s out of bounds for length 0", index));
       }
-      this.instructions = new ArrayList<>();
-      this.instructions.add(instruction);
-    } else {
-      this.instructions.set(index, instruction);
+      return addInstruction(instruction);
     }
+    this.instructions.set(index, instruction);
     return this;
   }
 
