@@ -12,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.Collection;
 import java.util.SequencedCollection;
 import java.util.function.*;
@@ -27,7 +28,18 @@ public abstract class BaseSolanaJsonRpcClient extends JsonRpcHttpClient {
                                     final UnaryOperator<HttpRequest.Builder> extendRequest,
                                     final BiPredicate<HttpResponse<?>, byte[]> testResponse,
                                     final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse);
+    this(endpoint, httpClient, requestTimeout, extendRequest, testResponse, defaultCommitment, null);
+  }
+
+  /// `deadlineScheduler` null selects the common pool: see [JsonHttpClient#deadlineScheduler].
+  protected BaseSolanaJsonRpcClient(final URI endpoint,
+                                    final HttpClient httpClient,
+                                    final Duration requestTimeout,
+                                    final UnaryOperator<HttpRequest.Builder> extendRequest,
+                                    final BiPredicate<HttpResponse<?>, byte[]> testResponse,
+                                    final Commitment defaultCommitment,
+                                    final ScheduledExecutorService deadlineScheduler) {
+    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse, deadlineScheduler);
     this.defaultCommitment = defaultCommitment;
   }
 

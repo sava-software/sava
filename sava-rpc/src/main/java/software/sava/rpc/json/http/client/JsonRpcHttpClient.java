@@ -8,6 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.*;
 
 public abstract class JsonRpcHttpClient extends JsonHttpClient {
@@ -19,7 +20,17 @@ public abstract class JsonRpcHttpClient extends JsonHttpClient {
                               final Duration requestTimeout,
                               final UnaryOperator<HttpRequest.Builder> extendRequest,
                               final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse);
+    this(endpoint, httpClient, requestTimeout, extendRequest, testResponse, null);
+  }
+
+  /// `deadlineScheduler` null selects the common pool: see [JsonHttpClient#deadlineScheduler].
+  protected JsonRpcHttpClient(final URI endpoint,
+                              final HttpClient httpClient,
+                              final Duration requestTimeout,
+                              final UnaryOperator<HttpRequest.Builder> extendRequest,
+                              final BiPredicate<HttpResponse<?>, byte[]> testResponse,
+                              final ScheduledExecutorService deadlineScheduler) {
+    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse, deadlineScheduler);
     this.id = new AtomicLong(System.currentTimeMillis());
   }
 

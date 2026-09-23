@@ -64,6 +64,11 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it
   also changes the `maxRetries` default (0 when skipping, 1 otherwise) and the
   preflight commitment. Use the three-argument overload to pin retries.
+- `SolanaRpcClientBuilder.deadlineScheduler(...)` chooses where the whole-exchange
+  deadline (twice the request timeout) is armed; unset means `ForkJoinPool.commonPool()`,
+  which is also where the JDK completes `sendAsync` futures on JDK 25, so a saturated
+  common pool delays the cancellation. The client never shuts the scheduler down, and a
+  scheduler that rejects the deadline fails the exchange instead of leaving it unbounded.
 - `JsonRpcException.requestId()` is the answering envelope's numeric `id` when the parser
   had the envelope (the HTTP client and the websocket error path both do); empty for
   `"id":null`, a string id, or an error object parsed on its own.

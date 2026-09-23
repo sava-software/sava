@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.*;
 import java.util.stream.Collectors;
 
@@ -106,8 +107,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                       final Duration requestTimeout,
                       final UnaryOperator<HttpRequest.Builder> extendRequest,
                       final BiPredicate<HttpResponse<?>, byte[]> testResponse,
-                      final Commitment defaultCommitment) {
-    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse, defaultCommitment);
+                      final Commitment defaultCommitment,
+                      final ScheduledExecutorService deadlineScheduler) {
+    super(endpoint, httpClient, requestTimeout, extendRequest, testResponse, defaultCommitment, deadlineScheduler);
     this.latestBlockhashResponseParser = wrapResponseParser(LATEST_BLOCK_HASH);
     this.sendTxResponseParser = wrapResponseParser(SEND_TX_RESPONSE_PARSER);
   }

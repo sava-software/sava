@@ -8,6 +8,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiPredicate;
 import java.util.function.UnaryOperator;
 
@@ -22,6 +23,7 @@ public final class SolanaRpcClientBuilder {
   private UnaryOperator<HttpRequest.Builder> extendRequest;
   private BiPredicate<HttpResponse<?>, byte[]> testResponse;
   private Commitment defaultCommitment;
+  private ScheduledExecutorService deadlineScheduler;
 
   SolanaRpcClientBuilder() {
   }
@@ -38,7 +40,8 @@ public final class SolanaRpcClientBuilder {
         requestTimeout,
         extendRequest,
         testResponse,
-        defaultCommitment
+        defaultCommitment,
+        deadlineScheduler
     );
   }
 
@@ -82,6 +85,19 @@ public final class SolanaRpcClientBuilder {
     return this;
   }
 
+  /// Where the client arms the whole-exchange deadline (twice the request timeout, the JDK 25
+  /// backstop for a body that stalls after the headers). Unset, the client uses
+  /// `ForkJoinPool.commonPool()`, which on JDK 25 is also where the JDK HTTP client completes
+  /// its `sendAsync` futures, so a common pool saturated with blocking work delays the
+  /// cancellation and the exchange runs past its deadline by that much. Supply a dedicated
+  /// scheduler when the deadline must fire on time regardless; the client never shuts it
+  /// down, and one that rejects the deadline (already shut down) fails the exchange rather than
+  /// leaving it unbounded.
+  public SolanaRpcClientBuilder deadlineScheduler(final ScheduledExecutorService deadlineScheduler) {
+    this.deadlineScheduler = deadlineScheduler;
+    return this;
+  }
+
   public URI endpoint() {
     return endpoint;
   }
@@ -104,5 +120,10 @@ public final class SolanaRpcClientBuilder {
 
   public Commitment defaultCommitment() {
     return defaultCommitment;
+  }
+
+  /// Null until set: the built client then uses the common pool.
+  public ScheduledExecutorService deadlineScheduler() {
+    return deadlineScheduler;
   }
 }

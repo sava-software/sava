@@ -13,7 +13,9 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -64,17 +66,37 @@ public abstract class JsonHttpClient {
   protected final Duration requestTimeout;
   protected final UnaryOperator<HttpRequest.Builder> extendRequest;
   protected final BiPredicate<HttpResponse<?>, byte[]> testResponse;
+  /// Runs the exchange deadline's cancellation (see [#withResponseDeadline]). The default is
+  /// `ForkJoinPool.commonPool()`, which on JDK 25 is also where the JDK HTTP client completes
+  /// its `sendAsync` futures, so the deadline's timeliness is bounded by that pool's
+  /// availability: a common pool saturated with blocking work delays the cancellation it
+  /// schedules, and the exchange runs past its deadline by that much. A caller who needs the
+  /// deadline to fire on time whatever the common pool is doing supplies a dedicated scheduler;
+  /// the client never shuts it down, and a scheduler that rejects the deadline (one already
+  /// shut down) fails the exchange rather than leaving it unbounded.
+  protected final ScheduledExecutorService deadlineScheduler;
 
   protected JsonHttpClient(final URI endpoint,
                            final HttpClient httpClient,
                            final Duration requestTimeout,
                            final UnaryOperator<HttpRequest.Builder> extendRequest,
                            final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
+    this(endpoint, httpClient, requestTimeout, extendRequest, testResponse, null);
+  }
+
+  /// `deadlineScheduler` null selects the common pool: see [#deadlineScheduler].
+  protected JsonHttpClient(final URI endpoint,
+                           final HttpClient httpClient,
+                           final Duration requestTimeout,
+                           final UnaryOperator<HttpRequest.Builder> extendRequest,
+                           final BiPredicate<HttpResponse<?>, byte[]> testResponse,
+                           final ScheduledExecutorService deadlineScheduler) {
     this.endpoint = endpoint;
     this.httpClient = httpClient;
     this.requestTimeout = requestTimeout;
     this.extendRequest = extendRequest == null ? UnaryOperator.identity() : extendRequest;
     this.testResponse = testResponse;
+    this.deadlineScheduler = deadlineScheduler == null ? ForkJoinPool.commonPool() : deadlineScheduler;
   }
 
   protected JsonHttpClient(final URI endpoint,
@@ -137,16 +159,25 @@ public abstract class JsonHttpClient {
                                                                       final long deadlineNanos) {
     // a block body: cancel(boolean) returns a value, and an expression lambda would bind the
     // Callable overload of schedule instead of the Runnable one
-    final var cancellation = scheduler.schedule(() -> {
+    final ScheduledFuture<?> cancellation;
+    try {
+      cancellation = scheduler.schedule(() -> {
+        response.cancel(true);
+      }, deadlineNanos, TimeUnit.NANOSECONDS);
+    } catch (final RejectedExecutionException rejected) {
+      // The exchange is already in flight and this deadline was its only bound (the JDK 25
+      // timer stops at the headers): an exchange whose deadline cannot be armed is cancelled
+      // rather than left to park on a stalled body for as long as the peer likes.
       response.cancel(true);
-    }, deadlineNanos, TimeUnit.NANOSECONDS);
+      throw rejected;
+    }
     response.whenComplete((_, _) -> cancellation.cancel(false));
     return response;
   }
 
   private <T> CompletableFuture<HttpResponse<T>> sendWithDeadline(final HttpRequest request,
                                                                   final HttpResponse.BodyHandler<T> bodyHandler) {
-    return sendWithDeadline(request, bodyHandler, ForkJoinPool.commonPool());
+    return sendWithDeadline(request, bodyHandler, deadlineScheduler);
   }
 
   // Package-private scheduler seam: lets a test observe the one timer this route arms, and

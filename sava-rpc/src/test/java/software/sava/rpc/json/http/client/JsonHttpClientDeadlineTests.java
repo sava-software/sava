@@ -206,6 +206,31 @@ final class JsonHttpClientDeadlineTests {
     }
   }
 
+  /// A scheduler that rejects the deadline — one the caller already shut down — cannot leave
+  /// the in-flight exchange as the one route with no bound at all: the response is cancelled
+  /// and the rejection propagates to the caller.
+  @Test
+  void aSchedulerThatRejectsTheDeadlineCancelsTheExchangeAndRethrows() {
+    final var rejection = new RejectedExecutionException("scheduler shut down");
+    final var rejecting = (ScheduledExecutorService) Proxy.newProxyInstance(
+        ScheduledExecutorService.class.getClassLoader(),
+        new Class<?>[]{ScheduledExecutorService.class},
+        (proxy, method, args) -> {
+          if (method.getName().equals("schedule")) {
+            throw rejection;
+          }
+          throw new UnsupportedOperationException(method.getName());
+        }
+    );
+    final var response = new RecordingResponseFuture<byte[]>();
+
+    assertSame(rejection, assertThrows(RejectedExecutionException.class,
+        () -> JsonHttpClient.withResponseDeadline(response, rejecting, Duration.ofSeconds(1).toNanos())));
+    assertTrue(response.isCancelled(), "an exchange whose deadline cannot be armed is not left unbounded");
+    assertEquals(1, response.cancellationCalls);
+    assertEquals(Boolean.TRUE, response.mayInterruptIfRunning, "cancelled the way the deadline itself cancels");
+  }
+
   /// The deadline follows the timeout on the built request, which `extendRequest` may have
   /// replaced in either direction, and falls back to the client default only when the request
   /// carries none.

@@ -4,9 +4,13 @@ import org.junit.jupiter.api.Test;
 import software.sava.rpc.json.http.SolanaNetwork;
 import software.sava.rpc.json.http.request.Commitment;
 
+import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,6 +44,58 @@ final class SolanaRpcClientBuilderTests {
     try (final var httpClient = client.httpClient()) {
       assertNotNull(httpClient, "an unconfigured builder must supply its own HttpClient");
     }
+  }
+
+  /// The exchange deadline is armed on the builder's scheduler and nowhere else. Observed the
+  /// way the seam tests observe it: an HTTP client whose executor swallows the exchange leaves
+  /// the response pending, and the one `schedule` call the deadline makes lands on the proxy.
+  @Test
+  void aConfiguredDeadlineSchedulerArmsTheExchangeDeadline() {
+    final var scheduleCalls = new AtomicInteger();
+    final var scheduler = (ScheduledExecutorService) Proxy.newProxyInstance(
+        ScheduledExecutorService.class.getClassLoader(),
+        new Class<?>[]{ScheduledExecutorService.class},
+        (proxy, method, args) -> {
+          if (!method.getName().equals("schedule")) {
+            throw new UnsupportedOperationException(method.getName());
+          }
+          scheduleCalls.incrementAndGet();
+          return Proxy.newProxyInstance(
+              ScheduledFuture.class.getClassLoader(),
+              new Class<?>[]{ScheduledFuture.class},
+              (p, m, a) -> {
+                if (m.getName().equals("cancel")) {
+                  return Boolean.TRUE;
+                }
+                throw new UnsupportedOperationException(m.getName());
+              }
+          );
+        }
+    );
+    final var swallowing = HttpClient.newBuilder().executor(_ -> {
+    }).build();
+    try {
+      final var builder = SolanaRpcClient.build()
+          .endpoint(ENDPOINT)
+          .httpClient(swallowing)
+          .deadlineScheduler(scheduler);
+      assertSame(scheduler, builder.deadlineScheduler());
+      final var client = builder.createClient();
+
+      final var health = client.getHealth();
+
+      assertFalse(health.isDone(), "the swallowed exchange must leave the response pending");
+      assertEquals(1, scheduleCalls.get(), "one accepted submission arms exactly one deadline, on the supplied scheduler");
+    } finally {
+      // close() would wait for the swallowed exchange, which never runs
+      swallowing.shutdownNow();
+    }
+  }
+
+  @Test
+  void anUnsetDeadlineSchedulerIsNullOnTheBuilder() {
+    assertNull(SolanaRpcClient.build().deadlineScheduler(),
+        "the default is applied in createClient, so an unset scheduler reads as null here");
   }
 
   @Test

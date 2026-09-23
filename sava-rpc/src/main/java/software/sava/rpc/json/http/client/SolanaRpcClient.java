@@ -43,7 +43,7 @@ public interface SolanaRpcClient {
                                       final HttpClient httpClient,
                                       final Duration requestTimeout,
                                       final Commitment defaultCommitment) {
-    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, null, null, defaultCommitment);
+    return new SolanaJsonRpcClient(endpoint, httpClient, requestTimeout, null, null, defaultCommitment, null);
   }
 
   static SolanaRpcClient createClient(final URI endpoint,
