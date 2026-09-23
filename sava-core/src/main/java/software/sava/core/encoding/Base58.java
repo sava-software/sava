@@ -41,6 +41,8 @@ public final class Base58 {
     return encode(input, 0, input.length);
   }
 
+  /// Encodes `input` from `offset` up to the exclusive index `to`. Unlike the ranged `decode`
+  /// overloads, the third argument is an end index, not a length.
   public static String encode(final byte[] input, final int offset, final int to) {
     final char[] encoded = new char[input.length << 1]; // upper bound
     final int outputStart = encode(input, offset, to, encoded);
@@ -51,6 +53,8 @@ public final class Base58 {
     return encode(input, 0, input.length, output);
   }
 
+  /// Encodes `input` from `offset` up to the exclusive index `to`. Unlike the ranged `decode`
+  /// overloads, the third argument is an end index, not a length.
   public static int encode(byte[] input, final int offset, final int to, final char[] output) {
     input = Arrays.copyOfRange(input, offset, to);
 
@@ -309,6 +313,7 @@ public final class Base58 {
     return (byte) remainder;
   }
 
+  /// Like [#encode(byte\[\], char\[\])], but overwrites `input` instead of copying it.
   public static int mutableEncode(final byte[] input, final char[] output) {
     int leadingZeroes = 0;
     while (leadingZeroes < input.length && input[leadingZeroes] == 0) {
@@ -339,9 +344,10 @@ public final class Base58 {
     return outputStart;
   }
 
-  /// Completes an encoding started by [#beginMutableEncode(byte[], int, char[])] into `output`,
-  /// which may hold stale content from previous encodings: only characters written by this call
-  /// are ever read back.
+  /// Finishes an encoding started by [#beginMutableEncode(byte\[\], int, char\[\])], overwriting
+  /// `input`. Pass the leading-zero count and input start it packed, and the index in `output`
+  /// before which to write the remaining leading characters; returns the index of the first one.
+  /// `output` may hold stale content: only characters written by this call are read back.
   public static int continueMutableEncode(final byte[] input,
                                           int leadingZeroes,
                                           int inputStart,
@@ -369,6 +375,13 @@ public final class Base58 {
     return outputStart;
   }
 
+  /// Runs at most `maxLen` steps of [#mutableEncode(byte\[\], char\[\])], each producing the
+  /// next of the encoding's last characters at the end of `output`, and overwrites `input`, so a
+  /// caller can test the end of an encoding before paying for the rest.
+  /// [#continueMutableEncode(byte\[\], int, int, int, char\[\])] finishes it.
+  ///
+  /// @return the state to resume from: the output start in bits 0-31, the input start in bits
+  ///         32-47, and the leading-zero count from bit 48
   public static long beginMutableEncode(final byte[] input, final int maxLen, final char[] output) {
     int leadingZeroes = 0;
     while (leadingZeroes < input.length && input[leadingZeroes] == 0) {
