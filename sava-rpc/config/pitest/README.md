@@ -390,11 +390,11 @@ a sanctioned writer can preserve that evidence while pruning the separately
 killed and retired rows.
 ## Triaged equivalent mutants (accepted with reasons)
 
-The 2026-09-05 fresh `responses` observation has eight surviving mutants and no
-`NO_COVERAGE` mutants. The accepted record retains twelve rows: eight match those
+The 2026-09-23 fresh `responses` observation has ten surviving mutants and no
+`NO_COVERAGE` mutants. The accepted record retains fourteen rows: ten match those
 survivors, one preserves historical `Lamports.amount` evidence absent from the
 current licensed population, and three `JsonUtil` rows await retirement as described
-below. The current equivalence arguments cover the eight observed survivors and
+below. The current equivalence arguments cover the ten observed survivors and
 the retained Lamports instance; they do not apply to the three pending rows.
 
 - `RpcCustomError.parseError` (both overloads) — baseline label
@@ -422,6 +422,23 @@ the retained Lamports instance; they do not apply to the three pending rows.
 - `JsonUtil.toJsonIntArray` — baseline label `# capacity math` —
   `(data.length << 2) + 2`:
   `StringBuilder` sizing only; the builder grows as needed.
+- `JsonRpcException.envelopeRequestId` — baseline label `# best-effort guard` — two
+  `removed conditional` mutants on guards that sit inside the reader's best-effort
+  `catch (RuntimeException)`, which exists so that no unreadable id can cost the caller
+  the error object. Property: an id the reader cannot carry reads as empty and never
+  displaces the error. Oracle: the reader's own contract (its javadoc and
+  `CONVENTIONS.md`), pinned by `JsonRpcExceptionTests.theEnvelopeReaderCarriesOnlyWhatSavaMints`
+  and the HTTP and websocket envelope tests. (1) `skipUntil("id") == null` forced false:
+  a missing `id` then runs `whatIsNext()` at the end of the object, which either throws
+  into the catch or is not a `NUMBER`, and either way the result is empty. (2) `c > '9'`
+  forced false in the digit check: any character above `'9'` also fails
+  `Long.parseLong`, whose exception the same catch swallows, so the guard cannot change
+  the result. Both guards are the non-exceptional fast path in front of that catch; the
+  kills are on the other direction of each (forced true rejects every id) and on the
+  `'0'`/`'9'` boundaries (an id carrying both digits). Removing the guards to make the
+  mutants killable would turn every ordinary missing or null `id` into an exception used
+  as control flow; narrowing the catch would trade robustness for a killable mutant. A
+  reviewer measured the same two survivors independently before this acceptance.
 
 ### Pending JsonUtil baseline retirement
 

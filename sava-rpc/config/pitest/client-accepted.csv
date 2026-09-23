@@ -3,8 +3,8 @@ software.sava.rpc.json.http.client.BaseJsonResponseController,applyResponse,Remo
 software.sava.rpc.json.http.client.BaseSolanaJsonRpcClient,joinKeys,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # killed retained # line 81
 software.sava.rpc.json.http.client.BaseSolanaJsonRpcClient,joinKeys,RemoveConditionalMutator_EQUAL_IF,SURVIVED # unlicensed-only retained # line 81
 software.sava.rpc.json.http.client.JsonHttpClient,gzipBufferSize,VoidMethodCallMutator,SURVIVED # killed retained # line 143
-software.sava.rpc.json.http.client.JsonHttpClient,newPostRequest,VoidMethodCallMutator,SURVIVED # request debug only # line 381
-software.sava.rpc.json.http.client.JsonHttpClient,readInputStream,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead pattern arm # line 264
+software.sava.rpc.json.http.client.JsonHttpClient,newPostRequest,VoidMethodCallMutator,SURVIVED # request debug only # line 421
+software.sava.rpc.json.http.client.JsonHttpClient,readInputStream,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead pattern arm # line 304
 software.sava.rpc.json.http.client.JsonHttpClient,wrapResponseParser,NullReturnValsMutator,SURVIVED # killed retained # line 267
 software.sava.rpc.json.http.client.JsonHttpClient,wrapResponseParser,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # killed retained # line 266
 software.sava.rpc.json.http.client.JsonRpcHttpClient,applyGenericResponseResult,NullReturnValsMutator,SURVIVED # killed retained # line 33

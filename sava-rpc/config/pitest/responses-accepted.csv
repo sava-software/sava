@@ -11,3 +11,5 @@ software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBound
 software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 58
 software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 66
 software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 66
+software.sava.rpc.json.http.response.JsonRpcException,envelopeRequestId,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # best-effort guard # line 81
+software.sava.rpc.json.http.response.JsonRpcException,envelopeRequestId,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # best-effort guard # line 87
