@@ -183,6 +183,8 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
   private static final String JUDGED_UNDER_TAIL_LAG = "ws.harness.judgedUnderTailLag";
   /// Replay rows the peer wrote after W1-A's bound: late by the wire's clock, not credited.
   private static final String REPLAY_ROWS_LATE = "ws.harness.replayRowsLate";
+  /// Plan steps on the generic channel a live run skipped: a real node has no synthetic method.
+  private static final String LIVE_GENERIC_SKIPPED = "ws.harness.liveGenericSkipped";
   /// `close()` reached the bare engine with no connection the peer could see closing.
   private static final String CLOSE_WITHOUT_LIVE_CONNECTION = "ws.harness.closeWithoutLiveConnection";
   /// A delivery to a registration the harness had tombstoned but whose unsubscribe it had not yet
@@ -482,18 +484,22 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
 
     final var ports = config.wsPorts();
     for (final var profile : EngineProfile.values()) {
-      if (profile.portIndex() >= ports.size()) {
+      if (!config.live() && profile.portIndex() >= ports.size()) {
         throw new IllegalStateException("SOAK_WS_PORTS has " + ports.size()
             + " entries; engine " + profile.engineName() + " needs index " + profile.portIndex());
       }
-      final int port = ports.get(profile.portIndex());
+      // A live run has no peer and no port list: every engine dials SOAK_LIVE_WS_URL, and the
+      // port that keys the peer-row joins (which a live run never makes) is the profile's index,
+      // unique per engine and never a real port. Measured 2026-09-23 on the first live launch,
+      // which failed at start-up on the empty list.
+      final int port = config.live() ? profile.portIndex() : ports.get(profile.portIndex());
       final boolean forced = forced(profile);
       final var tracker = AttemptTracker.forEngine(profile.engineName(),
           this::onRetirement, this::onClaim, forced, config.live());
       if (forced) {
         configureForced(tracker);
       }
-      final var handle = new EngineHandle(profile, port, tracker);
+      final var handle = new EngineHandle(profile, port, tracker, config.live());
       engines.put(profile, handle);
       byPort.put(port, handle);
       byEngineName.put(handle.name(), handle);
@@ -525,7 +531,7 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
     final var profile = handle.profile();
     final var tracker = handle.tracker();
     final var prototype = SolanaRpcWebsocket.build()
-        .uri(URI.create("ws://127.0.0.1:" + handle.port()))
+        .uri(config.live() ? URI.create(config.liveWsUrl()) : URI.create("ws://127.0.0.1:" + handle.port()))
         .webSocketBuilder(tracker.wrap(ctx.httpClient()))
         .connectTimeout(config.connectTimeoutMillis())
         .pingDelay(config.pingDelayMillis())
@@ -1071,6 +1077,15 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
     if (websocket == null) {
       return false;
     }
+    if (config.live() && channel == SubscriptionPlan.Channel.GENERIC) {
+      // The generic channel exercises sava's caller-defined subscribe API against the local peer's
+      // synthetic `transactionSubscribe`. A real node has no such method — public devnet answered
+      // every one with a request-defect code and the engine released it, measured 2026-09-23 —
+      // and Helius's own method of that name takes a different parameter shape. Neither says
+      // anything about sava, so a live plan skips the step and counts it.
+      counters.increment(LIVE_GENERIC_SKIPPED);
+      return false;
+    }
     if (handle.liveRegistrations() >= config.wsSubscriptions()) {
       counters.increment(SUBSCRIBE_AT_CAP);
       return false;
@@ -1196,7 +1211,10 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
                                               final EngineHandle.Registration registration) {
     return subscription -> {
       // Fires after every successful send, including each replay, so this is also where a replayed
-      // registration re-announces the message id the peer log will name.
+      // registration re-announces the message id the peer log will name. The subscription object
+      // is kept too: its `subId()` is the engine's own record of a grant, which is what a live run
+      // (no peer log) reads to say whether the registration is confirmed.
+      registration.subscription = subscription;
       handle.bindMsgId(subscription.msgId(), registration);
       subscriptionEvent("SEND_OBSERVED", handle, registration, -1L, subscription.msgId());
     };
@@ -1330,6 +1348,14 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
       }
     }
 
+    if (!peerOracleAvailable) {
+      // W1-E is peer-established: the sequence is what the controlled peer stamps on every
+      // notification. A real node stamps nothing, and the field the consumers read there is the
+      // slot, which no account changes on every one of — measured 2026-09-23 on public devnet,
+      // where the "sequence" oracle failed 7,188 of 18,672 notifications for gaps that were
+      // simply slots the account did not change in. Not evaluated, as the ledger states.
+      return;
+    }
     final long epoch = handle.currentEpoch();
     final var result = ctx.sequences().observe(handle.profile().oracleIndex(),
         registration.oracleSlot, registration.oracleEpoch(epoch), sequence);

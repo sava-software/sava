@@ -138,7 +138,12 @@ harness reaches somebody else's node (decided 2026-09-23): the `X-Soak-Call` non
 `X-Soak-Probe` marker exist for the local peer's log and fault schedule, so a live run sends
 neither, and the extended subject passes through `extendRequest` with an identity operator so
 that seam stays exercised. Every peer-established (grade C) property is `NOT_EVALUATED` with
-that reason stated, because nobody else's node is an oracle.
+that reason stated, because nobody else's node is an oracle. Two more things a live run does
+differently: the plan's generic channel (sava's caller-defined subscribe API, exercised against
+the local peer's synthetic `transactionSubscribe`) is skipped and counted
+(`ws.harness.liveGenericSkipped`), because a real node has no such method; and
+`pending_confirm` reads the engine's own grants (`Subscription.subId()`) rather than the peer
+log it does not have.
 
 ```sh
 SOAK_LIVE_HTTP_URL=... SOAK_LIVE_WS_URL=... SOAK_LIVE_CLUSTER=devnet \

@@ -219,8 +219,15 @@ public final class Main {
     final var keys = new ArrayList<>(SoakConfig.defaults(config.profile()).keySet());
     for (int i = 0; i < keys.size(); ++i) {
       final var key = keys.get(i);
+      // A live endpoint carries its credential in the URL. Measured 2026-09-23: the first Helius
+      // run wrote the key into this file and into run.env, verbatim. Endpoints are recorded as
+      // scheme://host and every other value through the same redaction the reports use.
+      final var value = resolved.getOrDefault(key, "");
+      final var recorded = key.equals(SoakConfig.LIVE_HTTP_URL) || key.equals(SoakConfig.LIVE_WS_URL)
+          ? (value.isBlank() ? value : Redaction.endpoint(value))
+          : Redaction.text(value);
       json.append("    \"").append(key).append("\": \"")
-          .append(RunIdentity.escapeJson(resolved.getOrDefault(key, ""))).append('"')
+          .append(RunIdentity.escapeJson(recorded)).append('"')
           .append(i + 1 < keys.size() ? ",\n" : "\n");
     }
     json.append("  }\n}\n");

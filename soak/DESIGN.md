@@ -187,6 +187,20 @@ SOAK_LIVE_CONFIRM (must equal "mainnet" for mainnet), SOAK_LIVE_RPS, SOAK_LIVE_C
 SOAK_LIVE_ACCOUNTS (file of base58 keys)   all REQUIRED when SOAK_LIVE=1, no defaults
 ```
 
+A live endpoint carries its credential in the URL, so the two URL keys are the one place the
+record and the run differ: the JVMs take the real URLs from the process environment (which
+`soak.sh` exports and `SoakConfig` overlays on `run.env`), while `run.env`, `run-client.json`
+and `SoakConfig.toRunEnv()` keep `scheme://host` only, the shape `Redaction.endpoint` gives the
+reports. Measured 2026-09-23: the first Helius run wrote the key into both files verbatim while
+every report, log and recording was clean. A live run whose artifacts (text files and the
+recordings) carry a URL credential is INVALID (`assert_no_secret_leak` in `soak.sh`), never a
+note. The same runs settled three more live rules: every websocket engine dials
+`SOAK_LIVE_WS_URL` (the port that keys peer-row joins is the profile's index); `W1-E` is not
+evaluated, because the sequence it judges is the controlled peer's stamp and a real node's
+field there is the slot; the plan's generic channel (`transactionSubscribe`, a method no real
+node has) is skipped and counted; and `pending_confirm` reads the engine's own grants
+(`Subscription.subId()`). No `X-Soak-*` header is sent.
+
 Peer-side knobs (read by PeerMain from the same file): `SOAK_PEER_HTTP_THREADS` 16,
 `SOAK_BLOCK_TXS` 400 (large 4000), `SOAK_PGA_ACCOUNTS` 500 (large 20000), `SOAK_BURST_FRAMES`
 256, `SOAK_BURST_PERIOD_SECONDS` 120, `SOAK_LARGE_PERIOD_SECONDS` 300, `SOAK_LARGE_BYTES`
@@ -1460,7 +1474,14 @@ untouched-again zero pages, resident size drops (measured 678 → 411 MiB inside
 216 MiB on another row) and the climb back as the heap is used fits as growth while NMT's
 committed total is flat. The runner therefore judges the RSS slope only when no sample fell more
 than the noise floor below the run's first, pre-touched sample; otherwise the slope is a note and
-the native-memory and heap-floor slopes carry the retention verdict.
+the native-memory and heap-floor slopes carry the retention verdict. Two more rules, both from
+the first live runs (2026-09-23): the slope is fitted over STEADY only — quiesce, drain and the
+final dump (a full collection with path-to-gc-roots, the NMT and thread dumps) come after it, and
+a +58 MiB step there turned a flat 26-minute window into 97 MiB/h — and a rise that NMT
+attributes to the code cache plus metaspace over the same window is a note, not a verdict: JIT
+compilation and class loading are bounded and are not the subject retaining anything, and a
+first run over TLS compiles code no local run ever touches (22 MiB of code cache in 30 minutes).
+Whatever remains above the floor is still a FAIL, with both numbers in the reason.
 
 `controls.tsv` (`id	kind	expected	property	overrides	metric	mechanism`): D1–D14, F1–F8,
 I1-sync, I1-forced, I1-natural, I1-jdk25, I2, I3 as described in `README.md`. The two asserting

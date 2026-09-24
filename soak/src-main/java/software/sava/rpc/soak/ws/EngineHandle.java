@@ -1,5 +1,6 @@
 package software.sava.rpc.soak.ws;
 
+import software.sava.rpc.json.http.ws.Subscription;
 import software.sava.rpc.json.http.ws.SolanaRpcWebsocket;
 import software.sava.rpc.soak.Seeds;
 import software.sava.rpc.soak.issue52.AttemptTracker;
@@ -49,6 +50,8 @@ final class EngineHandle {
     final long generation;
     volatile long msgId = -1L;
     volatile long confirmedEpoch = -1L;
+    /// The engine's own subscription object, from the send callback; its `subId()` is the grant.
+    volatile Subscription<?> subscription;
     volatile long lastDeliveryMillis = -1L;
     volatile boolean unsubscribed;
     /// Set when the server answered this registration's subscribe with a code that blames the
@@ -100,6 +103,7 @@ final class EngineHandle {
   private final String name;
   private final int port;
   private final AttemptTracker tracker;
+  private final boolean liveConfirmations;
   private final ConcurrentHashMap<String, Registration> registrations;
   private final Map<Long, Registration> byMsgId;
   private final AtomicLong msgIdOverflow;
@@ -118,11 +122,15 @@ final class EngineHandle {
   private volatile long lastMessageTimestamp;
   private volatile boolean closedByHarness;
 
-  EngineHandle(final EngineProfile profile, final int port, final AttemptTracker tracker) {
+  /// `liveConfirmations`: a live run has no peer log to establish a confirmation from, so
+  /// [#pendingConfirmations()] reads the engine's own grant (`Subscription.subId()`) instead.
+  EngineHandle(final EngineProfile profile, final int port, final AttemptTracker tracker,
+               final boolean liveConfirmations) {
     this.profile = profile;
     this.name = profile.engineName();
     this.port = port;
     this.tracker = tracker;
+    this.liveConfirmations = liveConfirmations;
     this.registrations = new ConcurrentHashMap<>(256);
     this.byMsgId = java.util.Collections.synchronizedMap(new LinkedHashMap<>(512, 0.75f, false) {
       @Override
@@ -285,7 +293,10 @@ final class EngineHandle {
     final long epoch = currentEpoch;
     long pending = 0;
     for (final var registration : registrations.values()) {
-      if (!registration.unsubscribed && registration.confirmedEpoch != epoch) {
+      final boolean confirmed = liveConfirmations
+          ? registration.subscription != null && registration.subscription.subId() != null
+          : registration.confirmedEpoch == epoch;
+      if (!registration.unsubscribed && !confirmed) {
         ++pending;
       }
     }

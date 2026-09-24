@@ -468,11 +468,37 @@ write_run_env() {
       printf '%s=%s\n' "$key" "${!key}"
     done
     if [ "${SOAK_LIVE}" = 1 ]; then
+      # A live endpoint carries its credential in the URL, and this file is an artifact people
+      # attach to issues. Measured 2026-09-23: the first Helius run recorded the key here
+      # verbatim. The two JVMs take the real URLs from the process environment, which soak.sh
+      # exports and SoakConfig overlays on this file, so the record keeps scheme://host only.
       for key in "${LIVE_KEYS[@]}"; do
-        [ -z "${!key:-}" ] || printf '%s=%s\n' "$key" "${!key}"
+        [ -n "${!key:-}" ] || continue
+        case "$key" in
+          SOAK_LIVE_HTTP_URL|SOAK_LIVE_WS_URL) printf '%s=%s\n' "$key" "$(redact_endpoint "${!key}")" ;;
+          *) printf '%s=%s\n' "$key" "${!key}" ;;
+        esac
       done
     fi
   } > "$file"
+}
+
+# redact_endpoint <url>: scheme://host[:port], dropping userinfo, path, query and fragment - the
+# same shape Redaction.endpoint gives the reports, so no artifact holds a URL credential.
+redact_endpoint() {
+  printf '%s' "$1" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://)([^@/?\#]*@)?([^/?\#]*).*#\1\3#'
+}
+
+# assert_no_secret_leak <run-dir>: a live run's artifacts must not carry a URL credential. Every
+# text file and the recordings are scanned for the shapes a provider key takes in a URL; a hit
+# is an INVALID run (the redaction that should have caught it is the subject of Main's start-up
+# self-test), never a note.
+assert_no_secret_leak() {
+  local dir=$1 hits
+  hits=$(grep -rIl -E '(api[-_]?key|apikey|token|secret|password)=[A-Za-z0-9._-]{8,}' "$dir" 2>/dev/null | grep -v -E '/(rss|nmt|client)\.csv$' | head -n 5)
+  [ -n "$hits" ] || hits=$(grep -l -a -E '(api[-_]?key|apikey)=[A-Za-z0-9._-]{8,}' "$dir"/jfr/*.jfr 2>/dev/null | head -n 3)
+  [ -z "$hits" ] || { printf 'a live artifact carries a URL credential: %s\n' "$(printf '%s' "$hits" | tr '\n' ' ')"; return 1; }
+  return 0
 }
 
 # ---------------------------------------------------------------------------- launch lines
@@ -1045,6 +1071,31 @@ is_decimal() { case "$1" in ''|.|-|*[!0-9.-]*) return 1 ;; *) return 0 ;; esac; 
 is_exit_code() { case "$1" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 gt() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 > b + 0) }'; }
 
+# jit_explains_rss <rss-csv> <skip-seconds> <floor>: whether the resident-size rise over the judged
+# window is accounted for by code-cache plus metaspace growth over the same window, read from
+# nmt.csv (NMT's own attribution). JIT compilation and class loading are bounded and are not the
+# subject retaining anything: measured on the first live run, the TLS and HTTP code that no local
+# run compiles grew the code cache 22 MiB in 30 minutes, the whole of the window's rise. Sets
+# RSS_RISE_KIB and RSS_JIT_KIB; true when the remainder is within the floor. NMT samples are
+# sparse, so the ones within a minute of the window's edges bound it; fewer than two is "not
+# explained", never "explained".
+jit_explains_rss() {
+  local rss_file=$1 skip=$2 floor=$3 t_first t_last
+  read -r t_first t_last RSS_RISE_KIB <<< "$(awk -F, -v skip="$skip" '
+    /^[0-9]/ { n++; if (n == 1) t0 = $1; if ($1 - t0 < skip) next; if (tf == "") { tf = $1; first = $2 } tl = $1; last = $2 }
+    END { if (tf == "") print "0 0 0"; else printf "%d %d %d\n", tf, tl, last - first }' "$rss_file")"
+  RSS_JIT_KIB=0
+  [ "${t_first:-0}" -gt 0 ] || return 1
+  RSS_JIT_KIB=$(awk -F, -v tf="$t_first" -v tl="$t_last" '
+    NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; next }
+    /^[0-9]/ { t = $1; if (t < tf - 60 || t > tl + 60) next
+               v = $(col["code_committed_kb"]) + $(col["metaspace_committed_kb"]); if (a == "") a = v; b = v; n++ }
+    END { if (n < 2) print -1; else printf "%d", b - a }' "$RUN_DIR/nmt.csv" 2>/dev/null)
+  is_number "${RSS_JIT_KIB:-x}" || RSS_JIT_KIB=-1
+  [ "$RSS_JIT_KIB" -ge 0 ] || { RSS_JIT_KIB=0; return 1; }
+  [ $((RSS_RISE_KIB - RSS_JIT_KIB)) -le "$floor" ]
+}
+
 # slope_fit <csv> <time-col> <value-col> <skip-seconds> <limit> <floor>: least squares over the
 # samples more than the warm-up window past the first, printed as 'n fit_n first last slope
 # window applied'. The window dropped is max(<skip-seconds>, 60, span/10) - the same rule the
@@ -1271,6 +1322,11 @@ compute_verdict() {
     # Only a campaign is invalidated by stale controls. A pilot is exploratory; an eight-hour
     # campaign is evidence, and evidence produced by an oracle nobody re-checked after the
     # subject changed is not evidence.
+    if [ "$SOAK_PROFILE" = live ]; then
+      # The artifacts of a run against somebody else's node must not carry that node's credential.
+      local leak
+      leak=$(assert_no_secret_leak "$RUN_DIR") || INVALIDS="$INVALIDS; $leak"
+    fi
     if [ "$SOAK_PROFILE" = campaign ]; then
       local controls_stale; controls_stale=$(stale_controls)
       [ -z "$controls_stale" ] || INVALIDS="$INVALIDS; $controls_stale"
@@ -1412,9 +1468,21 @@ compute_verdict() {
         NOTES="$NOTES; $D_INFLIGHT request(s) still inside their own deadline at DRAIN end"
     fi
 
+    # Judged over STEADY only. Quiesce, drain and the final dump - a full collection with
+    # path-to-gc-roots, the NMT and thread dumps - come after it and are not the subject's steady
+    # state: measured on a live run, a +58 MiB step in the last six minutes turned a flat
+    # 26-minute window into 97 MiB/h. The heap-floor gate already stops at the STEADY boundary.
+    local rss_steady steady_end
+    rss_steady=$RUN_DIR/rss-steady.csv
+    steady_end=$(awk -F'\t' '$2 == "QUIESCE" { print int($1 / 1000); exit }' "$RUN_DIR/phases.tsv" 2>/dev/null)
+    if is_number "$steady_end"; then
+      awk -F, -v end="$steady_end" '/^[0-9]/ && $1 <= end' "$RUN_DIR/rss.csv" > "$rss_steady"
+    else
+      cp "$RUN_DIR/rss.csv" "$rss_steady"
+    fi
     # shellcheck disable=SC2034  # RSS_N is read positionally
     read -r RSS_N RSS_FIT_N RSS_FIRST RSS_LAST RSS_SLOPE RSS_WINDOW RSS_LIMIT \
-      <<< "$(slope_fit "$RUN_DIR/rss.csv" 1 2 "$SOAK_WARMUP_SECONDS" "$SOAK_RSS_SLOPE_KIB_PER_HOUR" "$SOAK_RSS_NOISE_FLOOR_KIB")"
+      <<< "$(slope_fit "$rss_steady" 1 2 "$SOAK_WARMUP_SECONDS" "$SOAK_RSS_SLOPE_KIB_PER_HOUR" "$SOAK_RSS_NOISE_FLOOR_KIB")"
     # Resident size is not monotone under memory pressure: macOS compresses idle pages (a
     # pre-touched heap's zero pages first) and a JVM that then uses them reads as growth. A window
     # whose resident size fell below its first post-warm-up sample by more than the noise floor
@@ -1427,13 +1495,18 @@ compute_verdict() {
     # more than the floor above that first sample has grown nothing the OS did not first take.
     RSS_RECLAIM=$(awk -F, -v skip="$SOAK_WARMUP_SECONDS" -v floor="$SOAK_RSS_NOISE_FLOOR_KIB" '
       /^[0-9]/ { n++; if (n == 1) { t0 = $1; first = $2 } if ($1 - t0 < skip) next; if (min == "" || $2 < min) min = $2; last = $2 }
-      END { if (first == "" || min == "") { print 0 } else if (first - min > floor) { printf "%d", first - min } else { print 0 } }' "$RUN_DIR/rss.csv")
+      END { if (first == "" || min == "") { print 0 } else if (first - min > floor) { printf "%d", first - min } else { print 0 } }' "$rss_steady")
     if [ "$RSS_SLOPE" = n/a ]; then
       NOTES="$NOTES; the RSS slope was not measured ($RSS_FIT_N sample(s) after the ${SOAK_WARMUP_SECONDS}s warm-up, three are needed)"
     elif [ "${RSS_RECLAIM:-0}" -gt 0 ]; then
       NOTES="$NOTES; the RSS slope ($RSS_SLOPE KiB/h) is not judged: resident size fell $RSS_RECLAIM KiB below the run's first (pre-touched) sample, which is the OS compressing pages rather than the JVM releasing them, and a climb back from there is not growth"
+    elif gt "$RSS_SLOPE" "$RSS_LIMIT" && jit_explains_rss "$rss_steady" "$SOAK_WARMUP_SECONDS" "$SOAK_RSS_NOISE_FLOOR_KIB"; then
+      NOTES="$NOTES; the RSS slope ($RSS_SLOPE KiB/h) is not judged: resident size rose $RSS_RISE_KIB KiB over STEADY, of which the code cache and metaspace account for $RSS_JIT_KIB KiB (JIT compilation and class loading, bounded and not the subject's retention), and the remainder is within the $SOAK_RSS_NOISE_FLOOR_KIB KiB floor"
     elif gt "$RSS_SLOPE" "$RSS_LIMIT"; then
       REASONS="$REASONS; RSS slope $RSS_SLOPE KiB/h exceeds $RSS_LIMIT KiB/h over the ${RSS_WINDOW}s after warm-up"
+      jit_explains_rss "$rss_steady" "$SOAK_WARMUP_SECONDS" "$SOAK_RSS_NOISE_FLOOR_KIB" || true
+      [ "${RSS_JIT_KIB:-0}" -le 0 ] ||
+        REASONS="$REASONS (of the $RSS_RISE_KIB KiB rise, code cache and metaspace account for $RSS_JIT_KIB KiB)"
     fi
     read -r NMT_FIT_N NMT_SLOPE NMT_WINDOW NMT_LIMIT NMT_BASE_G NMT_FINAL_G \
       <<< "$(nmt_slope "$SOAK_WARMUP_SECONDS" "$SOAK_RSS_SLOPE_KIB_PER_HOUR" "$SOAK_RSS_NOISE_FLOOR_KIB")"

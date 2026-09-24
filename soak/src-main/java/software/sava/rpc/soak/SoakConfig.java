@@ -469,7 +469,13 @@ public final class SoakConfig {
   public String toRunEnv() {
     final var out = new StringBuilder(2048);
     for (final var entry : resolved.entrySet()) {
-      out.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');
+      // A live endpoint carries its credential in the URL; the record keeps scheme://host.
+      final var key = entry.getKey();
+      final var value = entry.getValue();
+      final var recorded = (key.equals(LIVE_HTTP_URL) || key.equals(LIVE_WS_URL)) && !value.isBlank()
+          ? Redaction.endpoint(value)
+          : value;
+      out.append(key).append('=').append(recorded).append('\n');
     }
     return out.toString();
   }
