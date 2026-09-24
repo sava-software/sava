@@ -4,8 +4,10 @@ import com.sun.management.UnixOperatingSystemMXBean;
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.client.SolanaRpcClient;
 import software.sava.rpc.json.http.request.Commitment;
+import software.sava.rpc.json.http.response.AccountInfo;
 import software.sava.rpc.json.http.response.JsonRpcException;
 import software.sava.rpc.json.http.ws.SolanaRpcWebsocket;
+import software.sava.rpc.json.http.ws.Subscription;
 import software.sava.rpc.soak.Counters;
 import software.sava.rpc.soak.GaugeSampler;
 import software.sava.rpc.soak.Phase;
@@ -35,7 +37,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.BooleanSupplier;
 
 /// Construction and shutdown churn: does the library give back what it took?
 ///
@@ -62,9 +66,14 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
   static final long CONNECT_BOUND_MILLIS = 10_000L;
 
   /// How long one cycle waits for one notification per accepted registration — on a live run,
-  /// for the node's confirmation of each, since the supplied accounts need not move inside any
-  /// bound (a cycle drawn from a list's static entries, programs and mints, never would).
+  /// for the node's grant of each, since the supplied accounts need not move inside any bound (a
+  /// cycle drawn from a list's static entries, programs and mints, never would).
   static final long NOTIFY_BOUND_MILLIS = 10_000L;
+
+  /// The period at which a live cycle re-reads its grants. The grant is set by the engine on the
+  /// confirmation frame and has no callback of its own, so it is polled, coarsely, inside the
+  /// bound above.
+  static final long GRANT_POLL_MILLIS = 50L;
 
   /// The settle window after `close()` before the thread count is read. `close()` sends a polite
   /// close frame and aborts a few seconds later, so reading the count immediately would be reading
@@ -89,6 +98,7 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
   private static final String ENGINE_CYCLE_FAILED_CONFIRM = "churn.engine.cycleFailed.confirm";
   private static final String ENGINE_CYCLE_FAILED_SUBSCRIBE = "churn.engine.cycleFailed.subscribe";
   private static final String ENGINE_SUBSCRIBE_REFUSED = "churn.engine.subscribeRefused";
+  private static final String ENGINE_CYCLE_STOPPED = "churn.engine.cycleStopped";
   private static final String ENGINE_CYCLE_FAILED_ENGINE_ERROR = "churn.engine.cycleFailed.engineError";
   private static final String ENGINE_CYCLE_FAILED_EXCEPTION = "churn.engine.cycleFailed.exception";
   private static final String CLIENT_CYCLE_FAILED_REQUEST = "churn.client.cycleFailed.request";
@@ -201,7 +211,12 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
     // a notification can arrive before `accountSubscribe` returns.
     final var keys = cycleKeys(ctx.keyTable(), counters.get(Counters.CHURN_ENGINE_CYCLES));
     final var notified = new CountDownLatch(keys.length);
-    final var confirmed = new CountDownLatch(keys.length);
+    // The engine's own handle per registration, from `onSub`. That callback is not the grant: it
+    // fires after each successful *send*, before the confirmation and again on every re-send
+    // (its javadoc), so counting it as one let a node that never answered open the latch
+    // (review). The grant is the handle's `subId()`, which only a confirmation frame sets.
+    final var handles = new AtomicReferenceArray<Subscription<AccountInfo<byte[]>>>(keys.length);
+    final var sent = new boolean[keys.length];
     boolean confirmedOpen = false;
     int accepted = 0;
     try {
@@ -226,24 +241,25 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
         counters.increment(ENGINE_CYCLE_FAILED_CONNECT);
       }
 
-      for (final var key : keys) {
+      for (int i = 0; i < keys.length; ++i) {
+        final int slot = i;
         final var once = new AtomicBoolean();
-        final boolean sent = websocket.accountSubscribe(Commitment.CONFIRMED, key,
-            subscription -> confirmed.countDown(),
+        sent[i] = websocket.accountSubscribe(Commitment.CONFIRMED, keys[i],
+            subscription -> handles.set(slot, subscription),
             accountInfo -> {
               if (once.compareAndSet(false, true)) {
                 notified.countDown();
               }
             });
-        if (sent) {
+        if (sent[i]) {
           ++accepted;
           liveRegistrations.incrementAndGet();
         } else {
           // The engine's own refusal — a `(commitment, key)` it already holds, or an engine
-          // already closed — returns false rather than throwing. Counted, and released from both
-          // latches: a cycle cannot wait on a registration that does not exist (review).
+          // already closed — returns false rather than throwing. Counted, released from the
+          // notify latch and skipped by the live grant wait: a cycle cannot wait on a
+          // registration that does not exist (review).
           counters.increment(ENGINE_SUBSCRIBE_REFUSED);
-          confirmed.countDown();
           notified.countDown();
         }
       }
@@ -251,15 +267,22 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
         counters.increment(ENGINE_CYCLE_FAILED);
         counters.increment(ENGINE_CYCLE_FAILED_SUBSCRIBE);
       } else if (ctx.live()) {
-        // A real node confirms every grant but moves only the accounts the runtime or a
+        // A real node grants every registration but moves only the accounts the runtime or a
         // transaction writes to, so the live cycle's evidence that the engine registered is the
-        // node's confirmation of each accepted registration, not a notification the account may
-        // never produce. Every cycle of the first live runs "failed" the notification latch —
-        // over a seeded table the driver had not yet swapped for the supplied accounts — and a
-        // cycle drawn from a supplied list's programs and mints would fail it the same way.
-        if (!confirmed.await(NOTIFY_BOUND_MILLIS, TimeUnit.MILLISECONDS)) {
-          counters.increment(ENGINE_CYCLE_FAILED);
-          counters.increment(ENGINE_CYCLE_FAILED_CONFIRM);
+        // node's grant of each accepted registration, not a notification the account may never
+        // produce. Every cycle of the first live runs "failed" the notification latch — over a
+        // seeded table the driver had not yet swapped for the supplied accounts — and a cycle
+        // drawn from a supplied list's programs and mints would fail it the same way.
+        switch (awaitGrants(handles, sent, NOTIFY_BOUND_MILLIS, running::get)) {
+          case GRANTED -> {
+          }
+          case ELAPSED -> {
+            counters.increment(ENGINE_CYCLE_FAILED);
+            counters.increment(ENGINE_CYCLE_FAILED_CONFIRM);
+          }
+          // The workload is quiescing: a wait cut short by the run ending is not a cycle failure,
+          // and holding the full bound here would outlive quiesce's join budget (review).
+          case STOPPED -> counters.increment(ENGINE_CYCLE_STOPPED);
         }
       } else if (!notified.await(NOTIFY_BOUND_MILLIS, TimeUnit.MILLISECONDS)) {
         counters.increment(ENGINE_CYCLE_FAILED);
@@ -291,6 +314,53 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
       keys.add(table[(start + i) % table.length]);
     }
     return keys.toArray(PublicKey[]::new);
+  }
+
+  /// How a live cycle's grant wait ended.
+  public enum Grant {
+    /// Every accepted registration holds a grant.
+    GRANTED,
+    /// The bound elapsed with at least one accepted registration ungranted: the cycle failure.
+    ELAPSED,
+    /// `keepWaiting` turned false first — the workload is quiescing — which is not a cycle failure.
+    STOPPED
+  }
+
+  /// Waits, inside `boundMillis`, for the node's grant (`Subscription.subId()` non-null) of
+  /// every registration the engine accepted; a slot the engine refused is not waited on. Polled
+  /// every [#GRANT_POLL_MILLIS], because the grant has no callback: `onSub` reports the send.
+  /// Each poll also reads `keepWaiting`, so a run that ends mid-wait releases the cycle at once
+  /// instead of holding the bound past quiesce's join budget.
+  ///
+  /// @throws InterruptedException when the cycle thread is interrupted while waiting; checked
+  ///         before the deadline, so the flag never leaks out under an [Grant#ELAPSED] result
+  public static Grant awaitGrants(final AtomicReferenceArray<? extends Subscription<?>> handles,
+                                  final boolean[] sent,
+                                  final long boundMillis,
+                                  final BooleanSupplier keepWaiting) throws InterruptedException {
+    final long deadline = System.nanoTime() + boundMillis * 1_000_000L;
+    while (true) {
+      boolean granted = true;
+      for (int i = 0; i < sent.length && granted; ++i) {
+        if (sent[i]) {
+          final var handle = handles.get(i);
+          granted = handle != null && handle.subId() != null;
+        }
+      }
+      if (granted) {
+        return Grant.GRANTED;
+      }
+      if (Thread.interrupted()) {
+        throw new InterruptedException("interrupted while waiting for subscription grants");
+      }
+      if (!keepWaiting.getAsBoolean()) {
+        return Grant.STOPPED;
+      }
+      if (System.nanoTime() - deadline >= 0L) {
+        return Grant.ELAPSED;
+      }
+      LockSupport.parkNanos(GRANT_POLL_MILLIS * 1_000_000L);
+    }
   }
 
   /// W5-A. The thread margin is the public half — no reflection, no add-opens — and the

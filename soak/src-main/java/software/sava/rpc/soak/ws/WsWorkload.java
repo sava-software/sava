@@ -1375,10 +1375,19 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
     }
 
     if (notifiedKey != null) {
-      // W1-J: only the program channels carry a pubkey, and the peer writes the key the
-      // subscription was granted for. The expectation is the key the harness asked for, which is
-      // independent of anything the notification says about itself.
+      // W1-J's antecedent: only the program channels carry a pubkey. Counted on every profile —
+      // the field feeds the peer-run skip reason, the counter is the artefact a live run keeps.
       programNotifications.incrementAndGet();
+      counters.increment(Counters.WS_NOTIFICATIONS_PROGRAM);
+    }
+    if (notifiedKey != null && peerOracleAvailable) {
+      // W1-J: the controlled peer writes the key the subscription was granted for, and the
+      // expectation is the key the harness asked for, independent of anything the notification
+      // says about itself. Peer-established, like W2-A above: a real node writes the *changed
+      // account's* address in `value.pubkey`, never the program's, so on a live run the comparison
+      // would fail every program notification (the reviewer's probe through this method with a
+      // real notification's shape did; no live run judged it, the gate landed with the fix). A
+      // live run states W1-J as not evaluated (`stateUnexercised`).
       final var expected = expectedProgramKey(registration);
       if (expected == null) {
         // The registration's own program key cannot be recovered, so there is nothing to compare

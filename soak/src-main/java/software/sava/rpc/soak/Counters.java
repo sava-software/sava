@@ -34,6 +34,8 @@ public final class Counters {
   public static final String WS_SEQUENCE_REORDER = "ws.notifications.sequence.reorder";
   public static final String WS_NOTIFICATIONS_ZOMBIE = "ws.notifications.zombie";
   public static final String WS_NOTIFICATIONS_UNKNOWN_SUB = "ws.notifications.unknownSub";
+  /// Program and keyed-program deliveries: W1-J's antecedent, kept on every profile.
+  public static final String WS_NOTIFICATIONS_PROGRAM = "ws.notifications.program";
   public static final String WS_CONSUMER_THREW = "ws.consumer.threw";
   public static final String WS_CONSUMER_THREW_UNEXPECTED = "ws.consumer.threw.unexpected";
   public static final String WS_SUBSCRIBE_REQUESTED = "ws.subscribe.requested";
@@ -193,7 +195,8 @@ public final class Counters {
 
   private static final List<String> FIXED_COUNTERS = List.of(
       WS_NOTIFICATIONS_DELIVERED, WS_SEQUENCE_OK, WS_SEQUENCE_GAP, WS_SEQUENCE_DUP, WS_SEQUENCE_REORDER,
-      WS_NOTIFICATIONS_ZOMBIE, WS_NOTIFICATIONS_UNKNOWN_SUB, WS_CONSUMER_THREW, WS_CONSUMER_THREW_UNEXPECTED,
+      WS_NOTIFICATIONS_ZOMBIE, WS_NOTIFICATIONS_UNKNOWN_SUB, WS_NOTIFICATIONS_PROGRAM,
+      WS_CONSUMER_THREW, WS_CONSUMER_THREW_UNEXPECTED,
       WS_SUBSCRIBE_REQUESTED, WS_SUBSCRIBE_CONFIRMED, WS_SUBSCRIBE_REPLAYED, WS_SUBSCRIBE_REFUSED,
       WS_UNSUBSCRIBE_REQUESTED, WS_UNSUBSCRIBE_ACKED, WS_UNSUBSCRIBE_REFUSED,
       WS_EPOCH_OPENED, WS_EPOCH_RETIRED, WS_RETIREMENT_EXPECTED, WS_RETIREMENT_UNEXPLAINED,

@@ -2,7 +2,9 @@ package software.sava.rpc.soak.selftest;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.request.Commitment;
+import software.sava.rpc.json.http.ws.Channel;
 import software.sava.rpc.json.http.ws.SolanaRpcWebsocket;
+import software.sava.rpc.json.http.ws.Subscription;
 import software.sava.rpc.soak.Seeds;
 import software.sava.rpc.soak.churn.ChurnWorkload;
 import software.sava.rpc.soak.issue52.AttemptTracker;
@@ -27,6 +29,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.math.BigInteger;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -46,6 +49,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -94,6 +98,7 @@ public final class SelfTest {
     });
     all &= run("SEEDS", SelfTest::seedsLivePopulation);
     all &= run("CHURNKEYS", SelfTest::churnCycleKeys);
+    all &= run("CHURNGRANT", SelfTest::churnGrantWait);
     all &= run("P1", SelfTest::p1JdkClose);
     all &= run("P2", SelfTest::p2JdkError);
     all &= run("P3", SelfTest::p3MaxMessageOverflow);
@@ -200,6 +205,37 @@ public final class SelfTest {
     checkEquals(4, five.length, "five-account population still registers four distinct keys");
     checkEquals(4, new HashSet<>(List.of(five)).size(), "five-account cycle keys are distinct");
     return "distinct keys per cycle: 4 seeded, 2 of 2, 4 of 5 across the table's wrap";
+  }
+
+  /// A live churn cycle waits for the grant (`subId()`), not for the send callback: handles with
+  /// no grant hold the wait to its bound, a refused slot is not waited on, and the grant releases it.
+  private static String churnGrantWait() throws InterruptedException {
+    final var handles = new AtomicReferenceArray<Subscription<String>>(3);
+    for (int i = 0; i < 3; ++i) {
+      handles.set(i, Subscription.<String>createSubscription(Commitment.CONFIRMED, Channel.account,
+          "key" + i, i + 1L, "{}", null, _ -> {
+          }));
+    }
+    final boolean[] sent = {true, true, false};
+    final long before = System.nanoTime();
+    checkEquals(ChurnWorkload.Grant.ELAPSED, ChurnWorkload.awaitGrants(handles, sent, 200L, () -> true),
+        "ungranted handles");
+    final long waitedMillis = (System.nanoTime() - before) / 1_000_000L;
+    check(waitedMillis >= 200L, "the wait returned before its bound: " + waitedMillis + " ms");
+    checkEquals(ChurnWorkload.Grant.STOPPED, ChurnWorkload.awaitGrants(handles, sent, 10_000L, () -> false),
+        "a stopped workload");
+    handles.get(0).setSubId(BigInteger.ONE);
+    checkEquals(ChurnWorkload.Grant.ELAPSED, ChurnWorkload.awaitGrants(handles, sent, 100L, () -> true),
+        "one grant of two");
+    handles.get(1).setSubId(BigInteger.TWO);
+    checkEquals(ChurnWorkload.Grant.GRANTED, ChurnWorkload.awaitGrants(handles, sent, 100L, () -> true),
+        "two grants of two");
+    checkEquals(ChurnWorkload.Grant.GRANTED, ChurnWorkload.awaitGrants(handles, sent, 100L, () -> false),
+        "grants already held when the workload stops");
+    final var pending = new AtomicReferenceArray<Subscription<String>>(1);
+    checkEquals(ChurnWorkload.Grant.ELAPSED, ChurnWorkload.awaitGrants(pending, new boolean[]{true}, 100L, () -> true),
+        "a registration whose send callback never ran");
+    return "ungranted handles hold the bound (" + waitedMillis + " ms), stop releases, refused slot skipped, grants release";
   }
 
   static void check(final boolean condition, final String message) {

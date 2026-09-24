@@ -859,7 +859,13 @@ Oracle decisions the integration settled, each on evidence from a run:
 - **W1-J** asserts the program key the *peer granted*, forwarded by the engine into
   `AccountInfo.pubKey()`, and only on the two program channels. A plain account notification
   carries no `value.pubkey` at all — sava fills it from the registration — so asserting there
-  would compare the harness against its own request.
+  would compare the harness against its own request. Not evaluated on a live run: a real node
+  writes the changed account's address in `value.pubkey`, and the comparison is against the
+  controlled peer's echo of the granted key, so it is gated on the peer oracle like W2-A and
+  W1-E. Not measured on a live node — the gate landed with the fix — but the reviewer's probe
+  through `observe()` with a real notification's shape failed it, and the first live run whose
+  list held a program (the Token program beside the USDC mint) delivered its program channel
+  heavily (`ws.notifications.program`) with W1-J stated as not evaluated.
 - **W2-A** is checked against the notification the bytes arrived in (payload sequence header and
   `value.space`), not only against the payload's own checksum; see §7. It is a peer-established
   check — the checksum is the controlled peer's — so it is gated on the peer oracle and stated as
@@ -983,13 +989,16 @@ rpc.gzip.ok / .badGzipClean / .truncatedClean / .identityServed
                                      identityServed: gzip-client answers the peer's rotation served with no
                                      encoding; whole, but no W3-C pass
 http.twin.identityServed             W3-C twins whose gzip half was identity-served: no verdict either way
-churn.engine.cycles / churn.client.cycles / churn.engine.cycleFailed{,.connect,.subscribe,.notify,.confirm,.engineError,.exception} / churn.engine.subscribeRefused / churn.client.cycleFailed{,.request,.exception}
+churn.engine.cycles / churn.client.cycles / churn.engine.cycleFailed{,.connect,.subscribe,.notify,.confirm,.engineError,.exception}
+churn.engine.subscribeRefused / churn.engine.cycleStopped / churn.client.cycleFailed{,.request,.exception}
                                      the churn ports sit under the fault schedule, so a failed cycle
                                      names its cause (a stalled handshake, a scheduled 503) beside the count;
                                      subscribe: the engine accepted none of the cycle's keys; notify (local) /
                                      confirm (live): the accepted registrations were not all notified /
-                                     confirmed inside the bound; subscribeRefused: keys the engine answered
-                                     false for, released from the latch rather than waited on
+                                     granted (`subId()`) inside the bound; subscribeRefused: keys the engine
+                                     answered false for — released from the notify latch on a local run, not
+                                     waited on for a grant on a live one; cycleStopped: a live grant wait cut
+                                     short by the workload stopping, which is not a cycle failure
 harness.opsSkipped.inflightCap / harness.opsSkipped.deadline / harness.opsAttempted / http.ops.attempted
                                      inflightCap: the HTTP driver drew its pace token and its worker's
                                      SOAK_HTTP_INFLIGHT permits were all still held; deadline: reserved,
@@ -1387,10 +1396,12 @@ committing thread).
   time; the sentinel is what makes the next occurrence attributable.
 - `ChurnWorkload`: W5a engine cycles every `SOAK_CHURN_PERIOD_SECONDS` (build, connect (10 s),
   up to 4 distinct registrations with the latch sized to the ones the engine accepted, one
-  notification each (10 s) — one confirmation each on a live run, where the supplied accounts need
-  not move — `close()`, 5 s quiesce, thread-count check,
-  `executorServiceShutdown()` via probes when available); W5b client cycles over the shared
-  `HttpClient` then one request on a new client.
+  notification each (10 s) — on a live run one *grant* each (`Subscription.subId()`, polled
+  inside the same bound and cut short if the workload stops, because `onSub` fires on the send
+  and a node that never answers would otherwise pass; review), since the supplied accounts need
+  not move — `close()`, 5 s quiesce, thread-count check, `executorServiceShutdown()` via probes
+  when available); W5b client cycles over the shared `HttpClient` then one request on a new
+  client.
 - `HarnessControls` (implements `Workload`, added first to the list) owns the client-side half of
   the defect sheet — D7–D11, D13 and D14 — leaving the peer D1–D6 and D12. D7 tombstones a registration
   in the harness's own registry a couple of seconds before its unsubscribe goes on the wire, so
