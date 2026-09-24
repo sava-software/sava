@@ -185,6 +185,11 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
   private static final String REPLAY_ROWS_LATE = "ws.harness.replayRowsLate";
   /// Plan steps on the generic channel a live run skipped: a real node has no synthetic method.
   private static final String LIVE_GENERIC_SKIPPED = "ws.harness.liveGenericSkipped";
+  /// The duplicate subscribes a SUBSCRIBE_DUPLICATE_PARAMS step handed the library directly, and
+  /// how many it accepted (the contract is none) or threw on.
+  private static final String DUPLICATE_OFFERED = "ws.plan.duplicateOffered";
+  private static final String DUPLICATE_ACCEPTED = "ws.plan.duplicateAccepted";
+  private static final String DUPLICATE_THREW = "ws.plan.duplicateThrew";
   /// `close()` reached the bare engine with no connection the peer could see closing.
   private static final String CLOSE_WITHOUT_LIVE_CONNECTION = "ws.harness.closeWithoutLiveConnection";
   /// A delivery to a registration the harness had tombstoned but whose unsubscribe it had not yet
@@ -927,6 +932,13 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
       }
       replay.settled = true;
     }
+    if (!peerOracleAvailable) {
+      // W1-A's evidence is the peer's own sub_req rows, and a live run has none: nothing ever
+      // clears the outstanding set, so the episode could only FAIL (or, once emptied by releases,
+      // falsely PASS). No verdict, counted with the other episodes that render none.
+      replayEpisodesWithoutVerdict.incrementAndGet();
+      return;
+    }
     pruneDead(handle, replay);
     if (replay.registrationsAtRetirement == 0 || replay.vacuous()) {
       // Nothing was owed, so the episode renders no W1-A verdict. Counted, because "no connection
@@ -1052,9 +1064,12 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
       case SUBSCRIBE_DUPLICATE_PARAMS -> {
         // Deliberately re-subscribes an identity the engine already holds. The engine is expected to
         // refuse it client side; the peer must therefore never see a second byte-identical request
-        // on that connection, which is the wire half of W1-B.
+        // on that connection, which is the wire half of W1-B. The second offer goes to the library
+        // directly: the harness's own registry refused the duplicate first, so the library never
+        // saw one and the step could not have caught a regression (measured in review against a
+        // fake subject that accepted every duplicate and received one call).
         subscribe(handle, plan, step.channel(), step.keyIndex());
-        subscribe(handle, plan, step.channel(), step.keyIndex());
+        offerDuplicate(handle, plan, step.channel(), step.keyIndex());
       }
       case NOOP -> {
       }
@@ -1113,6 +1128,31 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
       handle.removeRegistration(channel, key);
     }
     return accepted;
+  }
+
+  /// The duplicate half of a SUBSCRIBE_DUPLICATE_PARAMS step: the same subscribe, byte for byte,
+  /// handed to the library while its registration is live, bypassing this harness's registry.
+  /// The library's contract is to refuse it (the plan-level `subscribe` returns false); a library
+  /// that accepted it would put a second byte-identical request on the wire, which the peer's
+  /// `sub_req` rows and W1-B would then see. Counted either way.
+  private void offerDuplicate(final EngineHandle handle, final SubscriptionPlan plan,
+                              final SubscriptionPlan.Channel channel, final int keyIndex) {
+    final var websocket = handle.websocket();
+    final var registration = handle.registration(channel, keyFor(plan, channel, keyIndex));
+    if (websocket == null || registration == null || registration.unsubscribed) {
+      return;
+    }
+    counters.increment(DUPLICATE_OFFERED);
+    final boolean accepted;
+    try {
+      accepted = send(handle, websocket, registration, channel, keyIndex, consumers.kindFor(keyIndex));
+    } catch (final RuntimeException e) {
+      counters.increment(DUPLICATE_THREW);
+      return;
+    }
+    if (accepted) {
+      counters.increment(DUPLICATE_ACCEPTED);
+    }
   }
 
   private boolean send(final EngineHandle handle,

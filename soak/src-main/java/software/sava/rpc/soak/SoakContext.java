@@ -86,7 +86,10 @@ public final class SoakContext implements AutoCloseable {
     this.peerAdmin = peerAdmin;
     this.timer = timer;
     this.phase = new AtomicReference<>(Phase.STARTUP);
-    this.keyTable = Seeds.keyTable(config.seed());
+    // A live run's key table is the supplied accounts, cycled to the table's size, so every
+    // driver - HTTP, websocket, churn - targets accounts that exist and move; the seeded table is
+    // keys nobody funded, and subscribing to them on a real node measured nothing (review).
+    this.keyTable = config.live() ? Seeds.liveKeyTable(config.liveAccounts()) : Seeds.keyTable(config.seed());
     this.pendingGauges = new CopyOnWriteArrayList<>();
     this.gauges = new AtomicReference<>();
   }

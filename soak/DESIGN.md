@@ -199,7 +199,12 @@ note. The same runs settled three more live rules: every websocket engine dials
 evaluated, because the sequence it judges is the controlled peer's stamp and a real node's
 field there is the slot; the plan's generic channel (`transactionSubscribe`, a method no real
 node has) is skipped and counted; and `pending_confirm` reads the engine's own grants
-(`Subscription.subId()`). No `X-Soak-*` header is sent.
+(`Subscription.subId()`); the key table every driver draws from is `SOAK_LIVE_ACCOUNTS`,
+cycled to the table's size, so the websocket and churn subscriptions target accounts that exist
+and move rather than a seeded table nobody funded; and `W1-A` renders no verdict, since its
+evidence is the peer's re-send rows and nothing else clears a replay set. No `X-Soak-*` header
+is sent, from any driver: the churn driver's copy of the probe marker was sending one until the
+rule was made a single shared method (review).
 
 Peer-side knobs (read by PeerMain from the same file): `SOAK_PEER_HTTP_THREADS` 16,
 `SOAK_BLOCK_TXS` 400 (large 4000), `SOAK_PGA_ACCOUNTS` 500 (large 20000), `SOAK_BURST_FRAMES`
@@ -543,7 +548,10 @@ a failure and not a pass. An absent or short payload on a payload-bearing channe
 rather than a skip.
 
 HTTP peer (`RpcPeer`, `com.sun.net.httpserver`, HTTP/1.1, fixed pool `SOAK_PEER_HTTP_THREADS`,
-queue 256, overflow → 503 recorded as `peer_overflow`): responses are pure functions of the
+threads + 256 exchanges outstanding, counted from submission to the pool until the handler
+returns — counting only once a worker had picked an exchange up let the pool's own queue absorb
+everything and made the bound unreachable (review) — overflow → 503 recorded as
+`peer_overflow`): responses are pure functions of the
 request. Account stamp (32 bytes, base64 in `value.data[0]`): `[0..8) requestId`,
 `[8..16) fnv64(pubkey base58 bytes)`, `[16..24) peer rpc seq`, `[24..32) fnv64(bytes[0..24))`;
 `value.owner = Stamp.OWNER`, `value.lamports = seq`, `context.slot = BASE_SLOT + seq`.
@@ -869,7 +877,11 @@ Oracle decisions the integration settled, each on evidence from a run:
   stay failures. It is stated here so a future reader does not reintroduce a second copy.
 - **W3-C**'s twin comparison is over the key-derived projection of the stamped account (key
   hash, owner, space), because the two stamps carry their own request id and peer sequence and
-  can never be byte-equal.
+  can never be byte-equal. A decoding failure that surfaced cleanly is *not* a W3-C pass: this
+  side cannot tell a malformed body from a whole one the client rejected, so the clean failure
+  only leaves the row the report joins against the peer's applied faults, and the pass comes from
+  the paths that saw the body whole (a client rejecting every valid gzip body used to pass on its
+  own rejections; review).
 - **W3-D** means *settles*, not *succeeds*: the three operations after an error must settle
   inside the client's exchange deadline (`2 × requestTimeout`, `JsonHttpClient`'s
   `withResponseDeadline`) plus 2 s. One answered promptly with another error is not wedged — the
@@ -1036,7 +1048,9 @@ a mixed pause qualifies: the first carries everything promoted since the old gen
 reclaimed, the second every old region it chose not to evacuate (measured 2026-09-22: 300 to
 750 MiB between mixed pauses on a pilot, 23.6 MiB after its full collection). The harness forces
 one full collection at each end of STEADY (`Phases`, each recorded as a `STEADY` marker row in
-`phases.tsv` and as a `PhaseEvent` carrying the detail) and
+`phases.tsv` and as a `PhaseEvent` carrying the detail, and recorded only — the marker sends no
+`onPhase` callback, because a notified `STEADY` microseconds after `HTTP_QUIET` had the HTTP
+driver restore its full rate and the first quiet window ran at full load; review) and
 none in between; the runner's gate is the rise between those two readings against
 `SOAK_HEAP_FLOOR_NOISE_KIB`, the slope the report fits is informational, and `jfr.gc.pauses` /
 `jfr.gc.floorSamples` say how many collections happened and how many were full; the report scales it
@@ -1315,7 +1329,12 @@ committing thread).
   (production factory). `webSocket()` is called once at start and never polled.
 - Prototype: `SolanaRpcWebsocket.build().uri(ws://127.0.0.1:<port>).webSocketBuilder(tracker.wrap(httpClient)).pingDelay(...).subscriptionAndPingCheckDelay(...).commitment(CONFIRMED)`.
 - `SubscriptionPlan(seed, engine)`: deterministic ops over a 256-key table
-  (`Seeds.keyTable(seed)`), `SUBSCRIBE | UNSUBSCRIBE | RESUBSCRIBE_SAME_KEY | SUBSCRIBE_DUPLICATE_PARAMS | NOOP`,
+  (`Seeds.keyTable(seed)`; a live run's table is `SOAK_LIVE_ACCOUNTS` cycled), `SUBSCRIBE |
+  UNSUBSCRIBE | RESUBSCRIBE_SAME_KEY | SUBSCRIBE_DUPLICATE_PARAMS | NOOP` (the duplicate step
+  subscribes once through the harness's registry and then offers the byte-identical subscribe to
+  the library directly, bypassing the registry — the registry refused it first and the library
+  never saw a duplicate, so the step could not catch a library that accepts them; counted as
+  `ws.plan.duplicateOffered/Accepted/Threw`),
   channels account/logs/slot/root/program(filtered)/keyedProgram/signature/generic
   `transactionSubscribe`; paced by monotonic deadline at `SOAK_WS_CHURN_PER_MINUTE`.
 - `ConsumerFactory`: FAST 70 % / SLOW 15 % (`LockSupport.parkNanos`) / THROWING 10 % (after
@@ -1420,7 +1439,14 @@ cannot resolve: the runner drops them from the filter for that control rather th
 run on a gate that is measuring the control's own premise.
 
 Verdict outcomes and exit codes: PASS 0, FAIL 1, PASS-WITH-FINDING 2 (every gate passed and
-the #52 trigger met), INCOMPLETE 3, INVALID 4. FAIL reasons and INVALID conditions: see
+the #52 trigger met), INCOMPLETE 3, INVALID 4. INCOMPLETE is a bounded stage breached (the
+client's own exit 3) or a run that stopped outside its schedule: a client exit code the client
+never returns itself (a signal's 143 or 137, a ctrl-c's 130), no exit code recorded at all (the
+runner never finished), or a `phases.tsv` carrying an `ABORTED` row or no `SHUTDOWN` row — the
+shutdown hook writes the counters and the ledger on a kill so a late interruption looks complete
+to every other gate, and a copied run with exactly those artifacts re-reported as PASS before the
+runner read either signal (review, 2026-09-24; the `interrupted` control row pins it). FAIL
+reasons and INVALID conditions: see
 `README.md` (from the judged design §9). `#52` never contributes a FAIL. The gates this section
 fixes as contracts, because a reason's wording or a denominator is an interface:
 
@@ -1533,7 +1559,12 @@ the subject the run *saw*, the launch-time stamps `run.json` records (`subjectCo
 `subjectNewestMtime`), never against the tree at report time: a commit made while a campaign
 runs was not under test (measured 2026-09-23, when four library commits landed during a campaign
 launched on the very revision its sheet was run on). A run from before the stamps is dated by
-its `gitRev`, and its uncommitted half is a note, not a verdict.
+its `gitRev`, and its uncommitted half is a note, not a verdict. The sheet's side of the
+comparison is when its rows were *measured*: the launch of its oldest row (each row's
+`run.json`), so a row re-run later refreshes only itself and the sheet stays as old as the oldest
+row it carries — never `controls.md`'s modification time, which a re-score rewrites without
+measuring anything (review: rewriting the Markdown turned a stale-controls rejection into an
+acceptance).
 
 What the `F*` rows plan, since a restricted schedule is part of each row's claim (§6), stated in
 seconds of expected traffic on the kind's own counter: F1 `STALL_BODY` once per hold-length divided

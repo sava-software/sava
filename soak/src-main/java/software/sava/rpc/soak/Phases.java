@@ -160,7 +160,10 @@ final class Phases implements AutoCloseable {
   /// The boundary collection (see [#steady]), recorded as a marker so the phase log says when the
   /// floor's two readings were taken.
   private void fullCollection(final String at) {
-    marker(Phase.STEADY, "full collection forced at " + at);
+    // Recorded, not announced: a notifying STEADY marker here fanned out onPhase(STEADY) to the
+    // workloads microseconds after HTTP_QUIET, and the HTTP driver restored its full rate - the
+    // first quiet window ran at full load (measured in review: 2 -> 20 requests per second).
+    marker(Phase.STEADY, "full collection forced at " + at, false);
     System.gc();
   }
 
@@ -344,6 +347,12 @@ final class Phases implements AutoCloseable {
   /// A momentary trigger inside the current window — OVERLAP is a fan-out the drivers start, not
   /// a stretch of time — so it gets a row and a callback but does not break the window chain.
   private void marker(final Phase phase, final String detail) {
+    marker(phase, detail, true);
+  }
+
+  /// `notify` false records the row and the event without the callback: for a marker that is a
+  /// measurement point inside a window rather than a change of what the workloads should do.
+  private void marker(final Phase phase, final String detail, final boolean notify) {
     final int at = index.incrementAndGet();
     phasesTsv.append(Long.toString(System.currentTimeMillis()), phase.name(), Integer.toString(at));
     final var event = new SoakEvents.PhaseEvent();
@@ -351,7 +360,9 @@ final class Phases implements AutoCloseable {
     event.index = at;
     event.detail = detail;
     event.commit();
-    notifyWorkloads(phase);
+    if (notify) {
+      notifyWorkloads(phase);
+    }
   }
 
   private void notifyWorkloads(final Phase phase) {

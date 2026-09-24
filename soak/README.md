@@ -143,7 +143,10 @@ differently: the plan's generic channel (sava's caller-defined subscribe API, ex
 the local peer's synthetic `transactionSubscribe`) is skipped and counted
 (`ws.harness.liveGenericSkipped`), because a real node has no such method; and
 `pending_confirm` reads the engine's own grants (`Subscription.subId()`) rather than the peer
-log it does not have.
+log it does not have. `SOAK_LIVE_ACCOUNTS` is every driver's key table on a live run, cycled to
+the table's size: the websocket and churn subscriptions and the HTTP account calls all target the
+supplied accounts, not a seeded table of keys nobody funded. `W1-A` renders no verdict on a live
+run: its evidence is the peer's own re-send rows, and there are none to clear the replay set.
 
 ```sh
 SOAK_LIVE_HTTP_URL=... SOAK_LIVE_WS_URL=... SOAK_LIVE_CLUSTER=devnet \
@@ -207,7 +210,10 @@ injection that quietly did nothing cannot pass by producing a clean run. `contro
 A campaign is `INVALID` with the reason `stale controls` when the newest sheet is red (any
 control missed, or no `controls.env` to say otherwise), predates the sava revision under test,
 or predates an uncommitted change under `sava-rpc/src/main`. A controls run is evidence about
-this subject only if it was green **and** it saw this code. The subject is the one the run
+this subject only if it was green **and** it saw this code. The sheet is dated by when its rows
+were *measured* — the launch of its oldest row (each row's `run.json`), so a row re-run later
+refreshes only itself and a sheet is as old as the oldest row it still carries — never by
+`controls.md`, which a re-score rewrites without measuring anything. The subject is the one the run
 *saw*: `run.json` records the source's commit time and newest file time at launch
 (`subjectCommitTime`, `subjectNewestMtime`), and the report judges the sheet against those, so
 a commit made while a campaign runs does not invalidate it (measured 2026-09-23). A run from
@@ -263,7 +269,7 @@ Five outcomes, and the exit code is the outcome:
 | 0 | `PASS` | every gate passed |
 | 1 | `FAIL` | the library, or the run, did something it promised not to |
 | 2 | `PASS-WITH-FINDING` | every gate passed **and** the issue #52 trigger was met |
-| 3 | `INCOMPLETE` | a bounded stage was breached; the run says nothing either way |
+| 3 | `INCOMPLETE` | a bounded stage was breached, or the run stopped outside its schedule: the client exited with a code it never returns itself (a signal's 143 or 137, a ctrl-c's 130), no exit code was recorded at all, or `phases.tsv` carries an `ABORTED` row or no `SHUTDOWN` row; the run says nothing either way |
 | 4 | `INVALID` | the run cannot be judged at all |
 
 `INVALID` outranks `INCOMPLETE`, which outranks `FAIL`. The verdict is computed from

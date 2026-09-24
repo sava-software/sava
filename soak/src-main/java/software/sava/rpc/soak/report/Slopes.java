@@ -86,8 +86,27 @@ final class Slopes {
                  final double limitKibPerHour,
                  final double noiseFloorKib,
                  final double warmupSeconds) throws IOException {
+    return rss(rssCsv, limitKibPerHour, noiseFloorKib, warmupSeconds, Long.MAX_VALUE);
+  }
+
+  /// `untilEpochSeconds` bounds the series the way the runner's gate bounds it - STEADY only, so
+  /// quiesce, drain and the final dump are not fitted (the report and the verdict used to fit
+  /// different windows; review).
+  static Fit rss(final Path rssCsv,
+                 final double limitKibPerHour,
+                 final double noiseFloorKib,
+                 final double warmupSeconds,
+                 final long untilEpochSeconds) throws IOException {
     final var table = TsvReader.read(rssCsv, ',', List.of("epoch", "rss_kb"));
-    return fit("RSS (rss.csv)", table, "epoch", "rss_kb", limitKibPerHour, noiseFloorKib, warmupSeconds);
+    final var bounded = new java.util.ArrayList<TsvReader.Row>(table.rows().size());
+    for (final var row : table.rows()) {
+      if (row.getLong("epoch", Long.MAX_VALUE) <= untilEpochSeconds) {
+        bounded.add(row);
+      }
+    }
+    final var series = new TsvReader.Table(table.path(), table.columns(), bounded, table.partialLines());
+    return fit("RSS (rss.csv" + (untilEpochSeconds == Long.MAX_VALUE ? "" : ", STEADY only") + ')',
+        series, "epoch", "rss_kb", limitKibPerHour, noiseFloorKib, warmupSeconds);
   }
 
   /// `nmt.csv` carries a header and many columns; the series that means anything is the LAST one

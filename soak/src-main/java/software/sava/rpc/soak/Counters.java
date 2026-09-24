@@ -207,6 +207,7 @@ public final class Counters {
       "ws.harness.w1hProbeRetirements", "ws.harness.w1hOtherRetirements",
       "ws.harness.recoveryHeldPastCasualty", "ws.harness.recoveryPendingOvertaken",
       "ws.harness.judgedUnderTailLag", "ws.harness.replayRowsLate", "ws.harness.liveGenericSkipped",
+      "ws.plan.duplicateOffered", "ws.plan.duplicateAccepted", "ws.plan.duplicateThrew",
       RPC_COMPLETED_OK, RPC_COMPLETED_RPC_ERROR, RPC_COMPLETED_HTTP_ERROR, RPC_COMPLETED_TIMEOUT,
       RPC_COMPLETED_CANCELLED, RPC_COMPLETED_DEADLINE, RPC_COMPLETED_DECODE, RPC_COMPLETED_TRANSPORT,
       RPC_COMPLETED_MISMATCH,

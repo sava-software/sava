@@ -189,7 +189,6 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
   private final TokenBucket bucket;
   private final PublicKey[] keys;
   private final PublicKey programKey;
-  private final List<PublicKey> liveAccounts;
 
   private final AtomicInteger inFlight;
   private final AtomicLong requestOrdinal;
@@ -213,8 +212,7 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
                        final URI endpoint,
                        final int workerCount,
                        final int inflightPerWorker,
-                       final int ratePerSecond,
-                       final List<PublicKey> liveAccounts) {
+                       final int ratePerSecond) {
     this.ctx = ctx;
     this.counters = ctx.counters();
     this.endpoint = endpoint;
@@ -226,9 +224,10 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     this.cancelFraction = config.cancelFraction();
     this.largeFraction = config.largeFraction();
     this.mix = Rpc.mix(ctx.live());
+    // In a live run the context's key table is SOAK_LIVE_ACCOUNTS, cycled: every driver then
+    // subscribes to and queries the supplied accounts, not a seeded table of keys nobody funded.
     this.keys = ctx.keyTable();
     this.programKey = keys[0];
-    this.liveAccounts = liveAccounts;
     this.bucket = new TokenBucket(ratePerSecond);
     this.inFlight = new AtomicInteger();
     this.requestOrdinal = new AtomicLong();
@@ -314,9 +313,16 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
   /// client builds, so the count cannot drift from the number of requests that actually carried
   /// the header.
   private HttpRequest.Builder markProbe(final HttpRequest.Builder request) {
+    return markProbe(ctx, counters, request);
+  }
+
+  /// The one rule for the probe marker, shared with the churn driver so the two sites cannot
+  /// drift (measured in review: the churn copy still sent the header to a foreign node). Counted
+  /// per request built; the header tells the local peer's fault schedule to step over a probe,
+  /// and a live run sends a foreign node nothing of the harness's.
+  public static HttpRequest.Builder markProbe(final SoakContext ctx, final Counters counters,
+                                              final HttpRequest.Builder request) {
     counters.increment(PROBE_SENT);
-    // The marker tells the local peer's fault schedule to step over a probe; a foreign node has
-    // no schedule, and a live run sends it nothing of the harness's.
     return ctx.live() ? request : request.header(PROBE_HEADER, "1");
   }
 
@@ -332,29 +338,7 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     final int workers = Math.max(1, ctx.live() ? config.liveConcurrency() : config.httpConcurrency());
     final int inflight = Math.max(1, HarnessControls.httpInflight(config));
     final int rate = Math.max(1, ctx.live() ? config.liveRps() : HarnessControls.httpRps(config));
-    return new HttpWorkload(ctx, endpoint, workers, inflight, rate, liveAccounts(ctx));
-  }
-
-  private static List<PublicKey> liveAccounts(final SoakContext ctx) {
-    if (!ctx.live()) {
-      return List.of();
-    }
-    final var file = ctx.config().liveAccounts();
-    final var accounts = new ArrayList<PublicKey>();
-    try {
-      for (final var line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-        final var trimmed = line.strip();
-        if (!trimmed.isEmpty() && trimmed.charAt(0) != '#') {
-          accounts.add(PublicKey.fromBase58Encoded(trimmed));
-        }
-      }
-    } catch (final IOException | RuntimeException e) {
-      throw new IllegalStateException("SOAK_LIVE_ACCOUNTS is required in a live run: " + file, e);
-    }
-    if (accounts.isEmpty()) {
-      throw new IllegalStateException("SOAK_LIVE_ACCOUNTS holds no keys: " + file);
-    }
-    return List.copyOf(accounts);
+    return new HttpWorkload(ctx, endpoint, workers, inflight, rate);
   }
 
   // --- lifecycle --------------------------------------------------------------------------------
@@ -1111,9 +1095,11 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     }
   }
 
-  /// A gzip or truncation failure that surfaced cleanly is a W3-C pass, not a finding: the
-  /// property the design states is that a malformed body fails cleanly, and only a *successfully
-  /// returned wrong value* is the defect.
+  /// A gzip or truncation failure that surfaced cleanly is not a finding on its own: the property
+  /// the design states is that a malformed body fails cleanly, and only a *successfully returned
+  /// wrong value* is the defect. It is not a W3-C pass either - it used to be credited as one here,
+  /// which let a client that rejects every valid gzip body pass W3-C on its own rejections
+  /// (measured in review). The pass comes only from the paths that can see the body was whole.
   ///
   /// That pass is only half an oracle on its own, and this is the other half's client side. "The
   /// body was malformed and the client said so" is a pass exactly when *something malformed it*;
@@ -1148,9 +1134,6 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     if (outcome != Outcome.DECODE) {
       counters.increment(RPC_COMPLETED_DECODE);
       commitDecodeOutcome(op, cause);
-    }
-    if (op.subject.verifiesDecoding) {
-      ctx.properties().pass("W3-C");
     }
   }
 
@@ -1198,9 +1181,7 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
   }
 
   private PublicKey accountKey(final SplittableRandom random) {
-    return liveAccounts.isEmpty()
-        ? keys[random.nextInt(keys.length)]
-        : liveAccounts.get(random.nextInt(liveAccounts.size()));
+    return keys[random.nextInt(keys.length)];
   }
 
   @SuppressWarnings("unchecked")

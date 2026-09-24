@@ -18,6 +18,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.zip.GZIPOutputStream;
@@ -57,7 +58,10 @@ final class RpcPeer {
   private final Runnable shutdownHook;
   private final HttpServer server;
   private final ThreadPoolExecutor pool;
-  private final Semaphore admission;
+  /// Concurrent-plus-queued exchanges, counted from submission to the pool until the handler
+  /// returns, against [#admissionBound].
+  private final AtomicInteger outstanding;
+  private final int admissionBound;
   /// How many `STALL_BODY` holds may be parked at once — a quarter of the pool, never all of it.
   ///
   /// A hold lasts [WsPeer#STALL_HOLD_SECONDS] and the peer cannot end it early: the client's
@@ -99,7 +103,8 @@ final class RpcPeer {
       thread.setDaemon(true);
       return thread;
     }, new ThreadPoolExecutor.CallerRunsPolicy());
-    this.admission = new Semaphore(threads + ADMISSION_QUEUE);
+    this.admissionBound = threads + ADMISSION_QUEUE;
+    this.outstanding = new AtomicInteger();
     this.stallHoldBudget = Math.max(1, threads / STALL_HOLD_SHARE);
     this.stallHolds = new Semaphore(stallHoldBudget);
     this.rpcCounter = new AtomicLong();
@@ -107,7 +112,19 @@ final class RpcPeer {
     this.overflow = new LongAdder();
     this.faultsSeen = new LongAdder();
     this.quiesced = new AtomicBoolean();
-    server.setExecutor(pool);
+    // Counted at submission, not at handler start: an exchange queued behind the pool's workers
+    // is outstanding too, and counting it only once a worker picked it up made the bound below
+    // unreachable - the pool's own queue absorbed everything first (measured in review).
+    server.setExecutor(task -> {
+      outstanding.incrementAndGet();
+      pool.execute(() -> {
+        try {
+          task.run();
+        } finally {
+          outstanding.decrementAndGet();
+        }
+      });
+    });
     server.createContext("/", this::handleRpc);
     server.createContext("/__soak/", this::handleAdmin);
   }
@@ -148,7 +165,7 @@ final class RpcPeer {
     // Admission control rather than an executor rejection handler: the queue bound has to produce a
     // *JSON* 503 attributable to a named request, and a rejected Runnable has no exchange to answer
     // with. The semaphore caps concurrent-plus-queued exchanges at threads + 256.
-    if (!admission.tryAcquire()) {
+    if (outstanding.get() > admissionBound) {
       overflow.increment();
       final long id = -1;
       log.http("overflow", id, -1, 503, 0, "identity", 0, "peer_overflow",
@@ -183,7 +200,6 @@ final class RpcPeer {
       }
       answer(exchange, method, body, requestId, seq, fault, probe);
     } finally {
-      admission.release();
       exchange.close();
     }
   }

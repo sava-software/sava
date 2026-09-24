@@ -165,7 +165,7 @@ public final class SoakReport {
       writeIssue52(out, issue52, jfr);
       writeHarnessLatency(out, counters);
       jfr.writeLatency(out, metrics);
-      writeResourceSeries(out, runEnv, clientCsv, counters);
+      writeResourceSeries(out, runEnv, clientCsv, counters, phases);
       jfr.writeResources(out, metrics);
       writeResiduals(out, clientCsv, counters);
       jfr.writeStalls(out, metrics);
@@ -340,7 +340,10 @@ public final class SoakReport {
           + " count in this report is then only what survived in the ring");
       return;
     }
-    final long attempted = TsvReader.longValue(counters, "harness.opsAttempted", 0L);
+    // The skips are the HTTP driver's, so the denominator is the HTTP attempts - the same ratio
+    // the runner's starvation gate reads (review: this line divided by every workload's attempts).
+    final long attempted = TsvReader.longValue(counters, "http.ops.attempted",
+        TsvReader.longValue(counters, "harness.opsAttempted", 0L));
     final long skippedCap = TsvReader.longValue(counters, "harness.opsSkipped.inflightCap", 0L);
     final long skippedDeadline = TsvReader.longValue(counters, "harness.opsSkipped.deadline", 0L);
     final long skipped = skippedCap + skippedDeadline;
@@ -874,7 +877,16 @@ public final class SoakReport {
   private void writeResourceSeries(final PrintWriter out,
                                    final Map<String, String> runEnv,
                                    final TsvReader.Table clientCsv,
-                                   final Map<String, String> counters) throws IOException {
+                                   final Map<String, String> counters,
+                                   final TsvReader.Table phases) throws IOException {
+    // The same window the verdict fits: up to the QUIESCE boundary, or the whole file without one.
+    long steadyEnd = Long.MAX_VALUE;
+    for (final var row : phases.rows()) {
+      if ("QUIESCE".equals(row.get("name", ""))) {
+        steadyEnd = row.getLong("epochMillis", Long.MAX_VALUE) / 1_000L;
+        break;
+      }
+    }
     out.println();
     out.println("## (g1) Resources (whole-run series)");
     out.println();
@@ -889,7 +901,7 @@ public final class SoakReport {
     // it reads 0, and the 60 s floor inside Slopes still applies — the same order soak.sh takes.
     final double warmupSeconds = TsvReader.doubleValue(runEnv, "SOAK_WARMUP_SECONDS", 0d);
 
-    final var rss = Slopes.rss(runDir.resolve("rss.csv"), rssLimit, rssFloor, warmupSeconds);
+    final var rss = Slopes.rss(runDir.resolve("rss.csv"), rssLimit, rssFloor, warmupSeconds, steadyEnd);
     final var nmt = Slopes.nmt(runDir.resolve("nmt.csv"), rssLimit, rssFloor, warmupSeconds);
     final var heap = Slopes.heapAfterGc(runDir.resolve("client.csv"), heapLimit, heapFloor, warmupSeconds);
 

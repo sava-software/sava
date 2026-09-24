@@ -62,6 +62,11 @@ public final class HarnessControls implements Workload, GaugeSampler.GaugeSource
   public static final String D11_NO_WEBSOCKET_DRIVER = "D11";
   public static final String D13_STARVED_HTTP = "D13";
   public static final String D14_FAKE_SUBJECT = "D14";
+  /// A SIGTERM to this JVM a few seconds into STEADY - what a ctrl-c or a host shutdown delivers -
+  /// so the sheet proves an interrupted run reads INCOMPLETE. The shutdown hook writes the counters
+  /// and an ABORTED phase row and the runner sees exit 143: a copied run with exactly those
+  /// artifacts re-reported as PASS before the verdict read either signal (review, 2026-09-24).
+  public static final String INTERRUPTED = "INTERRUPTED";
   /// One notification consumer parks for the rest of the run on the thread the subject delivers
   /// on. Staged inside the consumer factory (see `ws.ConsumerFactory`), because the stall has to
   /// happen where deliveries happen; this class only owns the id and the arming delay.
@@ -128,6 +133,7 @@ public final class HarnessControls implements Workload, GaugeSampler.GaugeSource
   static final String SOCKETS_OPENED = "harness.control.socketsOpened";
   static final String SOCKETS_REFUSED = "harness.control.socketsRefused";
   static final String THREADS_PARKED = "harness.control.threadsParked";
+  static final String INTERRUPT_SENT = "harness.control.interruptSent";
 
   /// D10's retention is `static` on purpose: a field on the workload would be released when the
   /// workload is, and the control has to survive `drain()` to be visible in the heap floor at the
@@ -187,9 +193,20 @@ public final class HarnessControls implements Workload, GaugeSampler.GaugeSource
     return switch (normalise(id)) {
       case D7_TOMBSTONE_BEFORE_UNSUB, D8_UNJOINED_THREADS, D9_UNCLOSED_SOCKETS,
            D10_RETAINED_ALLOCATION, D11_NO_WEBSOCKET_DRIVER, D13_STARVED_HTTP,
-           D14_FAKE_SUBJECT, STALL_CALLBACK -> true;
+           D14_FAKE_SUBJECT, STALL_CALLBACK, INTERRUPTED -> true;
       default -> false;
     };
+  }
+
+  /// See [#INTERRUPTED]. A real signal rather than System.exit, so the JVM takes the same path a
+  /// user's interrupt takes: signal handler, shutdown hooks, exit 143.
+  private void interruptSelf(final Counters counters) {
+    counters.increment(INTERRUPT_SENT);
+    try {
+      new ProcessBuilder("kill", "-TERM", Long.toString(ProcessHandle.current().pid())).inheritIO().start();
+    } catch (final java.io.IOException e) {
+      throw new IllegalStateException("the interrupted control could not signal this JVM", e);
+    }
   }
 
   private static String normalise(final String control) {
@@ -271,7 +288,7 @@ public final class HarnessControls implements Workload, GaugeSampler.GaugeSource
   public void start(final SoakContext context) {
     final var counters = ctx.counters();
     switch (id) {
-      case D8_UNJOINED_THREADS, D9_UNCLOSED_SOCKETS, D10_RETAINED_ALLOCATION -> {
+      case D8_UNJOINED_THREADS, D9_UNCLOSED_SOCKETS, D10_RETAINED_ALLOCATION, INTERRUPTED -> {
         // Deferred to STEADY: see onPhase. Announced here anyway, so a run whose phases never
         // reached STEADY still says which control it was asked to be. D10 is deferred for the
         // same reason as the other two and one more: retention that starts at launch spends its
@@ -318,7 +335,7 @@ public final class HarnessControls implements Workload, GaugeSampler.GaugeSource
   /// True for the two injections that have to land after the baselines rather than at start-up.
   private boolean isDeferred() {
     return D8_UNJOINED_THREADS.equals(id) || D9_UNCLOSED_SOCKETS.equals(id)
-        || D10_RETAINED_ALLOCATION.equals(id);
+        || D10_RETAINED_ALLOCATION.equals(id) || INTERRUPTED.equals(id);
   }
 
   private void inject() {
@@ -331,6 +348,10 @@ public final class HarnessControls implements Workload, GaugeSampler.GaugeSource
         case D8_UNJOINED_THREADS -> parkThreads(counters);
         case D9_UNCLOSED_SOCKETS -> openSockets(counters);
         case D10_RETAINED_ALLOCATION -> startRetaining(counters);
+        case INTERRUPTED -> {
+          interruptSelf(counters);
+          return;
+        }
         default -> throw new IllegalStateException("not a deferred injection: " + id);
       }
     } catch (final RuntimeException | Error e) {

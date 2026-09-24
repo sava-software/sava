@@ -357,13 +357,9 @@ resolve_profile() {
   # more collections than its heap gives in a short run), so it stays empty everywhere else: a
   # campaign that tuned the subject's GC would be measuring a JVM nobody deploys.
   set_default SOAK_JVM_EXTRA         ""
-  # The ring must outlast the run: 1g/4h covered 94 % of an 8-h campaign and had lost its first
-  # half hour by the end (measured 2026-09-23). Default age = the run's hours + 1, size = 256m per
-  # hour of run, so a release-length 28800 s campaign gets 2g/9h; explicit values win.
-  local ring_hours=$(( (SOAK_DURATION_SECONDS + 3599) / 3600 ))
-  [ "$ring_hours" -ge 1 ] || ring_hours=1
-  set_default SOAK_JFR_MAXSIZE       "$(( ring_hours * 256 ))m"
-  set_default SOAK_JFR_MAXAGE        "$(( ring_hours + 1 ))h"
+  # SOAK_JFR_MAXSIZE / SOAK_JFR_MAXAGE are derived from the duration below, after the command-line
+  # overrides, so that --duration sizes the ring too (measured in review: campaign --duration 28800
+  # got the 4-h ring while the environment form got the 8-h one).
   by_profile SOAK_NMT_INTERVAL_SECONDS 60  600   1800
   by_profile SOAK_SAMPLE_SECONDS     10    30    30
   set_default SOAK_GAUGE_SECONDS     10
@@ -410,6 +406,14 @@ resolve_profile() {
   [ -z "$OPT_SEED" ] || SOAK_SEED=$OPT_SEED
   [ -z "$OPT_HEAP" ] || SOAK_HEAP_MB=$OPT_HEAP
   [ -z "$OPT_CONTROL" ] || SOAK_CONTROL=$OPT_CONTROL
+  # The ring must outlast the run: 1g/4h covered 94 % of an 8-h campaign and had lost its first
+  # half hour by the end (measured 2026-09-23). Default age = the run's hours + 1, size = 256m per
+  # hour of run, so a release-length 28800 s campaign gets 2g/9h; explicit values (an option or
+  # the environment) win, because set_default is a no-op once the key is set.
+  local ring_hours=$(( (SOAK_DURATION_SECONDS + 3599) / 3600 ))
+  [ "$ring_hours" -ge 1 ] || ring_hours=1
+  set_default SOAK_JFR_MAXSIZE       "$(( ring_hours * 256 ))m"
+  set_default SOAK_JFR_MAXAGE        "$(( ring_hours + 1 ))h"
   SOAK_PROFILE=$RESOLVED_PROFILE
 
   # No control-specific shortening lives here any more: a control row is a validate run plus the
@@ -994,6 +998,20 @@ monitor_run() {
   done
 }
 
+# controls_measured_at <sheet-dir>: when the sheet's rows were MEASURED, which is the oldest row's
+# launch (its run.json, written once at launch; a row re-run later refreshes only itself, and a
+# sheet is as old as the oldest row it still carries). Never the mtime of controls.md: a re-score
+# rewrites that file without measuring anything, and dating the oracle by it let a stale sheet
+# read fresh (measured in review). Falls back to the controls.tsv snapshot, copied at sheet start,
+# for a sheet from before rows recorded run.json, then to controls.md for anything older.
+controls_measured_at() {
+  local dir=$1 oldest
+  oldest=$( { stat -f %m "$dir"/*/run.json 2>/dev/null || stat -c %Y "$dir"/*/run.json 2>/dev/null; } | sort -n | head -n 1)
+  [ -n "$oldest" ] || oldest=$(stat -f %m "$dir/controls.tsv" 2>/dev/null || stat -c %Y "$dir/controls.tsv" 2>/dev/null)
+  [ -n "$oldest" ] || oldest=$(stat -f %m "$dir/controls.md" 2>/dev/null || stat -c %Y "$dir/controls.md" 2>/dev/null || echo 0)
+  printf '%s\n' "$oldest"
+}
+
 # The subject as the tree holds it now: the commit time of the last change under
 # sava-rpc/src/main and the newest file time under it, which is what a commit time cannot see
 # (an uncommitted edit). Recorded into run.json at launch, so a report judges the subject the
@@ -1336,9 +1354,24 @@ compute_verdict() {
   fi
 
   # ---- INCOMPLETE ----
+  # The client's own vocabulary is 0, 3 and 4 (Main.EXIT_*). Anything else - 143, 137, 130, or no
+  # code at all because the runner never wrote run-exit.env - means the JVM went down outside its
+  # schedule, and its shutdown hook then writes the counters and an ABORTED phase row so that a
+  # late interruption looks complete to every gate below. Measured in review: a copied run with
+  # exit 143, an ABORTED row and no SHUTDOWN row re-reported as PASS. Both signals are read here,
+  # inside the ran=1 guard so a launch gate's own verdict (ran=0) keeps precedence.
   if [ "$ran" = 1 ]; then
     if is_exit_code "$client_exit" && [ "$client_exit" -eq 3 ]; then
       INCOMPLETES="$INCOMPLETES; the client exited 3: a bounded stage was breached"
+    elif is_exit_code "$client_exit" && [ "$client_exit" -ne 0 ] && [ "$client_exit" -ne 4 ]; then
+      INCOMPLETES="$INCOMPLETES; the client exited $client_exit, a code it never returns itself (0, 3 or 4): it was killed, so the run stopped outside its schedule"
+    elif ! is_exit_code "$client_exit"; then
+      INCOMPLETES="$INCOMPLETES; no client exit code was recorded (no run-exit.env): the runner never finished this run, so it stopped outside its schedule"
+    fi
+    if phase_reached ABORTED; then
+      INCOMPLETES="$INCOMPLETES; phases.tsv carries an ABORTED row: the client's shutdown hook ended the run outside its schedule"
+    elif ! phase_reached SHUTDOWN; then
+      INCOMPLETES="$INCOMPLETES; phases.tsv has no SHUTDOWN row: the run never reached its terminal phase"
     fi
   fi
 
@@ -1694,7 +1727,7 @@ stale_controls() {
   else
     read -r sava_ct subject_mtime <<< "$(subject_source_stamps)"
   fi
-  controls_ct=$(stat -f %m "$newest/controls.md" 2>/dev/null || stat -c %Y "$newest/controls.md" 2>/dev/null || echo 0)
+  controls_ct=$(controls_measured_at "$newest")
   if [ "$controls_ct" -lt "${sava_ct:-0}" ]; then
     out="$out; stale controls: $id predates the sava revision under test"
   fi
@@ -1991,6 +2024,7 @@ write_controls_tail() {
 # row MEASURED: a code change under sava-rpc still needs a fresh sheet, and stale_controls keeps
 # checking that.
 do_controls_rescore() {
+  [ -x "$SCRIPT_DIR/soak.sh" ] || die "soak.sh is not executable (chmod +x soak.sh)"
   local parent
   parent=$(cd "$RESCORE_DIR" && pwd) || die "no such controls directory: $RESCORE_DIR"
   local tsv=$parent/controls.tsv
@@ -2069,6 +2103,9 @@ do_controls_rescore() {
 }
 
 do_controls() {
+  # Every row is a child that executes this script directly; a runner without its execute bit
+  # would turn every row into a silent miss (measured in review: the bit was lost to a rewrite).
+  [ -x "$SCRIPT_DIR/soak.sh" ] || die "soak.sh is not executable (chmod +x soak.sh)"
   local tsv=$SCRIPT_DIR/controls.tsv
   [ -s "$tsv" ] || die "missing $tsv"
   local stamp; stamp=$(date +%Y%m%d-%H%M%S)
@@ -2165,8 +2202,11 @@ do_controls() {
 }
 
 do_selftest() {
-  # The self-test builds and runs a JVM of its own, so it takes the lock like a soak does.
+  # The self-test builds and runs a JVM of its own, so it takes the lock like a soak does. The
+  # build comes before the toolchain files are read, because it is what writes them; a dry run
+  # never builds and reads whatever a previous build left.
   [ "$DRY_RUN" = 1 ] || take_lock
+  [ "$DRY_RUN" = 1 ] || build_harness || die "${BUILD_FAILED:-build failed}"
   resolve_toolchain
   local -a selftest_cmd=(
     "$JAVA"
@@ -2183,7 +2223,6 @@ do_selftest() {
     quoted "${selftest_cmd[@]}"; echo
     exit 0
   fi
-  build_harness || die "${BUILD_FAILED:-build failed}"
   log "running the attribution and detector self-test"
   set +e
   "${selftest_cmd[@]}"
@@ -2247,8 +2286,10 @@ case "$MODE" in
     # --report is deliberately not here: it starts no JVM and re-reporting an old run while a
     # campaign is in flight must keep working.
     [ "$DRY_RUN" = 1 ] || take_lock
-    resolve_toolchain
+    # The build writes the files resolve_toolchain reads, so it goes first: a fresh checkout has
+    # neither module-path.txt nor java.txt yet (measured in review).
     build_harness || die "${BUILD_FAILED:-build failed}"
+    resolve_toolchain
     do_controls
     exit 0
     ;;
@@ -2256,11 +2297,12 @@ esac
 
 if [ "$DRY_RUN" != 1 ]; then
   take_lock
-  resolve_toolchain
+  # Build first: it writes the files resolve_toolchain reads (a fresh checkout has none).
   if ! build_harness; then
     log "${BUILD_FAILED:-build failed}"
     exit "$STATUS_INCOMPLETE"
   fi
+  resolve_toolchain
 else
   # A dry run resolves the same toolchain files but never builds and never takes the lock.
   resolve_toolchain

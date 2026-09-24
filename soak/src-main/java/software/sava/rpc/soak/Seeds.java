@@ -40,6 +40,30 @@ public final class Seeds {
   /// The 256 keys both sides of a run agree on. Each key is generated from its own derived
   /// stream, so the table is identical whichever process builds it and whichever order it
   /// builds the entries in.
+  /// The live run's table: `SOAK_LIVE_ACCOUNTS` (one base58 key per line, `#` comments), cycled
+  /// to [#KEY_TABLE_SIZE] entries so every index a driver derives stays in range.
+  public static PublicKey[] liveKeyTable(final java.nio.file.Path accountsFile) {
+    final var accounts = new java.util.ArrayList<PublicKey>();
+    try {
+      for (final var line : java.nio.file.Files.readAllLines(accountsFile, java.nio.charset.StandardCharsets.UTF_8)) {
+        final var trimmed = line.strip();
+        if (!trimmed.isEmpty() && trimmed.charAt(0) != '#') {
+          accounts.add(PublicKey.fromBase58Encoded(trimmed));
+        }
+      }
+    } catch (final java.io.IOException | RuntimeException e) {
+      throw new IllegalStateException("SOAK_LIVE_ACCOUNTS is required in a live run: " + accountsFile, e);
+    }
+    if (accounts.isEmpty()) {
+      throw new IllegalStateException("SOAK_LIVE_ACCOUNTS holds no keys: " + accountsFile);
+    }
+    final var keys = new PublicKey[KEY_TABLE_SIZE];
+    for (int i = 0; i < KEY_TABLE_SIZE; ++i) {
+      keys[i] = accounts.get(i % accounts.size());
+    }
+    return keys;
+  }
+
   public static PublicKey[] keyTable(final long seed) {
     final var keys = new PublicKey[KEY_TABLE_SIZE];
     for (int i = 0; i < KEY_TABLE_SIZE; ++i) {

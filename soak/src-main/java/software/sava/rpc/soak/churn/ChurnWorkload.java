@@ -411,8 +411,7 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
   /// Counted once per request the client builds rather than once per call site, so the total
   /// cannot drift from the number of requests that carried the header.
   private HttpRequest.Builder markProbe(final HttpRequest.Builder request) {
-    counters.increment(HttpWorkload.PROBE_SENT);
-    return request.header(HttpWorkload.PROBE_HEADER, "1");
+    return HttpWorkload.markProbe(ctx, counters, request);
   }
 
   // ------------------------------------------------------------------------------ W5-B2, W5-C

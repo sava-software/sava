@@ -13,7 +13,7 @@
 #               the harness read it to decide what to inject
 #   kind        defect (the run must FAIL or be INVALID) | fault (the run must PASS) | i52 |
 #               selftest (no soak at all: soak.sh --selftest, bounded, scored on its exit code)
-#   expected    the verdict the run must produce: FAIL, PASS or INVALID
+#   expected    the verdict the run must produce: FAIL, PASS, INCOMPLETE or INVALID
 #   property    a property id, which the run's own ledger must show failed or UNEXERCISED; or a
 #               `key=value` pair, which jfr-metrics.properties must carry; or any other substring,
 #               which must appear in the verdict-bearing prose of summary.md (the INVALID/
@@ -52,6 +52,7 @@ D11	defect	FAIL	UNEXERCISED	-	-	harness: suppresses one workload's driver entire
 D12	defect	FAIL	[SWALLOW_PING]	SOAK_FAULT_RATE=10 SOAK_FAULT_MIN_PER_KIND=1	schedule:SWALLOW_PING	peer: accepts one scheduled fault kind and never applies it (NEVER_APPLY_KIND on SWALLOW_PING), so the reached-and-never-applied gate must fire and must name that kind; the metric term requires the kind to have been planned at all, so a schedule that dropped it fails here rather than passing on some other kind
 D13	defect	INVALID	starved	SOAK_HTTP_RPS=200 SOAK_HTTP_INFLIGHT=1 SOAK_HTTP_CONCURRENCY=1	-	harness: an in-flight semaphore of 1 against a 200 rps token bucket, so most HTTP operations are skipped; a starved harness did not drive the subject and the run is INVALID, never a PASS
 D14	defect	INVALID	exited 4	-	-	harness: RunIdentity reports a code source outside sava-rpc/build, standing in for a run that soaked the published jar instead of the working tree
+interrupted	defect	INCOMPLETE	outside its schedule	SOAK_CONTROL=INTERRUPTED	-	harness: 5 s into STEADY the client sends itself SIGTERM, the signal a ctrl-c or a host shutdown delivers; its shutdown hook writes the counters and an ABORTED phase row and the runner sees exit 143, and the verdict must read the interruption as INCOMPLETE rather than grade the partial artifacts (a copied run with exactly these artifacts re-reported as PASS before the runner read either signal)
 filter-typo	defect	FAIL	resolved to nothing	-	-	runner: soak.sh appends one deliberately misspelled entry to the method-timing filter. A bad filter entry is silent on this JDK, so this row is what proves the launch gate reads jfr-methodtrace.log correctly rather than trusting the filter
 stall-callback	defect	FAIL	stuck	SOAK_DURATION_SECONDS=300	-	harness: one notification consumer parks for the rest of the run on the thread the subject delivers on (soak-hc-N, the client's own executor), so the same-top-frame-in-three-consecutive-thread-dumps detector must fire; the duration override pins the three 60 s thread-dump periods it needs, whatever the profile's own duration is
 no-faults	fault	PASS	fault_fidelity=n/a	SOAK_FAULT_RATE=0 SOAK_FAULT_MIN_PER_KIND=0	peer:SCHEDULE_PLANNED=0	nothing is injected: the noise baseline. It must PASS with an empty plan - an undefined fidelity and a peer that planned nothing - and its exception floor and unexpected-exception classes are what later runs are read against. Both halves are asserted because a rate of 0 that silently planned a dense schedule would still PASS
