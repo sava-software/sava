@@ -115,7 +115,7 @@ public record Timings(long reConnectDelay,
   /// [#subscriptionResendDelay()], which is not floored.
   static long resendDelayFor(final long reConnectDelay, final long subscriptionAndPingCheckDelay) {
     // Floored at 1: zero is legal for both inputs — no reconnect throttle, a never-parking
-    // check loop — but a zero re-send deadline is rejected by this record's own validation,
+    // check loop — but a zero re-send deadline is rejected by the builder,
     // and a caller choosing two legal values must not be told their combination is nonsense.
     final long floored = Math.max(reConnectDelay, subscriptionAndPingCheckDelay);
     return floored > 0 ? floored : 1;

@@ -60,8 +60,8 @@ types. Pinned versions worth checking on each sync: `spl-token-interface`,
 ## Token-2022 extensions
 
 Java: `sava-core/src/main/java/software/sava/core/accounts/token/`
-- `extensions/TokenExtension.java` — sealed hierarchy covering all 29 known on-chain
-  extension types, ordinals 0 (`Uninitialized`) through 28 (`PermissionedBurn`). Each
+- `extensions/TokenExtension.java` — sealed hierarchy covering every known on-chain
+  extension type, with `UnknownTokenExtension` for the rest. Each
   concrete type's `ordinal()` returns its fixed wire ID, which **must match the Rust
   `ExtensionType` ordinal**. The model is the `Set<TokenExtension>` on
   `Token2022`/`Token2022Account`: users iterate it and switch on the sealed type;
@@ -106,7 +106,8 @@ Agave/SPL canonical sources:
   `TokenGroup`/`TokenGroupMember` come from `spl-token-group-interface`.
 
 Optional-pubkey semantics: Rust maps all-zero to `None`; the Java records keep the raw
-32-byte key. This is intentional — callers defensively check `null` and `PublicKey.NONE`.
+32-byte key. This is intentional: a parsed optional key is never `null`, and absence equals
+`PublicKey.NONE`.
 
 Tests: `sava-core/src/test/java/software/sava/core/accounts/token/extensions/`
 - `ExtensionRoundTripTests.java` — write→read round trips for all 29 types through

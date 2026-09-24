@@ -117,8 +117,8 @@ changes how much is allocated, never what is computed:
   reason — "an allocation-bound assertion could convert this family to
   killable, accepted instead because decode has no zero-allocation
   contract" — asked the wrong question. There is no zero-allocation
-  contract, but there *is* a bit bound, and it is stated in the method's own
-  comment: never under-allocate, and round up only to the limb boundary.
+  contract, but there *is* a bit bound: never under-allocate, and round up
+  only to the limb boundary.
   That is assertable as a value, so no allocation harness was needed:
   `limbsLength` is package-private and `Base58LimbBoundTests` checks it
   against an exact `BigInteger` oracle — the minimum limbs holding

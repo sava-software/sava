@@ -80,9 +80,8 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   string, negative, fractional or out-of-range id, or an error object parsed on its own;
   reading it is best effort and never costs the caller the error object itself.
 - `SolanaRpcClientBuilder.compressResponses()` composes with a previously set
-  `extendRequest` (it silently replaced it until 2026-07-21). `extendRequest`
-  itself is still a plain setter: calling it *after* `compressResponses()`
-  replaces everything, compression header included.
+  `extendRequest`. `extendRequest` itself is a plain setter: calling it *after*
+  `compressResponses()` replaces everything, compression header included.
 - Both `simulateTransaction` families default `replaceRecentBlockhash` to
   `true`, so a simulation does not fail on an expired blockhash by default.
 - `Transaction.sign(List<Signer>)` selects the `SequencedCollection` overload and signs
