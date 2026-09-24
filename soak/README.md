@@ -152,6 +152,14 @@ because a cycle drawn from a list's programs and mints would never see one. `W1-
 verdict on a live run: its evidence is the peer's own re-send rows, and there are none to clear
 the replay set.
 
+Three account lists are committed under `config/`. `live-devnet-keys.txt` and
+`live-mainnet-keys.txt` hold sixteen sysvars, programs and a mint each: every entry answers
+`getAccountInfo`, and only the sysvars that move notify. `live-mainnet-stream-keys.txt` holds the
+clock sysvar, the USDC mint and the Token program, which makes every websocket channel deliver
+(the program channel alone at several thousand notifications a second, through the harness's
+memcmp filter at offset 0, which on a token account is the mint), so it is the list for a live run
+that wants channel coverage rather than a quiet one.
+
 ```sh
 SOAK_LIVE_HTTP_URL=... SOAK_LIVE_WS_URL=... SOAK_LIVE_CLUSTER=devnet \
 SOAK_LIVE_RPS=5 SOAK_LIVE_CONCURRENCY=4 SOAK_LIVE_ACCOUNTS=keys.txt ./soak.sh live

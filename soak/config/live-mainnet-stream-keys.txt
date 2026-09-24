@@ -1,0 +1,8 @@
+# Three mainnet accounts that make every websocket channel deliver on a live soak: the clock sysvar
+# (accountSubscribe notifies every slot), the USDC mint (logsSubscribe mentions is a dense stream) and
+# the Token program (programSubscribe with the harness memcmp filter at offset 0 against another key
+# of the table selects that mint's token accounts, several thousand notifications a second).
+# Measured 2026-09-24 on Helius: ~550k deliveries in two minutes, 0 unexplained retirements.
+SysvarC1ock11111111111111111111111111111111
+EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
