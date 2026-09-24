@@ -1,6 +1,7 @@
 package software.sava.rpc.soak.churn;
 
 import com.sun.management.UnixOperatingSystemMXBean;
+import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.client.SolanaRpcClient;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.JsonRpcException;
@@ -23,6 +24,7 @@ import java.net.UnknownServiceException;
 import java.net.http.HttpRequest;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -59,7 +61,9 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
   /// magnitude more than it needs; a cycle that misses it is evidence, not impatience.
   static final long CONNECT_BOUND_MILLIS = 10_000L;
 
-  /// How long one cycle waits for one notification per registration.
+  /// How long one cycle waits for one notification per accepted registration — on a live run,
+  /// for the node's confirmation of each, since the supplied accounts need not move inside any
+  /// bound (a cycle drawn from a list's static entries, programs and mints, never would).
   static final long NOTIFY_BOUND_MILLIS = 10_000L;
 
   /// The settle window after `close()` before the thread count is read. `close()` sends a polite
@@ -68,8 +72,9 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
   static final long QUIESCE_MILLIS = 5_000L;
 
   /// Registrations per engine cycle: enough that a replay or a dispatch bug has somewhere to show,
-  /// few enough that a cycle fits inside its bounds.
-  static final int REGISTRATIONS_PER_CYCLE = 4;
+  /// few enough that a cycle fits inside its bounds. The plan's size; a cycle registers as many
+  /// *distinct* keys as the table offers up to it ([#cycleKeys]).
+  public static final int REGISTRATIONS_PER_CYCLE = 4;
 
   /// RPC clients built and dropped per client cycle.
   static final int CLIENTS_PER_CYCLE = 8;
@@ -81,6 +86,9 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
   // the peer answered with a scheduled 503, is expected, and a bare count could not say so.
   private static final String ENGINE_CYCLE_FAILED_CONNECT = "churn.engine.cycleFailed.connect";
   private static final String ENGINE_CYCLE_FAILED_NOTIFY = "churn.engine.cycleFailed.notify";
+  private static final String ENGINE_CYCLE_FAILED_CONFIRM = "churn.engine.cycleFailed.confirm";
+  private static final String ENGINE_CYCLE_FAILED_SUBSCRIBE = "churn.engine.cycleFailed.subscribe";
+  private static final String ENGINE_SUBSCRIBE_REFUSED = "churn.engine.subscribeRefused";
   private static final String ENGINE_CYCLE_FAILED_ENGINE_ERROR = "churn.engine.cycleFailed.engineError";
   private static final String ENGINE_CYCLE_FAILED_EXCEPTION = "churn.engine.cycleFailed.exception";
   private static final String CLIENT_CYCLE_FAILED_REQUEST = "churn.client.cycleFailed.request";
@@ -189,9 +197,13 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
         .commitment(Commitment.CONFIRMED)
         .create();
 
-    final var opened = new CountDownLatch(1);
-    final var notified = new CountDownLatch(REGISTRATIONS_PER_CYCLE);
+    // The keys before the latches, and the latches before the first subscribe: a confirmation or
+    // a notification can arrive before `accountSubscribe` returns.
+    final var keys = cycleKeys(ctx.keyTable(), counters.get(Counters.CHURN_ENGINE_CYCLES));
+    final var notified = new CountDownLatch(keys.length);
+    final var confirmed = new CountDownLatch(keys.length);
     boolean confirmedOpen = false;
+    int accepted = 0;
     try {
       websocket.exceptionSubscribe(exception -> {
         counters.increment(ENGINE_CYCLE_FAILED);
@@ -207,7 +219,6 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
       confirmedOpen = true;
       try {
         connect.get(CONNECT_BOUND_MILLIS, TimeUnit.MILLISECONDS);
-        opened.countDown();
       } catch (final ExecutionException | TimeoutException e) {
         // A cycle that could not connect proves nothing about release; it is counted so a run whose
         // peer went away does not look like a clean set of cycles.
@@ -215,26 +226,48 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
         counters.increment(ENGINE_CYCLE_FAILED_CONNECT);
       }
 
-      final var keyTable = ctx.keyTable();
-      final var seen = new AtomicBoolean[REGISTRATIONS_PER_CYCLE];
-      for (int i = 0; i < REGISTRATIONS_PER_CYCLE; ++i) {
+      for (final var key : keys) {
         final var once = new AtomicBoolean();
-        seen[i] = once;
-        final int keyIndex = (int) ((counters.get(Counters.CHURN_ENGINE_CYCLES) * 7L + i) & 0xFFL);
-        liveRegistrations.incrementAndGet();
-        websocket.accountSubscribe(Commitment.CONFIRMED, keyTable[keyIndex], accountInfo -> {
-          if (once.compareAndSet(false, true)) {
-            notified.countDown();
-          }
-        });
+        final boolean sent = websocket.accountSubscribe(Commitment.CONFIRMED, key,
+            subscription -> confirmed.countDown(),
+            accountInfo -> {
+              if (once.compareAndSet(false, true)) {
+                notified.countDown();
+              }
+            });
+        if (sent) {
+          ++accepted;
+          liveRegistrations.incrementAndGet();
+        } else {
+          // The engine's own refusal — a `(commitment, key)` it already holds, or an engine
+          // already closed — returns false rather than throwing. Counted, and released from both
+          // latches: a cycle cannot wait on a registration that does not exist (review).
+          counters.increment(ENGINE_SUBSCRIBE_REFUSED);
+          confirmed.countDown();
+          notified.countDown();
+        }
       }
-      if (!notified.await(NOTIFY_BOUND_MILLIS, TimeUnit.MILLISECONDS)) {
+      if (accepted == 0) {
+        counters.increment(ENGINE_CYCLE_FAILED);
+        counters.increment(ENGINE_CYCLE_FAILED_SUBSCRIBE);
+      } else if (ctx.live()) {
+        // A real node confirms every grant but moves only the accounts the runtime or a
+        // transaction writes to, so the live cycle's evidence that the engine registered is the
+        // node's confirmation of each accepted registration, not a notification the account may
+        // never produce. Every cycle of the first live runs "failed" the notification latch —
+        // over a seeded table the driver had not yet swapped for the supplied accounts — and a
+        // cycle drawn from a supplied list's programs and mints would fail it the same way.
+        if (!confirmed.await(NOTIFY_BOUND_MILLIS, TimeUnit.MILLISECONDS)) {
+          counters.increment(ENGINE_CYCLE_FAILED);
+          counters.increment(ENGINE_CYCLE_FAILED_CONFIRM);
+        }
+      } else if (!notified.await(NOTIFY_BOUND_MILLIS, TimeUnit.MILLISECONDS)) {
         counters.increment(ENGINE_CYCLE_FAILED);
         counters.increment(ENGINE_CYCLE_FAILED_NOTIFY);
       }
     } finally {
       websocket.close();
-      liveRegistrations.addAndGet(-REGISTRATIONS_PER_CYCLE);
+      liveRegistrations.addAndGet(-accepted);
       if (confirmedOpen) {
         openConnections.decrementAndGet();
       }
@@ -243,6 +276,21 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
 
     LockSupport.parkNanos(QUIESCE_MILLIS * 1_000_000L);
     assertEngineReleased(websocket);
+  }
+
+  /// The distinct keys one cycle registers: a walk over the table from the cycle's start index,
+  /// stopping at [#REGISTRATIONS_PER_CYCLE] distinct keys or after one lap. The seeded table has
+  /// 256 distinct keys, so a local cycle registers four — the same four the plain index arithmetic
+  /// picked; a live table is the supplied accounts cycled, and two accounts yield two. The engine
+  /// refuses a `(commitment, key)` it already holds, so a latch sized to the plan instead of to
+  /// the accepted registrations could never open (review).
+  public static PublicKey[] cycleKeys(final PublicKey[] table, final long cycle) {
+    final var keys = new LinkedHashSet<PublicKey>(REGISTRATIONS_PER_CYCLE * 2);
+    final int start = (int) Math.floorMod(cycle * 7L, (long) table.length);
+    for (int i = 0; i < table.length && keys.size() < REGISTRATIONS_PER_CYCLE; ++i) {
+      keys.add(table[(start + i) % table.length]);
+    }
+    return keys.toArray(PublicKey[]::new);
   }
 
   /// W5-A. The thread margin is the public half — no reflection, no add-opens — and the

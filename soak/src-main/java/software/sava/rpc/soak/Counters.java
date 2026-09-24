@@ -90,6 +90,11 @@ public final class Counters {
   public static final String RPC_GZIP_OK = "rpc.gzip.ok";
   public static final String RPC_GZIP_BAD_CLEAN = "rpc.gzip.badGzipClean";
   public static final String RPC_GZIP_TRUNCATED_CLEAN = "rpc.gzip.truncatedClean";
+  /// Gzip-client answers the peer's rotation served with no encoding: whole, and evidence of
+  /// nothing about decoding, so they earn no W3-C pass.
+  public static final String RPC_GZIP_IDENTITY_SERVED = "rpc.gzip.identityServed";
+  /// W3-C twins whose gzip half was one of those; no verdict either way.
+  public static final String HTTP_TWIN_IDENTITY_SERVED = "http.twin.identityServed";
 
   public static final String CHURN_ENGINE_CYCLES = "churn.engine.cycles";
   public static final String CHURN_CLIENT_CYCLES = "churn.client.cycles";
@@ -213,7 +218,8 @@ public final class Counters {
       RPC_COMPLETED_MISMATCH,
       RPC_TEST_RESPONSE_INVOKED, RPC_BYTES_RECEIVED, RPC_DEADLINE_HONOURED, RPC_DEADLINE_MISSED,
       RPC_NOWRAP_COMPLETED, RPC_PROBE_SENT, RPC_SHUTDOWN_CANCELLED, HTTP_INFLIGHT_UNTRACKED, HTTP_W4C_POOL_STARVED,
-      RPC_GZIP_OK, RPC_GZIP_BAD_CLEAN, RPC_GZIP_TRUNCATED_CLEAN,
+      RPC_GZIP_OK, RPC_GZIP_BAD_CLEAN, RPC_GZIP_TRUNCATED_CLEAN, RPC_GZIP_IDENTITY_SERVED,
+      HTTP_TWIN_IDENTITY_SERVED,
       CHURN_ENGINE_CYCLES, CHURN_CLIENT_CYCLES,
       FAULTS_OBSERVED, RECOVERY_OPENED, RECOVERY_COMPLETED, RECOVERY_OVER_BUDGET,
       RECOVERY_SUPERSEDED, RECOVERY_VACUOUS,

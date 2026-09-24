@@ -60,6 +60,7 @@ public final class SoakContext implements AutoCloseable {
   private final ScheduledExecutorService timer;
   private final AtomicReference<Phase> phase;
   private final PublicKey[] keyTable;
+  private final PublicKey[] liveAccounts;
   private final CopyOnWriteArrayList<GaugeSampler.GaugeSource> pendingGauges;
   private final AtomicReference<GaugeSampler> gauges;
 
@@ -86,10 +87,12 @@ public final class SoakContext implements AutoCloseable {
     this.peerAdmin = peerAdmin;
     this.timer = timer;
     this.phase = new AtomicReference<>(Phase.STARTUP);
-    // A live run's key table is the supplied accounts, cycled to the table's size, so every
-    // driver - HTTP, websocket, churn - targets accounts that exist and move; the seeded table is
-    // keys nobody funded, and subscribing to them on a real node measured nothing (review).
-    this.keyTable = config.live() ? Seeds.liveKeyTable(config.liveAccounts()) : Seeds.keyTable(config.seed());
+    // A live run's population is the supplied accounts, whole and in file order: the HTTP driver
+    // samples all of them, and the byte-indexed table the websocket and churn drivers share is
+    // that population cycled (or its first 256 entries). The seeded table is keys nobody funded,
+    // and subscribing to them on a real node measured nothing (review).
+    this.liveAccounts = config.live() ? Seeds.liveAccounts(config.liveAccounts()) : null;
+    this.keyTable = config.live() ? Seeds.cycled(liveAccounts) : Seeds.keyTable(config.seed());
     this.pendingGauges = new CopyOnWriteArrayList<>();
     this.gauges = new AtomicReference<>();
   }
@@ -208,9 +211,17 @@ public final class SoakContext implements AutoCloseable {
     return config.live();
   }
 
-  /// The run's 256 deterministic keys, shared by every driver and by the peer.
+  /// The run's 256 deterministic keys, shared by every driver and by the peer; on a live run,
+  /// [#liveAccounts] cycled to that size (or its first 256 entries).
   public PublicKey[] keyTable() {
     return keyTable;
+  }
+
+  /// The whole live population, in file order without duplicates; null unless the run is live.
+  /// The HTTP driver samples this rather than [#keyTable], so a list longer than the table loses
+  /// nothing there.
+  public PublicKey[] liveAccounts() {
+    return liveAccounts;
   }
 
   /// Publishes a driver's live counts to the gauge. Safe before the sampler exists: sources

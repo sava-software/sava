@@ -18,6 +18,7 @@ import software.sava.rpc.soak.Workload;
 import software.sava.rpc.soak.churn.ChurnWorkload;
 import software.sava.rpc.soak.control.HarnessControls;
 import software.sava.rpc.soak.events.SoakEvents;
+import systems.comodal.jsoniter.JsonIterator;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -46,6 +47,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.UnaryOperator;
@@ -112,6 +114,11 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
   static final int SIGNATURES_PER_CALL = 4;
   static final int WEDGE_PROBES = 3;
   static final Duration TWIN_PERIOD = Duration.ofSeconds(5);
+
+  /// Slots in the gzip subject's ring of identity-served request ids; a power of two, indexed by
+  /// the id's low bits. The client mints ids in sequence, so a lookup is exact for the newest
+  /// `IDENTITY_RING` ids, far more than a twin's decoded answer trails its predicate call by.
+  static final int IDENTITY_RING = 4096;
 
   private static final long INFLIGHT_WAIT_MILLIS = 250L;
   private static final long POLL_PARK_NANOS = TimeUnit.MILLISECONDS.toNanos(20);
@@ -224,9 +231,10 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     this.cancelFraction = config.cancelFraction();
     this.largeFraction = config.largeFraction();
     this.mix = Rpc.mix(ctx.live());
-    // In a live run the context's key table is SOAK_LIVE_ACCOUNTS, cycled: every driver then
-    // subscribes to and queries the supplied accounts, not a seeded table of keys nobody funded.
-    this.keys = ctx.keyTable();
+    // In a live run the population is SOAK_LIVE_ACCOUNTS itself, whole and in file order, not
+    // the byte-indexed table the websocket and churn drivers cycle it into: a list longer than
+    // that table used to lose every entry past the 256th here, silently (review).
+    this.keys = ctx.live() ? ctx.liveAccounts() : ctx.keyTable();
     this.programKey = keys[0];
     this.bucket = new TokenBucket(ratePerSecond);
     this.inFlight = new AtomicInteger();
@@ -1358,6 +1366,13 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     arm(new Op(gzip, Rpc.GET_ACCOUNT_INFO, ordinal, key, begun(), "WRAPPED", null,
         Rpc.GET_ACCOUNT_INFO.bound(SUBJECT_REQUEST_TIMEOUT.toMillis()), false), gzipFuture);
     plainFuture.thenCombine(gzipFuture, (left, right) -> {
+      if (right != null && RpcOracle.stampIntact(right.data())
+          && gzip.identityServed(RpcOracle.stampRequestId(right.data()))) {
+        // The rotation served the gzip half with no encoding: two identity bodies agreeing is not
+        // a decoding observation, so this twin records no verdict (it used to pass; review).
+        counters.increment(Counters.HTTP_TWIN_IDENTITY_SERVED);
+        return null;
+      }
       final long leftProjection = projection(left);
       final long rightProjection = projection(right);
       if (leftProjection == rightProjection && leftProjection != -1L) {
@@ -1554,6 +1569,11 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     /// work rather than the whole workload's.
     private final LongAdder outstanding = new LongAdder();
     private final AtomicInteger wedgeProbes = new AtomicInteger();
+    /// The JSON-RPC ids of this client's identity-served answers, a ring indexed by the id's low
+    /// bits ([HttpWorkload#IDENTITY_RING]); a slot holds the newest id that maps to it, so a
+    /// lookup is exact while the id is among the newest ring's worth. Only the gzip subject
+    /// writes it; the twin comparison reads it.
+    private final AtomicLongArray identityServed = new AtomicLongArray(IDENTITY_RING);
     private SolanaRpcClient client;
     /// This subject's W3-D probe route: the same endpoint over the same caller-owned
     /// `HttpClient`, with [HttpWorkload#PROBE_HEADER] on every request so the peer does not answer a question
@@ -1572,6 +1592,27 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
       this.client = client;
       this.hasTestResponse = hasTestResponse;
       this.verifiesDecoding = CLIENT_GZIP.equals(name);
+      for (int i = 0; i < IDENTITY_RING; ++i) {
+        identityServed.set(i, -1L);
+      }
+    }
+
+    private void rememberIdentityServed(final byte[] body) {
+      if (body == null || body.length == 0) {
+        return;
+      }
+      final var requestId = JsonRpcException.envelopeRequestId(JsonIterator.parse(body), 0);
+      if (requestId.isPresent()) {
+        final long id = requestId.getAsLong();
+        identityServed.set((int) (id & (IDENTITY_RING - 1)), id);
+      }
+    }
+
+    /// Whether the answer to `requestId` was served with no encoding, as far as the ring still
+    /// remembers.
+    private boolean identityServed(final long requestId) {
+      return requestId >= 0L
+          && identityServed.get((int) (requestId & (IDENTITY_RING - 1))) == requestId;
     }
 
     /// The `testResponse` predicate: the documented position from which a caller sees
@@ -1593,7 +1634,14 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
         counters.increment(Counters.RPC_GZIP_OK);
       }
       if (verifiesDecoding && !ctx.live() && response.statusCode() / 100 == 2) {
-        if (body != null && body.length >= 2 && (body[0] & 0xFF) == 0x1F && (body[1] & 0xFF) == 0x8B) {
+        if (!encoding.contains("gzip")) {
+          // The peer's rotation serves one gzip-capable request in four with no encoding at all
+          // (DESIGN.md §7). A whole identity body says nothing about decoding, so it earns no pass
+          // (it used to; review). Its request id is kept so the twin comparison can tell a half
+          // that was served identity from one the client decoded.
+          counters.increment(Counters.RPC_GZIP_IDENTITY_SERVED);
+          rememberIdentityServed(body);
+        } else if (body != null && body.length >= 2 && (body[0] & 0xFF) == 0x1F && (body[1] & 0xFF) == 0x8B) {
           // The body still carries the gzip magic after the client said it had read it: the
           // encoding was announced and not applied. A sharp, race-free decoding defect.
           ctx.properties().fail("W3-C", "a body announced as " + encoding

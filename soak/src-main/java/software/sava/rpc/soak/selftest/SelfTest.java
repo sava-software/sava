@@ -3,6 +3,8 @@ package software.sava.rpc.soak.selftest;
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.ws.SolanaRpcWebsocket;
+import software.sava.rpc.soak.Seeds;
+import software.sava.rpc.soak.churn.ChurnWorkload;
 import software.sava.rpc.soak.issue52.AttemptTracker;
 import software.sava.rpc.soak.issue52.BackoffClass;
 import software.sava.rpc.soak.issue52.ClaimRecord;
@@ -26,8 +28,11 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.SplittableRandom;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -87,6 +92,8 @@ public final class SelfTest {
       check(RetirementDetector.selfTest(), "synthetic frames misjudged");
       return "synthetic frames judged";
     });
+    all &= run("SEEDS", SelfTest::seedsLivePopulation);
+    all &= run("CHURNKEYS", SelfTest::churnCycleKeys);
     all &= run("P1", SelfTest::p1JdkClose);
     all &= run("P2", SelfTest::p2JdkError);
     all &= run("P3", SelfTest::p3MaxMessageOverflow);
@@ -124,6 +131,75 @@ public final class SelfTest {
       t.printStackTrace(System.out);
       return false;
     }
+  }
+
+  /// `Seeds.liveAccounts` keeps the whole population in file order without duplicates, and
+  /// `Seeds.cycled` is the byte-indexed view of it: cycled below the table's size, truncated above.
+  private static String seedsLivePopulation() throws IOException {
+    final var random = new SplittableRandom(0x5EED5L);
+    final var written = new ArrayList<PublicKey>();
+    for (int i = 0; i < 300; ++i) {
+      final byte[] bytes = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+      random.nextBytes(bytes);
+      written.add(PublicKey.createPubKey(bytes));
+    }
+    final var lines = new ArrayList<String>();
+    lines.add("# a comment, then a blank line");
+    lines.add("");
+    for (final var key : written) {
+      lines.add("  " + key.toBase58() + "  ");
+    }
+    lines.add(written.get(0).toBase58());
+    lines.add(written.get(299).toBase58());
+    final var file = Files.createTempFile("soak-selftest-accounts", ".txt");
+    try {
+      Files.write(file, lines);
+      final var population = Seeds.liveAccounts(file);
+      checkEquals(300, population.length, "population size (duplicates dropped, comments skipped)");
+      checkEquals(written.get(0), population[0], "first key");
+      checkEquals(written.get(299), population[299], "last key");
+      final var table = Seeds.cycled(population);
+      checkEquals(Seeds.KEY_TABLE_SIZE, table.length, "table size over a long population");
+      for (int i = 0; i < table.length; ++i) {
+        checkEquals(population[i], table[i], "long population entry " + i);
+      }
+      final var three = Seeds.cycled(new PublicKey[]{written.get(0), written.get(1), written.get(2)});
+      checkEquals(Seeds.KEY_TABLE_SIZE, three.length, "table size over a short population");
+      for (int i = 0; i < three.length; ++i) {
+        checkEquals(written.get(i % 3), three[i], "short population entry " + i);
+      }
+      Files.write(file, List.of("# only a comment"));
+      try {
+        Seeds.liveAccounts(file);
+        throw new AssertionError("an empty population was accepted");
+      } catch (final IllegalStateException expected) {
+        // the stated refusal
+      }
+    } finally {
+      Files.deleteIfExists(file);
+    }
+    return "300 keys kept whole for HTTP sampling, cycled and truncated for the byte-indexed table";
+  }
+
+  /// A churn cycle registers distinct keys only, sized by the population rather than by the plan.
+  private static String churnCycleKeys() {
+    final var seeded = Seeds.keyTable(7L);
+    // 7 * 146 = 1022 = 3 * 256 + 254: the walk starts at index 254 and wraps.
+    final long wrapping = 146L;
+    final var local = ChurnWorkload.cycleKeys(seeded, wrapping);
+    checkEquals(ChurnWorkload.REGISTRATIONS_PER_CYCLE, local.length, "seeded cycle size");
+    for (int i = 0; i < local.length; ++i) {
+      checkEquals(seeded[(int) ((wrapping * 7L + i) & 0xFFL)], local[i], "seeded cycle key " + i);
+    }
+    final var two = ChurnWorkload.cycleKeys(Seeds.cycled(new PublicKey[]{seeded[0], seeded[1]}), 0L);
+    checkEquals(2, two.length, "two-account population registers two keys, not four");
+    // Five accounts cycled: indices 254, 255, 0, 1 are accounts 4, 0, 0, 1 - the plain arithmetic
+    // would have offered account 0 twice; the walk continues to account 2 instead.
+    final var five = ChurnWorkload.cycleKeys(
+        Seeds.cycled(new PublicKey[]{seeded[0], seeded[1], seeded[2], seeded[3], seeded[4]}), wrapping);
+    checkEquals(4, five.length, "five-account population still registers four distinct keys");
+    checkEquals(4, new HashSet<>(List.of(five)).size(), "five-account cycle keys are distinct");
+    return "distinct keys per cycle: 4 seeded, 2 of 2, 4 of 5 across the table's wrap";
   }
 
   static void check(final boolean condition, final String message) {

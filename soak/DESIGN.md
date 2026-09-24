@@ -199,9 +199,15 @@ note. The same runs settled three more live rules: every websocket engine dials
 evaluated, because the sequence it judges is the controlled peer's stamp and a real node's
 field there is the slot; the plan's generic channel (`transactionSubscribe`, a method no real
 node has) is skipped and counted; and `pending_confirm` reads the engine's own grants
-(`Subscription.subId()`); the key table every driver draws from is `SOAK_LIVE_ACCOUNTS`,
-cycled to the table's size, so the websocket and churn subscriptions target accounts that exist
-and move rather than a seeded table nobody funded; and `W1-A` renders no verdict, since its
+(`Subscription.subId()`); the population every driver draws from is `SOAK_LIVE_ACCOUNTS` — the
+HTTP driver samples the whole list, and the websocket and churn drivers index the byte-sized
+table it is cycled into (its first 256 entries when the list is longer), so the subscriptions
+target accounts that exist rather than a seeded table nobody funded (a list past 256 used to lose
+its tail for HTTP too; review). The first three live runs predate that swap, so nothing they say
+about account-channel deliveries is evidence: their engines subscribed to seeded keys, which is
+why every churn cycle missed its notification latch and W2-A was never reached; the first run on
+the supplied list (Helius, two accounts) delivered clock-sysvar notifications on the account
+channel with W2-A stated as not evaluated; and `W1-A` renders no verdict, since its
 evidence is the peer's re-send rows and nothing else clears a replay set. No `X-Soak-*` header
 is sent, from any driver: the churn driver's copy of the probe marker was sending one until the
 rule was made a single shared method (review).
@@ -855,7 +861,12 @@ Oracle decisions the integration settled, each on evidence from a run:
   carries no `value.pubkey` at all — sava fills it from the registration — so asserting there
   would compare the harness against its own request.
 - **W2-A** is checked against the notification the bytes arrived in (payload sequence header and
-  `value.space`), not only against the payload's own checksum; see §7.
+  `value.space`), not only against the payload's own checksum; see §7. It is a peer-established
+  check — the checksum is the controlled peer's — so it is gated on the peer oracle and stated as
+  not evaluated on a live run, where a real node's account data would otherwise have failed it on
+  the first delivery (review; the first live runs delivered none only because their engines still
+  subscribed to the seeded table, and the first run on the supplied accounts delivered clock
+  notifications with the gate in place).
 - **W3-B**'s bound is the bound the ledger publishes: the exchange deadline
   (`2 × requestTimeout`) plus 2 s of slack, and a FAIL past *that*, not past twice it. An
   operation whose own harness bound expires before the client's deadline was due records neither
@@ -881,7 +892,12 @@ Oracle decisions the integration settled, each on evidence from a run:
   side cannot tell a malformed body from a whole one the client rejected, so the clean failure
   only leaves the row the report joins against the peer's applied faults, and the pass comes from
   the paths that saw the body whole (a client rejecting every valid gzip body used to pass on its
-  own rejections; review).
+  own rejections; review). Those paths must also have seen it *compressed*: the predicate's pass
+  needs a body the peer served under `gzip`, `x-gzip` or `identity, gzip` and handed over whole
+  and unframed — the rotation's plain quarter is counted (`rpc.gzip.identityServed`) and earns
+  nothing — and the twin comparison records nothing when its gzip half came back identity-served
+  (`http.twin.identityServed`; the stamp's request id is matched against the predicate's ring of
+  identity-served ids). Both used to pass on bodies nothing had decoded (review).
 - **W3-D** means *settles*, not *succeeds*: the three operations after an error must settle
   inside the client's exchange deadline (`2 × requestTimeout`, `JsonHttpClient`'s
   `withResponseDeadline`) plus 2 s. One answered promptly with another error is not wedged — the
@@ -963,10 +979,17 @@ rpc.wedgeProbe.erroredFast           a W3-D probe that settled with an error ins
                                      wedge, but a burst says the pool handed out a peer-closed socket
 rpc.probe.sent                       requests carrying X-Soak-Probe (section 7), counted once per request the
                                      client built, so it cannot drift from what went on the wire
-rpc.gzip.ok / .badGzipClean / .truncatedClean
-churn.engine.cycles / churn.client.cycles / churn.engine.cycleFailed{,.connect,.notify,.engineError,.exception} / churn.client.cycleFailed{,.request,.exception}
+rpc.gzip.ok / .badGzipClean / .truncatedClean / .identityServed
+                                     identityServed: gzip-client answers the peer's rotation served with no
+                                     encoding; whole, but no W3-C pass
+http.twin.identityServed             W3-C twins whose gzip half was identity-served: no verdict either way
+churn.engine.cycles / churn.client.cycles / churn.engine.cycleFailed{,.connect,.subscribe,.notify,.confirm,.engineError,.exception} / churn.engine.subscribeRefused / churn.client.cycleFailed{,.request,.exception}
                                      the churn ports sit under the fault schedule, so a failed cycle
-                                     names its cause (a stalled handshake, a scheduled 503) beside the count
+                                     names its cause (a stalled handshake, a scheduled 503) beside the count;
+                                     subscribe: the engine accepted none of the cycle's keys; notify (local) /
+                                     confirm (live): the accepted registrations were not all notified /
+                                     confirmed inside the bound; subscribeRefused: keys the engine answered
+                                     false for, released from the latch rather than waited on
 harness.opsSkipped.inflightCap / harness.opsSkipped.deadline / harness.opsAttempted / http.ops.attempted
                                      inflightCap: the HTTP driver drew its pace token and its worker's
                                      SOAK_HTTP_INFLIGHT permits were all still held; deadline: reserved,
@@ -1329,7 +1352,7 @@ committing thread).
   (production factory). `webSocket()` is called once at start and never polled.
 - Prototype: `SolanaRpcWebsocket.build().uri(ws://127.0.0.1:<port>).webSocketBuilder(tracker.wrap(httpClient)).pingDelay(...).subscriptionAndPingCheckDelay(...).commitment(CONFIRMED)`.
 - `SubscriptionPlan(seed, engine)`: deterministic ops over a 256-key table
-  (`Seeds.keyTable(seed)`; a live run's table is `SOAK_LIVE_ACCOUNTS` cycled), `SUBSCRIBE |
+  (`Seeds.keyTable(seed)`; on a live run `Seeds.cycled` over `SOAK_LIVE_ACCOUNTS`), `SUBSCRIBE |
   UNSUBSCRIBE | RESUBSCRIBE_SAME_KEY | SUBSCRIBE_DUPLICATE_PARAMS | NOOP` (the duplicate step
   subscribes once through the harness's registry and then offers the byte-identical subscribe to
   the library directly, bypassing the registry — the registry refused it first and the library
@@ -1363,7 +1386,9 @@ committing thread).
   idle, and a standalone reproduction against a stalled-body server settled at 1.0 s every
   time; the sentinel is what makes the next occurrence attributable.
 - `ChurnWorkload`: W5a engine cycles every `SOAK_CHURN_PERIOD_SECONDS` (build, connect (10 s),
-  4 registrations, one notification each (10 s), `close()`, 5 s quiesce, thread-count check,
+  up to 4 distinct registrations with the latch sized to the ones the engine accepted, one
+  notification each (10 s) — one confirmation each on a live run, where the supplied accounts need
+  not move — `close()`, 5 s quiesce, thread-count check,
   `executorServiceShutdown()` via probes when available); W5b client cycles over the shared
   `HttpClient` then one request on a new client.
 - `HarnessControls` (implements `Workload`, added first to the list) owns the client-side half of

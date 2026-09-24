@@ -143,9 +143,12 @@ differently: the plan's generic channel (sava's caller-defined subscribe API, ex
 the local peer's synthetic `transactionSubscribe`) is skipped and counted
 (`ws.harness.liveGenericSkipped`), because a real node has no such method; and
 `pending_confirm` reads the engine's own grants (`Subscription.subId()`) rather than the peer
-log it does not have. `SOAK_LIVE_ACCOUNTS` is every driver's key table on a live run, cycled to
-the table's size: the websocket and churn subscriptions and the HTTP account calls all target the
-supplied accounts, not a seeded table of keys nobody funded. `W1-A` renders no verdict on a live
+log it does not have. `SOAK_LIVE_ACCOUNTS` is every driver's population on a live run: the HTTP
+account calls sample the whole list, and the websocket and churn subscriptions index the 256-entry
+table it is cycled into (its first 256 entries when the list is longer), so all of them target the
+supplied accounts, not a seeded table of keys nobody funded. A live churn cycle waits for the
+node's confirmation of each accepted registration rather than a notification, because a cycle
+drawn from a list's programs and mints would never see one. `W1-A` renders no verdict on a live
 run: its evidence is the peer's own re-send rows, and there are none to clear the replay set.
 
 ```sh

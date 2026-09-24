@@ -37,13 +37,15 @@ public final class Seeds {
     return new SplittableRandom(mix(seed, CONNECTION_SALT, ordinal));
   }
 
-  /// The 256 keys both sides of a run agree on. Each key is generated from its own derived
-  /// stream, so the table is identical whichever process builds it and whichever order it
-  /// builds the entries in.
-  /// The live run's table: `SOAK_LIVE_ACCOUNTS` (one base58 key per line, `#` comments), cycled
-  /// to [#KEY_TABLE_SIZE] entries so every index a driver derives stays in range.
-  public static PublicKey[] liveKeyTable(final java.nio.file.Path accountsFile) {
-    final var accounts = new java.util.ArrayList<PublicKey>();
+  /// A live run's population: `SOAK_LIVE_ACCOUNTS` (one base58 key per line, `#` comments), in
+  /// file order with duplicate lines dropped. This is the whole list — the HTTP driver samples it
+  /// as given — and [#cycled] derives the byte-indexed table the websocket and churn drivers
+  /// share from it.
+  ///
+  /// @throws IllegalStateException when the file cannot be read, a line is not a base58 key, or
+  ///         no key remains
+  public static PublicKey[] liveAccounts(final java.nio.file.Path accountsFile) {
+    final var accounts = new java.util.LinkedHashSet<PublicKey>();
     try {
       for (final var line : java.nio.file.Files.readAllLines(accountsFile, java.nio.charset.StandardCharsets.UTF_8)) {
         final var trimmed = line.strip();
@@ -57,13 +59,27 @@ public final class Seeds {
     if (accounts.isEmpty()) {
       throw new IllegalStateException("SOAK_LIVE_ACCOUNTS holds no keys: " + accountsFile);
     }
+    return accounts.toArray(PublicKey[]::new);
+  }
+
+  /// The [#KEY_TABLE_SIZE]-entry table over a live population: the population cycled when it is
+  /// shorter than the table, its first [#KEY_TABLE_SIZE] entries when it is longer. Only the
+  /// drivers that index keys with a byte read this; a list longer than the table used to lose
+  /// every entry past the 256th for HTTP sampling too, silently (review).
+  public static PublicKey[] cycled(final PublicKey[] accounts) {
+    if (accounts == null || accounts.length == 0) {
+      throw new IllegalArgumentException("a key table needs at least one key");
+    }
     final var keys = new PublicKey[KEY_TABLE_SIZE];
     for (int i = 0; i < KEY_TABLE_SIZE; ++i) {
-      keys[i] = accounts.get(i % accounts.size());
+      keys[i] = accounts[i % accounts.length];
     }
     return keys;
   }
 
+  /// The 256 keys both sides of a run agree on. Each key is generated from its own derived
+  /// stream, so the table is identical whichever process builds it and whichever order it
+  /// builds the entries in.
   public static PublicKey[] keyTable(final long seed) {
     final var keys = new PublicKey[KEY_TABLE_SIZE];
     for (int i = 0; i < KEY_TABLE_SIZE; ++i) {

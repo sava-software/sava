@@ -1353,7 +1353,12 @@ public final class WsWorkload implements Workload, GaugeSampler.GaugeSource, Con
       }
     }
 
-    if (verifyPayload) {
+    if (verifyPayload && peerOracleAvailable) {
+      // Peer-established: the checksum is the controlled peer's, which a real node's account data
+      // cannot satisfy, so a live run skips this and states W2-A as not evaluated
+      // (`stateUnexercised`). Unguarded, it would have failed on the first account notification a
+      // live provider delivered; the first live runs delivered none only because their engines
+      // still subscribed to the seeded table (review).
       // The two-sided form: the filler's own checksum, plus the two cross-checks that tie these
       // bytes to the notification they arrived in. The checksum alone is self-consistent, so a
       // payload swapped wholesale for another sequence's, or one that decoded to fewer bytes than
