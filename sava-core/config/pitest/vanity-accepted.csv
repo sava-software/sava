@@ -9,7 +9,6 @@ software.sava.core.accounts.vanity.BaseMaskWorker,foundLimitOrInterrupted,Boolea
 software.sava.core.accounts.vanity.BaseMaskWorker,foundLimitOrInterrupted,ConditionalsBoundaryMutator,SURVIVED # untriaged # line 250
 software.sava.core.accounts.vanity.BaseMaskWorker,foundLimitOrInterrupted,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 250
 software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,MathMutator,SURVIVED # untriaged # line 148
-software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,NakedReceiverMutator,SURVIVED # untriaged # line 166
 software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 127
 software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 131
 software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 137
@@ -44,13 +43,8 @@ software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL
 software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 73
 software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 61
 software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 63
-software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 72
 software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 73
 software.sava.core.accounts.vanity.MaskWorker,run,VoidMethodCallMutator,SURVIVED # untriaged # line 85
-software.sava.core.accounts.vanity.PrivateKeyEncoding,fromJsonArray,ConditionalsBoundaryMutator,SURVIVED # untriaged # line 23
-software.sava.core.accounts.vanity.PrivateKeyEncoding,fromJsonArray,ConditionalsBoundaryMutator,SURVIVED # untriaged # line 25
-software.sava.core.accounts.vanity.PrivateKeyEncoding,fromJsonArray,NakedReceiverMutator,SURVIVED # untriaged # line 17
-software.sava.core.accounts.vanity.PrivateKeyEncoding,fromJsonArray,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # untriaged # line 25
 software.sava.core.accounts.vanity.VanityAddressGenerator,createGenerator,ConditionalsBoundaryMutator,NO_COVERAGE # untriaged # line 59
 software.sava.core.accounts.vanity.VanityAddressGenerator,createGenerator,ConditionalsBoundaryMutator,NO_COVERAGE # untriaged # line 66
 software.sava.core.accounts.vanity.VanityAddressGenerator,createGenerator,MathMutator,NO_COVERAGE # untriaged # line 65

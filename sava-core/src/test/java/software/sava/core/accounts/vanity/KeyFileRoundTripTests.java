@@ -12,7 +12,9 @@ import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
+import java.util.StringJoiner;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -104,27 +106,63 @@ final class KeyFileRoundTripTests {
     }
   }
 
-  /// JSON requires an array to end with `]`. The current hand-written key-pair parser
-  /// treats end-of-input as the last value's delimiter after it has read 64 values, so an
-  /// unterminated array is accepted. Pin that published behavior pending an owner decision
-  /// without describing it as valid JSON.
-  @Test
-  void unterminatedJsonKeyPairArrayIsCurrentBehaviorPendingOwnerDecision() {
-    final byte[] keyPair = Signer.createKeyPairBytesFromPrivateKey(new byte[Signer.KEY_LENGTH]);
-    final var json = new StringBuilder("[");
-    for (int i = 0; i < keyPair.length; ++i) {
-      if (i > 0) {
-        json.append(',');
-      }
-      json.append(Byte.toUnsignedInt(keyPair[i]));
-    }
-    final String unterminated = json.toString();
-    final String complete = unterminated + ']';
+  /// A seed holding 0 and 255 puts both byte boundaries inside a valid serialized pair.
+  private static final byte[] BOUNDARY_KEY_PAIR = boundaryKeyPair();
 
-    final var expected = PrivateKeyEncoding.jsonKeyPairArray.parseSecret(complete);
-    final var accepted = PrivateKeyEncoding.jsonKeyPairArray.parseSecret(unterminated);
-    assertEquals(expected.publicKey(), accepted.publicKey(),
-        "current parser accepts end-of-input in place of the closing bracket");
+  private static byte[] boundaryKeyPair() {
+    final byte[] seed = new byte[Signer.KEY_LENGTH];
+    Arrays.fill(seed, (byte) 7);
+    seed[0] = 0;
+    seed[1] = (byte) 0xFF;
+    return Signer.createKeyPairBytesFromPrivateKey(seed);
+  }
+
+  private static String jsonArray(final byte[] keyPair, final String separator) {
+    final var joiner = new StringJoiner(separator, "[", "]");
+    for (final byte b : keyPair) {
+      joiner.add(Integer.toString(Byte.toUnsignedInt(b)));
+    }
+    return joiner.toString();
+  }
+
+  private static void assertRejected(final String message, final String json) {
+    final var error = assertThrows(IllegalArgumentException.class,
+        () -> PrivateKeyEncoding.jsonKeyPairArray.parseSecret(json), json);
+    assertEquals(message, error.getMessage(), json);
+  }
+
+  /// solana-sdk's `read_keypair` is the reference: the trimmed input is one array of exactly 64
+  /// integers from 0 to 255, with whitespace allowed around each element.
+  @Test
+  void jsonKeyPairArrayAcceptsWhatTheSolanaCliReads() {
+    final var expected = Signer.createFromKeyPair(BOUNDARY_KEY_PAIR).publicKey();
+    for (final var json : List.of(
+        jsonArray(BOUNDARY_KEY_PAIR, ","),  // the Solana CLI's and the vanity writer's form
+        jsonArray(BOUNDARY_KEY_PAIR, ", "), // Python's json.dumps default
+        " \n" + jsonArray(BOUNDARY_KEY_PAIR, ",\n  ") + "\n"
+    )) {
+      assertEquals(expected, PrivateKeyEncoding.jsonKeyPairArray.parseSecret(json).publicKey(), json);
+    }
+  }
+
+  @Test
+  void jsonKeyPairArrayRejectsWhatTheSolanaCliRejects() {
+    final var valid = jsonArray(BOUNDARY_KEY_PAIR, ",");
+    final var elements = valid.substring(1, valid.length() - 1);
+    final var afterFirst = elements.substring(elements.indexOf(',') + 1);
+
+    assertRejected("Input must be a JSON array", valid.substring(0, valid.length() - 1));
+    assertRejected("Input must be a JSON array", "key=" + valid);
+    assertRejected("Input must be a JSON array", elements);
+    assertRejected("Input must be a JSON array", "[");
+    assertRejected("Input must be a JSON array", "");
+    assertRejected("Expected 64 elements, found 1", "[]");
+    assertRejected("Expected 64 elements, found 63", "[" + afterFirst + "]");
+    assertRejected("Expected 64 elements, found 65", "[" + elements + ",0]");
+    assertRejected("Element 0 must be 0 to 255, found 256", "[256," + afterFirst + "]");
+    assertRejected("Element 0 must be 0 to 255, found -1", "[-1," + afterFirst + "]");
+    assertThrows(IllegalArgumentException.class,
+        () -> PrivateKeyEncoding.jsonKeyPairArray.parseSecret("[x," + afterFirst + "]"));
   }
 
   /// The key-pair encodings carry the seed and the public key; the private-key

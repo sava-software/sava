@@ -7,11 +7,10 @@ import java.util.Base64;
 
 public enum PrivateKeyEncoding {
 
-  /// A JSON array containing the 64 unsigned key-pair bytes.
-  ///
-  /// Current-behavior compatibility note: [#parseSecret(String)] accepts an otherwise
-  /// complete 64-value array when its closing `]` is missing. That contradicts the JSON
-  /// array grammar and is retained pending an owner decision.
+  /// A JSON array containing the 64 unsigned key-pair bytes, as the Solana CLI writes it.
+  /// [#parseSecret(String)] reads it as solana-sdk's `read_keypair` does: the trimmed input must
+  /// be one array of exactly 64 integers from 0 to 255, with whitespace allowed around each, or it
+  /// throws `IllegalArgumentException`.
   jsonKeyPairArray,
   base64PrivateKey,
   base64KeyPair,
@@ -20,19 +19,21 @@ public enum PrivateKeyEncoding {
 
   private static Signer fromJsonArray(final String secret) {
     final var trimmed = secret.strip();
-    final int keyPairLength = Signer.KEY_LENGTH * 2;
-    final var keyPair = new byte[keyPairLength];
-    int from = trimmed.indexOf('[') + 1;
-    for (int i = 0; i < keyPairLength; ++i) {
-      int to = trimmed.indexOf(',', from);
-      if (to < 0) {
-        to = trimmed.indexOf(']', from);
-        if (to < 0) {
-          to = trimmed.length();
-        }
+    final int last = trimmed.length() - 1;
+    if (last < 1 || trimmed.charAt(0) != '[' || trimmed.charAt(last) != ']') {
+      throw new IllegalArgumentException("Input must be a JSON array");
+    }
+    final var elements = trimmed.substring(1, last).split(",", -1);
+    final var keyPair = new byte[Signer.KEY_LENGTH << 1];
+    if (elements.length != keyPair.length) {
+      throw new IllegalArgumentException("Expected " + keyPair.length + " elements, found " + elements.length);
+    }
+    for (int i = 0; i < keyPair.length; ++i) {
+      final int value = Integer.parseInt(elements[i].strip());
+      if (value < 0 || value > 0xFF) {
+        throw new IllegalArgumentException("Element " + i + " must be 0 to 255, found " + value);
       }
-      keyPair[i] = (byte) Integer.parseInt(trimmed, from, to, 10);
-      from = to + 1;
+      keyPair[i] = (byte) value;
     }
     return Signer.createFromKeyPair(keyPair);
   }
