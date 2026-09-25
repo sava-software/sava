@@ -101,10 +101,9 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
     return Base58.encode(data, recentBlockHashIndex, recentBlockHashIndex + BLOCK_HASH_LENGTH);
   }
 
-  /// An instruction's program is invoked by definition, but a `parseAccounts()` that has no
-  /// invoked indexes to consult types every read-only account as [AccountMeta#createRead];
-  /// mark it here so this agrees with [TransactionSkeleton#filterInstructions] and with
-  /// [TransactionSkeleton#parseInstructionsWithoutTableAccounts]. Any writable use of the same
+  /// Returns an instruction's program meta marked invoked, so every instruction view agrees even
+  /// though [#parseAccounts()] types read-only programs as [AccountMeta#createRead]. An
+  /// already-invoked meta is returned as is, keeping its write flag; any other writable use of the
   /// account is recovered by [Instruction#mergeAccounts] when a transaction is rebuilt.
   protected static AccountMeta invokedProgramAccount(final AccountMeta account) {
     return account.invoked() ? account : createInvoked(account.publicKey());
@@ -117,18 +116,9 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
     return PublicKey.readPubKey(data, accountsOffset() + (accountIndex * PUBLIC_KEY_LENGTH));
   }
 
-  /// The signature count and the address count are two independently read fields, so
-  /// `numIncludedAccounts < numSignatures` is representable on the wire even though no valid
-  /// transaction has it — every signer is an address. Every account-parsing entry point sizes its
-  /// array from the address count and then fills signer slots from the signature count, so the
-  /// mismatch used to surface as a bare `ArrayIndexOutOfBoundsException` (or a
-  /// `NegativeArraySizeException` from [#parseNonSignerAccounts], which subtracts the two).
-  ///
-  /// This narrows *how* such a header fails, not *whether* it does: the same inputs threw before.
-  /// Over-limit-but-coherent headers stay readable, as they must — narrowing a count to its wire
-  /// byte is a documented analysis affordance. A header that contradicts itself is a different
-  /// thing, because no reading of it is faithful. A v1 message cannot reach this: its
-  /// deserialization rejects the same contradiction against SIMD-0385's header rules first.
+  /// Rejects a header declaring more signers than included addresses, which the account parsers
+  /// would otherwise hit as a bare `ArrayIndexOutOfBoundsException` or
+  /// `NegativeArraySizeException`. Over-limit but coherent headers stay readable.
   ///
   /// @throws IllegalStateException if the address array cannot hold the signers the header declares
   protected final void requireAddressesCoverSigners() {

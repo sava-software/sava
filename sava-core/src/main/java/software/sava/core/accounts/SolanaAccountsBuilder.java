@@ -3,8 +3,7 @@ package software.sava.core.accounts;
 import static software.sava.core.accounts.PublicKey.fromBase58Encoded;
 import static software.sava.core.accounts.meta.AccountMeta.*;
 
-/// Builds a [SolanaAccounts] view. Every address defaults to its main-net value, override
-/// only the accounts which differ for your cluster or fork.
+/// Builds a [SolanaAccounts]; every address defaults to its main-net value.
 public final class SolanaAccountsBuilder {
 
   // Native

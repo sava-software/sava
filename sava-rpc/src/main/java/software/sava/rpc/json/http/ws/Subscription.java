@@ -6,20 +6,18 @@ import software.sava.rpc.json.http.request.Commitment;
 import java.math.BigInteger;
 import java.util.function.Consumer;
 
-/// A live registration inside the websocket engine. Consumers receive one via the `onSub`
-/// callback, which fires after each successful request *send* — before confirmation, while
-/// [#subId()] is still null, and again on every re-send and reconnect replay. Treat it as a
-/// read-only handle: [#setSubId(BigInteger)] and [#setLastAttempt(long)] are the engine's own
-/// bookkeeping seams and calling them corrupts pacing and correlation. The engine retains
-/// registrations internally; holding this handle is not required to keep one alive.
+/// A live registration inside the websocket engine. The `onSub` callback receives it after each
+/// successful send of its request, including retries and reconnect replays; the server's
+/// confirmation may or may not have arrived, so [#subId()] may still be null. Treat it as
+/// read-only: [#setSubId(BigInteger)] and [#setLastAttempt(long)] are engine bookkeeping, and
+/// calling them corrupts pacing and correlation. The engine retains registrations; holding this
+/// handle is not required.
 public interface Subscription<T> extends Consumer<T>, Runnable {
 
-  /// A [#lastAttempt()] stamp meaning "never": far enough in the past that every sane pacing
-  /// window — anything under ~34 years — has elapsed, without being so far that `now - NEVER`
-  /// could overflow. Pacing time is monotonic and starts near zero, so 0 cannot mean "never" —
-  /// it means "just now". A delay beyond 2^40 ms behaves as "disabled", exactly as it always
-  /// has: under the previous wall clock, `now` was ~1.7e12 and the comparison came out the
-  /// same way.
+  /// A [#lastAttempt()] stamp meaning "never attempted". Stamps are monotonic pacing
+  /// milliseconds starting near zero, so 0 means "just now"; this is about 34 years earlier, so
+  /// `now - NEVER` cannot overflow but exceeds only windows shorter than that. Compare against
+  /// it explicitly when a window may be larger.
   long NEVER = -(1L << 40);
 
   static <T> Subscription<T> createAccountSubscription(final Commitment commitment,
@@ -46,19 +44,18 @@ public interface Subscription<T> extends Consumer<T>, Runnable {
 
   Channel channel();
 
-  /// The notification method this registration is served by — a built-in channel's derived
-  /// name, or the method a generic registration was created under. Part of identity: a generic
-  /// key is unique only within its notification method, so two registrations sharing a key
-  /// across methods are distinct, in a consumer's collections as much as in the engine's.
-  ///
-  /// Implementations predating this accessor represent built-in channels only, whose
-  /// notification method has always been derived from the channel name. A null channel is the
-  /// legacy shape used by caller-defined registrations and has no derivable method.
+  /// The notification method serving this registration: the channel's derived name, or the
+  /// method a generic registration was created under. Part of identity, since a generic key is
+  /// unique only within its notification method. The default derives it from [#channel()] and
+  /// returns null when the channel is null.
   default String notificationMethod() {
     final var channel = channel();
     return channel == null ? null : channel.name() + "Notification";
   }
 
+  /// The default derives it from [#channel()].
+  ///
+  /// @throws NullPointerException if the default runs with a null [#channel()]
   default String unSubscribeMethod() {
     return channel().unSubscribe();
   }

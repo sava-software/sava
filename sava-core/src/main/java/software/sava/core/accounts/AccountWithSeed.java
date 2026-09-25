@@ -9,11 +9,9 @@ public interface AccountWithSeed {
     return new AccountWithSeedRecord(baseKey, publicKey, asciiSeed, program);
   }
 
-  /**
-   * Creates account metadata carrying the UTF-8 encoding of {@code seed}.
-   *
-   * @throws IllegalArgumentException if {@code seed} contains an unpaired UTF-16 surrogate
-   */
+  /// Creates account metadata carrying the UTF-8 encoding of `seed`.
+  ///
+  /// @throws IllegalArgumentException if `seed` contains an unpaired UTF-16 surrogate
   static AccountWithSeed createAccount(final PublicKey baseKey,
                                        final PublicKey publicKey,
                                        final String seed,
@@ -30,6 +28,9 @@ public interface AccountWithSeed {
 
   PublicKey publicKey();
 
+  /// The raw seed bytes. An account from these factories returns its stored array, not a copy,
+  /// and the `byte[]` factory stores its argument without copying. Despite the name the bytes
+  /// need not be ASCII: [#createAccount(PublicKey, PublicKey, String, PublicKey)] stores UTF-8.
   byte[] asciiSeed();
 
   PublicKey program();

@@ -23,21 +23,17 @@ import static software.sava.core.tx.TxBuilderImpl.V1_VERSION_BYTE;
 
 public interface TransactionSkeleton {
 
-  /**
-   * Parses the serialized transaction into its structural views.
-   *
-   * <p>For versioned messages, account parsing marks every included read-only account referenced
-   * by an instruction's {@code program_id_index} as invoked. This also holds when the address-table
-   * lookup count is zero or the data ends immediately after the instruction section.</p>
-   *
-   * <p>Legacy deserialization reads each instruction's account-count and data-length prefixes
-   * eagerly: a missing prefix throws before a skeleton is returned. This is not complete
-   * validation of instruction payloads; the final payload is skipped without checking its end.</p>
-   *
-   * <p>A message whose first byte is the SIMD-0385 v1 version byte is dispatched to the v1
-   * skeleton instead; v1 transactions carry no address lookup tables and expose their compute
-   * budget as config values.</p>
-   */
+  /// Parses a serialized legacy, v0 or SIMD-0385 v1 transaction into a read-only view that
+  /// retains `data` without copying it.
+  ///
+  /// Parsing is not full validation. Legacy deserialization reads each instruction's account-count
+  /// and data-length prefixes eagerly, so a missing prefix throws here, but the final payload is
+  /// skipped without checking its end. A versioned message records which included accounts its
+  /// instructions invoke even when its lookup-table section is empty or absent; see
+  /// [#parseAccounts(List, List)].
+  ///
+  /// @throws RuntimeException if parsing runs past the end of `data`, or a v1 header or config mask
+  ///                          is inconsistent; the exception type is not guaranteed
   static TransactionSkeleton deserializeSkeleton(final byte[] data) {
     // The v1 version byte 0x81 also opens a legacy message's compact-u16 signature count: 0x81 0x01
     // is 129 signatures, and 0x81 0x00 is the non-canonical encoding of 1. Only the latter is
@@ -224,75 +220,47 @@ public interface TransactionSkeleton {
 
   PublicKey[] lookupTableAccounts();
 
-  /// The priority fee, in lamports, for this transaction.
+  /// Returns the priority fee in lamports, or 0 if the transaction sets none.
   ///
-  /// v1 transactions return the priority fee ConfigValue directly.
+  /// A v1 transaction returns its priority fee ConfigValue. A legacy or v0 transaction converts its
+  /// SetComputeUnitPrice price with [TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)]
+  /// against the requested compute unit limit. Without a SetComputeUnitLimit instruction, or with a
+  /// limit of 0, the limit is estimated from the runtime's per-instruction defaults: 3,000 units
+  /// per builtin program instruction (SIMD-0170) and 200,000 per other instruction.
   ///
-  /// Legacy and v0 transactions derive the fee from the SetComputeUnitPrice compute budget
-  /// instruction, which is priced in micro-lamports per compute unit. The price is multiplied
-  /// by the requested compute unit limit, capped at the 1.4 million maximum, then converted to
-  /// lamports, rounding up, mirroring the runtime's prioritization fee calculation.
-  ///
-  /// If no SetComputeUnitLimit instruction is present, a default limit of 200,000 units per
-  /// non-compute-budget instruction is assumed. This is an estimate; per SIMD-0170 the runtime
-  /// only allocates 3,000 units for each builtin program instruction, so the derived fee may
-  /// differ for such transactions. Transactions which explicitly set a compute unit limit are
-  /// exact.
-  ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
-  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
-  /// skeleton over a transaction carrying real compute-budget instructions reports their values
-  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
-  /// deserialization per call.
-  ///
-  /// @return 0 if no priority fee ConfigValue or SetComputeUnitPrice instruction is present.
+  /// The default implementation reparses [#data()] on every call; override it.
   default long priorityFeeLamports() {
     return TransactionSkeleton.deserializeSkeleton(data()).priorityFeeLamports();
   }
 
-  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
-  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
-  /// skeleton over a transaction carrying real compute-budget instructions reports their values
-  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
-  /// deserialization per call.
+  /// Returns the requested compute unit limit, or 0 if the transaction sets none.
   ///
-  /// @return 0 if not explicitly set via Config Value or Compute Budget. A v1 transaction that
-  ///         requests no compute unit limit really is budgeted 0 units, and cannot execute a single
-  ///         metered instruction; it is not given the runtime default.
+  /// A v1 transaction that sets no limit is budgeted 0 units, not the runtime default, and cannot
+  /// execute a single metered instruction.
+  ///
+  /// The default implementation reparses [#data()] on every call; override it.
   default int computeUnitLimit() {
     return TransactionSkeleton.deserializeSkeleton(data()).computeUnitLimit();
   }
 
-  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
-  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
-  /// skeleton over a transaction carrying real compute-budget instructions reports their values
-  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
-  /// deserialization per call.
+  /// Returns the requested loaded accounts data size limit in bytes, or 0 if the transaction sets
+  /// none.
   ///
-  /// @return 0 if not explicitly set via Config Value or Compute Budget. Per SIMD-0385 a v1
-  ///         transaction that requests no accounts data size limit really is limited to 0 bytes,
-  ///         rather than the 64MiB legacy transactions default to.
+  /// Per SIMD-0385 a v1 transaction that sets no limit is limited to 0 bytes, not the 64MiB legacy
+  /// default.
+  ///
+  /// The default implementation reparses [#data()] on every call; override it.
   default int accountDataSizeLimit() {
     return TransactionSkeleton.deserializeSkeleton(data()).accountDataSizeLimit();
   }
 
-  /// Reports the heap size this transaction *requests*, not the heap it will run with.
+  /// Returns the heap size in bytes this transaction *requests*, or 0 if it requests none, in which
+  /// case the runtime applies its 32KiB minimum.
   ///
-  /// Heap is the one compute budget value whose absent and effective values differ: a transaction
-  /// requesting no heap runs with 32KiB (`MIN_HEAP_FRAME_BYTES`), the minimum legal request, so an
-  /// explicit 32KiB and no request at all behave identically. This returns 0 for both formats when
-  /// nothing was requested, so that a transaction rebuilt from these values — see
-  /// {@link #prototypeTransaction} — carries exactly the ConfigValues its source did rather than
-  /// gaining a heap request it never had.
+  /// Reporting 0 rather than the effective 32KiB lets [#prototypeTransaction()] rebuild exactly the
+  /// ConfigValues its source carried.
   ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that reparses
-  /// [#data()] and delegates to the resulting built-in skeleton, so an external legacy or v0
-  /// skeleton over a transaction carrying real compute-budget instructions reports their values
-  /// rather than a blind zero. Override to answer from parsed state — the default costs a full
-  /// deserialization per call.
-  ///
-  /// @return 0 if no heap size ConfigValue or RequestHeapFrame instruction is present, in which
-  ///         case the runtime applies 32KiB.
+  /// The default implementation reparses [#data()] on every call; override it.
   default int heapSize() {
     return TransactionSkeleton.deserializeSkeleton(data()).heapSize();
   }
@@ -307,10 +275,13 @@ public interface TransactionSkeleton {
     return parseAccounts(lookupTableMap);
   }
 
-  /// Parses included accounts and appends the supplied loaded accounts. For a built-in legacy
-  /// skeleton, pass empty lists; this preserves [#parseAccounts()] flags, including read-only
-  /// program accounts with `invoked() == false`. Instruction views identify their programs
-  /// as invoked separately.
+  /// Parses the included accounts and appends the given table-loaded accounts, writable first;
+  /// together the lists must number [#numIndexedAccounts()].
+  ///
+  /// For a versioned message, included read-only non-signers that an instruction invokes as its
+  /// program are marked [AccountMeta#invoked()], which [#parseAccounts()] never does. A legacy
+  /// message loads no accounts: pass empty lists to get the [#parseAccounts()] flags. Instruction
+  /// views mark their programs invoked in every format.
   AccountMeta[] parseAccounts(final List<PublicKey> writableLoaded, final List<PublicKey> readonlyLoaded);
 
   PublicKey feePayer();
@@ -329,56 +300,38 @@ public interface TransactionSkeleton {
 
   int serializedInstructionsLength();
 
-  /**
-   * Parses each instruction's account references against the supplied array by index.
-   *
-   * <p>An out-of-range account index resolves against two different bounds. An index at or beyond
-   * {@link #numAccounts()} — the included accounts plus every index the transaction's lookup
-   * tables load — names an account the transaction does not declare; that is corruption in every
-   * format and throws, exactly as an out-of-range program index always has. An index the
-   * transaction declares but the supplied array cannot resolve yields a {@code null} element
-   * inside that instruction's account list: through this interface's own parsers that is precisely
-   * a <b>v0</b> message parsed without its lookup tables, whose first table-loaded account sits at
-   * {@link #numIncludedAccounts()} — the same contract
-   * {@link #parseInstructionsWithoutTableAccounts()} documents. Resolvability is judged against
-   * the supplied array alone, so a caller-truncated array produces the same {@code null} for a
-   * declared index in any format; a legacy message has no lookup tables, so through arrays this
-   * interface produces its every declared index resolves and its instruction accounts are never
-   * {@code null}. Transaction v1 also declares no loaded accounts, and its reader — which arrives
-   * with v1 support — enforces these same two bounds, rejecting an undeclared index with the
-   * identical exception and message.</p>
-   *
-   * @throws IndexOutOfBoundsException if an instruction references an account index the
-   *                                   transaction does not declare
-   */
+  /// Parses each instruction, resolving its account indexes against `accounts`.
+  ///
+  /// An index the transaction declares (below [#numAccounts()], which counts included and
+  /// table-loaded accounts) that `accounts` does not resolve, because the array is shorter or
+  /// holds `null` there, yields a `null` element in that instruction's accounts. From this
+  /// interface's own account parsers that happens only for a v0 message parsed without its lookup
+  /// tables; a caller-truncated array can cause it in any format. A longer array does not make an
+  /// undeclared index valid.
+  ///
+  /// @throws IndexOutOfBoundsException if an instruction references an account index the
+  ///                                   transaction does not declare, or a program index outside
+  ///                                   its included accounts
   Instruction[] parseInstructions(final AccountMeta[] accounts);
 
   default Instruction[] parseLegacyInstructions() {
     return parseInstructions(parseAccounts());
   }
 
-  /**
-   * Program accounts will be included for each instruction.
-   * Instruction accounts will not.
-   */
+  /// Parses each instruction with its program but an empty account list.
   Instruction[] parseInstructionsWithoutAccounts();
 
-  /**
-   * If this is a v0 transaction, accounts which are indexed into a lookup table will be null.
-   * Signing accounts and program accounts will always be included. Legacy and v1 transactions have
-   * no lookup tables, so every account is resolved.
-   */
+  /// Parses instructions against the included accounts only, so instruction accounts a v0
+  /// transaction loads from a lookup table are `null`. Legacy and v1 transactions resolve every
+  /// account.
   Instruction[] parseInstructionsWithoutTableAccounts();
 
-  /**
-   * Filters by discriminator, resolving accounts the way {@link #parseInstructions(AccountMeta[])}
-   * does — {@code null} elements for declared indices the supplied array cannot resolve, which
-   * through sava-produced arrays only a v0 message parsed without its lookup tables exhibits, and
-   * the same rejection of undeclared indices in every format.
-   *
-   * @throws IndexOutOfBoundsException if a matched instruction references an account index the
-   *                                   transaction does not declare
-   */
+  /// Parses the instructions whose data starts with `discriminator`, resolving accounts like
+  /// [#parseInstructions(AccountMeta\[\])].
+  ///
+  /// @throws IndexOutOfBoundsException if a matched instruction references an account index the
+  ///                                   transaction does not declare, or any instruction's program
+  ///                                   index is outside the included accounts
   Instruction[] filterInstructions(final AccountMeta[] accounts, final Discriminator discriminator);
 
   default Instruction[] filterInstructionsWithoutTableAccounts(final Discriminator discriminator) {
@@ -412,35 +365,33 @@ public interface TransactionSkeleton {
     return createTransaction(Arrays.asList(instructions));
   }
 
-  /**
-   * Creates a mutable transaction after parsing instructions against the supplied accounts.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
+  /// Creates a mutable transaction after parsing instructions against `accounts`; it shares
+  /// [#data()] like [#createTransaction()].
+  ///
+  /// @throws IllegalStateException as [#createTransaction()] does
   default Transaction createTransaction(final AccountMeta[] accounts) {
     final var instructions = parseInstructions(accounts);
     return createTransaction(instructions);
   }
 
-  /**
-   * Creates a mutable transaction after parsing its accounts and instructions.
-   *
-   * @throws IllegalStateException if this parsed signature layout cannot be represented by a
-   *                               mutable transaction
-   */
+  /// Creates a mutable transaction after parsing its included accounts and instructions. Its
+  /// [Transaction#serialized()] bytes are this skeleton's [#data()] array, shared rather than
+  /// copied, so in-place changes such as signing or setting the block hash write into it; every
+  /// other `createTransaction` overload shares it the same way.
+  ///
+  /// @throws IllegalStateException if the serialized signature-slot count does not match the
+  ///                               message header's required-signature count, or its prefix is
+  ///                               not representable by a mutable transaction
   default Transaction createTransaction() {
     final var accounts = parseAccounts();
     return createTransaction(accounts);
   }
 
-  /// Creates a v1 {@link TxBuilder} from this transaction's fee payer, instructions, and compute
-  /// budget values.
+  /// Creates a v1 [TxBuilder] from this transaction's fee payer, instructions and compute budget
+  /// values. A transaction that loads accounts from lookup tables must resolve them first, with
+  /// `prototypeTransaction(parseInstructions(parseAccounts(lookupTables)))`.
   ///
-  /// v0 transactions which load accounts via address lookup tables must resolve those accounts
-  /// first, e.g. {@code prototypeTransaction(parseInstructions(parseAccounts(lookupTables)))}.
-  ///
-  /// @throws IllegalStateException if this transaction loads accounts via address lookup tables.
+  /// @throws IllegalStateException if this transaction loads accounts from address lookup tables
   default TxBuilder prototypeTransaction() {
     if (numIndexedAccounts() > 0) {
       throw new IllegalStateException(
@@ -450,27 +401,19 @@ public interface TransactionSkeleton {
     return prototypeTransaction(this.parseInstructionsWithoutTableAccounts());
   }
 
-  /// Creates a v1 {@link TxBuilder} from this transaction's fee payer, the given instructions,
-  /// and this transaction's compute budget values.
+  /// Creates a v1 [TxBuilder] from this transaction's fee payer and compute budget values and the
+  /// given instructions.
   ///
-  /// ComputeBudgetProgram instructions are filtered out, their values are carried over as
-  /// ConfigValues instead; per SIMD-0385 the v1 runtime ignores them for configuration and
-  /// processes them as no-ops which still consume compute units.
+  /// ComputeBudgetProgram instructions in `instructions` are dropped, since per SIMD-0385 the v1
+  /// runtime treats them as no-ops that still cost compute units; the ConfigValues come from this
+  /// transaction's values, never from the given instructions.
   ///
-  /// For a legacy/v0 source {@link #computeUnitLimit()} and {@link #accountDataSizeLimit()} return
-  /// 0 when no SetComputeUnitLimit or SetLoadedAccountsDataSizeLimit instruction is present, which
-  /// a {@link TxBuilder} would treat as clearing the ConfigValue, a 0 unit and 0 byte budget per
-  /// SIMD-0385. To mirror the runtime defaults such transactions actually executed with, an unset
-  /// value is not carried over so that the builder defaults of the runtime maximums are retained,
-  /// which also reserves the ConfigValues for in-place updates.
-  ///
-  /// A v1 source distinguishes unset from zero on the wire, so
-  /// {@link V1TransactionSkeleton} overrides this to carry 0 through verbatim.
-  ///
-  /// The legacy/v0 {@link #priorityFeeLamports()} carried over is derived from the
-  /// SetComputeUnitPrice instruction and, when no SetComputeUnitLimit instruction is present, an
-  /// estimated compute unit limit; prefer re-pricing the created transaction via
-  /// {@link Transaction#setPriorityFeeLamports(long)} after simulating it.
+  /// From a legacy or v0 source, a compute unit or accounts data size limit that is not set (reads
+  /// 0) is not carried over, so the builder keeps its runtime-maximum default rather than a 0
+  /// budget, which also reserves that ConfigValue for in-place updates. A v1 source carries every
+  /// value verbatim, 0 included. A legacy or v0 priority fee may rest on an estimated limit (see
+  /// [#priorityFeeLamports()]); re-price the built transaction with
+  /// [Transaction#setPriorityFeeLamports(long)] after simulating it.
   default TxBuilder prototypeTransaction(final Instruction[] instructions) {
     final var builder = new TxBuilderImpl()
         .feePayer(feePayer())
@@ -489,26 +432,23 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// Creates a mutable transaction using one lookup table.
+  /// Creates a mutable transaction from the given instructions and one lookup table; like
+  /// [#createTransaction()], it shares [#data()] and does not serialize the instructions.
   ///
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
+  /// A v1 transaction, which has no lookup tables, ignores the table.
   ///
-  /// @throws IllegalStateException if the serialized signature-slot count does not match the
-  ///                               message header's required-signature count, or its prefix is
-  ///                               not representable by a mutable transaction
+  /// @throws IllegalStateException as [#createTransaction()] does
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   Transaction createTransaction(final List<Instruction> instructions, final AddressLookupTable lookupTable);
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// Creates a mutable transaction from the supplied instructions and lookup table.
+  /// Creates a mutable transaction from the given instructions and lookup table; like
+  /// [#createTransaction()], it shares [#data()] and does not serialize the instructions.
   ///
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
+  /// A v1 transaction, which has no lookup tables, ignores the table.
   ///
-  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
-  ///                               mutable transaction
+  /// @throws IllegalStateException as [#createTransaction()] does
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final Instruction[] instructions, final AddressLookupTable lookupTable) {
@@ -516,13 +456,12 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// Creates a mutable transaction after parsing instructions against the supplied accounts.
+  /// Creates a mutable transaction after parsing instructions against `accounts`; it shares
+  /// [#data()] like [#createTransaction()].
   ///
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
+  /// A v1 transaction, which has no lookup tables, ignores the table.
   ///
-  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
-  ///                               mutable transaction
+  /// @throws IllegalStateException as [#createTransaction()] does
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final AccountMeta[] accounts, final AddressLookupTable lookupTable) {
@@ -531,13 +470,12 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// Creates a mutable transaction after resolving accounts through one lookup table.
+  /// Creates a mutable transaction after resolving accounts through one lookup table; it shares
+  /// [#data()] like [#createTransaction()].
   ///
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
+  /// A v1 transaction, which has no lookup tables, ignores the table.
   ///
-  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
-  ///                               mutable transaction
+  /// @throws IllegalStateException as [#createTransaction()] does
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final AddressLookupTable lookupTable) {
@@ -546,13 +484,12 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// Creates a mutable transaction after parsing instructions against the supplied accounts.
+  /// Creates a mutable transaction after parsing instructions against `accounts`; it shares
+  /// [#data()] like [#createTransaction()].
   ///
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
+  /// A v1 transaction, which has no lookup tables, ignores the table.
   ///
-  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
-  ///                               mutable transaction
+  /// @throws IllegalStateException as [#createTransaction()] does
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final AccountMeta[] accounts,
@@ -562,13 +499,12 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// Creates a mutable transaction after resolving accounts through the supplied lookup metadata.
+  /// Creates a mutable transaction after resolving accounts through the given lookup metadata; it
+  /// shares [#data()] like [#createTransaction()].
   ///
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
+  /// A v1 transaction, which has no lookup tables, ignores the table.
   ///
-  /// @throws IllegalStateException if this parsed signature layout cannot be represented by a
-  ///                               mutable transaction
+  /// @throws IllegalStateException as [#createTransaction()] does
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   default Transaction createTransaction(final LookupTableAccountMeta[] tableAccountMetas) {
@@ -577,14 +513,12 @@ public interface TransactionSkeleton {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// Creates a mutable transaction using the supplied lookup-table metadata.
+  /// Creates a mutable transaction from the given instructions and lookup-table metadata; like
+  /// [#createTransaction()], it shares [#data()] and does not serialize the instructions.
   ///
-  /// **Note:** for V1 transactions the provided lookup table will be ignored
-  /// because V1 transactions do not support address lookup tables.
+  /// A v1 transaction, which has no lookup tables, ignores the table.
   ///
-  /// @throws IllegalStateException if the serialized signature-slot count does not match the
-  ///                               message header's required-signature count, or its prefix is
-  ///                               not representable by a mutable transaction
+  /// @throws IllegalStateException as [#createTransaction()] does
   // /// @deprecated use {@link TxBuilder} or {@link #prototypeTransaction} to create a v1 transaction instead.
   // @Deprecated
   Transaction createTransaction(final List<Instruction> instructions, final LookupTableAccountMeta[] tableAccountMetas);

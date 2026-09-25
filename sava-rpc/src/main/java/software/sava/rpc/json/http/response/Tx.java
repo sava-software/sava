@@ -10,6 +10,8 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.Supplier;
 
+/// @param version          The served transaction version, negative for `legacy` or when absent; see
+///                         [#isLegacy()].
 /// @param transactionIndex Index of the transaction within its block, empty when the responding node does not
 ///                         serve this field.
 public record Tx(long slot,

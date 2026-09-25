@@ -10,15 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-/// For valid data spans, built-in instructions compare and hash their program, accounts, and data by value.
-/// Keep retained accounts, public keys, and data unchanged while using an instruction as a hash-based
-/// collection key.
+/// Built-in instructions compare and hash their program, accounts, and data span by value (for
+/// valid spans). Keep the retained accounts, keys, and data unchanged while an instruction is a
+/// hash key.
 public interface Instruction {
 
-  /// Retains the supplied array and span without validation. Diagnostic `toString()` renders
-  /// empty data when `data == null` or `len <= 0`, without reading the span. For a positive
-  /// length, it uses {@link java.util.Arrays#copyOfRange(byte[], int, int) Arrays.copyOfRange}, which can zero-pad
-  /// beyond the array's end. Diagnostic rendering does not validate the span for serialization.
+  /// Retains `data` and the span without validation. Diagnostic `toString()` renders empty data
+  /// when `data` is null or `len <= 0`; otherwise it copies the span with
+  /// [java.util.Arrays#copyOfRange(byte\[\], int, int)], which zero-pads past the array's end. A
+  /// span that renders may still fail to serialize.
   static Instruction createInstruction(final AccountMeta programId,
                                        final List<AccountMeta> keys,
                                        final byte[] data, int offset, int len) {
@@ -49,9 +49,9 @@ public interface Instruction {
     return createInstruction(programId, keys, data, 0, data.length);
   }
 
-  /// Appends the supplied accounts. The built-in implementation ignores a singleton null entry,
-  /// as [#extraAccount(AccountMeta)] does, but retains null entries in larger lists. This existing
-  /// size-dependent behavior is preserved for compatibility; callers should supply non-null metas.
+  /// Appends the supplied accounts. The built-in implementation ignores a lone null entry, as
+  /// [#extraAccount(AccountMeta)] does, but keeps nulls in larger lists (retained for
+  /// compatibility); supply non-null metas.
   Instruction extraAccounts(final List<AccountMeta> accounts);
 
   Instruction extraAccount(final AccountMeta account);

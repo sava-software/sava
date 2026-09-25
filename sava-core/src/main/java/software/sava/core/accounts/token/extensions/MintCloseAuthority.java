@@ -5,8 +5,7 @@ import software.sava.core.accounts.PublicKey;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
-/// @param closeAuthority the authority that may close the mint; all-zero means none, so
-///                       compare with [PublicKey#NONE] rather than testing for `null`.
+/// @param closeAuthority [PublicKey#NONE] when absent, never `null`.
 public record MintCloseAuthority(PublicKey closeAuthority) implements MintTokenExtension {
 
   public static final int BYTES = PUBLIC_KEY_LENGTH;

@@ -32,21 +32,18 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
   static final int COMPUTE_UNIT_LIMIT_MASK = 0b0000_0100;
   static final int ACCOUNT_DATA_SIZE_LIMIT_MASK = 0b0000_1000;
   static final int HEAP_SIZE_MASK = 0b0001_0000;
-  /// Every TransactionConfigMask bit SIMD-0385 defines. Rust's `has_unknown_bits` rejects anything
-  /// outside this, so no transaction carrying one can reach a cluster.
+  /// Every TransactionConfigMask bit SIMD-0385 defines; Agave rejects any other bit
+  /// (`has_unknown_bits`).
   static final int KNOWN_CONFIG_MASK_BITS =
       PRIORITY_FEE_MASK | COMPUTE_UNIT_LIMIT_MASK | ACCOUNT_DATA_SIZE_LIMIT_MASK | HEAP_SIZE_MASK;
 
-  /// Returns the offset of the ConfigValue corresponding to the given TransactionConfigMask
-  /// bits, or -1 if the bits are not set.
+  /// Returns the offset of the ConfigValue for the given TransactionConfigMask bits, or -1 if they
+  /// are not set.
   ///
-  /// ConfigValues are serialized by ascending TransactionConfigMask bit position, 4 bytes per
-  /// set bit, so the value offset is 4 bytes for each set bit below the target bits.
-  /// The ConfigValues block is four bytes per SET mask bit, which is why counting bits below the
-  /// target gives the offset. That is exact rather than approximate even though the priority fee is
-  /// a u64 while the other three values are u32: the fee is the one field SIMD-0385 gives a TWO bit
-  /// pair, so it contributes exactly two four-byte slots. A future field that is not four bytes per
-  /// bit would break this, which is part of why `deserialize` refuses unknown mask bits.
+  /// ConfigValues are serialized in ascending mask-bit order, four bytes per set bit, so the offset
+  /// counts the set bits below the target; the u64 priority fee owns two mask bits and so two
+  /// slots. Requires a mask within [#KNOWN_CONFIG_MASK_BITS], as [#deserialize(byte\[\])]
+  /// enforces: a field that is not four bytes per bit would break the count.
   static int configValueOffset(final byte[] data, final int maskBits) {
     final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
     if ((configMask & maskBits) != maskBits) {
@@ -57,12 +54,9 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
         + (Integer.bitCount(configMask & (Integer.lowestOneBit(maskBits) - 1)) << 2);
   }
 
-  /// Walks the fixed-width instruction headers of an unparsed v1 message to the first byte after
-  /// the last instruction payload, i.e. where the appended signature block must begin, or -1 if the
-  /// buffer is too short to hold the headers its own counts declare.
-  ///
-  /// Allocation free, so the raw-byte helpers on [Transaction] can corroborate a length-derived
-  /// signature offset without building a skeleton.
+  /// Returns the offset just past the last instruction payload of an unparsed v1 message, where its
+  /// signature block must begin, or -1 if the buffer cannot hold the instruction headers its counts
+  /// declare. Allocation free, so untrusted raw bytes can be checked without building a skeleton.
   static int messageEnd(final byte[] data) {
     final int configMask = ByteUtil.getInt32LE(data, V1_CONFIG_MASK_OFFSET);
     final int numInstructions = data[V1_ACCOUNTS_OFFSET - 2] & 0xFF;
@@ -80,12 +74,10 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     return messageEnd;
   }
 
-  /// Returns the offset of an unparsed v1 message's signature block, verified against the message
-  /// itself rather than trusted from the serialized length alone.
-  ///
-  /// The public statics on [Transaction] take raw bytes, so the length and the header's signature
-  /// count are both untrusted: a padded or truncated buffer moves the implied boundary into the
-  /// message, where signing overwrites the tail and reading the id returns the wrong 64 bytes.
+  /// Returns the offset of an unparsed v1 message's signature block, checked against [#messageEnd]
+  /// rather than trusted from the buffer length. A padded or truncated buffer misplaces the
+  /// length-implied slots: the id would read the wrong bytes, and after truncation signing would
+  /// overwrite the message tail.
   ///
   /// @throws IllegalArgumentException if the buffer cannot hold the signatures its header declares,
   ///                                  or if the message does not end where they would begin
@@ -291,14 +283,13 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     }
   }
 
-  /// SIMD-0385 makes an instruction account index at or beyond NumAddresses a sanitization failure,
-  /// so no such transaction can execute, and the refusal is bounded by the wire — `numAccounts`,
-  /// the message's own NumAddresses — never by the caller's array: an oversized array must not
-  /// widen what the transaction declares into resolving an undeclared index. The legacy and v0
-  /// skeleton applies the identical wire bound with the identical exception and message, so every
-  /// format refuses corruption the same way. An index the message does declare but a
-  /// caller-truncated array cannot cover reads as null there and here alike — through sava's own
-  /// parsers that never happens for v1, whose account arrays always cover NumAddresses.
+  /// Resolves an instruction account index. An index at or past NumAddresses (`numAccounts`) fails
+  /// SIMD-0385 sanitization and throws, bounded by the wire, never by the caller's array; a
+  /// declared index past the end of a caller-truncated `accounts` reads as `null`. Keep the
+  /// exception and message identical to [TransactionSkeletonImpl]'s.
+  ///
+  /// @throws IndexOutOfBoundsException if an instruction references an account index the
+  ///                                   transaction does not declare
   private AccountMeta requireIncludedInstructionAccount(final AccountMeta[] accounts, final int accountIndex) {
     if (accountIndex >= numAccounts) {
       throw new IndexOutOfBoundsException(String.format(
@@ -451,11 +442,8 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
     return createTransaction(instructions);
   }
 
-  /// A v1 message distinguishes an unset ConfigValue from an explicit zero on the wire: an absent
-  /// TransactionConfigMask bit means the value really is 0, not "no compute budget instruction was
-  /// present, so the runtime default applied". Carry both limits through verbatim rather than
-  /// letting the interface default substitute the builder's runtime maximums, which would silently
-  /// raise a 0/0 transaction to 1.4M units and 64MiB.
+  /// Carries both limits through verbatim, 0 included: an absent v1 mask bit means the value is 0,
+  /// and the interface default would raise a 0/0 transaction to the builder's runtime maximums.
   @Override
   public TxBuilder prototypeTransaction(final Instruction[] instructions) {
     return new TxBuilderImpl()
@@ -467,13 +455,10 @@ final class V1TransactionSkeleton extends BaseTransactionSkeleton {
         .accountDataSizeLimit(accountDataSizeLimit());
   }
 
-  /// A v1 message carries its signatures appended after the instruction payloads, so the boundary
-  /// between the two is only implied by the serialized length. Verify the parsed message ends
-  /// exactly where the signature block must begin: a truncated or padded payload otherwise stays
-  /// readable, but its signature slots are not where the length says they are — signing writes over
-  /// the tail of the message, and reading the transaction id returns the wrong bytes. This is the
-  /// v1 counterpart of [TransactionSkeletonImpl]'s legacy signature-prefix check, which legacy
-  /// gets for free because its signatures lead and its first slot is always at offset 1.
+  /// Returns the offset of the appended signature block, verified to start exactly where the parsed
+  /// message ends: a truncated or padded payload still parses, but its length-implied slots are
+  /// misplaced as [#requireSignatureBlockOffset(byte\[\])] describes. This is the v1 counterpart of
+  /// [TransactionSkeletonImpl]'s one-byte signature-prefix check.
   ///
   /// @throws IllegalStateException if the parsed message end does not coincide with the start of
   ///                               the required signature slots

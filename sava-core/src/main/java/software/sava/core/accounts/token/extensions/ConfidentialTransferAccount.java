@@ -21,15 +21,12 @@ public record ConfidentialTransferAccount(boolean approved,
                                           long expectedPendingBalanceCreditCounter,
                                           long actualPendingBalanceCreditCounter) implements AccountTokenExtension {
 
-  /// Maximum bit length of any deposit or transfer amount
-  ///
-  /// Any deposit or transfer amount must be less than `2^48`
+  /// The largest deposit or transfer amount, `2^48 - 1`.
   public static final long MAXIMUM_DEPOSIT_TRANSFER_AMOUNT = 65_535 + (1 << 16) * 4_294_967_295L;
 
-  /// Bit length of the low bits of pending balance plaintext
+  /// Bit length of the pending balance's low part, encrypted in [#pendingBalanceLo()].
   public static final int PENDING_BALANCE_LO_BIT_LENGTH = 16;
 
-  /// The default maximum pending balance credit counter.
   public static final int DEFAULT_MAXIMUM_PENDING_BALANCE_CREDIT_COUNTER = 65_536;
 
   public static final int BYTES = 1

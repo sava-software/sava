@@ -54,9 +54,8 @@ public final class ByteUtil {
     return (double) DOUBLE_LE.get(b, off);
   }
 
-  /// Reads a single byte as an unsigned value in `[0, 255]`, despite the name —
-  /// the `u8` reader, not an `i8` one. There is no signed counterpart because
-  /// `data[off]` already is one.
+  /// Reads one byte as an unsigned value in `[0, 255]`, despite the name. For a signed byte,
+  /// read `b[off]` directly.
   public static int getInt8LE(final byte[] b, final int off) {
     return b[off] & 0xFF;
   }
@@ -65,13 +64,8 @@ public final class ByteUtil {
     return (short) SHORT_LE.get(b, off);
   }
 
-  /// A `u16` field widened to the narrowest Java type that can hold it, so the
-  /// top half of the range reads as `[32768, 65535]` rather than negative.
-  ///
-  /// The widening that call sites otherwise open-code beside the read — as
-  /// `Token2022` does twice for its extension type and length, and as a `u16`
-  /// read straight through [#getInt16LE] silently gets wrong once a program
-  /// admits a value above `Short.MAX_VALUE`.
+  /// Reads a `u16` as an `int` in `[0, 65535]`; [#getInt16LE] reads the top half of that range
+  /// as negative.
   public static int getUInt16LE(final byte[] b, final int off) {
     return Short.toUnsignedInt(getInt16LE(b, off));
   }
@@ -80,7 +74,7 @@ public final class ByteUtil {
     return (int) INT_LE.get(b, off);
   }
 
-  /// A `u32` field widened to `long`, the counterpart to [#getUInt16LE].
+  /// Reads a `u32` as a `long` in `[0, 2^32 - 1]`.
   public static long getUInt32LE(final byte[] b, final int off) {
     return Integer.toUnsignedLong(getInt32LE(b, off));
   }
@@ -89,21 +83,14 @@ public final class ByteUtil {
     return (long) LONG_LE.get(b, off);
   }
 
-  /// A `u64` field as its exact value, for callers that cannot carry the raw
-  /// bits — the widths above `u32` have no Java primitive to widen into.
-  ///
-  /// Callers on a hot path should prefer [#getInt64LE] and widen only where the
-  /// value is actually needed as a number: most `u64` fields read off an account
-  /// are below the sign bit, and this allocates for every one of them. See
-  /// [#toUnsignedBigInteger], which owns the reinterpretation.
+  /// Reads a `u64` as its exact, never negative value. Allocates on every call: on a hot path,
+  /// read [#getInt64LE] and widen with [#toUnsignedBigInteger] only where needed.
   public static BigInteger getUInt64LE(final byte[] b, final int off) {
     return toUnsignedBigInteger(getInt64LE(b, off));
   }
 
-  /// Rejects a field these methods cannot address before any of them touches
-  /// `data`, so a bad width or a short buffer is one diagnosis rather than
-  /// whichever low-level failure the loop happens to hit — and, for the writers,
-  /// so an out-of-range field cannot leave a half-written value behind.
+  /// Validates the field before `data` is touched, so a bad width or short buffer gets one
+  /// diagnosis and a writer never leaves a half-written value.
   ///
   /// @throws IllegalArgumentException  if `byteSize` is not positive
   /// @throws IndexOutOfBoundsException if `[offset, offset + byteSize)` falls outside `data`
@@ -114,17 +101,15 @@ public final class ByteUtil {
     Objects.checkFromIndexSize(offset, byteSize, data.length);
   }
 
-  /// Writes `val` little-endian into the `byteSize` byte field at `offset`,
-  /// returning `byteSize`.
+  /// Writes `val` little-endian into the `byteSize`-byte field at `offset`, returning
+  /// `byteSize`.
   ///
-  /// Serves both signednesses: a negative value sign-extends into the fill, and
-  /// the full unsigned range up to `2^(8 * byteSize) - 1` is accepted, since a
-  /// magnitude that fills the field exactly is only over-long by the sign byte
-  /// `BigInteger.toByteArray` prepends. Use [#putUIntLE] where the field is
-  /// unsigned and a negative operand is a caller error rather than a bit
-  /// pattern.
+  /// Serves signed and unsigned fields: accepts `-2^(8 * byteSize - 1)` through
+  /// `2^(8 * byteSize) - 1` and sign-extends a negative value. Use [#putUIntLE] to reject
+  /// negative values.
   ///
-  /// @throws IllegalArgumentException  if `val` does not fit in `byteSize` bytes, or `byteSize` is not positive
+  /// @throws IllegalArgumentException  if `val` does not fit in `byteSize` bytes, or `byteSize`
+  ///                                   is not positive
   /// @throws IndexOutOfBoundsException if `[offset, offset + byteSize)` falls outside `data`
   public static int putIntLE(final byte[] data,
                              final int offset,
@@ -158,16 +143,11 @@ public final class ByteUtil {
     return byteSize;
   }
 
-  /// Writes an unsigned `val` little-endian into the `byteSize` byte field at
-  /// `offset`, returning `byteSize`.
+  /// Writes a non-negative `val` little-endian into the `byteSize`-byte field at `offset`,
+  /// returning `byteSize`. Unlike [#putIntLE], a negative `val` is rejected, not sign-extended.
   ///
-  /// [#putIntLE] with the one restriction that makes it an unsigned writer: a
-  /// negative operand is rejected instead of sign-extending across the field.
-  /// Sign extension is the right answer for an `i128` and silently the wrong one
-  /// for a `u192` — `-1` written to an unsigned field is not an error the field
-  /// can represent, it is `2^192 - 1`.
-  ///
-  /// @throws IllegalArgumentException  if `val` is negative, does not fit in `byteSize` bytes, or `byteSize` is not positive
+  /// @throws IllegalArgumentException  if `val` is negative, does not fit in `byteSize` bytes,
+  ///                                   or `byteSize` is not positive
   /// @throws IndexOutOfBoundsException if `[offset, offset + byteSize)` falls outside `data`
   public static int putUIntLE(final byte[] data,
                               final int offset,
@@ -181,13 +161,8 @@ public final class ByteUtil {
     return putIntLE(data, offset, val, byteSize);
   }
 
-  /// Reads the `byteSize` byte field at `offset` as a little-endian
-  /// two's-complement signed integer — the read side of [#putIntLE].
-  ///
-  /// Named widths are covered by [#getInt128LE] and [#getInt256LE]; this is the
-  /// escape hatch for the ones that are not, such as the `u192` fixed-point
-  /// decimals some Rust programs carry, and the only reason it takes a width at
-  /// all.
+  /// Reads the `byteSize`-byte field at `offset` as a little-endian two's-complement signed
+  /// integer. Use [#getUIntLE] for an unsigned field.
   ///
   /// @throws IllegalArgumentException  if `byteSize` is not positive
   /// @throws IndexOutOfBoundsException if `[offset, offset + byteSize)` falls outside `data`
@@ -200,13 +175,8 @@ public final class ByteUtil {
     return new BigInteger(be);
   }
 
-  /// Reads the `byteSize` byte field at `offset` as a little-endian unsigned
-  /// integer: the high bit is a value bit, never a sign bit, so the result is
-  /// never negative.
-  ///
-  /// The unsigned counterpart to [#getIntLE], and the one a Rust `uN` field
-  /// wants — reading a `u192` whose top bit is set through the signed reader
-  /// returns a value short by `2^192`.
+  /// Reads the `byteSize`-byte field at `offset` as a little-endian unsigned integer, so the
+  /// result is never negative.
   ///
   /// @throws IllegalArgumentException  if `byteSize` is not positive
   /// @throws IndexOutOfBoundsException if `[offset, offset + byteSize)` falls outside `data`
@@ -223,16 +193,9 @@ public final class ByteUtil {
     return putIntLE(data, offset, val, 16);
   }
 
-  /// Widens a `long` holding a u64 read off the wire into its unsigned value.
-  ///
-  /// Reinterprets the 64 bits directly rather than formatting them to decimal and
-  /// re-parsing: `new BigInteger(1, ...)` reads the bytes as a positive magnitude,
-  /// which is exactly what "this is unsigned" means. The decimal round trip it
-  /// replaces cost roughly five times the allocation and sixteen times the time.
-  ///
-  /// Correct for every `long`, but callers on a hot path should keep the
-  /// `val < 0 ? … : BigInteger.valueOf(val)` guard — `valueOf` is cheaper still for
-  /// non-negative values, which is the common case.
+  /// Returns the unsigned value of the 64 bits in `val`, as when `val` holds a `u64`. Correct for
+  /// every `long`; for a non-negative `val`, [BigInteger#valueOf(long)] is equal and cheaper, so
+  /// hot paths can branch on `val < 0`.
   public static BigInteger toUnsignedBigInteger(final long val) {
     return new BigInteger(1, new byte[]{
         (byte) (val >>> 56), (byte) (val >>> 48), (byte) (val >>> 40), (byte) (val >>> 32),

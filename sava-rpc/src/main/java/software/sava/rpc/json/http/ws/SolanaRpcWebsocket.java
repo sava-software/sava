@@ -52,66 +52,45 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   Timings timings();
 
-  /// When a message was last received, in epoch milliseconds, or 0 when none has been since
-  /// this connection opened.
+  /// When the current connection last received a complete message, in epoch milliseconds, or 0
+  /// when it has received none or there is no connection.
   ///
-  /// This is application-message evidence, distinct from the transport watchdog: an unanswered
-  /// Ping is reported through the error callback, but a Pong says nothing about whether the peer
-  /// is still serving subscriptions. [#closed()] says only that [#close()] was called.
-  ///
-  /// Only messages count. A ping or a pong proves the transport is alive but says nothing about
-  /// whether subscriptions are still being served, and conflating the two would hide exactly the
-  /// failure this exists to expose. A message which fails to parse still counts: it is evidence
-  /// the connection delivered something, which is the question being asked.
-  ///
-  /// Silence is not by itself a failure — a quiet subscription is quiet — so treat this as a
-  /// lower bound on liveness and weigh it against how much traffic the subscriptions should be
-  /// producing. The 0 returned before the first message reads as no evidence rather than as
-  /// evidence of death, so a caller gating a fallback on it falls back rather than trusting a
-  /// connection nothing has vouched for.
-  ///
-  /// Implementations compiled before this observation was added have no timestamp to expose.
-  /// Returning no evidence keeps those implementations link-compatible and gives callers the
-  /// conservative answer promised above rather than an [AbstractMethodError].
+  /// Only messages count, including ones that fail to parse; Pings and Pongs prove the transport
+  /// alive, not that subscriptions are being served. [#closed()] says only that [#close()] was
+  /// called. Silence is not failure by itself, so weigh this against the traffic the
+  /// subscriptions should produce, and treat 0 as no evidence rather than as liveness. The
+  /// default returns 0.
   default long lastMessageReceivedTimestamp() {
     return 0;
   }
 
   boolean closed();
 
-  /// @return A CompletableFuture which completes once the underlying WebSocket is connected.
-  /// `null` will be returned if this has been [closed][#close()].
+  /// Connects, or reconnects, the underlying WebSocket.
   ///
-  /// See [java.net.http.WebSocket.Builder#buildAsync(URI,WebSocket.Listener)] for potential exceptions.
+  /// A new attempt waits out whatever remains of [Timings#reConnectDelay()] since the previous
+  /// one. Attempts are single-flight: while one is unsettled, every caller gets a private copy of
+  /// its future, so cancelling one abandons only that caller's view. The socket being replaced is
+  /// aborted and its late callbacks are ignored.
   ///
-  /// This may be used to re-connect the underlying WebSocket if this has not been [closed][#close()].
-  /// [Timings#reConnectDelay()] (milliseconds, like every delay here) will delay the connection
-  /// attempt if a previous attempt has already been made. Attempts are single-flight: while one
-  /// is unsettled, every caller receives a future that settles with that attempt — a private
-  /// copy, so cancelling it abandons only that caller's view — rather than starting another
-  /// handshake. The socket being replaced is aborted; its late callbacks are ignored.
+  /// The returned future and the [Builder#onClose(OnClose)] and [Builder#onError(BiConsumer)]
+  /// callbacks are overlapping, uncorrelated signals: in the implementation from [#build()],
+  /// retiring a transport whose attempt is still unsettled completes that attempt's future
+  /// exceptionally before the callback runs, and the two may report different details
+  /// (cancellation versus the transport error or close status). Callbacks carry no attempt
+  /// identity, so they cannot be attributed to a particular future; delaying reconnect narrows
+  /// the overlap but cannot attribute it.
   ///
-  /// Callers must not assume exactly-once or correlated failure notification across the returned
-  /// future and the lifecycle callbacks. In the implementation created by [#build()], retiring a
-  /// current transport while its connection attempt remains unsettled settles that attempt
-  /// exceptionally before invoking a configured [Builder#onClose(OnClose)] or
-  /// [Builder#onError(BiConsumer)] callback. A future returned for that attempt may therefore
-  /// expose a separate exceptional observation. The future and callback need not expose the same
-  /// details: the future may report cancellation or invalidation while the callback reports the
-  /// transport error or close status and reason.
-  ///
-  /// A returned future represents its connection attempt. Lifecycle callbacks receive this
-  /// reusable wrapper and no attempt token, so this API cannot attribute a callback to a
-  /// particular future. Recovery code that consumes both channels must treat them as potentially
-  /// overlapping, uncorrelated signals rather than independently attributing each one to the
-  /// current attempt. Delaying reconnect can narrow the overlap but cannot provide attribution.
+  /// @return a future completing once connected, or `null` if this is [closed][#close()]; see
+  ///         [java.net.http.WebSocket.Builder#buildAsync(URI,WebSocket.Listener)] for its
+  ///         failures
   CompletableFuture<?> connect();
 
-  /// Registers a consumer for engine-reported failures: correlated request rejections, terminal
-  /// registration collisions, and consumer bugs contained by the dispatch paths. Each subscriber
-  /// is contained — one subscriber throwing does not starve the rest. A no-op once
-  /// [closed][#close()]: close releases every consumer reference, and a late registration must
-  /// not re-pin its caller to a dead instance.
+  /// Registers a consumer for engine-reported failures: request rejections, terminal
+  /// registration collisions, unexpected errors processing inbound messages, and exceptions
+  /// thrown by subscription consumers, notification parsers and `onSub` callbacks. A throwing
+  /// consumer does not stop the others. A no-op once [closed][#close()], since close releases
+  /// every consumer.
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);
 
   boolean accountSubscribe(final PublicKey key,
@@ -198,18 +177,15 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return signatureSubscribe(commitment, commitment == Commitment.PROCESSED, b58TxSig, onSub, consumer);
   }
 
-  /// Every `signatureSubscribe` overload arrives here, so this is where the signature is
-  /// checked for frame safety: it is the one caller supplied string that reaches the wire
-  /// inside a frame, and a quote, backslash or control character would splice into that frame
-  /// — the server then answers a parse error with a null id, leaving the request permanently
-  /// uncorrelatable. Semantic validity is deliberately the server's call: a well formed frame
-  /// carrying an invalid signature is rejected with the request id attached, which this client
-  /// correlates, retires and reports (measured against api.mainnet-beta.solana.com).
+  /// Only frame safety is checked locally. Whether the signature is valid is the server's call;
+  /// its rejection is correlated, releases the registration, and is reported through
+  /// [#exceptionSubscribe(Consumer)]. Overloads without `enableReceivedNotification` enable it
+  /// only at [Commitment#PROCESSED].
   ///
-  /// @throws IllegalArgumentException if `b58TxSig` is null, empty, or contains a character
-  ///                                 that cannot travel inside a JSON string. Rejection is a
-  ///                                 throw and not a `false` return because `false` already
-  ///                                 means this signature and commitment are subscribed.
+  /// @throws IllegalArgumentException if `b58TxSig` is null, empty, or contains a quote,
+  ///                                 backslash or character below U+0020. A throw, not `false`,
+  ///                                 which means this signature and commitment are already
+  ///                                 subscribed.
   boolean signatureSubscribe(final Commitment commitment,
                              final boolean enableReceivedNotification,
                              final String b58TxSig,
@@ -289,18 +265,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   boolean programUnsubscribe(final Commitment commitment, final PublicKey program);
 
-  /// Registers a program subscription under an explicit caller identity. Unlike
+  /// Registers a program subscription under a caller-chosen key, so that, unlike
   /// [#programSubscribe(PublicKey,List,Consumer)], distinct keys may subscribe to the same
-  /// program and commitment with different filters. The `(key, commitment)` pair is unique
-  /// across keyed program subscriptions — keys are not scoped to a program — and the same pair
-  /// passed to `keyedProgramUnsubscribe` removes exactly this durable registration.
+  /// program and commitment with different filters. Keys are not scoped to a program: the
+  /// `(key, commitment)` pair is unique across keyed program subscriptions, and passing it to
+  /// [#keyedProgramUnsubscribe(Commitment,String)] removes exactly this registration.
   ///
-  /// This additive API is a capability: implementations predating it remain binary compatible
-  /// and report the unsupported operation clearly. Existing `programSubscribe` identity and
-  /// duplicate behavior are unchanged.
-  ///
-  /// @param subscriptionKey a non-null, non-empty identity unique among keyed program
-  ///                        subscriptions at this commitment
+  /// @param subscriptionKey unique among keyed program subscriptions at this commitment
+  /// @throws IllegalArgumentException if `subscriptionKey` is null or empty
   /// @throws UnsupportedOperationException if this implementation does not provide keyed
   ///                                       program subscriptions
   default boolean keyedProgramSubscribe(final String subscriptionKey,
@@ -335,8 +307,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     throw new UnsupportedOperationException("Keyed program subscriptions are not supported by this implementation.");
   }
 
-  /// Removes the explicitly keyed program registration at the default commitment.
+  /// Removes the keyed program registration at the default commitment.
   ///
+  /// @throws IllegalArgumentException if `subscriptionKey` is null or empty
   /// @throws UnsupportedOperationException if this implementation does not provide keyed
   ///                                       program subscriptions
   default boolean keyedProgramUnsubscribe(final String subscriptionKey) {
@@ -366,26 +339,21 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// Subscribe to a websocket method which is not directly supported by this interface, e.g.
   /// Helius' transactionSubscribe. Subscriptions are replayed if the connection is re-connected.
   ///
-  /// @param subscribeMethod    the subscription request method.
-  /// @param unSubscribeMethod  the corresponding un-subscription request method. Fixed by the
-  ///                           first registration under a notification method: later
-  ///                           registrations must agree, so unknown-id recovery never has to
-  ///                           pick among divergent methods. The binding lives only as long as
-  ///                           some registration under the method remains — releasing the last
-  ///                           key releases the binding, and a re-registration may then bind a
-  ///                           different method while an older cancellation is still
-  ///                           outstanding; its wrong-method rejection is reported, not
-  ///                           retried.
+  /// @param unSubscribeMethod  bound by the first registration under `notificationMethod`;
+  ///                           later registrations must agree until its last key is released.
+  ///                           After a rebind, an older cancellation's wrong-method rejection
+  ///                           is reported, not retried.
   /// @param notificationMethod the method of the corresponding notification messages.
-  /// @param key                unique key within this notification method, used for
-  ///                           de-duplication and to unsubscribe.
+  /// @param key                unique within `notificationMethod`; used for de-duplication and
+  ///                           to [unsubscribe][#unsubscribe(String,String)].
   /// @param paramsJson         placed RAW within the request params array — validity and
   ///                           escaping are the caller's responsibility.
   /// @param parser             applied positioned at the notification params result value.
-  /// @throws IllegalArgumentException if any method name could splice the frame, names a
-  ///                                  built-in channel's notification, subscribe, or
-  ///                                  unsubscribe method, or disagrees with the un-subscription
-  ///                                  method already bound to this notification method.
+  /// @throws IllegalArgumentException if any method name is null, empty, or contains a quote,
+  ///                                  backslash or character below U+0020, names a built-in
+  ///                                  channel's notification, subscribe, or unsubscribe method,
+  ///                                  or disagrees with the un-subscription method already bound
+  ///                                  to this notification method.
   default <T> boolean subscribe(final String subscribeMethod,
                                 final String unSubscribeMethod,
                                 final String notificationMethod,
@@ -408,13 +376,13 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// Unsubscribe from a subscription created via [#subscribe].
   boolean unsubscribe(final String notificationMethod, final String key);
 
-  /// Once closed, this WebSocket is no longer usable: subscriptions return false, `connect()`
-  /// returns null, and inbound frames are ignored. A close frame is sent politely, and the
-  /// transport is aborted a few seconds later if the peer never replies — the release of the
-  /// socket is bounded, not dependent on the peer's cooperation.
+  /// Once closed, this WebSocket is no longer usable: subscriptions return false, [#connect()]
+  /// returns null, and inbound frames are ignored. A close frame is sent, and the transport is
+  /// aborted a few seconds later if the peer never replies.
   @Override
   void close();
 
+  /// Every delay and timeout set here is in milliseconds.
   interface Builder {
 
     SolanaRpcWebsocket create();
@@ -435,25 +403,20 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder webSocketBuilder(final WebSocket.Builder webSocketBuilder);
 
-    /// Cap on a single (possibly fragmented) text message, in chars, defaulting to
-    /// 2^26 — 67,108,864 chars, a 128 MiB buffer, which a 10 MiB account (the
-    /// network's account data cap) base64-encodes well inside. A message the cap
-    /// excludes aborts the connection and surfaces through `onError` — without
-    /// one, the fragment reassembly buffer grows until OOM against a server that
-    /// never sends a final frame.
+    /// Cap on a single (possibly fragmented) text message, in chars, defaulting to 2^26: well
+    /// above a base64-encoded 10 MiB account, the network's account data cap. A longer message
+    /// aborts the connection and is reported through [#onError(BiConsumer)]; the cap bounds the
+    /// reassembly buffer against a server that never sends a final frame.
     ///
     /// @throws IllegalArgumentException if maxMessageLength is not positive.
     Builder maxMessageLength(final int maxMessageLength);
 
     int maxMessageLength();
 
-    /// How long the whole handshake — DNS, TCP, TLS and the HTTP upgrade — may take. Separate
-    /// from [#reConnectDelay(long)]: a handshake budget and a retry cadence have no reason to be
-    /// the same number.
+    /// How long the whole handshake (DNS, TCP, TLS and the HTTP upgrade) may take, in
+    /// milliseconds; independent of [#reConnectDelay(long)].
     ///
-    /// This is an additive capability: a builder compiled before independent handshake timing
-    /// cannot retain the value without also changing its reconnect cadence.
-    ///
+    /// @throws IllegalArgumentException if connectTimeout is not positive.
     /// @throws UnsupportedOperationException if this implementation cannot configure an
     ///                                       independent handshake timeout
     default Builder connectTimeout(final long connectTimeout) {
@@ -462,39 +425,38 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     Builder reConnectDelay(final long reConnectDelay);
 
-    /// How long the peer may be silent before a Ping is sent, how long that send may remain
-    /// pending, and how long a successfully sent probe may remain unanswered before the transport
-    /// is treated as unresponsive and reported through [#onError(BiConsumer)]. A peer frame which
-    /// races a still-pending send already answers the probe, but the send operation must still
-    /// settle within its own window. The peer-response window starts at successful send
-    /// completion, not when the Ping was admitted for sending.
+    /// How long the peer may be silent before a Ping is sent, in milliseconds. The same window
+    /// then bounds the Ping's send, and, from successful send completion, the wait for any peer
+    /// frame; a frame racing a still-pending send answers the probe, but the send must still
+    /// settle in time. A failed probe aborts the transport and is reported through
+    /// [#onError(BiConsumer)].
     Builder pingDelay(final long pingDelay);
 
     Builder subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay);
 
-    /// How long this end may be silent before it pokes the peer, guarding against an
-    /// intermediary that ages a connection on what it receives from us. Defaults to a multiple
-    /// of [#pingDelay()], so tuning only the ping delay moves this proportionately.
+    /// How long this end may be silent before a Ping is sent, in milliseconds, even while the
+    /// peer is talking; it guards against something in the path that ages the connection on what
+    /// it receives from us. Ordinary proxies and load balancers reset on traffic in either
+    /// direction, so set this when something enforces client liveness. Defaults to a multiple of
+    /// [#pingDelay()] with no cap, so raising the ping delay raises this too.
     ///
+    /// @throws IllegalArgumentException if keepAliveDelay is not positive.
     /// @throws UnsupportedOperationException if this implementation cannot configure an
     ///                                       independent keep-alive delay
     default Builder keepAliveDelay(final long keepAliveDelay) {
       throw unsupportedTiming("keepAliveDelay");
     }
 
-    /// How long a FAILED subscription send waits before it is retried, in milliseconds — and,
-    /// times four, the deadline after which a sent-but-never-answered request replaces the
-    /// connection. Defaults to [#reConnectDelay()] floored at [#subscriptionAndPingCheckDelay()].
+    /// How long a failed subscription send waits before it is retried, in milliseconds.
+    /// Defaults to [#reConnectDelay()] floored at [#subscriptionAndPingCheckDelay()] and at 1.
     ///
-    /// A successfully sent request is never re-sent on its own connection: JSON-RPC ids
-    /// correlate responses, they do not deduplicate calls, so a duplicate of a merely slow
-    /// subscribe would create a second, orphaned server subscription. Only a send that failed
-    /// outright retries, at this cadence; a request the server never answers at all escalates
-    /// through the error seam by aborting the connection, so reconnect policy — not a duplicate
-    /// frame — resolves it. This delay also paces replay after a reconnect — a re-queued
-    /// subscription keeps its last attempt stamp — and the retry of an un-subscription the
-    /// server refused transiently, so an immediately-refusing peer is not retried at wire
-    /// speed.
+    /// A successfully sent request is not re-sent while it awaits an answer, since a duplicate
+    /// would create an orphaned server subscription; one left unanswered for four of these
+    /// windows aborts the connection and is reported through [#onError(BiConsumer)], leaving
+    /// recovery to the reconnect policy. This delay also paces the retry of a subscription or
+    /// un-subscription the server refused transiently, and replay after a reconnect (a
+    /// re-queued subscription keeps its last attempt stamp, so a large value delays replay by up
+    /// to one window).
     ///
     /// @throws IllegalArgumentException if subscriptionResendDelay is not positive.
     /// @throws UnsupportedOperationException if this implementation cannot configure an
@@ -511,9 +473,8 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     WebSocket.Builder webSocketBuilder();
 
-    /// A legacy builder used the reconnect delay as its handshake timeout. Deriving that value
-    /// preserves its observable configuration while allowing implementations predating this
-    /// accessor to remain link-compatible.
+    /// Defaults to [#reConnectDelay()], the handshake timeout of a builder without an independent
+    /// setting.
     default long connectTimeout() {
       return reConnectDelay();
     }
@@ -524,14 +485,12 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     long subscriptionAndPingCheckDelay();
 
-    /// Legacy builders have no independent keep-alive setting, so they inherit the same derived
-    /// default as the built-in builder.
+    /// Defaults to the built-in builder's derived value, a multiple of [#pingDelay()].
     default long keepAliveDelay() {
       return Timings.keepAliveFor(pingDelay());
     }
 
-    /// Legacy websocket engines paced retries through their reconnect and check delays. This is
-    /// the value the built-in builder now derives when no independent setting is supplied.
+    /// Defaults to the built-in builder's derived value; see [#subscriptionResendDelay(long)].
     default long subscriptionResendDelay() {
       return Timings.resendDelayFor(reConnectDelay(), subscriptionAndPingCheckDelay());
     }
@@ -551,44 +510,26 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     OnClose onClose();
 
-    /// The current underlying transport is retired before this callback. The default behavior is
-    /// to [#close()] this WebSocket and its subscription registries.
-    ///
-    /// This behavior can be changed to instead attempt to [re-connect][#connect()] the underlying
-    /// WebSocket and re-use this instance; durable registrations are replayed on its successor.
-    /// The handler runs without the websocket lifecycle lock.
-    ///
-    /// When this callback follows a transport retirement, do not assume it is the only observation
-    /// of that retirement. In the implementation created by [SolanaRpcWebsocket#build()], if that
-    /// transport's connection attempt is still unsettled, the attempt is settled exceptionally
-    /// before this configured callback is invoked. A future returned for that attempt may expose a
-    /// separate exceptional observation, and the two channels need not expose the same details. The
-    /// [SolanaRpcWebsocket] passed here is the reusable wrapper and carries no identity for that
-    /// attempt; see [SolanaRpcWebsocket#connect()].
+    /// Called when the peer closes the current transport, after that transport is retired.
+    /// Without a handler the instance [closes][SolanaRpcWebsocket#close()]; a handler may instead
+    /// [reconnect][SolanaRpcWebsocket#connect()] and reuse this instance, replaying its durable
+    /// registrations. A close following a failed Ping send is reported through
+    /// [#onError(BiConsumer)] instead. Runs without the lifecycle lock. It may duplicate an
+    /// exceptional completion of the attempt's future, and carries no attempt identity; see
+    /// [SolanaRpcWebsocket#connect()].
     Builder onClose(final OnClose onClose);
 
     BiConsumer<SolanaRpcWebsocket, Throwable> onError();
 
-    /// For an error attributed to the current underlying transport, that transport is retired
-    /// before this callback. The default behavior is to [#close()] this WebSocket and its
-    /// subscription registries.
+    /// Called for an error on the current transport, after that transport is retired. Without a
+    /// handler the error is logged and the instance [closes][SolanaRpcWebsocket#close()]; a
+    /// handler may instead [reconnect][SolanaRpcWebsocket#connect()] and reuse this instance.
+    /// If the internal check loop dies, this is called and the instance then closes regardless:
+    /// reconnecting requires a new instance.
     ///
-    /// For a socket error this behavior can be changed to instead attempt to
-    /// [re-connect][#connect()] the underlying WebSocket and re-use this instance. One failure
-    /// is different: if the internal check loop itself dies, this handler is invoked and the
-    /// instance is then closed regardless — the loop's thread is gone, so reconnecting requires
-    /// a new instance.
-    ///
-    /// This handler runs without the websocket lifecycle lock, on whichever thread reports the
-    /// failure; keep it brief and non-blocking.
-    ///
-    /// When this callback follows a transport retirement, do not assume it is the only observation
-    /// of that retirement. In the implementation created by [SolanaRpcWebsocket#build()], if that
-    /// transport's connection attempt is still unsettled, the attempt is settled exceptionally
-    /// before this configured callback is invoked. A future returned for that attempt may expose a
-    /// separate exceptional observation, and the two channels need not expose the same details. The
-    /// [SolanaRpcWebsocket] passed here is the reusable wrapper and carries no identity for that
-    /// attempt; see [SolanaRpcWebsocket#connect()].
+    /// Runs without the lifecycle lock, on whichever thread reports the failure; keep it brief
+    /// and non-blocking. It may duplicate an exceptional completion of the attempt's future, and
+    /// carries no attempt identity; see [SolanaRpcWebsocket#connect()].
     Builder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError);
 
     BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError();
@@ -597,10 +538,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     BiConsumer<SolanaRpcWebsocket, Throwable> onPingError();
 
-    /// Observes an outbound Ping whose send operation throws or completes exceptionally. The
-    /// failed transport is also aborted and reported through [#onError(BiConsumer)]; a send which
-    /// never completes, or one which succeeds but receives no peer frame, uses only that ordinary
-    /// error callback because no exceptional send completion was reported.
+    /// Observes an outbound Ping whose send throws or completes exceptionally, after the
+    /// transport is aborted and the [#onError(BiConsumer)] handling has run. A send that never
+    /// completes, or a probe that gets no peer frame, reaches only [#onError(BiConsumer)].
     Builder onPingError(final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError);
   }
 }

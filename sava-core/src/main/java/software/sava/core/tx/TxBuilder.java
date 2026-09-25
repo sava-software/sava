@@ -7,37 +7,32 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.SequencedCollection;
 
-/// Builds {@link Transaction}s. For now only the SIMD-0385 v1 format is supported.
-///
+/// Builds SIMD-0385 v1 [Transaction]s, the only format it supports.
 public interface TxBuilder {
 
   static TxBuilder createBuilder() {
     return new TxBuilderImpl();
   }
 
+  /// Builds a v1 transaction from the configured fee payer and instructions.
+  ///
+  /// @throws IllegalArgumentException if instructions were supplied only as an empty collection
+  /// @throws IllegalStateException    if no add, insert, or set call has succeeded, the accounts
+  ///                                  include no fee payer, an instruction's program is the fee
+  ///                                  payer, a [#strict()] limit is exceeded, or a count or length
+  ///                                  does not fit its wire field
   Transaction createTransaction();
 
-  /// Whether strict mode is enabled. Strict mode is enabled by default.
+  /// Whether strict mode, the default, is enabled.
   ///
-  /// When enabled, [#createTransaction()] validates that the resulting transaction conforms to the
-  /// SIMD-0385 v1 limits and throws an exception if any are exceeded:
-  ///  - at least one and at most 64 instructions
-  ///  - at most 64 accounts
-  ///  - at most 12 required signatures
-  ///  - a serialized size within the v1 maximum
-  ///
-  /// Additionally, [#heapSize(int)] validates that a requested heap size is a multiple of 1KiB within
-  /// the inclusive range [32KiB,256KiB].
-  ///
-  /// @return {@code true} if strict mode is enabled
+  /// Strict mode enforces the SIMD-0385 v1 limits: [#createTransaction()] rejects more than 64
+  /// instructions, more than [Transaction#MAX_ACCOUNTS] accounts, more than 12 required signatures,
+  /// or a serialized size above the v1 maximum, and [#heapSize(int)] rejects a nonzero heap size
+  /// that is not a multiple of 1KiB from 32KiB to 256KiB.
   boolean strict();
 
-  /// Enables or disables strict mode.
-  ///
-  /// When enabled (the default), the builder enforces the SIMD-0385 v1 limits described by [#strict()].
-  /// When disabled, these validations are skipped, allowing transactions that may violate the v1 limits.
-  ///
-  /// @param strict {@code true} to enable strict mode, {@code false} to disable it
+  /// Enables or disables the SIMD-0385 limit checks described by [#strict()]. When disabled, the
+  /// builder still refuses values its wire fields cannot encode.
   void strict(final boolean strict);
 
   AccountMeta feePayer();
@@ -48,8 +43,7 @@ public interface TxBuilder {
 
   TxBuilder addInstruction(final Instruction instruction);
 
-  /// Since Java 21 `List` extends `SequencedCollection`, so this one declaration serves both; a
-  /// separate `List` overload would publish a second method that can never behave differently.
+  /// Appends the instructions in iteration order, copying rather than retaining the collection.
   TxBuilder addInstructions(final SequencedCollection<Instruction> instructions);
 
   default TxBuilder addInstructions(final Instruction[] instructions) {
@@ -64,37 +58,26 @@ public interface TxBuilder {
   ///                                   below the instruction count
   TxBuilder setInstruction(final int index, final Instruction instruction);
 
-  /***
-   *
-   * @throws IndexOutOfBoundsException if the index is out of range
-   *         ({@code index < 0 || index >= size()})
-   */
+  /// Inserts the instruction at `index`, shifting later instructions.
+  ///
+  /// @throws IndexOutOfBoundsException if `index` is negative or above the instruction count
   TxBuilder insertInstruction(int index, Instruction instruction);
 
   long priorityFeeLamports();
 
   TxBuilder priorityFeeLamports(final long priorityFeeLamports);
 
-  /// Converts a legacy/v0 SetComputeUnitPrice compute budget price, denominated in micro-lamports
-  /// per compute unit, into the equivalent v1 priority fee in lamports for the given compute unit
-  /// limit.
+  /// Converts a legacy/v0 SetComputeUnitPrice price, in micro-lamports per compute unit, into the
+  /// equivalent v1 priority fee in lamports for `computeUnitLimit`.
   ///
-  /// The price is multiplied by the compute unit limit, capped at the 1.4 million maximum, then
-  /// converted to lamports, rounding up, mirroring the runtime's prioritization fee calculation.
-  /// Saturates at {@link Long#MAX_VALUE} if the fee overflows, which far exceeds the total supply
-  /// of SOL.
+  /// Multiplies by the limit (read as unsigned, capped at the 1.4 million runtime maximum) and
+  /// rounds up to whole lamports, as the runtime does. Returns 0 for a zero price or limit;
+  /// otherwise saturates at [Long#MAX_VALUE] for a negative price or on overflow.
   ///
-  /// **This is a one-time conversion, not an ongoing binding.** On legacy/v0 the fee is derived at
-  /// execution from the price and the effective compute unit limit, so lowering the limit lowered
-  /// the fee. A v1 priority fee is an absolute lamport ConfigValue that the runtime charges
-  /// verbatim, so the number this returns is fixed at the limit passed here and does not track a
-  /// limit changed later. That decoupling is deliberate in SIMD-0385: it lets a caller tighten the
-  /// compute unit request after simulating, improving block-packing odds, without lowering the bid.
-  /// Callers who want the fee to fall with the limit must convert again.
-  ///
-  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
-  /// @param computeUnitLimit            the compute unit limit the price applies to
-  /// @return the equivalent priority fee in lamports
+  /// **A one-time conversion, not a binding.** A v1 priority fee is an absolute lamport ConfigValue
+  /// charged verbatim, so the result does not follow a limit changed later; SIMD-0385 decouples
+  /// them so a caller can tighten the limit after simulating without lowering the bid. Convert
+  /// again if the fee should follow the limit.
   static long computeUnitPriceToPriorityFeeLamports(final long microLamportsPerComputeUnit,
                                                     final int computeUnitLimit) {
     final long cappedComputeUnitLimit = Math.min(computeUnitLimit & 0xFFFF_FFFFL, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
@@ -108,46 +91,34 @@ public interface TxBuilder {
     return ((microLamportsPerComputeUnit * cappedComputeUnitLimit) + 999_999) / 1_000_000;
   }
 
-  /// Sets the priority fee from a legacy/v0 SetComputeUnitPrice compute budget price, denominated
-  /// in micro-lamports per compute unit, converting it to lamports against this builder's current
-  /// {@link #computeUnitLimit()}.
+  /// Sets the priority fee from a legacy/v0 price in micro-lamports per compute unit, converted
+  /// against this builder's current [#computeUnitLimit()]; a cleared (0) limit gives a fee of 0.
   ///
-  /// Set the desired compute unit limit before calling this method so the conversion reflects the
-  /// intended limit. The result is a **one-time conversion, not an ongoing binding**: it is fixed
-  /// at the limit current when this is called, and a limit changed afterwards does not move it. Call
-  /// this again after changing the limit if the fee should follow it.
+  /// Set the limit first: the fee is fixed at conversion and does not follow a later limit change.
   ///
-  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
   /// @see #computeUnitPriceToPriorityFeeLamports(long, int)
   TxBuilder priorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit);
 
   int computeUnitLimit();
 
-  /// Sets the compute unit limit, capped by the runtime at 1.4 million.
+  /// Sets the compute unit limit; the runtime caps it at 1.4 million.
   ///
-  /// Defaults to the 1.4 million maximum so that the corresponding ConfigValue is serialized and
-  /// may be updated in place later via {@link Transaction#setComputeUnitLimit(int)}. Set to 0 to
-  /// clear, omitting the ConfigValue, which per SIMD-0385 defaults the limit to 0 compute units.
-  ///
-  /// If not known ahead of time, simulate the transaction with the default maximum,
-  /// then set the limit to the units consumed reported by the RPC simulation,
-  /// plus a buffer if desired, before signing and sending.
+  /// Defaults to that maximum so the ConfigValue is serialized and can be updated in place with
+  /// [Transaction#setComputeUnitLimit(int)]. 0 clears it, omitting the ConfigValue, which
+  /// SIMD-0385 reads as a limit of 0 units. To size it, simulate with the default, then set the
+  /// units consumed plus any buffer before signing.
   TxBuilder computeUnitLimit(final int computeUnitLimit);
 
   int accountDataSizeLimit();
 
-  /// Sets the loaded accounts data size limit, in bytes, capped by the runtime at 64MiB.
+  /// Sets the loaded accounts data size limit in bytes; the runtime caps it at 64MiB.
   ///
-  /// Defaults to the 64MiB maximum, mirroring the legacy/v0 default, so that the corresponding
-  /// ConfigValue is serialized and may be updated in place later via
-  /// {@link Transaction#setAccountDataSizeLimit(int)}. Set to 0 to clear, omitting the
-  /// ConfigValue, which per SIMD-0385 defaults the limit to 0 bytes; a transaction which loads
-  /// account data without a sufficient limit will fail with MaxLoadedAccountsDataSizeExceeded
-  /// and still pay fees.
-  ///
-  /// If not known ahead of time, simulate the transaction with the default maximum,
-  /// then set the limit to the loaded accounts data size reported by the RPC simulation,
-  /// plus a buffer if desired, before signing and sending.
+  /// Defaults to that maximum, as legacy/v0 do, so the ConfigValue is serialized and can be
+  /// updated in place with [Transaction#setAccountDataSizeLimit(int)]. 0 clears it, omitting the
+  /// ConfigValue, which SIMD-0385 reads as a limit of 0 bytes: a transaction that then loads
+  /// account data fails with MaxLoadedAccountsDataSizeExceeded and still pays fees. To size it,
+  /// simulate with the default, then set the reported loaded accounts data size plus any buffer
+  /// before signing.
   TxBuilder accountDataSizeLimit(final int accountDataSizeLimit);
 
   int heapSize();

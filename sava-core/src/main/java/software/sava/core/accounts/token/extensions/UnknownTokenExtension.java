@@ -2,9 +2,8 @@ package software.sava.core.accounts.token.extensions;
 
 import java.util.Arrays;
 
-/// An extension released after this library was last synced with the SPL Token-2022
-/// program. Exposes the on-chain extension type value via [#type()] and the raw extension
-/// data for the user to handle as they see fit.
+/// An extension type this library does not know: its wire type and raw value bytes, written
+/// back unchanged.
 public record UnknownTokenExtension(int type, byte[] data) implements TokenExtension {
 
   @Override

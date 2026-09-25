@@ -40,10 +40,8 @@ public interface ProgramAccountsRequest<T> {
 
   BiFunction<PublicKey, byte[], T> factory();
 
-  /**
-   * Returns the decoder used for {@link RpcEncoding#base64_zstd}, or {@code null} when none was
-   * supplied. This default preserves compatibility with third-party request implementations.
-   */
+  /// The decoder for [RpcEncoding#base64_zstd] account data, or `null` when none was supplied.
+  /// An implementation whose [#encoding()] is [RpcEncoding#base64_zstd] must override it.
   default ZstdDecompressor zstdDecompressor() {
     return null;
   }
@@ -63,10 +61,14 @@ public interface ProgramAccountsRequest<T> {
     Builder() {
     }
 
+    /// @throws IllegalStateException if the encoding is [RpcEncoding#base64_zstd] and no
+    ///                               [#zstdDecompressor(ZstdDecompressor)] was set.
     public ProgramAccountsRequest<byte[]> createRequest() {
       return createRequest(BYTES_IDENTITY);
     }
 
+    /// @throws IllegalStateException if the encoding is [RpcEncoding#base64_zstd] and no
+    ///                               [#zstdDecompressor(ZstdDecompressor)] was set.
     public <T> ProgramAccountsRequest<T> createRequest(final BiFunction<PublicKey, byte[], T> factory) {
       final var encoding = Objects.requireNonNullElse(this.encoding, RpcEncoding.base64);
       if (encoding == RpcEncoding.base64_zstd && zstdDecompressor == null) {
@@ -111,26 +113,24 @@ public interface ProgramAccountsRequest<T> {
       return this;
     }
 
-    /// @param dataSliceOffset byte offset into the account data to start at.
-    /// @param dataSliceLength bytes to return, 0 for the whole account.
+    /// Takes the **offset first**, despite the method name.
+    ///
+    /// @param dataSliceOffset byte offset into the account data.
+    /// @param dataSliceLength bytes to return, `0` for the whole account.
     public Builder dataSliceLength(final int dataSliceOffset, final int dataSliceLength) {
       this.dataSliceOffset = dataSliceOffset;
       this.dataSliceLength = dataSliceLength;
       return this;
     }
 
-    /// Selects the account-data encoding sent to `getProgramAccounts`. In particular,
-    /// [RpcEncoding#base64_zstd] opts into Solana's `base64+zstd` wire representation and also
-    /// requires [#zstdDecompressor(ZstdDecompressor)] before the request can be executed.
+    /// Account-data encoding, [RpcEncoding#base64] when unset. [RpcEncoding#base64_zstd] also
+    /// requires [#zstdDecompressor(ZstdDecompressor)].
     public Builder encoding(final RpcEncoding encoding) {
       this.encoding = encoding;
       return this;
     }
 
-    /**
-     * Supplies the optional zstd implementation used to decode {@code base64+zstd} account data.
-     * Sava deliberately has no runtime dependency on a particular zstd library.
-     */
+    /// Sets the decoder that [RpcEncoding#base64_zstd] requires; sava bundles no zstd library.
     public Builder zstdDecompressor(final ZstdDecompressor zstdDecompressor) {
       this.zstdDecompressor = zstdDecompressor;
       return this;

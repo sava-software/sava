@@ -29,16 +29,16 @@ abstract class BaseTransaction implements Transaction {
     this.data = data;
   }
 
-  /// Returns the byte offset of the fee payer signature, or -1 if it has not been written yet.
+  /// Returns the byte offset of the fee payer signature, or -1 if no signer is declared or that
+  /// slot is still all zeros.
   ///
-  /// A v1 transaction appends its signatures, so their offset is implied by the serialized length
-  /// alone. These bytes are untrusted — this is reachable from the public static
-  /// [Transaction#getBase58Id(byte[])] — so the implied boundary is corroborated against the
-  /// message the buffer actually contains. Without that, padding silently slides the window and the
-  /// caller is handed 64 bytes that are not the transaction's id.
+  /// The bytes are untrusted (reachable from [Transaction#getBase58Id(byte\[\])]), so a v1
+  /// offset comes from [V1TransactionSkeleton#requireSignatureBlockOffset(byte\[\])] rather than
+  /// the length.
   ///
-  /// @throws IllegalArgumentException if the buffer cannot hold the signatures its header declares,
-  ///                                  or if the message does not end where they would begin
+  /// @throws IllegalArgumentException if a legacy/v0 buffer declares a signer but cannot hold one
+  ///                                  signature, or a v1 buffer cannot hold every declared
+  ///                                  signature or its message does not end where they begin
   static int feePayerSignatureOffset(final byte[] signedTransaction) {
     final int numSigners;
     final int signaturesOffset;
@@ -241,26 +241,15 @@ abstract class BaseTransaction implements Transaction {
     }
   }
 
-  /// The serialized payload, not the caller, decides where a transaction's message begins.
+  /// Requires an untrusted legacy/v0 payload to declare exactly `numSigners` signatures before it
+  /// is signed: the payload, not the caller, decides where the message begins.
   ///
-  /// Backs [Transaction]'s `static` signing helpers, where the signer count arrives as raw bytes and
-  /// is therefore untrusted. Those helpers used to size the signature block from the caller's
-  /// argument and overwrite the count byte to match, which silently relocates the message: signing a
-  /// two-signer payload with one signer moved the message start back 64 bytes and wrote a signature
-  /// over the header. The overwrite dated from a time when construction did not set that byte;
-  /// every `createTx` path writes it at allocation now, so all it still did was let a mismatch pass.
-  ///
-  /// A payload states its signature count twice — the prefix that positions the message, and the
-  /// header's own `num_required_signatures` — and only the prefix locates anything, so both are
-  /// checked. Trusting the prefix alone would have moved the defect rather than closed it: a payload
-  /// whose two copies disagree would still be signed, over a span its own header contradicts. The
-  /// header sits at the prefix's implied message offset, after the version byte where there is one.
-  /// [TransactionSkeleton] corroborates the same pair before it will sign.
-  ///
-  /// Nothing is written, and a caller assembling a buffer by hand declares its count exactly as
-  /// `createTx` does. Like every signature-count site in [Transaction] this reads one byte, `sigLen`
-  /// being `1 + (n << 6)` throughout, so counts above 127 narrow rather than growing a second
-  /// compact-u16 byte.
+  /// The count appears twice, as the prefix that positions the message and as the header's
+  /// `num_required_signatures` (after the version byte, if any), and both must match. Nothing is
+  /// written, so a hand-assembled buffer must declare its count as [Transaction#createTx] does;
+  /// resizing the signature block or rewriting the count to fit the caller would relocate the
+  /// message and sign over the header. The prefix is read as one byte, so counts above 127 are not
+  /// supported.
   ///
   /// @throws IllegalArgumentException if `numSigners` disagrees with the payload, if the payload's
   ///                                  two copies of the count disagree, or if it is too short to

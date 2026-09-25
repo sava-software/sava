@@ -6,11 +6,10 @@ import software.sava.core.encoding.ByteUtil;
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
-/// @param rateAuthority        the authority that may update the rate; all-zero means none, so
-///                             compare with [PublicKey#NONE] rather than testing for `null`.
-/// @param unixTimestamp        when interest accrual started.
-/// @param preUpdateAverageRate the average rate that applied before the last update.
-/// @param lastUpdateTimestamp  when the rate was last updated.
+/// @param rateAuthority        may update the rate; [PublicKey#NONE] when absent, never `null`.
+/// @param unixTimestamp        when interest accrual started, in Unix seconds.
+/// @param preUpdateAverageRate the average rate before the last update, in basis points.
+/// @param lastUpdateTimestamp  when the rate was last updated, in Unix seconds.
 /// @param currentRate          the rate in force, in basis points per year.
 public record InterestBearingConfig(PublicKey rateAuthority,
                                     long unixTimestamp,

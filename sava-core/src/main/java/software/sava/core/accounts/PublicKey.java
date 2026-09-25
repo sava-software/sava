@@ -30,7 +30,7 @@ public interface PublicKey extends Comparable<PublicKey> {
   int PUBLIC_KEY_LENGTH = 32;
   int MAX_SEED_LENGTH = 32;
 
-  /** Maximum number of seed byte arrays in a PDA derivation, including the bump when present. */
+  /// Maximum number of seed byte arrays in a PDA derivation, including the bump when present.
   int MAX_SEEDS = 16;
   PublicKey NONE = new PublicKeyBytes(new byte[PUBLIC_KEY_LENGTH]); // 11111111111111111111111111111111
 
@@ -59,7 +59,7 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
-  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
+  /// Verifies a signature over the UTF-8 encoding of `msg`.
   static boolean verifySignature(final java.security.PublicKey publicKey,
                                  final String msg,
                                  final byte[] signature) {
@@ -134,7 +134,7 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
-  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
+  /// Verifies a signature over the UTF-8 encoding of `msg`.
   static boolean verifySignature(final byte[] publicKey,
                                  final int publicKeyOffset,
                                  final String msg,
@@ -143,7 +143,7 @@ public interface PublicKey extends Comparable<PublicKey> {
     return verifySignature(publicKey, publicKeyOffset, msgBytes, 0, msgBytes.length, signature);
   }
 
-  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
+  /// Verifies a signature over the UTF-8 encoding of `msg`.
   static boolean verifySignature(final byte[] publicKey, final String msg, final byte[] signature) {
     return verifySignature(publicKey, 0, msg, signature);
   }
@@ -164,14 +164,13 @@ public interface PublicKey extends Comparable<PublicKey> {
     return readPubKey(bytes, 0);
   }
 
-  /**
-   * Creates a public key retaining the supplied 32-byte array without copying it.
-   *
-   * <p>The caller must leave the retained bytes unchanged while the key is in use. Pass
-   * {@code publicKey.clone()} if the source array may be modified later. Mutating retained
-   * bytes can leave cached {@link #toBase58()} and {@link Object#hashCode()} values stale,
-   * causing equal keys to have different hash codes.</p>
-   */
+  /// Creates a public key that retains `publicKey` without copying it.
+  ///
+  /// Leave the array unchanged while the key is in use, or pass `publicKey.clone()`: mutating
+  /// it can leave the cached [#toBase58()] and [Object#hashCode()] stale, so equal keys may
+  /// hash differently.
+  ///
+  /// @throws IllegalArgumentException if `publicKey` is not [#PUBLIC_KEY_LENGTH] bytes
   static PublicKey createPubKey(final byte[] publicKey) {
     if (publicKey.length != PublicKey.PUBLIC_KEY_LENGTH) {
       throw new IllegalArgumentException("Invalid public key input");
@@ -196,7 +195,7 @@ public interface PublicKey extends Comparable<PublicKey> {
     return new PublicKeyBytes(publicKey);
   }
 
-  /// Decodes a base58 encoded key from ASCII text held in a byte array, e.g. a raw JSON or wire buffer.
+  /// Decodes a key from base58 text stored as ASCII bytes, e.g. a raw JSON buffer.
   static PublicKey fromBase58Encoded(final byte[] base58, final int from, final int len) {
     final byte[] publicKey = new byte[PUBLIC_KEY_LENGTH];
     Base58.decode(base58, from, len, publicKey);
@@ -210,39 +209,37 @@ public interface PublicKey extends Comparable<PublicKey> {
 
   int write(final byte[] out, final int off);
 
+  /// Derives a program address from `seeds` as given, without a bump search.
+  ///
+  /// @return `null` if the derived address lies on the ed25519 curve
+  /// @throws IllegalArgumentException if more than [#MAX_SEEDS] seeds are given or any seed
+  ///                                  exceeds [#MAX_SEED_LENGTH] bytes
   static PublicKey createProgramAddress(final List<byte[]> seeds, final PublicKey programId) {
     final byte[] buffer = PublicKeyBytes.createBuffer(seeds, false, programId);
     final byte[] hash = Hash.sha256(buffer);
     return Ed25519Util.isNotOnCurve(hash) ? PublicKey.createPubKey(hash) : null;
   }
 
-  /**
-   * Finds Solana's canonical program address by trying bump seeds from 255 through 1.
-   * The generated bump counts toward {@link #MAX_SEEDS}, so callers may provide at most
-   * 15 seeds.
-   *
-   * @throws IllegalArgumentException if the caller provides more than 15 seeds or any
-   *                                  seed exceeds {@link #MAX_SEED_LENGTH}
-   * @throws RuntimeException if no viable address exists for bumps 255 through 1
-   */
+  /// Finds the canonical program address, trying bump seeds from 255 down to 1. The bump
+  /// counts toward [#MAX_SEEDS], so at most `MAX_SEEDS - 1` caller seeds are allowed.
+  ///
+  /// @throws IllegalArgumentException if more than `MAX_SEEDS - 1` seeds are given or any seed
+  ///                                  exceeds [#MAX_SEED_LENGTH] bytes
+  /// @throws RuntimeException if no bump yields an off-curve address
   static ProgramDerivedAddress findProgramAddress(final List<byte[]> seeds, final PublicKey programId) {
     return PublicKeyBytes.findProgramAddress(seeds, programId, Ed25519Util::isNotOnCurve);
   }
 
-  /**
-   * Derives an off-curve account from a base key, an ASCII seed, and a program id.
-   *
-   * <p>The returned {@link AccountWithSeed#asciiSeed()} contains the US-ASCII encoding of
-   * {@code baseSeed} followed by the selected nonce byte. Because the nonce is part of the
-   * on-chain seed, the caller's base seed may encode to at most
-   * {@code MAX_SEED_LENGTH - 1} bytes. Non-ASCII characters use Java's standard US-ASCII
-   * replacement byte. Nonces are tried from 127 through 0.</p>
-   *
-   * @throws IllegalArgumentException if the ASCII-encoded base seed plus nonce exceeds
-   *                                  {@link #MAX_SEED_LENGTH} bytes or the owner ends in the
-   *                                  program-derived-address marker
-   * @throws RuntimeException if no off-curve address exists in the nonce range
-   */
+  /// Derives an off-curve seeded account, trying nonces from 127 down to 0.
+  ///
+  /// The returned [AccountWithSeed#asciiSeed()] is the US-ASCII encoding of `baseSeed`
+  /// followed by the nonce byte, so `baseSeed` may encode to at most `MAX_SEED_LENGTH - 1`
+  /// bytes. Non-ASCII characters encode as Java's US-ASCII replacement byte (`?`).
+  ///
+  /// @throws IllegalArgumentException if the encoded base seed plus nonce exceeds
+  ///                                  [#MAX_SEED_LENGTH] bytes or `programId` ends in the
+  ///                                  program-derived-address marker
+  /// @throws RuntimeException if no nonce yields an off-curve address
   static AccountWithSeed createOffCurveAccountWithAsciiSeed(final PublicKey base,
                                                             final String baseSeed,
                                                             final PublicKey programId) {
@@ -261,18 +258,13 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
-  /**
-   * Derives a system-program address from a base, UTF-8 seed, and owner program id.
-   *
-   * <p>This follows Solana's {@code Address::create_with_seed}: the seed limit is measured
-   * in UTF-8 bytes, an owner ending in the program-derived-address marker is illegal, and
-   * Java strings containing unpaired UTF-16 surrogates are rejected because Rust strings
-   * cannot represent them.</p>
-   *
-   * @throws IllegalArgumentException if the seed exceeds {@link #MAX_SEED_LENGTH} UTF-8 bytes
-   *                                  or contains an unpaired UTF-16 surrogate, or the owner
-   *                                  ends in the program-derived-address marker
-   */
+  /// Derives a seeded address as Solana's `Address::create_with_seed` does, hashing the UTF-8
+  /// encoding of `seed`.
+  ///
+  /// @throws IllegalArgumentException if `seed` exceeds [#MAX_SEED_LENGTH] UTF-8 bytes or
+  ///                                  contains an unpaired UTF-16 surrogate (a Rust string
+  ///                                  cannot hold one), or `programId` ends in the
+  ///                                  program-derived-address marker
   static PublicKey createWithSeed(final PublicKey base,
                                   final String seed,
                                   final PublicKey programId) {
@@ -298,15 +290,12 @@ public interface PublicKey extends Comparable<PublicKey> {
     return PublicKey.createPubKey(digest.digest());
   }
 
-  /**
-   * Returns this implementation's byte array, which may share the key's storage.
-   * Keys returned by {@link #createPubKey(byte[])} expose their retained input array;
-   * other implementations may return a copy. Treat shared bytes as read-only and use
-   * {@link #copyByteArray()} when an independent array is needed.
-   */
+  /// Returns the key bytes, which may be the key's own storage: a key from
+  /// [#createPubKey(byte\[\])] returns its retained input array. Do not modify the result; use
+  /// [#copyByteArray()] for an independent copy.
   byte[] toByteArray();
 
-  /** Returns a copy of the public-key bytes. */
+  /// Returns an independent copy of the key bytes.
   byte[] copyByteArray();
 
   String toBase58();
@@ -336,7 +325,7 @@ public interface PublicKey extends Comparable<PublicKey> {
     );
   }
 
-  /** Verifies a signature over the UTF-8 encoding of {@code msg}. */
+  /// Verifies a signature over the UTF-8 encoding of `msg`.
   default boolean verifySignature(final String msg, final byte[] signature) {
     return verifySignature(toByteArray(), msg, signature);
   }

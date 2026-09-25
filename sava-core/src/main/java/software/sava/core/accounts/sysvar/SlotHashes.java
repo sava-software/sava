@@ -6,8 +6,7 @@ import software.sava.core.encoding.ByteUtil;
 
 import java.util.function.BiFunction;
 
-/// The most recent hashes of a slot's parent bank hashes, ordered from most recent to
-/// oldest slot.
+/// Recent (slot, bank hash) entries, most recent slot first.
 record SlotHashes(PublicKey address, SlotHash[] slotHashes) implements Borsh {
 
   public static final int MAX_ENTRIES = 512;
@@ -26,9 +25,7 @@ record SlotHashes(PublicKey address, SlotHash[] slotHashes) implements Borsh {
     return read(address, data, 0);
   }
 
-  /// @throws IllegalArgumentException if the entry count claims more entries than the
-  ///                                  bytes after it can hold — a corrupt or hostile
-  ///                                  count must fail here, not size an allocation
+  /// @throws IllegalArgumentException if the entry count exceeds what the remaining bytes hold
   public static SlotHashes read(final PublicKey address, final byte[] data, int offset) {
     final long numEntries = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;

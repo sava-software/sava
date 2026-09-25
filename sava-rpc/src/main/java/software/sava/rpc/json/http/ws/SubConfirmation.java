@@ -10,8 +10,8 @@ import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-/// `boolResult` carries an un-subscription acknowledgement — the server answers those with a
-/// bare boolean — which used to be skipped, leaving every unsubscribe outcome invisible.
+/// `boolResult` is an un-subscription acknowledgement, which the server sends as a bare boolean
+/// result; it is null, and `subId` set, for a subscription confirmation.
 record SubConfirmation(BigInteger subId, long msgId, JsonRpcException jsonRpcException, Boolean boolResult) {
 
   public static SubConfirmation parse(final JsonIterator ji) {

@@ -20,11 +20,8 @@ public interface KeyDerivation {
     return Argon2id.DEFAULT;
   }
 
-  /**
-   * Derives a key from the given password. Implementations must scrub any internal
-   * copies of the password they create, but MUST NOT clear the caller's
-   * {@code password} array — ownership of that array remains with the caller.
-   */
+  /// Derives a key of `keyBits / 8` bytes from `password`. Implementations scrub their internal
+  /// copies of the password but never clear the caller's `password` array, which the caller owns.
   byte[] derive(final char[] password, final byte[] salt, final int keyBits);
 
   String toJson();

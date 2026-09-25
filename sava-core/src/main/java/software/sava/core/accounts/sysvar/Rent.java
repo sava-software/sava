@@ -11,10 +11,10 @@ record Rent(PublicKey address,
             double exemptionThreshold,
             int burnPercent) implements Borsh {
 
-  /// Account storage overhead in bytes for calculating the minimum rent exempt balance.
+  /// Per-account storage overhead, in bytes, charged by [#minimumBalance(long)].
   public static final int ACCOUNT_STORAGE_OVERHEAD = 128;
 
-  /// Maximum permitted account-data length in Solana's rent calculation (10 MiB).
+  /// Maximum permitted account-data length in Solana's rent calculation.
   static final long MAX_PERMITTED_DATA_LENGTH = 10L * 1024 * 1024;
 
   private static final long SIMD0194_MAX_LAMPORTS_PER_BYTE = 1_759_197_129_867L;
@@ -44,9 +44,13 @@ record Rent(PublicKey address,
     return new Rent(address, lamportsPerByteYear, exemptionThreshold, burnPercent);
   }
 
-  /// Minimum balance in lamports for an account with `dataLength` bytes of data to be rent
-  /// exempt. This follows the current `solana-rent` validation and uses its exact integer
-  /// paths for exemption thresholds `1.0` and `2.0`.
+  /// Minimum rent-exempt balance in lamports for `dataLength` bytes of account data, following
+  /// `solana-rent`'s validation and its exact integer paths for thresholds `1.0` and `2.0`.
+  ///
+  /// @throws IllegalArgumentException if `dataLength` is negative or exceeds
+  ///                                  [#MAX_PERMITTED_DATA_LENGTH], or, at those thresholds,
+  ///                                  `lamportsPerByteYear` exceeds `solana-rent`'s maximum for
+  ///                                  that threshold
   public long minimumBalance(final long dataLength) {
     if (dataLength < 0 || dataLength > MAX_PERMITTED_DATA_LENGTH) {
       throw new IllegalArgumentException("Maximum permitted data length exceeded: " + dataLength);

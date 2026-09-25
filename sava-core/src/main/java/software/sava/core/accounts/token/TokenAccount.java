@@ -108,9 +108,9 @@ public record TokenAccount(PublicKey address,
     );
   }
 
-  /// The state byte is an unsigned discriminant with three defined values; anything else is
-  /// corrupt account data. Reading it unchecked indexed the enum with the raw byte, so the
-  /// top half of the range arrived as a negative index.
+  /// Reads the state byte as an unsigned [AccountState] ordinal.
+  ///
+  /// @throws IllegalArgumentException if it names no state.
   private static AccountState parseState(final byte state) {
     final var states = AccountState.values();
     final int ordinal = state & 0xFF;

@@ -11,8 +11,7 @@ import java.util.function.Supplier;
 
 /// @param commission    Vote account commission when the reward was credited, in basis points if
 ///                      [#commissionBps()], otherwise a percentage.
-/// @param commissionBps True if the commission is in basis points (SIMD-0291). Nodes which serve it only
-///                      serve the percentage as null.
+/// @param commissionBps True if the commission is in basis points (SIMD-0291).
 public record InflationReward(long amount,
                               long effectiveSlot,
                               long epoch,
@@ -22,6 +21,7 @@ public record InflationReward(long amount,
 
   private static final InflationReward ZERO = new InflationReward(0, 0, 0, 0, 0, false);
 
+  /// Parses a `getInflationReward` result; a `null` entry (no reward) becomes an all-zero reward.
   public static List<InflationReward> parse(final JsonIterator ji) {
     final var rewards = new ArrayList<InflationReward>();
     while (ji.readArray()) {

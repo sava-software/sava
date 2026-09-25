@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.OptionalInt;
 import java.util.function.Supplier;
 
-/// @param commission                    Before SIMD-0291 activation, the native commission percentage. After
-///                                      activation, derived from [#inflationRewardsCommissionBps()] with
+/// @param commission                    Commission percentage; after SIMD-0291 activation the node derives it
+///                                      from [#inflationRewardsCommissionBps()] as
 ///                                      `min(ceilDiv(bps, 100), 255)`.
 /// @param inflationRewardsCommissionBps Commission in basis points, empty when the responding node pre-dates
 ///                                      this field.

@@ -78,12 +78,16 @@ public enum PrivateKeyEncoding {
     };
   }
 
-  /// Imports a key-pair array or an object with `encoding` and `secret` fields.
-  /// Object fields may appear in any order; unrecognized fields and their values are skipped.
-  /// Missing required fields are reported with an `IllegalStateException` naming the field.
-  /// On success, the iterator remains
-  /// immediately after the imported value so an enclosing array or object can continue.
-  /// If `encoding` is repeated, a secret decoded before a later encoding is not reinterpreted.
+  /// Imports a key-pair array, or an object with `encoding` and `secret` fields and an optional
+  /// `pubKey` checked against the derived key. Object fields may appear in any order and
+  /// unrecognized ones are skipped. On success the iterator is left immediately after the
+  /// imported value. If `encoding` is repeated, a secret decoded before a later encoding is not
+  /// reinterpreted.
+  ///
+  /// @throws IllegalStateException if the value is neither an array nor an object, `encoding` or
+  /// `secret` is missing (the message names it), or `pubKey` does not match the derived key
+  /// @throws IllegalArgumentException if a key-pair array does not hold exactly 64 elements (as
+  /// [#fromJsonArray(JsonIterator)] throws), or `encoding` names no [PrivateKeyEncoding] constant
   public static Signer fromJsonPrivateKey(final JsonIterator ji) {
     return switch (ji.whatIsNext()) {
       case ARRAY -> fromJsonPrivateKey(ji, jsonKeyPairArray);

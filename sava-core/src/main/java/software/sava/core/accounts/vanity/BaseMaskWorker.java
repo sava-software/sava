@@ -259,14 +259,12 @@ abstract class BaseMaskWorker implements AddressWorker {
     return this.found.get() >= find || Thread.currentThread().isInterrupted();
   }
 
-  /// Bounds an otherwise unbounded search. A worker asked for a subsequence that
-  /// its encoder can never produce would spin forever, so callers that cannot
-  /// afford that — tests, and any caller wanting a deadline — cap the number of
-  /// key pairs generated. [Long#MAX_VALUE] is the unbounded default.
+  /// Bounds an otherwise unbounded search: a subsequence the encoder can never produce would
+  /// spin forever, so callers that cannot afford that — tests, and any caller wanting a
+  /// deadline — cap the number of key pairs generated.
   ///
-  /// @param attempts key pairs this worker has generated so far.
-  /// @return true once the cap is reached, at which point the worker stops
-  /// without having found anything.
+  /// @param attempts key pairs this worker has generated so far
+  /// @return true once `attempts` has reached the cap
   protected final boolean searchExhausted(final long attempts) {
     return attempts >= maxSearches;
   }

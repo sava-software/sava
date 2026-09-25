@@ -93,9 +93,7 @@ public final class Base58 {
     throw new IllegalArgumentException("Illegal character " + c + " at position " + position);
   }
 
-  /// Package-private rather than private so the bit bound can be asserted directly against
-  /// an exact oracle. Over-allocating here returns identical bytes for more memory, which no
-  /// value assertion on `decode` can see — see `Base58LimbBoundTests`.
+  /// Visible for tests.
   static int limbsLength(final int numDigits) {
     // 5858/1000 > log2(58), +1 rounds the bit bound up, so the limb count never under-allocates.
     return (int) ((numDigits * 5_858L / 1_000 + 1 + 31) >> 5);
@@ -207,7 +205,8 @@ public final class Base58 {
 
   /// Decodes directly into `out`, which must exactly fit the decoded value.
   ///
-  /// @throws IllegalArgumentException if the input contains a non base58 character or the decoded length does not equal `out.length`.
+  /// @throws IllegalArgumentException if the input contains a non-base58 character or the
+  ///                                  decoded length is not `out.length`
   public static void decode(final char[] input, final int from, final int len, final byte[] out) {
     final int to = from + len;
     int i = from;
@@ -226,9 +225,9 @@ public final class Base58 {
     toBytes(limbs, used, i - from, out);
   }
 
-  /// Decodes base58 ASCII text held in a byte array, e.g. a raw JSON or wire buffer.
+  /// Decodes base58 ASCII text held in a byte array.
   ///
-  /// @throws IllegalArgumentException if the input contains a non base58 character.
+  /// @throws IllegalArgumentException if the input contains a non-base58 character
   public static byte[] decode(final byte[] input, final int from, final int len) {
     if (len == 0) {
       return new byte[0];
@@ -247,7 +246,8 @@ public final class Base58 {
 
   /// Decodes base58 ASCII text directly into `out`, which must exactly fit the decoded value.
   ///
-  /// @throws IllegalArgumentException if the input contains a non base58 character or the decoded length does not equal `out.length`.
+  /// @throws IllegalArgumentException if the input contains a non-base58 character or the
+  ///                                  decoded length is not `out.length`
   public static void decode(final byte[] input, final int from, final int len, final byte[] out) {
     final int to = from + len;
     int i = from;
@@ -284,7 +284,8 @@ public final class Base58 {
 
   /// Decodes directly into `out`, which must exactly fit the decoded value.
   ///
-  /// @throws IllegalArgumentException if the input contains a non base58 character or the decoded length does not equal `out.length`.
+  /// @throws IllegalArgumentException if the input contains a non-base58 character or the
+  ///                                  decoded length is not `out.length`
   public static void decode(final String input, final byte[] out) {
     final int len = input.length();
     int i = 0;

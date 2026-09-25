@@ -6,8 +6,7 @@ import software.sava.core.encoding.ByteUtil;
 
 import java.util.function.BiFunction;
 
-/// Stake activation/deactivation history per epoch, ordered from most recent to oldest
-/// epoch.
+/// Per-epoch stake activation and deactivation history, most recent epoch first.
 record StakeHistory(PublicKey address, StakeHistoryEntry[] entries) implements Borsh {
 
   public static final int MAX_ENTRIES = 512;
@@ -26,9 +25,7 @@ record StakeHistory(PublicKey address, StakeHistoryEntry[] entries) implements B
     return read(address, data, 0);
   }
 
-  /// @throws IllegalArgumentException if the entry count claims more entries than the
-  ///                                  bytes after it can hold — a corrupt or hostile
-  ///                                  count must fail here, not size an allocation
+  /// @throws IllegalArgumentException if the entry count exceeds what the remaining bytes hold
   public static StakeHistory read(final PublicKey address, final byte[] data, int offset) {
     final long numEntries = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;

@@ -7,12 +7,8 @@ import software.sava.core.encoding.ByteUtil;
 import java.math.BigInteger;
 import java.util.function.BiFunction;
 
-/// The serialized layout follows Solana's
-/// [EpochRewards](https://github.com/anza-xyz/solana-sdk/blob/master/epoch-rewards/src/lib.rs)
-/// sysvar.
-///
-/// The `active` flag is the final byte of the 81-byte payload, immediately after the
-/// eight-byte `distributedRewards` field.
+/// The [EpochRewards](https://github.com/anza-xyz/solana-sdk/blob/master/epoch-rewards/src/lib.rs)
+/// sysvar; `totalPoints` is an unsigned `u128`.
 public record EpochRewards(PublicKey address,
                            long distributionStartingBlockHeight,
                            long numPartitions,
@@ -44,6 +40,7 @@ public record EpochRewards(PublicKey address,
     return read(address, data, 0);
   }
 
+  /// @throws IllegalArgumentException if the `active` byte is neither 0 nor 1
   public static EpochRewards read(final PublicKey address, final byte[] data, int offset) {
     final long distributionStartingBlockHeight = ByteUtil.getInt64LE(data, offset);
     offset += Long.BYTES;

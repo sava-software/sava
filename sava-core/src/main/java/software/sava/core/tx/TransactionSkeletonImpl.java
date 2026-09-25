@@ -312,25 +312,11 @@ final class TransactionSkeletonImpl extends BaseTransactionSkeleton {
     }
   }
 
-  /// The instruction-account counterpart to [#requireIncludedProgramAccount], bounded twice: once
-  /// by the wire and once by the caller.
-  ///
-  /// The transaction itself declares how many accounts it references — `numAccounts`, the included
-  /// accounts plus every index its lookup tables load. An instruction index at or past that total
-  /// names an account no reading of the transaction can supply, in any format, and the runtime
-  /// rejects such a message outright; it used to read as the same `null` a legitimately
-  /// unresolvable index produces, an instruction that looks well formed and throws a
-  /// `NullPointerException` far from the malformed input, while the program-index field of the
-  /// same instruction has always been loud about the same defect. It now throws for every format
-  /// this class parses — legacy and v0 — and [V1TransactionSkeleton], which the deserialization
-  /// entry point selects before this class is reached, rejects with the identical exception and
-  /// message.
-  ///
-  /// An index the transaction *does* declare but the supplied array cannot resolve reads as the
-  /// documented `null`: through sava's own parsers that is exactly a v0 message parsed without its
-  /// lookup tables, whose first loaded account sits at `numIncludedAccounts`. Legacy declares no
-  /// loaded accounts, so its every declared index resolves and only a caller-truncated array — one
-  /// no sava parser produces — can observe a legacy `null`.
+  /// Resolves an instruction account index, bounded by the wire and then by the caller. An index
+  /// at or past `numAccounts` (included plus table-loaded) is undeclared, which the runtime
+  /// rejects, so it throws like [#requireIncludedProgramAccount]; [V1TransactionSkeleton] throws
+  /// the identical exception and message. A declared index past the end of `accounts` reads as
+  /// `null`.
   ///
   /// @throws IndexOutOfBoundsException if an instruction references an account index the
   ///                                   transaction does not declare

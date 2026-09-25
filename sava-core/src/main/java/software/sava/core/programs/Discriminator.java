@@ -12,12 +12,10 @@ public interface Discriminator extends Predicate<Instruction> {
   int NATIVE_DISCRIMINATOR_LENGTH = Integer.BYTES;
   int ANCHOR_DISCRIMINATOR_LENGTH = 8;
 
-  /**
-   * Creates a discriminator retaining the supplied array without copying it. Pass
-   * {@code discriminator.clone()} if the source array may be modified later.
-   * The ranged factories copy their input, and {@link #data()} returns a copy for
-   * discriminators created by these factories.
-   */
+  /// Creates a discriminator that retains `discriminator` without copying it; pass a clone if
+  /// the array may be modified later. [#createDiscriminator(byte\[\], int, int)] and the other
+  /// ranged factories copy their input, and [#data()] returns a copy for discriminators
+  /// created by this interface's factories.
   static Discriminator createDiscriminator(final byte[] discriminator) {
     return new DiscriminatorRecord(discriminator);
   }
@@ -84,14 +82,9 @@ public interface Discriminator extends Predicate<Instruction> {
     );
   }
 
-  /// Matches only within the `len` bytes beginning at `offset`, for callers holding a region of a
-  /// larger buffer — an instruction's data inside a serialized transaction, most of all.
-  ///
-  /// [#equals(byte[], int)] bounds the comparison by the end of the whole array, which is the right
-  /// contract when `offset` starts a standalone payload but the wrong one for a region: a
-  /// discriminator longer than the region is then compared against whatever follows it, so a match
-  /// can be produced by bytes the region does not own. Where those trailing bytes are attacker
-  /// influenced, such a match can be forged outright.
+  /// Matches only within the `len` bytes at `offset`, for a region of a larger buffer such as an
+  /// instruction's data inside a serialized transaction. [#equals(byte\[\], int)] is bounded
+  /// only by the end of the array, so for a region it can match on bytes that follow it.
   ///
   /// @throws IndexOutOfBoundsException if `offset` and `len` do not describe a region of `data`
   default boolean equals(final byte[] data, final int offset, final int len) {

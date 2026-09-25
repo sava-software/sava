@@ -14,31 +14,27 @@ import java.util.function.BiFunction;
 /// A Token-2022 mint: the [Mint] base state, the account-type discriminant that follows it,
 /// and the TLV extensions after that.
 ///
-/// The writer clears the 83 mint-padding bytes to satisfy the program's layout rule. The
-/// reader does not validate that region and continues to accept nonzero padding.
+/// Writing zeroes the padding between the base state and the discriminant, as the program
+/// requires; reading accepts nonzero padding.
 ///
-/// @param mint            the 82-byte base mint state.
-/// @param accountType     `null` when the account carries no discriminant — either because
-///                        the account is exactly [Mint#BYTES] long with no remainder at all,
-///                        the shape of a mint that never had extension space allocated, or
-///                        because the byte on the wire is an [AccountType] released after
-///                        this library was last synced. With no extensions either, both
-///                        re-serialize as the base state alone. [AccountType#Uninitialized]
-///                        alongside an uninitialized [Mint] is not a defect: extension
-///                        initializers run before `InitializeMint`, so that is what a mint
-///                        looks like between the two instructions.
-/// @param tokenExtensions the parsed TLV entries, empty when there are none.
+/// @param accountType     `null` when the data is exactly [Mint#BYTES] long (no extension
+///                        space) or the byte is not a known [AccountType]; with no extensions
+///                        either, both re-serialize as the base state alone, but with
+///                        extensions [#write(byte\[\], int)] throws `NullPointerException`.
+///                        [AccountType#Uninitialized] with an uninitialized [Mint] is valid:
+///                        extension initializers run before `InitializeMint`.
+/// @param tokenExtensions the parsed TLV entries: empty with no TLV area, just [Uninitialized]
+///                        when it starts with a zero type word.
 public record Token2022(Mint mint,
                         AccountType accountType,
                         Set<TokenExtension> tokenExtensions) implements Serializable {
 
-  /// The gap between the base mint state and the account-type byte, sized so an extended mint
-  /// cannot collide with `Account::LEN`. `type_and_tlv_indices` — interface/src/extension/mod.rs
-  /// — refuses a buffer whose padding holds any non-zero byte, so this region is part of the
-  /// serialized form and has to be written, not skipped.
+  /// The gap between the base mint state and the account-type byte, which puts that byte at
+  /// [TokenAccount#BYTES] in mints and token accounts alike. The program's `type_and_tlv_indices`
+  /// refuses nonzero padding, so the writer must zero this region, not skip it.
   static final int PADDING_AFTER_MINT = 83;
-  /// `Multisig::LEN` — interface/src/state.rs. A multisig is never extensible, so a buffer of
-  /// exactly this length cannot be told apart from an extended mint or token account.
+  /// `Multisig::LEN`. A multisig is never extensible, so the program refuses a buffer of exactly
+  /// this length as an extended mint or token account.
   static final int MULTISIG_BYTES = 355;
 
   // Wire names retained for the parser's existing diagnostic messages.
@@ -172,9 +168,8 @@ public record Token2022(Mint mint,
     }
   }
 
-  /// Serializes every entry, always emitting the [Uninitialized] padding word last however
-  /// the set happens to iterate. A type-zero word is where the TLV walk stops, so an entry
-  /// written after it is unreachable to every reader.
+  /// Serializes every entry, writing [Uninitialized] last whatever the set's order: readers stop
+  /// at a zero type word, so an entry after it would be lost.
   static int writeExtensions(final Set<TokenExtension> extensions,
                              final byte[] data,
                              final int offset) {
@@ -234,16 +229,14 @@ public record Token2022(Mint mint,
     }
   }
 
-  /// `adjust_len_for_multisig` — interface/src/extension/mod.rs. An account whose extensions
-  /// would land it exactly on the multisig length is allocated one extra, empty type word,
-  /// because a buffer of that length is not readable as an extended account at all. Readers
-  /// stop at the zero word, so the two bytes cost nothing but the space.
+  /// Mirrors `adjust_len_for_multisig`: a length equal to [#MULTISIG_BYTES] grows by one zero
+  /// type word, where readers stop.
   static int adjustLengthForMultisig(final int length) {
     return length == MULTISIG_BYTES ? length + Short.BYTES : length;
   }
 
-  /// Writes the empty type word `adjustLengthForMultisig` reserves, when the bytes written so
-  /// far land on the multisig length. Returns the total including it.
+  /// Writes the zero type word [#adjustLengthForMultisig(int)] reserves when `written` equals
+  /// [#MULTISIG_BYTES], and returns the total including it.
   static int padLengthForMultisig(final byte[] data, final int offset, final int written) {
     if (written != MULTISIG_BYTES) {
       return written;
@@ -252,13 +245,12 @@ public record Token2022(Mint mint,
     return written + Short.BYTES;
   }
 
-  /// The account-type rule has two sides, because extension initializers run before
-  /// `InitializeMint` / `InitializeAccount` — interface/src/extension/mod.rs. `unpack` applies
-  /// `check_account_type` to an initialized base, so the discriminant must be the one the
-  /// reader was asked for. `unpack_uninitialized` requires an uninitialized base and, through
-  /// `unpack_uninitialized_type_and_tlv_data`, an [AccountType#Uninitialized] discriminant, so
-  /// a zeroed base carrying `Mint` or `Account` is refused. An account type this library does
-  /// not know is carried as `null` and is a mismatch on neither side.
+  /// Checks the discriminant as Token-2022's `unpack` and `unpack_uninitialized` do: an
+  /// initialized base needs `expected`, an uninitialized one needs [AccountType#Uninitialized]
+  /// (extension initializers run before `InitializeMint` / `InitializeAccount`). An unknown type
+  /// (`null`) passes either way.
+  ///
+  /// @throws IllegalArgumentException on a mismatch.
   static void requireAccountType(final AccountType expected,
                                  final AccountType parsed,
                                  final boolean initialized) {

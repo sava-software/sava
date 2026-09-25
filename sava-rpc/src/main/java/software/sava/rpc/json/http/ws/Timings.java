@@ -1,95 +1,37 @@
 package software.sava.rpc.json.http.ws;
 
-/// Every delay is in MILLISECONDS.
+/// Websocket engine timings, all in milliseconds. The constructors do not validate them.
 ///
-/// @param reConnectDelay                 how long to wait before re-attempting a connection.
-/// @param pingDelay                      how long the peer may be silent before it is asked
-///                                       whether it is still there. It is also each probe phase's
-///                                       budget: the Ping send must complete within one window,
-///                                       and a successful probe must receive a Pong or other peer
-///                                       frame within a response window that starts at successful
-///                                       send completion, not at admission. A peer frame racing a
-///                                       pending send already answers the probe, but the send must
-///                                       still settle. Failure aborts the transport and is reported
-///                                       through the websocket error seam.
+/// @param reConnectDelay                 minimum time between connection attempts.
+/// @param pingDelay                      how long the peer may be silent before a Ping probes it;
+///                                       see [SolanaRpcWebsocket.Builder#pingDelay(long)].
 /// @param subscriptionAndPingCheckDelay  how often the check cycle runs.
-/// @param keepAliveDelay                 how long *this* end may be silent before it pokes the
-///                                       peer. Distinct from [#pingDelay()] because it answers a
-///                                       different question: the peer talking proves nothing is
-///                                       wrong, so this is not a detection deadline but a guard
-///                                       against something ageing out a connection on what it
-///                                       receives *from us* while we are happily reading.
-///                                       <p>
-///                                       That is a narrower class of peer than it first appears,
-///                                       and worth naming, because it decides when this setting
-///                                       matters at all. Ordinary proxies and load balancers —
-///                                       nginx, ALB, HAProxy, Envoy — reset their idle timers on
-///                                       traffic in either direction, so a talkative server keeps
-///                                       the connection alive on its own and this delay never
-///                                       binds. When both ends do go quiet, [#pingDelay()]
-///                                       governs and fires first. What is left is a server, or an
-///                                       intermediary, that enforces client liveness specifically:
-///                                       for that, size this against whatever bound it applies,
-///                                       which is not the 60s an idle-timeout discussion suggests.
-///                                       <p>
-///                                       The default derives from [#pingDelay()] and so is
-///                                       proportional, not bounded: raising the detection deadline
-///                                       raises this too, with no ceiling. That is deliberate —
-///                                       clamping it would collapse it onto [#pingDelay()] for any
-///                                       larger value, sending *more* frames to a caller who
-///                                       raised the delay to send fewer — but it does mean a
-///                                       caller with a real outbound bound should state this
-///                                       explicitly rather than inherit it.
-/// @param subscriptionResendDelay        how long a subscription send that FAILED waits before
-///                                       it is retried — a successfully sent request is never
-///                                       re-sent on its own connection; the server's answer is
-///                                       what releases it, and four of these windows with no
-///                                       answer replace the connection through the error seam
-///                                       instead. The same window paces the retry of an
-///                                       un-subscription the server refused transiently.
-///                                       Formerly [#reConnectDelay()] did double duty
-///                                       here, which made one number answer two questions that
-///                                       disagree about their edge cases: zero is a coherent
-///                                       reconnect throttle meaning "do not throttle", but as a
-///                                       retry deadline it means "retry whenever a millisecond
-///                                       has passed" — a hot loop for as long as a failing
-///                                       socket keeps failing. A subscription the server
-///                                       rejected as a request defect is released, while one it
-///                                       refused transiently stays pending for this window, so
-///                                       the two readings were furthest apart exactly where it
-///                                       mattered.
+/// @param keepAliveDelay                 how long this end may be silent before it pokes the
+///                                       peer; see
+///                                       [SolanaRpcWebsocket.Builder#keepAliveDelay(long)].
+/// @param subscriptionResendDelay        how long a failed subscription send waits before it is
+///                                       retried; see
+///                                       [SolanaRpcWebsocket.Builder#subscriptionResendDelay(long)].
 public record Timings(long reConnectDelay,
                       long pingDelay,
                       long subscriptionAndPingCheckDelay,
                       long keepAliveDelay,
                       long subscriptionResendDelay) {
 
-  /// Multiple of the ping delay used when no keep-alive delay is given. Not part of the
-  /// contract: a caller who wants a particular keep-alive states it rather than deriving it.
+  /// Multiple of the ping delay used when no keep-alive delay is given; not a contract.
   static final int DEFAULT_KEEP_ALIVE_FACTOR = 2;
 
-  /// Defaults the keep-alive to a multiple of the ping delay, so a caller who has tuned only the
-  /// detection deadline still gets a keep-alive proportionate to it.
-  ///
-  /// This overload deliberately retains the original three-component record constructor's value
-  /// semantics: all `long` values are accepted. Validation cannot live in the five-component
-  /// canonical constructor without retroactively making this published signature reject values
-  /// that earlier releases represented. The built-in builder validates its newly introduced
-  /// positive-only settings before constructing this value.
-  ///
-  /// The multiply saturates rather than wrapping. A very large [#pingDelay()] is how a caller
-  /// says "do not ping" — [Long#MAX_VALUE] being the idiomatic form — and an overflow there
-  /// would land on a negative delay, which every comparison reads as long overdue: the one
-  /// setting that means *never* would become a ping on every check cycle and every inbound
-  /// ping or pong. Saturating keeps "never ping" meaning "never poke either".
+  /// Defaults [#keepAliveDelay()] to a multiple of [#pingDelay()], saturating instead of
+  /// overflowing, so a [Long#MAX_VALUE] ping delay ("never ping") also never pokes. The re-send
+  /// delay defaults as in [#Timings(long,long,long,long)].
   public Timings(final long reConnectDelay,
                  final long pingDelay,
                  final long subscriptionAndPingCheckDelay) {
     this(reConnectDelay, pingDelay, subscriptionAndPingCheckDelay, keepAliveFor(pingDelay));
   }
 
-  /// Defaults the re-send deadline, keeping the historical behaviour for a caller who set the
-  /// other four: it follows [#reConnectDelay()], which is what it used to be.
+  /// Defaults [#subscriptionResendDelay()] to [#reConnectDelay()], floored at
+  /// [#subscriptionAndPingCheckDelay()] and at 1.
   public Timings(final long reConnectDelay,
                  final long pingDelay,
                  final long subscriptionAndPingCheckDelay,
@@ -98,21 +40,18 @@ public record Timings(long reConnectDelay,
         resendDelayFor(reConnectDelay, subscriptionAndPingCheckDelay));
   }
 
-  /// Package-private so [SolanaRpcWebsocketBuilder#keepAliveDelay()] reports the value its
-  /// [SolanaRpcWebsocketBuilder#create()] would build rather than deriving it a second time.
+  /// The derived keep-alive, shared so builders report exactly what they build. Proportional,
+  /// not capped: a cap would poke more often for a caller who raised the ping delay to send
+  /// fewer frames.
   static long keepAliveFor(final long pingDelay) {
     return pingDelay > Long.MAX_VALUE / DEFAULT_KEEP_ALIVE_FACTOR
         ? Long.MAX_VALUE
         : pingDelay * DEFAULT_KEEP_ALIVE_FACTOR;
   }
 
-  /// Follows [#reConnectDelay()], but never drops below the check cadence.
-  ///
-  /// The floor only ever binds when a caller sets a reconnect throttle shorter than the interval
-  /// at which anything is checked — in practice, zero. Re-sending faster than the loop that
-  /// decides whether to re-send is not a setting anyone means to choose, and reaching it through
-  /// a *reconnect* knob is not choosing it at all. A caller who does want it says so through
-  /// [#subscriptionResendDelay()], which is not floored.
+  /// The derived re-send delay: the greater of [#reConnectDelay()] and
+  /// [#subscriptionAndPingCheckDelay()] (re-sending faster than the loop that decides to re-send
+  /// is never meant), and at least 1. An explicit [#subscriptionResendDelay()] is not floored.
   static long resendDelayFor(final long reConnectDelay, final long subscriptionAndPingCheckDelay) {
     // Floored at 1: zero is legal for both inputs — no reconnect throttle, a never-parking
     // check loop — but a zero re-send deadline is rejected by the builder,

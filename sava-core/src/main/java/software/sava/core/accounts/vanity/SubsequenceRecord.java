@@ -141,8 +141,7 @@ record SubsequenceRecord(String subsequence,
     return Arrays.copyOfRange(storage, 0, i);
   }
 
-  /// One row per alternative, `_` padding positions with fewer alternatives than
-  /// the widest. See [Subsequence#charOptionsTable()].
+  /// Backs [Subsequence#charOptionsTable()].
   static String formatCharOptions(final char[][] charOptions) {
     final var table = new StringBuilder();
     for (int level = 0; level < Subsequence.MAX_OPTIONS; ++level) {

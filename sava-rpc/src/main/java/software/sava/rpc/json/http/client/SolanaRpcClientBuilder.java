@@ -28,6 +28,8 @@ public final class SolanaRpcClientBuilder {
   SolanaRpcClientBuilder() {
   }
 
+  /// Unset values take defaults, notably the [SolanaNetwork#MAIN_NET] endpoint and
+  /// [Commitment#CONFIRMED].
   public SolanaRpcClient createClient() {
     final var endpoint = this.endpoint == null ? SolanaNetwork.MAIN_NET.getEndpoint() : this.endpoint;
     final var httpClient = this.httpClient == null ? HttpClient.newHttpClient() : this.httpClient;
@@ -60,14 +62,14 @@ public final class SolanaRpcClientBuilder {
     return this;
   }
 
+  /// Replaces any earlier extension, including the header added by [#compressResponses()].
   public SolanaRpcClientBuilder extendRequest(final UnaryOperator<HttpRequest.Builder> extendRequest) {
     this.extendRequest = extendRequest;
     return this;
   }
 
-  /// Composes with any previously set [#extendRequest(UnaryOperator)] rather
-  /// than replacing it — the chaining reads as if it composes, and until
-  /// 2026-07-21 it silently did not.
+  /// Adds `Accept-Encoding: gzip` to each request, composing with any earlier
+  /// [#extendRequest(UnaryOperator)].
   public SolanaRpcClientBuilder compressResponses() {
     final var extendRequest = this.extendRequest;
     return extendRequest(extendRequest == null
@@ -75,6 +77,8 @@ public final class SolanaRpcClientBuilder {
         : r -> extendRequest.apply(r).header("Accept-Encoding", "gzip"));
   }
 
+  /// Tests each response and its body before parsing; a rejected response completes the request's
+  /// future with `null` instead of a parsed value.
   public SolanaRpcClientBuilder testResponse(final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
     this.testResponse = testResponse;
     return this;

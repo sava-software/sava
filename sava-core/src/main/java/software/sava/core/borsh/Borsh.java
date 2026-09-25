@@ -17,11 +17,9 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 /// Borsh serialization helpers.
 ///
-/// Borsh strings are UTF-8 on the wire, matching Rust {@code String}. Readers reject malformed
-/// UTF-8 bytes. Before producing those bytes, sizing and writing helpers reject unpaired UTF-16
-/// surrogate code units that Java {@link String} can contain but Rust strings cannot represent.
-/// Every optional, array, vector, and matrix String helper propagates the corresponding
-/// {@link IllegalArgumentException}.
+/// Strings are UTF-8 on the wire, as in Rust `String`. Every string reader rejects malformed
+/// UTF-8, and every string sizing or writing helper rejects unpaired UTF-16 surrogates, which a
+/// Rust string cannot represent; both throw [IllegalArgumentException].
 @SuppressWarnings("unchecked")
 public interface Borsh extends Serializable {
 
@@ -46,9 +44,9 @@ public interface Borsh extends Serializable {
     return readString(data, offset);
   }
 
-  /// Returns {@code null} for a null or blank value; otherwise returns its UTF-8 bytes.
+  /// Returns `null` for a null or blank value; otherwise returns its UTF-8 bytes.
   ///
-  /// @throws IllegalArgumentException if {@code str} contains unpaired UTF-16 surrogates
+  /// @throws IllegalArgumentException if `str` contains unpaired UTF-16 surrogates
   static byte[] getBytes(final String str) {
     return str == null || str.isBlank() ? null : encodeString(str);
   }
@@ -63,13 +61,13 @@ public interface Borsh extends Serializable {
     return bytes;
   }
 
-  /// @throws IllegalArgumentException if {@code val} contains unpaired UTF-16 surrogates
+  /// @throws IllegalArgumentException if `val` contains unpaired UTF-16 surrogates
   static int len(final String val) {
     final int len = encodeString(val).length;
     return Integer.BYTES + len;
   }
 
-  /// @throws IllegalArgumentException if {@code val} contains unpaired UTF-16 surrogates
+  /// @throws IllegalArgumentException if `val` contains unpaired UTF-16 surrogates
   static int lenOptional(final String val) {
     return val == null ? 1 : 1 + len(val);
   }
@@ -165,7 +163,7 @@ public interface Borsh extends Serializable {
     return result;
   }
 
-  /// @throws IllegalArgumentException if {@code str} contains unpaired UTF-16 surrogates
+  /// @throws IllegalArgumentException if `str` contains unpaired UTF-16 surrogates
   static int write(final String str, final byte[] data, final int offset) {
     return writeVector(encodeString(str), data, offset);
   }
@@ -212,10 +210,10 @@ public interface Borsh extends Serializable {
     ));
   }
 
-  /// Reads a u32 vector length and validates it against the bytes actually present —
-  /// each element needs at least elementSize bytes — so a corrupt length prefix cannot
-  /// drive the allocation it sizes. Negative lengths flow through to the array
-  /// constructor's NegativeArraySizeException.
+  /// Reads a u32 vector length and checks it against the remaining bytes at `elementSize` bytes
+  /// per element, so a corrupt prefix cannot size an allocation. A u32 above [Integer#MAX_VALUE]
+  /// is returned negative and unchecked, so allocating from it throws
+  /// `NegativeArraySizeException`.
   ///
   /// @throws IllegalArgumentException if the length claims more elements than the
   ///                                  remaining bytes could hold

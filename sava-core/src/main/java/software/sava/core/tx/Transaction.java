@@ -23,11 +23,21 @@ public interface Transaction {
   int BLOCK_QUEUE_SIZE = 151;
   int BLOCKS_UNTIL_FINALIZED = 32;
 
+  /// Returns the fee payer's signature, the transaction id, Base58 encoded.
+  ///
+  /// @throws IllegalStateException    if no signer is declared or the fee payer signature is all
+  ///                                  zero
+  /// @throws IllegalArgumentException if `signedTransaction` is too short for its fee payer
+  ///                                  signature, or a v1 buffer cannot hold every declared
+  ///                                  signature or its message does not end where they begin
+  /// @throws ArrayIndexOutOfBoundsException if `signedTransaction` is empty or holds only the v1
+  ///                                        version byte
   static String getBase58Id(final byte[] signedTransaction) {
     final int offset = BaseTransaction.signedIdOffset(signedTransaction);
     return Base58.encode(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
   }
 
+  /// Like [#getBase58Id(byte\[\])], but returns a copy of the raw signature bytes.
   static byte[] getId(final byte[] signedTransaction) {
     final int offset = BaseTransaction.signedIdOffset(signedTransaction);
     return Arrays.copyOfRange(signedTransaction, offset, offset + Transaction.SIGNATURE_LENGTH);
@@ -260,11 +270,9 @@ public interface Transaction {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// With a lookup table, compacts `sortedAccounts` in place: accounts included in the message
-  /// come first, followed by accounts loaded from the table. All entries are retained, with their
-  /// relative order preserved within each group. Pass a clone to preserve the input array's order.
-  /// With a null lookup table, serializes the supplied `sortedAccounts` as a legacy transaction
-  /// without changing the array.
+  /// With a lookup table, reorders `sortedAccounts` in place: message accounts first, then
+  /// table-loaded accounts, each group keeping its relative order. Pass a clone to keep the input
+  /// order. A null table serializes a legacy transaction and leaves the array unchanged.
   // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
   // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
@@ -434,11 +442,12 @@ public interface Transaction {
   }
 
   // TODO: deprecate once v1 transactions are active on mainnet
-  /// With one or more lookup tables, compacts `sortedAccounts` in place: accounts included in the
-  /// message come first, followed by lookup-loaded accounts. All entries are retained, with their
-  /// relative order preserved within each group. Pass a clone to preserve the input array's order.
-  /// With an empty `tableAccountMetas` array, rebuilds from `instructions` without using or changing
-  /// `sortedAccounts`.
+  /// With one or more lookup tables, reorders `sortedAccounts` in place: message accounts first,
+  /// then table-loaded accounts, each group keeping its relative order. Pass a clone to keep the
+  /// input order. With several tables, each entry of `tableAccountMetas` is reset and refilled.
+  /// An empty `tableAccountMetas` rebuilds a legacy transaction from `instructions` alone, neither
+  /// using nor changing `sortedAccounts`, so an account only it holds, such as a fee payer, is
+  /// dropped.
   // /// @deprecated use {@link TxBuilder} to create a v1 transaction instead.
   // @Deprecated
   static Transaction createTx(final List<Instruction> instructions,
@@ -616,19 +625,14 @@ public interface Transaction {
     signer.sign(out, msgOffset, msgLen, sigOffset);
   }
 
-  /// Signs `out` with a single signer, dispatching on the payload's format.
+  /// Signs the serialized transaction `out` in place into its first signature slot, whatever the
+  /// signer's public key.
   ///
-  /// The count restriction is legacy/v0 only. There the signature block's length is implied by the
-  /// prefix, so a lone signature cannot fill a block declared wider and the payload is refused. A v1
-  /// payload carries its signature block after the message, at a boundary the message itself
-  /// determines, and the fee payer's signature is the first slot — so signing only the fee payer of
-  /// a multi-signer v1 transaction is well defined, leaves every other slot untouched, and is
-  /// permitted. The v1 branch instead refuses a payload whose implied boundary contradicts its
-  /// message, which is the corruption that matters there.
+  /// A v1 `out` may require more signers; their slots are left untouched.
   ///
-  /// @throws IllegalArgumentException if a legacy/v0 `out` declares a required signature count other
-  ///                                  than one, or if a v1 `out`'s signature block does not begin
-  ///                                  exactly where its message ends
+  /// @throws IllegalArgumentException if a legacy/v0 `out` does not declare exactly one required
+  ///                                  signature or its signature layout is inconsistent, or if a v1
+  ///                                  `out`'s signature block does not begin where its message ends
   static void sign(final Signer signer, final byte[] out) {
     BaseTransaction.signInOrder(Collections.singletonList(signer), out, true);
   }
@@ -638,10 +642,8 @@ public interface Transaction {
     return Base64.getEncoder().encodeToString(out);
   }
 
-  /**
-   * @deprecated Use {@link #signInOrder(SequencedCollection, byte[], int, int, int)} to make
-   *             positional signing explicit. The supplied order and offsets retain their meaning.
-   */
+  /// @deprecated Use [#signInOrder(SequencedCollection, byte\[\], int, int, int)], which behaves
+  ///             identically.
   @Deprecated(forRemoval = true)
   static void sign(final SequencedCollection<Signer> signers,
                    final byte[] out,
@@ -653,27 +655,22 @@ public interface Transaction {
 
   /// @throws IllegalArgumentException if `signers` does not match the required signature count that
   ///                                  `out` declares
-  /// @deprecated Use [#signInOrder(SequencedCollection, byte[])] to keep positional signing with
-  ///             an explicit name. Signer public keys are not matched to required slots.
+  /// @deprecated Use [#signInOrder(SequencedCollection, byte\[\])], which behaves identically:
+  ///             signing is positional and public keys are not matched to slots.
   @Deprecated(forRemoval = true)
   static void sign(final SequencedCollection<Signer> signers, final byte[] out) {
     signInOrder(signers, out);
   }
 
-  /**
-   * @deprecated Use {@link #signInOrderAndBase64Encode(SequencedCollection, byte[])} to keep
-   *             positional signing with an explicit name.
-   */
+  /// @deprecated Use [#signInOrderAndBase64Encode(SequencedCollection, byte\[\])], which behaves
+  ///             identically.
   @Deprecated(forRemoval = true)
   static String signAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
     return signInOrderAndBase64Encode(signers, out);
   }
 
-  /**
-   * Signs the supplied message span into consecutive signature slots, in iteration order.
-   * The caller supplies the message and signature offsets; signer public keys are not matched
-   * to transaction accounts and the serialized layout is not validated by this overload.
-   */
+  /// Signs `msgLen` bytes of `out` from `msgOffset` into consecutive signature slots starting at
+  /// `sigOffset`, in iteration order. Neither signer public keys nor the layout are checked.
   static void signInOrder(final SequencedCollection<Signer> signers,
                           final byte[] out,
                           final int msgOffset,
@@ -684,18 +681,16 @@ public interface Transaction {
     }
   }
 
-  /**
-   * Signs every required slot in iteration order, using the serialized legacy, v0, or v1 layout.
-   * The first signer writes the first signature slot regardless of its public key.
-   *
-   * @throws IllegalArgumentException if the signer count does not match the serialized count,
-   *                                  or the serialized signature boundary is inconsistent
-   */
+  /// Signs the serialized legacy, v0 or v1 transaction `out` in place, one required slot per signer
+  /// in iteration order, whatever each signer's public key.
+  ///
+  /// @throws IllegalArgumentException if the signer count differs from the count `out` declares, or
+  ///                                  its signature layout is inconsistent
   static void signInOrder(final SequencedCollection<Signer> signers, final byte[] out) {
     BaseTransaction.signInOrder(signers, out, false);
   }
 
-  /** Signs positionally and returns the complete signed payload encoded as Base64. */
+  /// Signs as [#signInOrder(SequencedCollection, byte\[\])], then returns `out` Base64 encoded.
   static String signInOrderAndBase64Encode(final SequencedCollection<Signer> signers, final byte[] out) {
     signInOrder(signers, out);
     return Base64.getEncoder().encodeToString(out);
@@ -705,19 +700,14 @@ public interface Transaction {
     return Base64.getEncoder().encodeToString(serialized());
   }
 
-  /**
-   * Signs the slot whose required signer address matches {@link Signer#publicKey()}.
-   *
-   * @throws IllegalArgumentException if this transaction does not require that signer
-   */
+  /// Signs the slot whose required signer address matches [Signer#publicKey()].
+  ///
+  /// @throws IllegalArgumentException if this transaction does not require that signer
   void sign(final Signer signer);
 
-  /**
-   * Signs a required-signature slot by its zero-based position.
-   *
-   * @throws IllegalArgumentException if {@code index} is negative or is not less than
-   *                                  {@link #numSigners()}
-   */
+  /// Signs the required-signature slot at zero-based `index`, whatever the signer's public key.
+  ///
+  /// @throws IllegalArgumentException if `index` is negative or not less than [#numSigners()]
   void sign(final int index, final Signer signer);
 
   default String signAndBase64Encode(final Signer signer) {
@@ -743,214 +733,189 @@ public interface Transaction {
     return signAndBase64Encode(Base58.decode(recentBlockHash), signer);
   }
 
-  /**
-   * Validates the complete required-signer assignment, then signs each slot by public key; input
-   * order is irrelevant. Assignment-validation failures leave every signature untouched.
-   * Use {@link #signByKey(Collection)} to select this behavior for a {@link List} without a cast.
-   */
+  /// Signs each required slot with the signer whose public key matches it; iteration order is
+  /// irrelevant. Nothing is signed unless `signers` is exactly the required set.
+  ///
+  /// An argument typed as a [SequencedCollection], a [List] included, binds to the deprecated
+  /// positional [#sign(SequencedCollection)] instead; use [#signByKey(Collection)] to sign it by
+  /// key.
+  ///
+  /// @throws IllegalArgumentException if `signers` is not exactly the required signers: a wrong
+  ///                                  count, a duplicate, or an unknown signer
   void sign(final Collection<Signer> signers);
 
-  /**
-   * Signs each required slot positionally. The first signer writes the first signature slot,
-   * regardless of its public key. Use {@link #signByKey(Collection)} when order is not already the
-   * message's required-signer order.
-   *
-   * @deprecated Use {@link #signInOrder(SequencedCollection)} to retain positional signing.
-   *             Use {@link #signByKey(Collection)} to match signers by public key instead.
-   *             Migrate before removal: a recompiled {@code sign(list)} call could otherwise
-   *             resolve to {@link #sign(Collection)} and change to by-key signing.
-   */
+  /// Signs each required slot positionally: the first signer writes the first slot, whatever its
+  /// public key.
+  ///
+  /// @deprecated Use [#signInOrder(SequencedCollection)] to keep positional signing, or
+  ///             [#signByKey(Collection)] to match public keys. Migrate before removal: a
+  ///             recompiled `sign(list)` call would otherwise bind to [#sign(Collection)] and sign
+  ///             by key.
   @Deprecated(forRemoval = true)
   void sign(final SequencedCollection<Signer> signers);
 
-  /**
-   * @deprecated Use {@link #signInOrderAndBase64Encode(SequencedCollection)} to retain positional
-   *             signing, or {@link #signByKeyAndBase64Encode(Collection)} to match public keys.
-   */
+  /// @deprecated Use [#signInOrderAndBase64Encode(SequencedCollection)] to keep positional
+  ///             signing, or [#signByKeyAndBase64Encode(Collection)] to match public keys.
   @Deprecated(forRemoval = true)
   default String signAndBase64Encode(final SequencedCollection<Signer> signers) {
     sign(signers);
     return base64EncodeToString();
   }
 
-  /**
-   * @deprecated Use {@link #signInOrder(byte[], SequencedCollection)} to retain positional signing,
-   *             or {@link #signByKey(byte[], Collection)} to match public keys.
-   */
+  /// @deprecated Use [#signInOrder(byte\[\], SequencedCollection)] to keep positional signing,
+  ///             or [#signByKey(byte\[\], Collection)] to match public keys.
   @Deprecated(forRemoval = true)
   default void sign(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     sign(signers);
   }
 
-  /**
-   * @deprecated Use {@link #signInOrder(String, SequencedCollection)} to retain positional signing,
-   *             or {@link #signByKey(String, Collection)} to match public keys.
-   */
+  /// @deprecated Use [#signInOrder(String, SequencedCollection)] to keep positional signing,
+  ///             or [#signByKey(String, Collection)] to match public keys.
   @Deprecated(forRemoval = true)
   default void sign(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     sign(signers);
   }
 
-  /**
-   * @deprecated Use {@link #signInOrderAndBase64Encode(byte[], SequencedCollection)} to retain
-   *             positional signing, or {@link #signByKeyAndBase64Encode(byte[], Collection)} to
-   *             match public keys.
-   */
+  /// @deprecated Use [#signInOrderAndBase64Encode(byte\[\], SequencedCollection)] to keep
+  ///             positional signing, or [#signByKeyAndBase64Encode(byte\[\], Collection)] to
+  ///             match public keys.
   @Deprecated(forRemoval = true)
   default String signAndBase64Encode(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
     return base64EncodeToString();
   }
 
-  /**
-   * @deprecated Use {@link #signInOrderAndBase64Encode(String, SequencedCollection)} to retain
-   *             positional signing, or {@link #signByKeyAndBase64Encode(String, Collection)} to
-   *             match public keys.
-   */
+  /// @deprecated Use [#signInOrderAndBase64Encode(String, SequencedCollection)] to keep
+  ///             positional signing, or [#signByKeyAndBase64Encode(String, Collection)] to
+  ///             match public keys.
   @Deprecated(forRemoval = true)
   default String signAndBase64Encode(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
     return base64EncodeToString();
   }
 
-  /**
-   * Signs every required slot in iteration order. The first signer writes the first signature
-   * slot regardless of its public key; the collection must follow the message's required-signer
-   * order to produce valid signatures. Delegates to the existing positional implementation.
-   *
-   * @throws IllegalArgumentException if the collection size differs from {@link #numSigners()}
-   */
+  /// Signs each required slot in iteration order: the first signer writes the first slot, whatever
+  /// its public key, so the order must match the message's required signers.
+  ///
+  /// @throws IllegalArgumentException if the collection size differs from [#numSigners()]
   default void signInOrder(final SequencedCollection<Signer> signers) {
     // Preserve existing implementors' positional override. When removing that overload, migrate
     // this body too: leaving sign(signers) would silently bind to sign(Collection) instead.
     sign(signers);
   }
 
-  /** Signs positionally and returns the complete signed payload encoded as Base64. */
+  /// Signs positionally and returns the signed transaction Base64 encoded.
   default String signInOrderAndBase64Encode(final SequencedCollection<Signer> signers) {
     return signAndBase64Encode(signers);
   }
 
-  /** Sets the recent blockhash before signing every required slot in iteration order. */
+  /// Sets the recent blockhash, then signs positionally.
   default void signInOrder(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
   }
 
-  /** Sets the Base58 recent blockhash before signing every required slot in iteration order. */
+  /// Sets the Base58 recent blockhash, then signs positionally.
   default void signInOrder(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     sign(recentBlockHash, signers);
   }
 
-  /** Sets the recent blockhash, signs positionally, and returns the signed payload as Base64. */
+  /// Sets the recent blockhash, signs positionally, and returns the signed transaction as Base64.
   default String signInOrderAndBase64Encode(final byte[] recentBlockHash, final SequencedCollection<Signer> signers) {
     return signAndBase64Encode(recentBlockHash, signers);
   }
 
-  /** Sets the Base58 blockhash, signs positionally, and returns the signed payload as Base64. */
+  /// Sets the Base58 blockhash, signs positionally, and returns the signed transaction as Base64.
   default String signInOrderAndBase64Encode(final String recentBlockHash, final SequencedCollection<Signer> signers) {
     return signAndBase64Encode(recentBlockHash, signers);
   }
 
-  /**
-   * Validates the complete required-signer assignment, then signs each slot by public key;
-   * iteration order is irrelevant, including for {@link List} inputs. Assignment-validation
-   * failures leave every signature untouched. Delegates to {@link #sign(Collection)} so existing
-   * implementations retain their by-key signing behavior.
-   *
-   * @throws IllegalArgumentException if the collection does not contain exactly the required
-   *                                  signers, including duplicate or unknown signers
-   */
+  /// Signs by public key as [#sign(Collection)] does, for any collection type, [List] included.
+  ///
+  /// @throws IllegalArgumentException if `signers` is not exactly the required signers: a wrong
+  ///                                  count, a duplicate, or an unknown signer
   default void signByKey(final Collection<Signer> signers) {
     sign(signers);
   }
 
-  /** Signs by public key and returns the complete signed payload encoded as Base64. */
+  /// Signs by public key and returns the signed transaction Base64 encoded.
   default String signByKeyAndBase64Encode(final Collection<Signer> signers) {
     signByKey(signers);
     return base64EncodeToString();
   }
 
-  /** Sets the recent blockhash before validating and signing the complete by-key assignment. */
+  /// Sets the recent blockhash, then signs by public key.
   default void signByKey(final byte[] recentBlockHash, final Collection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     signByKey(signers);
   }
 
-  /** Sets the Base58 blockhash before validating and signing the complete by-key assignment. */
+  /// Sets the Base58 recent blockhash, then signs by public key.
   default void signByKey(final String recentBlockHash, final Collection<Signer> signers) {
     setRecentBlockHash(recentBlockHash);
     signByKey(signers);
   }
 
-  /** Sets the recent blockhash, signs by public key, and returns the signed payload as Base64. */
+  /// Sets the recent blockhash, signs by public key, and returns the signed transaction as Base64.
   default String signByKeyAndBase64Encode(final byte[] recentBlockHash, final Collection<Signer> signers) {
     signByKey(recentBlockHash, signers);
     return base64EncodeToString();
   }
 
-  /** Sets the Base58 blockhash, signs by public key, and returns the signed payload as Base64. */
+  /// Sets the Base58 blockhash, signs by public key, and returns the signed transaction as Base64.
   default String signByKeyAndBase64Encode(final String recentBlockHash, final Collection<Signer> signers) {
     signByKey(recentBlockHash, signers);
     return base64EncodeToString();
   }
 
+  /// Returns the fee payer's signature, the transaction id, Base58 encoded.
+  ///
+  /// @throws IllegalStateException    if the fee payer signature slot is missing or all zero
+  /// @throws IllegalArgumentException if [#serialized()] is malformed, as for
+  ///                                  [#getBase58Id(byte\[\])]
   String getBase58Id();
 
+  /// Like [#getBase58Id()], with the same exceptions, but returns a copy of the raw signature
+  /// bytes.
   byte[] getId();
 
   int size();
 
-  /// Compatibility default for implementations compiled against the pre-v1 interface: the legacy
-  /// limit main has always applied. The built-in implementations override this per format — a v1
-  /// transaction's limit is 4096 bytes.
+  /// Whether [#size()] exceeds this format's limit: 1232 bytes for legacy and v0, 4096 for v1. The
+  /// default applies the legacy limit.
   default boolean exceedsSizeLimit() {
     return size() > TxBuilderImpl.MAX_SERIALIZED_LENGTH_LEGACY;
   }
 
-  /// The number of unique accounts referenced by this transaction, including any which would be
-  /// loaded via an address lookup table.
-  /// Compatibility default for implementations compiled against the pre-v1 interface: reparses the
-  /// serialized transaction and reports the skeleton's wire-declared total, included accounts plus
-  /// every index its lookup tables load. Override to answer from state the implementation already
-  /// holds — this default costs a full deserialization per call.
+  /// The number of accounts the message declares, including those loaded from address lookup
+  /// tables.
+  ///
+  /// The default reparses [#serialized()] on every call; implementations should override it.
   default int numAccounts() {
     return TransactionSkeleton.deserializeSkeleton(serialized()).numAccounts();
   }
 
-  /// Whether the number of unique accounts referenced by this transaction, including any which
-  /// would be loaded via an address lookup table, exceeds the 64 account limit.
-  ///
+  /// Whether [#numAccounts()] exceeds [#MAX_ACCOUNTS].
   default boolean exceedsAccountLimit() {
     return numAccounts() > MAX_ACCOUNTS;
   }
 
   /// The number of top-level instructions.
-  /// Compatibility default for implementations compiled against the pre-v1 interface.
   default int numInstructions() {
     return instructions().size();
   }
 
-  /// Whether the number of top-level instructions exceeds the 64-instruction limit. SIMD-0385
-  /// imposes the limit on the v1 format directly, while legacy and v0 transactions are bound at
-  /// execution by the 64 instruction trace limit.
-  ///
+  /// Whether there are more than 64 top-level instructions: SIMD-0385's limit for v1, and the
+  /// instruction trace limit legacy and v0 transactions hit at execution.
   default boolean exceedsInstructionLimit() {
     return numInstructions() > BaseTransaction.MAX_INSTRUCTIONS;
   }
 
   int numSigners();
 
-  /// Whether the number of required signatures exceeds the 12-signature limit imposed on v1
-  /// transactions by SIMD-0385.
-  ///
-  /// Legacy and v0 transactions have no distinct signature count limit, they are only bound by
-  /// the serialized size limit, so this is always false.
-  ///
-  /// Compatibility default for implementations compiled against the pre-v1 interface: only
-  /// SIMD-0385 v1 bounds the required signature count, at twelve, so every legacy and v0
-  /// transaction reports false here exactly as it did before this method existed.
+  /// Whether more than 12 signatures are required, SIMD-0385's limit for v1. Always false for legacy
+  /// and v0, which only the size limit bounds.
   default boolean exceedsSignatureLimit() {
     return version() == 1 && numSigners() > TxBuilderImpl.MAX_V1_SIGNATURES;
   }
@@ -985,194 +950,117 @@ public interface Transaction {
 
   Transaction replaceInstruction(final int index, final Instruction instruction);
 
-  /// Sets the priority fee, in lamports, for this transaction.
+  /// Sets the priority fee, in lamports.
   ///
-  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
-  /// return this transaction.
+  /// A v1 transaction overwrites its priority fee ConfigValue in place and returns `this`.
   ///
-  /// The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports
-  /// per compute unit, not lamports, so legacy and v0 transactions convert the given lamports to
-  /// the equivalent compute unit price against the compute unit limit the runtime will apply:
-  /// the value of the SetComputeUnitLimit instruction if present, otherwise the default limit
-  /// granted per non-compute-budget instruction, capped at the 1.4 million maximum. The price is
-  /// rounded up so that the prioritization fee charged by the runtime is at least the given
-  /// lamports. The instruction is replaced if present, otherwise prepended, and a new
-  /// transaction is returned. Set the compute unit limit before the priority fee so the
-  /// conversion reflects the intended limit.
+  /// Legacy and v0 transactions return a new transaction with a SetComputeUnitPrice instruction, in
+  /// micro-lamports per compute unit, replaced or prepended. The price is rounded up so the runtime
+  /// charges at least the given lamports against the limit it will apply: the SetComputeUnitLimit
+  /// value if present, otherwise the runtime's default per-instruction allocation (counting a
+  /// prepended instruction), capped at 1.4 million. An explicit limit of 0 writes a price of 0,
+  /// and a negative fee or an overflow saturates the price at [Long#MAX_VALUE]. Set the compute
+  /// unit limit first.
   ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that throws
-  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
-  /// implementation can hold the expectation, and a throwing default keeps recompilation
-  /// compatibility without inventing behaviour. The built-in implementations override it.
-  ///
-  /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
-  ///                               transaction are not set, because a priority fee was not
-  ///                               provided to the {@link TxBuilder} or this transaction was
-  ///                               produced elsewhere without one.
-  /// @throws UnsupportedOperationException from the compatibility default, when this method is
-  ///                                       not overridden
+  /// @throws IllegalStateException if this v1 transaction's TransactionConfigMask lacks the priority
+  ///                               fee bits: none was given to the [TxBuilder], or it was built
+  ///                               elsewhere without one
+  /// @throws UnsupportedOperationException from the default, which built-in implementations
+  ///                                       override
   default Transaction setPriorityFeeLamports(final long priorityFeeLamports) {
     throw new UnsupportedOperationException("This Transaction implementation does not support setPriorityFeeLamports.");
   }
 
-  /// Sets the compute unit limit for this transaction.
+  /// Sets the compute unit limit.
   ///
-  /// Legacy and v0 transactions replace the existing SetComputeUnitLimit compute budget
-  /// instruction if present, otherwise one is prepended, and a new transaction is returned.
+  /// Legacy and v0 transactions return a new transaction with a SetComputeUnitLimit instruction
+  /// replaced or prepended. A v1 transaction overwrites its ConfigValue in place and returns `this`;
+  /// [TxBuilder] reserves that ConfigValue by default.
   ///
-  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
-  /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
-  /// to the runtime maximum.
-  ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that throws
-  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
-  /// implementation can hold the expectation, and a throwing default keeps recompilation
-  /// compatibility without inventing behaviour. The built-in implementations override it.
-  ///
-  /// @throws IllegalStateException if the compute unit limit TransactionConfigMask bit of this
-  ///                               v1 transaction is not set, because it was explicitly cleared
-  ///                               or this transaction was produced elsewhere without one.
-  /// @throws UnsupportedOperationException from the compatibility default, when this method is
-  ///                                       not overridden
+  /// @throws IllegalStateException if this v1 transaction's TransactionConfigMask lacks the compute
+  ///                               unit limit bit: it was cleared, or it was built elsewhere
+  ///                               without one
+  /// @throws UnsupportedOperationException from the default, which built-in implementations
+  ///                                       override
   default Transaction setComputeUnitLimit(final int computeUnitLimit) {
     throw new UnsupportedOperationException("This Transaction implementation does not support setComputeUnitLimit.");
   }
 
-  /// Sets the priority fee for this transaction from a legacy/v0 SetComputeUnitPrice compute
-  /// budget price, denominated in micro-lamports per compute unit, by converting it to lamports
-  /// against the compute unit limit currently set on this transaction. If no compute unit limit
-  /// is set, the 1.4 million runtime maximum is used.
+  /// Sets the priority fee from a SetComputeUnitPrice price, in micro-lamports per compute unit.
   ///
-  /// The price is multiplied by the compute unit limit, capped at the 1.4 million maximum, then
-  /// converted to lamports, rounding up, mirroring the runtime's prioritization fee calculation.
-  /// For v1 transactions this overwrites the corresponding ConfigValue within the serialized data
-  /// and returns this transaction.
+  /// Legacy and v0 transactions return a new transaction with that SetComputeUnitPrice instruction
+  /// replaced or prepended, so their fee keeps following the compute unit limit in effect.
   ///
-  /// The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports per
-  /// compute unit, not lamports, so legacy and v0 transactions add a SetComputeUnitPrice compute
-  /// budget instruction with the given price directly, replacing an existing one if present,
-  /// otherwise prepending one, and return a new transaction.
+  /// A v1 transaction converts the price to lamports, capped and rounded up as
+  /// [TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)] does, against its current compute
+  /// unit limit, or 1.4 million if none is set; it overwrites its priority fee ConfigValue in place
+  /// and returns `this`. The conversion is one-time: a limit changed afterwards does not move the
+  /// fee, so when tightening after simulation set the limit first, or use
+  /// [#setPriorityFeeLamportsFromComputeUnitPrice(long, int)].
   ///
-  /// **For v1 this is a one-time conversion, not an ongoing binding.** The lamport fee is computed
-  /// against this transaction's compute unit limit as it stands now and is then fixed; a limit
-  /// changed afterwards does not move it. Only legacy and v0 keep the price itself, and so keep
-  /// re-deriving the fee from whatever limit is in effect. In the build, simulate, then tighten
-  /// flow this matters: tighten the compute unit limit first and convert afterwards, or call this
-  /// again, if the fee should reflect the tightened limit rather than the one it was sized for.
-  ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that throws
-  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
-  /// implementation can hold the expectation, and a throwing default keeps recompilation
-  /// compatibility without inventing behaviour. The built-in implementations override it.
-  ///
-  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
-  /// @return the transaction with its priority fee set
-  /// @throws IllegalStateException if the priority fee TransactionConfigMask bits of this v1
-  ///                               transaction are not set, because a priority fee was not
-  ///                               provided to the {@link TxBuilder} or this transaction was
-  ///                               produced elsewhere without one.
-  /// @see TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)
-  /// @throws UnsupportedOperationException from the compatibility default, when this method is
-  ///                                       not overridden
+  /// @throws IllegalStateException if this v1 transaction's TransactionConfigMask lacks the priority
+  ///                               fee bits: none was given to the [TxBuilder], or it was built
+  ///                               elsewhere without one
+  /// @throws UnsupportedOperationException from the default, which built-in implementations
+  ///                                       override
   default Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
     throw new UnsupportedOperationException("This Transaction implementation does not support setPriorityFeeLamportsFromComputeUnitPrice.");
   }
 
-  /// Sets both the compute unit limit and the priority fee for this transaction from a legacy/v0
-  /// SetComputeUnitPrice compute budget price, denominated in micro-lamports per compute unit. The
-  /// given compute unit limit is applied via {@link #setComputeUnitLimit(int)} and the price is
-  /// converted to a lamport priority fee against that limit.
+  /// Sets the compute unit limit, and the priority fee from a SetComputeUnitPrice price, in
+  /// micro-lamports per compute unit, sized against that limit.
   ///
-  /// The price is multiplied by the compute unit limit, capped at the 1.4 million maximum, then
-  /// converted to lamports, rounding up, mirroring the runtime's prioritization fee calculation.
-  /// For v1 transactions this overwrites the corresponding ConfigValues within the serialized data
-  /// and returns this transaction.
+  /// Legacy and v0 transactions return a new transaction with SetComputeUnitLimit and
+  /// SetComputeUnitPrice instructions replaced or prepended. A v1 transaction overwrites both
+  /// ConfigValues in place and returns `this`; prefer this overload when tightening a v1
+  /// transaction after simulation. As with [#setPriorityFeeLamportsFromComputeUnitPrice(long)], the
+  /// v1 fee does not follow a later limit change.
   ///
-  /// The legacy/v0 SetComputeUnitPrice compute budget instruction is priced in micro-lamports per
-  /// compute unit, not lamports, so legacy and v0 transactions add SetComputeUnitLimit and
-  /// SetComputeUnitPrice compute budget instructions directly, replacing existing ones if present,
-  /// otherwise prepending them, and return a new transaction.
+  /// The built-in implementations never half-update: on failure this transaction is unchanged. The
+  /// default throws rather than composing [#setComputeUnitLimit(int)] with the one-argument overload,
+  /// which could apply the limit and then throw.
   ///
-  /// Prefer this overload when tightening a v1 transaction after simulating it: it applies the limit
-  /// before converting, so the fee is sized for the limit you are setting rather than the one the
-  /// transaction was built with. As with the single argument overload the v1 result is a one-time
-  /// conversion — a limit changed after this call does not move the fee.
-  ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that throws
-  /// [UnsupportedOperationException] directly — deliberately not composed from
-  /// [#setComputeUnitLimit(int)] followed by the single-argument overload, which would let an
-  /// implementation that defines its own compute unit limit mutate it before the inherited fee
-  /// call throws, leaving the transaction half-updated. The built-in implementations override this
-  /// with that composition and neither can half-update: the v1 override validates both ConfigValue
-  /// slots before writing either, and legacy/v0 build a new transaction, leaving this one untouched.
-  ///
-  /// @param microLamportsPerComputeUnit the legacy compute unit price in micro-lamports per compute unit
-  /// @param computeUnitLimit            the compute unit limit to set and convert the price against
-  /// @return the transaction with its compute unit limit and priority fee set
-  /// @throws IllegalStateException if the compute unit limit or priority fee
-  ///                               TransactionConfigMask bits of this v1 transaction are not set,
-  ///                               because they were not provided to the {@link TxBuilder} or this
-  ///                               transaction was produced elsewhere without them.
-  /// @throws UnsupportedOperationException from the compatibility default, when this method is
-  ///                                       not overridden
-  /// @see #setPriorityFeeLamportsFromComputeUnitPrice(long)
+  /// @throws IllegalStateException if this v1 transaction's TransactionConfigMask lacks the compute
+  ///                               unit limit or priority fee bits: they were not given to the
+  ///                               [TxBuilder], or it was built elsewhere without them
+  /// @throws UnsupportedOperationException from the default, which built-in implementations
+  ///                                       override
   /// @see TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)
   default Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit,
                                                                  final int computeUnitLimit) {
     throw new UnsupportedOperationException("This Transaction implementation does not support setPriorityFeeLamportsFromComputeUnitPrice.");
   }
 
-  /// Sets the loaded accounts data size limit, in bytes, for this transaction. Values above the
-  /// 64MiB maximum are clamped by the runtime rather than rejected.
+  /// Sets the loaded accounts data size limit, in bytes. The runtime clamps values above its 64MiB
+  /// maximum rather than rejecting them.
   ///
-  /// Legacy and v0 transactions replace the existing SetLoadedAccountsDataSizeLimit compute
-  /// budget instruction if present, otherwise one is prepended, and a new transaction is
-  /// returned. The runtime rejects an instruction with a value of 0, so the limit must be
-  /// greater than 0.
+  /// Legacy and v0 transactions return a new transaction with a SetLoadedAccountsDataSizeLimit
+  /// instruction replaced or prepended; the runtime rejects 0 there. A v1 transaction overwrites
+  /// its ConfigValue in place and returns `this`; [TxBuilder] reserves that ConfigValue by default,
+  /// and 0 is valid, the same as leaving the limit unset at 0 bytes (SIMD-0385).
   ///
-  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
-  /// return this transaction. {@link TxBuilder} reserves the ConfigValue by defaulting the limit
-  /// to the runtime maximum. Unlike legacy and v0 transactions, a value of 0 is valid and per
-  /// SIMD-0385 is equivalent to an unset limit of 0 bytes.
-  ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that throws
-  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
-  /// implementation can hold the expectation, and a throwing default keeps recompilation
-  /// compatibility without inventing behaviour. The built-in implementations override it.
-  ///
-  /// @throws IllegalArgumentException if the limit is not greater than 0 for a legacy or v0
-  ///                                  transaction.
-  /// @throws IllegalStateException    if the account data size limit TransactionConfigMask bit of
-  ///                               this v1 transaction is not set, because it was explicitly
-  ///                               cleared or this transaction was produced elsewhere without one.
-  /// @throws UnsupportedOperationException from the compatibility default, when this method is
-  ///                                       not overridden
+  /// @throws IllegalArgumentException if the limit is not greater than 0 on a legacy or v0
+  ///                                  transaction
+  /// @throws IllegalStateException    if this v1 transaction's TransactionConfigMask lacks the
+  ///                                  account data size limit bit: it was cleared, or it was built
+  ///                                  elsewhere without one
+  /// @throws UnsupportedOperationException from the default, which built-in implementations
+  ///                                       override
   default Transaction setAccountDataSizeLimit(final int accountDataSizeLimit) {
     throw new UnsupportedOperationException("This Transaction implementation does not support setAccountDataSizeLimit.");
   }
 
-  /// Sets the requested heap size, in bytes, for this transaction, which per SIMD-0385 must be
-  /// a multiple of 1KiB in the inclusive range [32KiB,256KiB].
+  /// Sets the requested heap size, in bytes: a multiple of 1KiB from 32KiB to 256KiB inclusive.
   ///
-  /// Legacy and v0 transactions replace the existing RequestHeapFrame compute budget instruction
-  /// if present, otherwise one is prepended, and a new transaction is returned.
+  /// Legacy and v0 transactions return a new transaction with a RequestHeapFrame instruction
+  /// replaced or prepended. A v1 transaction overwrites its ConfigValue in place and returns `this`.
   ///
-  /// v1 transactions overwrite the corresponding ConfigValue within the serialized data and
-  /// return this transaction.
-  ///
-  /// Implementations compiled against the pre-v1 interface inherit a default that throws
-  /// [UnsupportedOperationException]: these mutators did not exist there, so no caller of such an
-  /// implementation can hold the expectation, and a throwing default keeps recompilation
-  /// compatibility without inventing behaviour. The built-in implementations override it.
-  ///
-  /// @throws IllegalArgumentException if the heap size is not a multiple of 1KiB in the
-  ///                                  inclusive range [32KiB,256KiB].
-  /// @throws IllegalStateException    if the heap size TransactionConfigMask bit of this v1
-  ///                               transaction is not set, because a heap size was not provided
-  ///                               to the {@link TxBuilder} or this transaction was produced
-  ///                               elsewhere without one.
-  /// @throws UnsupportedOperationException from the compatibility default, when this method is
-  ///                                       not overridden
+  /// @throws IllegalArgumentException if the heap size is not a multiple of 1KiB in that range
+  /// @throws IllegalStateException    if this v1 transaction's TransactionConfigMask lacks the heap
+  ///                                  size bit: none was given to the [TxBuilder], or it was built
+  ///                                  elsewhere without one
+  /// @throws UnsupportedOperationException from the default, which built-in implementations
+  ///                                       override
   default Transaction setHeapSize(final int heapSize) {
     throw new UnsupportedOperationException("This Transaction implementation does not support setHeapSize.");
   }

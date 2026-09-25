@@ -215,7 +215,6 @@ final class TxBuilderImpl implements TxBuilder {
     return this;
   }
 
-  /// Builds a SIMD-0385 v1 transaction from the configured fee payer and instructions.
   @Override
   public Transaction createTransaction() {
     if (instructions == null) {

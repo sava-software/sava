@@ -15,8 +15,7 @@ import static systems.comodal.jsoniter.JsonIterator.fieldEqualsIgnoreCase;
 
 /// @param commission    Vote account commission when the reward was credited, in basis points if
 ///                      [#commissionBps()], otherwise a percentage.
-/// @param commissionBps True if the commission is in basis points (SIMD-0291). Nodes which serve it only
-///                      serve the percentage as null.
+/// @param commissionBps True if the commission is in basis points (SIMD-0291).
 public record TxReward(PublicKey publicKey,
                        long lamports,
                        long postBalance,
@@ -24,8 +23,7 @@ public record TxReward(PublicKey publicKey,
                        int commission,
                        boolean commissionBps) {
 
-  /// Compatibility constructor for callers compiled against the response shape before
-  /// `commissionBps` was added by the Solana JSON representation.
+  /// Kept for source and binary compatibility; [#commission()] is a percentage.
   public TxReward(final PublicKey publicKey,
                   final long lamports,
                   final long postBalance,

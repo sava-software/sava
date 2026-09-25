@@ -1,8 +1,6 @@
 package software.sava.rpc.json.http.ws;
 
-/// Clock seam for time-dependent code, so tests advance time instead of waiting.
-/// Injected through the package-private builder seam; production code uses
-/// [#SYSTEM]. Mirrors ravina's `software.sava.services.core.NanoClock`.
+/// Time source for the websocket engine; [#SYSTEM] reads the system clocks.
 public interface NanoClock {
 
   NanoClock SYSTEM = new NanoClock() {
@@ -24,15 +22,9 @@ public interface NanoClock {
 
   long nanoTime();
 
-  /// Millisecond reading for wall-clock age comparisons, as opposed to the
-  /// monotonic [#nanoTime()] used for pacing.
-  ///
-  /// [#SYSTEM] overrides this with `System.currentTimeMillis()`, so values
-  /// produced in production are epoch millis. The default derives from
-  /// [#nanoTime()] instead, so a test clock that implements only `nanoTime()`
-  /// still advances both readings coherently — give such a clock a non-zero
-  /// origin. Consumers must treat these values as comparable to each other,
-  /// not as an epoch, unless the clock is [#SYSTEM].
+  /// Millisecond reading for wall-clock age comparisons; the monotonic [#nanoTime()] is for
+  /// pacing. Epoch millis only from [#SYSTEM]: the default derives from [#nanoTime()], so its
+  /// values are comparable to each other but are not an epoch.
   default long currentTimeMillis() {
     return nanoTime() / 1_000_000L;
   }

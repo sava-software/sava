@@ -15,13 +15,9 @@ import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.PublicKey.readPubKey;
 
 // https://github.com/solana-program/token-metadata/tree/main/interface#optional-state
-/// @param updateAuthority    the authority that may update the metadata; all-zero means none,
-///                           so compare with [PublicKey#NONE] rather than testing for `null`.
-/// @param mint               the mint the metadata describes.
-/// @param name               the token name.
-/// @param symbol             the token symbol.
-/// @param uri                the off-chain metadata URI.
-/// @param additionalMetadata additional key/value pairs, unmodifiable.
+/// @param updateAuthority    may update the metadata; [PublicKey#NONE] when absent, never
+///                           `null`.
+/// @param additionalMetadata extra key/value pairs; when parsed, unmodifiable and in wire order.
 public record TokenMetadata(PublicKey updateAuthority,
                             PublicKey mint,
                             String name,

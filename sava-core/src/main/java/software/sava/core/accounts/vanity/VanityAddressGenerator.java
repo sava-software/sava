@@ -12,11 +12,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public interface VanityAddressGenerator {
 
-  /// Unbounded search: workers keep generating key pairs until they have found
-  /// `findKeys` matches or are interrupted. Use the [#createGenerator(Path, char[],
-  /// SecureRandomFactory, PrivateKeyEncoding, KeyFileFormat, KeyDerivation, boolean,
-  /// ExecutorService, int, Subsequence, Subsequence, long, int, long)] overload to
-  /// cap the number of attempts.
+  /// Searches without a cap: workers generate key pairs until `findKeys` matches are found or
+  /// they are interrupted. To cap attempts, use
+  /// [#createGenerator(Path, char\[\], SecureRandomFactory, PrivateKeyEncoding, KeyFileFormat, KeyDerivation, boolean, ExecutorService, int, Subsequence, Subsequence, long, int, long)].
   static VanityAddressGenerator createGenerator(final Path keyPath,
                                                 final char[] password,
                                                 final SecureRandomFactory secureRandomFactory,
@@ -36,12 +34,15 @@ public interface VanityAddressGenerator {
     );
   }
 
-  /// @param maxSearches key pairs each worker may generate before giving up.
-  /// [Long#MAX_VALUE] searches forever, which is what the other overloads do. A
-  /// finite cap is the escape hatch for a search that may never succeed — an
-  /// unsatisfiable subsequence would otherwise spin a thread indefinitely. Workers
-  /// that exhaust their cap stop without queueing a result, so a caller blocking
-  /// in [#take()] must be prepared for fewer results than it asked for.
+  /// Starts `numThreads` search workers on `executor`.
+  ///
+  /// @param maxSearches key pairs after which each worker gives up; [Long#MAX_VALUE], as the
+  ///                    other overloads use, is unbounded. Set a cap when the subsequence may
+  ///                    be unsatisfiable. It is not a strict maximum: a worker generates at
+  ///                    least one key pair, and an `endsWith` worker skips the check after a
+  ///                    match. A worker that gives up queues no further results, so fewer than
+  ///                    `findKeys` may arrive.
+  /// @throws IllegalArgumentException if `findKeys` exceeds [Integer#MAX_VALUE]
   static VanityAddressGenerator createGenerator(final Path keyPath,
                                                 final char[] password,
                                                 final SecureRandomFactory secureRandomFactory,
@@ -146,6 +147,8 @@ public interface VanityAddressGenerator {
 
   void breakOut();
 
+  /// Returns the next queued result, or `null` if none is queued. It waits only if another
+  /// thread takes the last result concurrently.
   Result take() throws InterruptedException;
 
   Result poll(final long timeout, final TimeUnit timeUnit) throws InterruptedException;

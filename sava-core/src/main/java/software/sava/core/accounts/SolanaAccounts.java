@@ -4,7 +4,6 @@ import software.sava.core.accounts.meta.AccountMeta;
 
 public interface SolanaAccounts {
 
-  /// Every builder field defaults to its main-net address, see [SolanaAccountsBuilder].
   SolanaAccounts MAIN_NET = SolanaAccountsBuilder.builder().create();
 
   // Mint
@@ -91,7 +90,7 @@ public interface SolanaAccounts {
 
   AccountMeta invokedStakeProgram();
 
-  /// Deprecated upstream, the stake config account is no longer used by the stake program.
+  /// The stake program no longer reads this account, and Solana has deprecated its id.
   PublicKey stakeConfig();
 
   AccountMeta readStakeConfig();
@@ -142,7 +141,6 @@ public interface SolanaAccounts {
 
   // Sysvar
 
-  /// Owner of the sysvar accounts.
   PublicKey sysvarOwner();
 
   AccountMeta readSysvarOwner();
@@ -159,11 +157,12 @@ public interface SolanaAccounts {
 
   AccountMeta readInstructionsSysVar();
 
-  /// Deprecated upstream, the RecentBlockhashes sysvar is no longer updated by the
-  /// runtime, use the getLatestBlockhash RPC method.
+  /// @deprecated Solana deprecated the RecentBlockhashes sysvar; use the `getLatestBlockhash`
+  /// RPC method for a recent blockhash.
   @Deprecated
   PublicKey recentBlockhashesSysVar();
 
+  /// @deprecated as for [#recentBlockhashesSysVar()].
   @Deprecated
   AccountMeta readRecentBlockhashesSysVar();
 

@@ -46,9 +46,8 @@ sealed class AccountMetaReadOnly implements AccountMeta permits
     return accountMeta;
   }
 
-  /// Exact class rather than `instanceof`: a read only meta must not equal a
-  /// subclass carrying more privileges. The null guard is required by the
-  /// Object.equals contract — every subclass gets it free from `instanceof`.
+  /// Exact class rather than `instanceof`: a read-only meta must not equal a subclass
+  /// carrying more privileges.
   @Override
   public boolean equals(final Object o) {
     return this == o

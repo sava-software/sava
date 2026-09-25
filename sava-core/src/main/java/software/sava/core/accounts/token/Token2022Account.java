@@ -13,17 +13,15 @@ import static software.sava.core.accounts.token.Token2022.parseAccountType;
 /// A Token-2022 token account: the [TokenAccount] base state, the account-type discriminant
 /// that follows it, and the TLV extensions after that.
 ///
-/// @param tokenAccount    the 165-byte base account state.
-/// @param type            `null` when the account carries no discriminant — either because
-///                        the buffer has no room for one, the shape of a token account that
-///                        never had extension space allocated ([TokenAccount#BYTES] exactly),
-///                        or because the byte on the wire is an [AccountType] released after
-///                        this library was last synced. With no extensions either, both
-///                        re-serialize as the base state alone. [AccountType#Uninitialized]
-///                        alongside an [AccountState#Uninitialized] base is not a defect:
-///                        extension initializers run before `InitializeAccount`, so that is
-///                        what an account looks like between the two instructions.
-/// @param tokenExtensions the parsed TLV entries, empty when there are none.
+/// @param type            `null` when the data is exactly [TokenAccount#BYTES] long (no
+///                        extension space) or the byte is not a known [AccountType]; with no
+///                        extensions either, both re-serialize as the base state alone, but
+///                        with extensions [#write(byte\[\], int)] throws
+///                        `NullPointerException`.
+///                        [AccountType#Uninitialized] with an [AccountState#Uninitialized]
+///                        base is valid: extension initializers run before
+///                        `InitializeAccount`.
+/// @param tokenExtensions the parsed TLV entries, as for [Token2022#tokenExtensions()].
 public record Token2022Account(TokenAccount tokenAccount,
                                AccountType type,
                                Set<TokenExtension> tokenExtensions) implements Serializable {

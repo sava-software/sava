@@ -111,21 +111,14 @@ final class TransactionRecord extends BaseTransaction {
     return accountMetas;
   }
 
-  /// Converts a v1 priority fee, denominated in lamports, into the equivalent legacy/v0
-  /// SetComputeUnitPrice compute budget price in micro-lamports per compute unit for the given
-  /// compute unit limit.
+  /// Converts a v1 priority fee in lamports into the legacy/v0 SetComputeUnitPrice price, in
+  /// micro-lamports per compute unit, for `computeUnitLimit` (read as unsigned, capped at
+  /// [TxBuilderImpl#MAX_COMPUTE_UNIT_LIMIT]).
   ///
-  /// The fee is converted to micro-lamports then divided by the compute unit limit, capped at the
-  /// 1.4 million maximum, rounding up so that the prioritization fee charged by the runtime is at
-  /// least the given lamports. Saturates at {@link Long#MAX_VALUE} if the price overflows.
-  ///
-  /// The inverse of {@link TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)}; converting the
-  /// resulting price back yields the given fee whenever the fee scales to a whole number of
-  /// micro-lamports per compute unit.
-  ///
-  /// @param priorityFeeLamports the priority fee in lamports
-  /// @param computeUnitLimit    the compute unit limit the fee applies to
-  /// @return the equivalent compute unit price in micro-lamports per compute unit
+  /// Rounds up so the runtime charges at least the given fee. Returns 0 for a zero fee or limit;
+  /// otherwise saturates at [Long#MAX_VALUE] for a negative fee or on overflow. Unless it
+  /// saturates, it inverts [TxBuilder#computeUnitPriceToPriorityFeeLamports(long, int)] exactly
+  /// when the fee scales to a whole number of micro-lamports per compute unit.
   static long priorityFeeLamportsToComputeUnitPrice(final long priorityFeeLamports, final int computeUnitLimit) {
     final long cappedComputeUnitLimit = Math.min(computeUnitLimit & 0xFFFF_FFFFL, TxBuilderImpl.MAX_COMPUTE_UNIT_LIMIT);
     if (cappedComputeUnitLimit == 0 || priorityFeeLamports == 0) {
@@ -238,8 +231,8 @@ final class TransactionRecord extends BaseTransaction {
     return setComputeBudgetValue(discriminator, computeBudgetIxData(discriminator, value));
   }
 
-  /// Replaces or prepends two compute budget instructions in a single pass, rebuilding the
-  /// transaction only once rather than once per instruction.
+  /// Replaces or prepends two compute budget instructions, rebuilding the transaction once rather
+  /// than per instruction.
   private Transaction setComputeBudgetValues(final byte discriminator1, final byte[] ixData1,
                                              final byte discriminator2, final byte[] ixData2) {
     final var invokedComputeBudgetProgram = SolanaAccounts.MAIN_NET.invokedComputeBudgetProgram();
@@ -285,12 +278,12 @@ final class TransactionRecord extends BaseTransaction {
     return setBlockHash(createTransaction(Arrays.asList(ixArray)));
   }
 
-  /// The compute unit limit this transaction will actually execute against: the value of an explicit
-  /// SetComputeUnitLimit instruction, otherwise the sum the runtime allocates per instruction.
+  /// The compute unit limit to price a fee against: the first explicit SetComputeUnitLimit value
+  /// unchanged (even 0, and not capped), otherwise the per-instruction runtime allocation summed
+  /// and capped at [TxBuilderImpl#MAX_COMPUTE_UNIT_LIMIT].
   ///
-  /// @param prependsComputeBudgetInstruction whether the caller is about to add a compute budget
-  ///                                         instruction this transaction does not yet carry, which
-  ///                                         the runtime will budget as one more builtin
+  /// @param prependsComputeBudgetInstruction whether the caller will prepend a compute budget
+  ///                                         instruction, budgeted as one more builtin
   private int effectiveComputeUnitLimit(final boolean prependsComputeBudgetInstruction) {
     final var computeBudgetProgram = SolanaAccounts.MAIN_NET.computeBudgetProgram();
     long computeUnitLimit = prependsComputeBudgetInstruction ? BuiltinPrograms.BUILTIN_COMPUTE_UNIT_LIMIT : 0;

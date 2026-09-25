@@ -9,15 +9,9 @@ import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.zk.ElGamal.ELGAMAL_CIPHERTEXT_LEN;
 import static software.sava.core.zk.ElGamal.ELGAMAL_PUBKEY_LEN;
 
-/// @param authority                              the authority that may update the
-///                                               configuration; all-zero means none, so
-///                                               compare with [PublicKey#NONE] rather than
-///                                               testing for `null`.
-/// @param withdrawWithheldAuthorityElgamalPubkey the ElGamal key withheld fees are encrypted
-///                                               under.
-/// @param harvestToMintEnabled                   whether accounts may harvest withheld fees
-///                                               to the mint.
-/// @param withheldAmount                         the encrypted withheld fee total.
+/// @param authority      may update the configuration; [PublicKey#NONE] when absent, never
+///                       `null`.
+/// @param withheldAmount the withheld fee total as an ElGamal ciphertext.
 public record ConfidentialTransferFeeConfig(PublicKey authority,
                                             PublicKey withdrawWithheldAuthorityElgamalPubkey,
                                             boolean harvestToMintEnabled,

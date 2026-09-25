@@ -76,68 +76,84 @@ public interface SolanaRpcClient {
 
   CompletableFuture<NodeHealth> getHealth(final Duration requestTimeout);
 
+  /// A missing account yields a non-null [AccountInfo] whose [AccountInfo#owner()] is `null`,
+  /// built by applying `factory` to `null` data.
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   default CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final PublicKey account) {
     return getAccountInfo(account, BYTES_IDENTITY);
   }
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   default CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment, final PublicKey account) {
     return getAccountInfo(commitment, account, BYTES_IDENTITY);
   }
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final BigInteger minContextSlot,
                                                         final PublicKey account);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final int length,
                                                         final int offset,
                                                         final PublicKey account);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
                                                         final BigInteger minContextSlot,
                                                         final PublicKey account);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
                                                         final int length,
                                                         final int offset,
                                                         final PublicKey account);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final BigInteger minContextSlot,
                                                         final int length,
                                                         final int offset,
                                                         final PublicKey account);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
                                                         final BigInteger minContextSlot,
                                                         final int length,
                                                         final int offset,
                                                         final PublicKey account);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final BigInteger minContextSlot,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final int length,
                                                        final int offset,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                        final BigInteger minContextSlot,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                        final int length,
                                                        final int offset,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                        final BigInteger minContextSlot,
                                                        final int length,
@@ -236,29 +252,35 @@ public interface SolanaRpcClient {
 
   CompletableFuture<InflationRate> getInflationRate();
 
+  /// A key with no reward yields an all-zero entry; see [InflationReward#parse].
   CompletableFuture<List<InflationReward>> getInflationReward(final SequencedCollection<PublicKey> keys);
 
+  /// A key with no reward yields an all-zero entry; see [InflationReward#parse].
   CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
                                                               final SequencedCollection<PublicKey> keys);
 
+  /// A key with no reward yields an all-zero entry; see [InflationReward#parse].
   CompletableFuture<List<InflationReward>> getInflationReward(final SequencedCollection<PublicKey> keys,
                                                               final long epoch);
 
+  /// A key with no reward yields an all-zero entry; see [InflationReward#parse].
   CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
                                                               final SequencedCollection<PublicKey> keys,
                                                               final long epoch);
 
+  /// A key with no reward yields an all-zero entry; see [InflationReward#parse].
   CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
                                                               final SequencedCollection<PublicKey> keys,
                                                               final BigInteger minContextSlot);
 
+  /// A key with no reward yields an all-zero entry; see [InflationReward#parse].
   CompletableFuture<List<InflationReward>> getInflationReward(final Commitment commitment,
                                                               final SequencedCollection<PublicKey> keys,
                                                               final long epoch,
                                                               final BigInteger minContextSlot);
 
-  /// Requires a scan over all accounts, which is expensive enough that RPC providers commonly
-  /// disable this method. Expect an error response unless the node is known to serve it.
+  /// Scans every account, so RPC providers commonly disable it: expect an error response unless
+  /// the node is known to serve it.
   CompletableFuture<List<AccountLamports>> getLargestAccounts();
 
   /// @see #getLargestAccounts()
@@ -295,138 +317,97 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Long> getMinimumBalanceForRentExemption(final long accountLength);
 
-  /// Accounts which do not exist are **omitted** from the returned List rather than
-  /// occupying their slot, so the result is shorter than `keys` and every entry after
-  /// a missing account shifts down by one. This does not match the Solana RPC
-  /// response one to one — the node returns a null in place of each missing account.
+  /// Returns the accounts that exist, in key order: absent accounts are **omitted**, unlike
+  /// the node's response, which holds a null in their place, so later entries shift and
+  /// indices no longer match `keys`.
   ///
-  /// That contract is the right fit when absence does not matter: each returned
-  /// account carries its own [AccountInfo#pubKey()], so a caller dispatching on the
-  /// entries themselves — switching on owner, key, or contents — never sees a gap.
-  /// It is the wrong fit for indexed correlation: zipping the result back against
-  /// `keys` by index attributes data to the wrong account, silently. For that, use
-  /// [#getAccounts(SequencedCollection, BiFunction)], which keeps a null in each
-  /// absent account's slot and stays aligned with `keys`.
-  ///
-  /// Every `getMultipleAccounts` overload behaves this way, not just this one; both
-  /// families send an identical `getMultipleAccounts` request and differ only in how
-  /// the response is parsed.
-  ///
-  /// @return the accounts which exist, in key order, with absent accounts omitted.
+  /// Dispatch on each entry's [AccountInfo#pubKey()]. To correlate by index, use
+  /// [#getAccounts(SequencedCollection, BiFunction)], which sends the same request but keeps a
+  /// null entry for each absent account.
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Absent accounts are omitted rather than nulled — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(SequencedCollection)] stays aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(keys, BYTES_IDENTITY);
   }
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, SequencedCollection)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                            final SequencedCollection<PublicKey> keys) {
     return getMultipleAccounts(commitment, keys, BYTES_IDENTITY);
   }
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(int, int, SequencedCollection)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(BigInteger, SequencedCollection)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(BigInteger, int, int, SequencedCollection)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, BigInteger, SequencedCollection)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, int, int, SequencedCollection)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, BigInteger, int, int, SequencedCollection)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
                                                                    final int length,
                                                                    final int offset,
                                                                    final SequencedCollection<PublicKey> keys);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(BigInteger, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(BigInteger, int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final int length,
                                                                   final int offset,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, BigInteger, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Absent accounts are omitted — see
-  /// [#getMultipleAccounts(SequencedCollection, BiFunction)] for when that fits;
-  /// [#getAccounts(Commitment, BigInteger, int, int, SequencedCollection, BiFunction)] keeps the result aligned with `keys`.
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
                                                                   final int length,
@@ -434,114 +415,95 @@ public interface SolanaRpcClient {
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Fetches several accounts in one `getMultipleAccounts` request, keeping the result
-  /// positionally aligned with `keys`: an account which does not exist is a null entry
-  /// at its own index, matching the Solana RPC response one to one.
+  /// Returns one entry per key, in key order, null where the account does not exist, as in the
+  /// node's `getMultipleAccounts` response.
   ///
-  /// This is the difference from [#getMultipleAccounts(SequencedCollection, BiFunction)],
-  /// which sends the identical request but drops absent accounts from the List. Use
-  /// this family whenever the results are correlated back to the keys by index.
-  ///
-  /// @return one entry per key, in key order, null where the account does not exist.
+  /// Use this rather than [#getMultipleAccounts(SequencedCollection, BiFunction)], which sends
+  /// the same request but omits absent accounts, whenever results are matched to keys by index.
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final SequencedCollection<PublicKey> keys) {
     return getAccounts(keys, BYTES_IDENTITY);
   }
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                                    final SequencedCollection<PublicKey> keys) {
     return getAccounts(commitment, keys, BYTES_IDENTITY);
   }
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
                                                            final SequencedCollection<PublicKey> keys);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
                                                            final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                            final BigInteger minContextSlot,
                                                            final SequencedCollection<PublicKey> keys);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                            final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                            final BigInteger minContextSlot,
                                                            final int length,
                                                            final int offset,
                                                            final SequencedCollection<PublicKey> keys);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final int length,
                                                           final int offset,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
                                                           final int length,
                                                           final int offset,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final int length,
                                                           final int offset,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final BigInteger minContextSlot,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
-  /// Result aligned with `keys`, null where an account does not exist — see
-  /// [#getAccounts(SequencedCollection, BiFunction)].
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final BigInteger minContextSlot,
                                                           final int length,
@@ -597,12 +559,8 @@ public interface SolanaRpcClient {
                                                                  final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
-  /// @param minContextSlot **0 means unset**, not "slot 0" — the field is omitted
-  ///                       from the request entirely, so the node applies no
-  ///                       minimum. Slots are u64, so a negative value is read as
-  ///                       the unsigned slot (`-1` is 18446744073709551615). Use
-  ///                       the [BigInteger] overloads to pass an explicit 0 or a
-  ///                       slot above [Long#MAX_VALUE].
+  /// @param minContextSlot unsigned; **`0` means unset** and omits the field, so the node applies
+  ///                       no minimum. Use a [BigInteger] overload to send an explicit `0`.
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
@@ -767,6 +725,8 @@ public interface SolanaRpcClient {
                                                                  final int offset,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
+  /// @throws IllegalStateException if [ProgramAccountsRequest#encoding()] is `base64_zstd` and
+  ///                               [ProgramAccountsRequest#zstdDecompressor()] is `null`.
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final ProgramAccountsRequest<T> request);
 
   CompletableFuture<List<PerfSample>> getRecentPerformanceSamples(final int limit);
@@ -812,10 +772,13 @@ public interface SolanaRpcClient {
                                                          final String untilTxSig,
                                                          final BigInteger minContextSlot);
 
+  /// Unknown signatures map to a nil [TxStatus]; see
+  /// [#getSignatureStatuses(SequencedCollection, boolean)].
   default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures) {
     return getSignatureStatuses(signatures, false);
   }
 
+  /// An unknown signature maps to a [TxStatus] whose [TxStatus#nil()] is `true`, never to `null`.
   CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures,
                                                                 final boolean searchTransactionHistory);
 
@@ -927,39 +890,29 @@ public interface SolanaRpcClient {
                                             final Signer signer,
                                             final byte[] recentBlockHash);
 
-  /// Sets the blockhash and signs in iteration order before submitting. Each signer writes the
-  /// corresponding signature position, without matching its public key to the required account.
-  /// For by-key signing, pass [Transaction#signByKeyAndBase64Encode(byte[], Collection)]'s result
-  /// to [#sendTransaction(String)].
+  /// Sets the blockhash and signs **positionally** before submitting: the n-th signer writes the
+  /// n-th signature slot whatever its public key. To sign by key, submit the result of
+  /// [Transaction#signByKeyAndBase64Encode(byte\[\], Collection)] with [#sendTransaction(String)].
   CompletableFuture<String> sendTransaction(final Transaction transaction,
                                             final SequencedCollection<Signer> signers,
                                             final byte[] recentBlockHash);
 
-  /// Sets the blockhash and signs in iteration order before submitting with the given commitment.
-  /// Signer public keys are not matched to required accounts. For by-key signing, pass
-  /// [Transaction#signByKeyAndBase64Encode(byte[], Collection)]'s result to
-  /// [#sendTransaction(Commitment, String)].
+  /// Signs **positionally**, as [#sendTransaction(Transaction, SequencedCollection, byte\[\])].
   CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
                                             final Transaction transaction,
                                             final SequencedCollection<Signer> signers,
                                             final byte[] recentBlockHash);
 
-  /// Submits with preflight checks, asking the node to retry once.
+  /// Submits with preflight at the client's default commitment and `maxRetries` of `1`.
   ///
-  /// `maxRetries` is how many times the RPC node re-sends the transaction to the
-  /// leader on the caller's behalf. `0` means send once and stop — it is not
-  /// "unset". Every overload in this client sends the field, so the node's own
-  /// behaviour when it is absent (retry until the transaction is finalized or the
-  /// blockhash expires) is not reachable here; pass an explicit `maxRetries` to
-  /// choose something other than the defaults.
-  ///
-  /// The two families default it differently on purpose — see
-  /// [#sendTransactionSkipPreflight(String)].
+  /// Every overload sends `maxRetries`, so the node's behaviour when it is absent (retry until
+  /// finalized or the blockhash expires) is unreachable.
+  /// [#sendTransactionSkipPreflight(String)] defaults it to `0` instead.
   default CompletableFuture<String> sendTransaction(final String base64SignedTx) {
     return sendTransaction(base64SignedTx, 1);
   }
 
-  /// @param maxRetries node-side re-sends to the leader; `0` sends once and stops.
+  /// @param maxRetries node-side re-sends to the leader; `0` sends once and stops, it is not unset.
   CompletableFuture<String> sendTransaction(final String base64SignedTx, final int maxRetries);
 
   default CompletableFuture<String> sendTransaction(final Commitment preflightCommitment, final String base64SignedTx) {
@@ -970,17 +923,11 @@ public interface SolanaRpcClient {
                                             final String base64SignedTx,
                                             final int maxRetries);
 
-  /// Submits without preflight checks, asking the node **not** to retry.
+  /// Submits without preflight, with `maxRetries` of `0` and preflight commitment
+  /// [Commitment#PROCESSED].
   ///
-  /// The `maxRetries` default of `0` is deliberate and differs from the
-  /// preflighting family's `1`: skipping preflight is what a caller does when it
-  /// is driving its own submission loop — re-signing or re-broadcasting until the
-  /// signature confirms — and node-side retries would duplicate that work against
-  /// the same blockhash. Callers who are not rebroadcasting themselves should pass
-  /// an explicit `maxRetries`.
-  ///
-  /// Preflight commitment defaults to [Commitment#PROCESSED] here, since there is
-  /// no simulation to run at a stronger commitment.
+  /// The `0` suits a caller that re-broadcasts until the signature confirms, where node-side
+  /// retries would duplicate that work; other callers should pass an explicit `maxRetries`.
   default CompletableFuture<String> sendTransactionSkipPreflight(final String base64SignedTx) {
     return sendTransactionSkipPreflight(PROCESSED, base64SignedTx, 0);
   }
@@ -998,25 +945,18 @@ public interface SolanaRpcClient {
                                                          final String base64SignedTx,
                                                          final int maxRetries);
 
-  /// Selects between the two families by flag.
-  ///
-  /// **`skipPreFlight` changes more than preflight.** It routes to
-  /// [#sendTransactionSkipPreflight(String)] or [#sendTransaction(String)], and
-  /// those differ in their `maxRetries` default as well — `true` sends with `0`
-  /// node-side retries, `false` with `1`. The flag also selects the preflight
-  /// commitment ([Commitment#PROCESSED] when skipping, the client default
-  /// otherwise). Use the three argument overload to fix `maxRetries` across both
-  /// branches.
+  /// Routes to [#sendTransactionSkipPreflight(String)] or [#sendTransaction(String)], so
+  /// `skipPreFlight` also picks the `maxRetries` default (`0` when skipping, `1` otherwise) and
+  /// the preflight commitment ([Commitment#PROCESSED] when skipping, the client default
+  /// otherwise). Use [#sendTransaction(String, boolean, int)] to pin `maxRetries`.
   default CompletableFuture<String> sendTransaction(final String base64SignedTx, final boolean skipPreFlight) {
     return skipPreFlight
         ? sendTransactionSkipPreflight(base64SignedTx)
         : sendTransaction(base64SignedTx);
   }
 
-  /// Selects between the two families by flag, with `maxRetries` pinned, so unlike
-  /// [#sendTransaction(String, boolean)] the flag only affects preflight and the
-  /// preflight commitment.
-
+  /// Like [#sendTransaction(String, boolean)] with `maxRetries` pinned, so the flag affects only
+  /// preflight and the preflight commitment.
   default CompletableFuture<String> sendTransaction(final String base64SignedTx,
                                                     final boolean skipPreFlight,
                                                     final int maxRetries) {
@@ -1025,8 +965,8 @@ public interface SolanaRpcClient {
         : sendTransaction(base64SignedTx, maxRetries);
   }
 
-  /// As [#sendTransaction(String, boolean)], the flag also picks the `maxRetries`
-  /// default — `0` when skipping preflight, `1` otherwise.
+  /// As [#sendTransaction(String, boolean)], `skipPreFlight` also picks the `maxRetries` default:
+  /// `0` when skipping preflight, `1` otherwise.
   default CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
                                                     final String base64SignedTx,
                                                     final boolean skipPreFlight) {
@@ -1044,6 +984,7 @@ public interface SolanaRpcClient {
         : sendTransaction(preflightCommitment, base64SignedTx, maxRetries);
   }
 
+  /// Simulates with `replaceRecentBlockhash` `true`, so an expired blockhash does not fail it.
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,
@@ -1053,6 +994,7 @@ public interface SolanaRpcClient {
                                                       final Transaction transaction,
                                                       final boolean replaceRecentBlockhash);
 
+  /// Simulates with `replaceRecentBlockhash` `true`, so an expired blockhash does not fail it.
   CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx);
 
   CompletableFuture<TxSimulation> simulateTransaction(final String base64EncodedTx,
@@ -1067,14 +1009,18 @@ public interface SolanaRpcClient {
                                                       final boolean replaceRecentBlockhash,
                                                       final boolean innerInstructions);
 
+  /// Simulates with `replaceRecentBlockhash` `true`.
   CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Commitment commitment,
                                                                            final Transaction transaction);
 
+  /// Simulates with `replaceRecentBlockhash` `true`.
   CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Commitment commitment,
                                                                            final String base64EncodedTx);
 
+  /// Simulates with `replaceRecentBlockhash` `true`.
   CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final Transaction transaction);
 
+  /// Simulates with `replaceRecentBlockhash` `true`.
   CompletableFuture<TxSimulation> simulateTransactionWithInnerInstructions(final String base64EncodedTx);
 
   CompletableFuture<TxSimulation> simulateTransaction(final Transaction transaction,

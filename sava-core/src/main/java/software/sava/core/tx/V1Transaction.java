@@ -111,21 +111,12 @@ final class V1Transaction extends BaseTransaction {
     return this;
   }
 
-  /// **Deliberate divergence from agave — do not "correct" this to 0.** An absent compute-unit-limit
-  /// ConfigValue reads as 0 everywhere else in this library, matching SIMD-0385 and agave's
-  /// `compute_unit_limit().unwrap_or(0)`, and [TransactionSkeleton#prototypeTransaction] preserves
-  /// that 0 exactly. Pricing is a different operation from preservation, and 0 is not a value any
-  /// usable transaction can carry: the compute meter *is* the limit, so a 0 budget fails on the
-  /// first metered instruction, and only an empty or precompile-only transaction can succeed with
-  /// one. Deriving a fee of 0 for a transaction that cannot execute is useless, so an unset limit is
-  /// priced at the runtime maximum instead — which is also what [TxBuilder] itself writes into the
-  /// slot unless the caller explicitly clears it, so this prices an absent slot at exactly what this
-  /// library would have put there.
-  ///
-  /// agave has no counterpart to this conversion for v1: a v1 priority fee is an absolute lamport
-  /// ConfigValue, never price × limit. The only related agave function is the inverse,
-  /// `compute_unit_price_in_microlamports()`, which returns 0 on a 0 limit purely because that is
-  /// what the division degenerates to.
+  /// Prices an absent compute-unit-limit ConfigValue at [TxBuilderImpl#MAX_COMPUTE_UNIT_LIMIT],
+  /// not the 0 that SIMD-0385 and agave (`unwrap_or(0)`) read it as. **Deliberate; do not
+  /// "correct" it to 0:** a 0 budget fails at the first metered instruction, so a fee priced
+  /// against it is useless, and the maximum is what [TxBuilder] writes unless cleared. Readers and
+  /// [TransactionSkeleton#prototypeTransaction()] still preserve the 0; agave has no v1 counterpart
+  /// to this conversion. See AGAVE_SYNC.md, "Deliberate divergences".
   @Override
   public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit) {
     final int offset = V1TransactionSkeleton.configValueOffset(data, COMPUTE_UNIT_LIMIT_MASK);
@@ -150,16 +141,8 @@ final class V1Transaction extends BaseTransaction {
     return this;
   }
 
-  /// The composition the interface default used to provide, now explicit because the inherited
-  /// default throws for implementations that never supported these mutators: apply the limit, then
-  /// price against it.
-  ///
-  /// Both ConfigValue slots are validated before either is written. Composed naively, a
-  /// transaction whose mask carries the compute-unit-limit bit but not the priority-fee pair would
-  /// have its limit written and then throw on the fee slot, leaving it observably half-updated —
-  /// and a builder-produced v1 transaction has exactly that shape unless a priority fee was
-  /// requested, since [TxBuilder] always serializes the limit slot but never defaults the fee. The
-  /// fee slot is resolved first, so a refusal on either slot leaves every byte untouched.
+  /// Resolves the fee slot before writing the limit: a [TxBuilder] transaction built without a
+  /// priority fee has the limit slot by default but not the fee slot.
   @Override
   public Transaction setPriorityFeeLamportsFromComputeUnitPrice(final long microLamportsPerComputeUnit,
                                                                 final int computeUnitLimit) {

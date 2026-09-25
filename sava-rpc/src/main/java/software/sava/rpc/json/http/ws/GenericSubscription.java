@@ -6,11 +6,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /// A caller-defined subscription, registered by notification method rather than a [Channel].
-///
-/// Identity includes [#notificationMethod()] — the namespace a generic key is unique within —
-/// so two handles sharing a key across different notification methods are distinct, in a
-/// consumer's collections as much as in the engine's registries. [RootSubscription#equals] is
-/// final and compares through the interface accessor, which this class overrides.
+/// Its [#notificationMethod()] is part of identity, since a generic key is unique only within
+/// its method; [RootSubscription#equals] is final and compares through that accessor.
 final class GenericSubscription<T> extends RootSubscription<T> {
 
   private final String unSubscribeMethod;
