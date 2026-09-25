@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
+import software.sava.rpc.json.http.response.EpochCredits;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,6 +25,15 @@ final class ValidatorInfoRpcRequestTests extends RpcRequestTests {
   private static final String VOTE_ACCOUNTS_RESPONSE = """
       {"jsonrpc":"2.0","result":{"current":[{"activatedStake":42,"commission":5,\
       "epochCredits":[[1,64,0]],"epochVoteAccount":true,"lastVote":147,\
+      "nodePubkey":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA","rootSlot":146,\
+      "votePubkey":"So11111111111111111111111111111111111111112"}],"delinquent":[]},"id":1}""";
+
+  /// Agave's Alpenglow migration marker, `(Epoch::MAX, u64::MAX, u64::MAX)`, arrives as three
+  /// `18446744073709551615`; the signed reader threw on every answer carrying it.
+  private static final String MARKER_VOTE_ACCOUNTS_RESPONSE = """
+      {"jsonrpc":"2.0","result":{"current":[{"activatedStake":42,"commission":5,\
+      "epochCredits":[[7,123,100],[18446744073709551615,18446744073709551615,18446744073709551615],\
+      [8,125,123]],"epochVoteAccount":true,"lastVote":147,\
       "nodePubkey":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA","rootSlot":146,\
       "votePubkey":"So11111111111111111111111111111111111111112"}],"delinquent":[]},"id":1}""";
 
@@ -67,6 +79,20 @@ final class ValidatorInfoRpcRequestTests extends RpcRequestTests {
         "votePubkey":"So11111111111111111111111111111111111111112"}]}""", VOTE_ACCOUNTS_RESPONSE);
 
     assertNotNull(rpcClient.getVoteAccounts(Commitment.PROCESSED, VOTE_ACCOUNT).join());
+  }
+
+  @Test
+  void getVoteAccountsKeepsTheAlpenglowMigrationMarker() {
+    registerRequest("""
+        {"jsonrpc":"2.0","id":1,"method":"getVoteAccounts","params":[{"commitment":"confirmed"}]}""",
+        MARKER_VOTE_ACCOUNTS_RESPONSE);
+
+    final var voteAccounts = rpcClient.getVoteAccounts().join();
+    assertEquals(List.of(
+        new EpochCredits(7, 123, 100),
+        new EpochCredits(-1L, -1L, -1L),
+        new EpochCredits(8, 125, 123)
+    ), voteAccounts.current().getFirst().epochCredits());
   }
 
   @Test

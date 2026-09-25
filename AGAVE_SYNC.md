@@ -781,14 +781,45 @@ PoH with off-chain BLS-signed votes and finalization certificates. Feature gates
 agave (`alpenglow` = `A1pengvuM6JEcyNuTnMqepBKhwHE3N6PmUrdATGawhJS`, plus
 `alpenglow_fast_leader_handover` and, governing the `VoterWithBLS` path below,
 `bls_pubkey_management_in_vote_account` = `AnAP9zPV4KL7czAPQbFhpDKV2tx7g4UGNbK9wvXwjaRo`, all
-in `agave:feature-set/src/lib.rs`) but are NOT activated.
-**Policy: do not implement Alpenglow-specific surfaces until activation on main-net is
-likely** (per project owner).
+in `agave:feature-set/src/lib.rs`). Status probed 2026-09-24 through each cluster's public RPC
+(`getAccountInfo` on the `alpenglow` feature account): **activated on testnet** at slot
+444,620,256, so the migration began at slot 444,625,256 (activation plus
+`MIGRATION_SLOT_OFFSET` = 5,000 in a release build, 32 under `dev-context-only-utils`;
+`agave:votor-messages/src/migration.rs`) and the genesis certificate names slot 444,625,255,
+the last slot before it (the genesis block is the latest ancestor below the migration slot);
+the feature account is absent on mainnet-beta and devnet. The agave wiki's v4.3 release
+schedule, read 2026-09-21, targets resuming mainnet feature activations on 2026-09-28; a
+schedule is not an activation observation.
+**Policy (owner, 2026-09-24): sava carries whatever activation breaks for an existing
+caller — the vote-credit parsing below — and leaves Alpenglow-only surfaces
+(`getAgGenesisCert`) unimplemented until a consumer needs one.**
 
-What changes for this library when it activates:
-- `getAgGenesisCert` RPC (`agave:rpc/src/rpc.rs`) returns the genesis handoff certificate:
-  `WireBlockCertMessage { block: {slot, blockId}, signature: BLS agg sig + validator rank
-  bitmap }` (`agave:votor-messages/src/wire.rs`).
+What activation changes for this library, and what it already changed on testnet:
+- **Vote-credit history carries a marker no signed reader can hold.** At the migration
+  epoch agave pushes `AG_MIGRATION_EPOCH_CREDIT` = `(Epoch::MAX, u64::MAX, u64::MAX)` into
+  the `epoch_credits` of every vote account credited during that epoch (`ensure_marker`,
+  reached from `increment_credits` in
+  `agave:runtime/src/block_component_processor/vote_reward.rs`), and `getVoteAccounts`
+  serialises the tuple as plain JSON numbers, so the marker arrives as three
+  `18446744073709551615` values and stays in the answer while it sits inside the RPC's
+  credit window (`MAX_RPC_VOTE_ACCOUNT_INFO_EPOCH_CREDITS_HISTORY` = 5 entries,
+  `agave:rpc-client-types/src/request.rs`, applied in `agave:rpc/src/rpc.rs`), one of which
+  the marker itself occupies. `EpochCredits.parse` read each field with the signed
+  `readLong`, which threw `value is too large for long` on any answer carrying it: every
+  unfiltered `getVoteAccounts` call for as long as the marker sits inside the window. Since
+  2026-09-24 the three fields are the `u64` bits in a `long` (CONVENTIONS.md, "Unsigned longs
+  and sentinel zeros"), read without allocating: the marker reads as three `-1L` and is kept
+  in the history rather than dropped; signed values, quoted bare digits and the no-leading-zero
+  rule parse as before; whitespace inside the quotes, which the old reader tolerated and no
+  node writes, is rejected; a value past `u64` or below `-2^63` is a `JsonException` naming
+  the field (`EpochCreditsTests`, `ValidatorInfoRpcRequestTests`).
+- `getAgGenesisCert` RPC (`agave:rpc/src/rpc.rs`, shipped in agave 4.2.0) returns the
+  finalized bank's genesis certificate — the ≥ 82 % genesis-vote aggregate that names
+  Alpenglow's genesis block (SIMD-0384): `WireBlockCertMessage { block: {slot, blockId},
+  signature: BLS agg sig + validator rank bitmap }` (`agave:votor-messages/src/wire.rs`).
+  Probed 2026-09-24: testnet returns a certificate for slot 444,625,255, mainnet-beta
+  returns `null`.
+  Deliberately unimplemented here — see the policy above.
 - jsonParsed vote accounts (`agave:account-decoder/src/parse_vote.rs`) gain
   `bls_pubkey_compressed` (48-byte BLS key, bs58) and the SIMD-0185 v4 commission/collector
   fields; `prior_voters` is always empty; the on-chain `votes` list empties out since
@@ -894,6 +925,7 @@ completes.**
 | solana-sdk, error enums only | `983858e1` | 2026-09-20 | `transaction-error/` and `instruction-error/` variant sets, via the committed error-variants fixture (crates 4.0.0 and 3.0.0, published from `9d02e6dc` and `5bcc7778`, source unchanged since). `sdk-ids/` and every other solana-sdk surface were not rechecked and keep the row above. |
 | solana-com | `7719729df` | 2026-07-14 | Documented HTTP/WebSocket method lists (`apps/docs/content/docs/en/rpc/`) confirmed to match the implemented client surface |
 | solana-improvement-documents | `05f2ae9` | 2026-07-14 | Alpenglow SIMDs 0326/0357/0384/0387/0388 read for the Alpenglow section above |
+| agave, Alpenglow only | `f5bd9eca04` | 2026-09-24 | `votor-messages/src/migration.rs` (marker, `MIGRATION_SLOT_OFFSET`), `runtime/src/block_component_processor/vote_reward.rs` (marker insertion), `rpc/src/rpc.rs` (`getVoteAccounts` credit window, `getAgGenesisCert`), `rpc-client-types/src/request.rs` (`MAX_RPC_VOTE_ACCOUNT_INFO_EPOCH_CREDITS_HISTORY`), `rpc-client-types/src/response.rs` (`epoch_credits: Vec<(Epoch, u64, u64)>`); feature status probed on mainnet-beta, testnet and devnet |
 | agave-sdk | — | — | **Never verified.** Declared as a reference repo and cited for `transaction-view/` (the zero-copy v1 parser and its `sanitize`), but no sync pass has ever recorded a hash here, so there is no diff base. |
 | transaction-v1-examples | — | — | **Never verified.** Cited for `ts/kit/src/estimate.ts` (kit's v1 resource-limit flow); no sync pass has ever recorded a hash, so there is no diff base. |
 
