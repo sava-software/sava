@@ -721,7 +721,9 @@ As of 2026-08-10 — 11 members across four suites (`ed25519` 4, `encoding` 1,
 `-timeouts.csv`. The set grew when `vanity` widened to its whole package, shrank
 when `Base58.limbsLength` became killable, and halved again when four of
 `vanity`'s members turned out to be bounded by a seam no test was using; every
-movement is recorded with its suite below.
+movement is recorded with its suite below. On 2026-09-25 the two stale `ORDER_IF`
+rows described next left the set, which now holds 9 members (`ed25519` 3,
+`encoding` 1, `tx` 1, `vanity` 4).
 
 Two rows came BACK on 2026-08-10 — `ed25519`'s `pack25519` and `vanity`'s
 `SubsequenceRecord.formatCharOptions`, both `ORDER_IF`. They were removed on
@@ -741,8 +743,11 @@ lines are hand-maintained records either way; the never-hand-edit rule covers
 baseline rows and provenance stamps. These two rows are the stale case. Restoring
 them cost one line each and one stale-member advisory per run — cheap against
 the failure it prevents, which is a timeout reappearing at a site whose note
-says it was expected to be gone — and their removal now waits only on the
-adoption certification run naming them, landed as its own reviewed change.
+says it was expected to be gone. The sava-build 21.6.1 adoption certification
+on 2026-09-25 — fresh, full, history-free, its receipts bound to commit
+`50c9728` with clean provenance — was that run: it reported each coordinate as
+"1 audited-timeout row matches no mutant in this run's report", and both lines
+were removed by hand the same day as their own reviewed change.
 
 **A timeout is not one thing, and the difference decides whether a member
 belongs here at all.** Splitting these by their written cause gives two classes.
@@ -760,15 +765,15 @@ package-private visibility and an exact `BigInteger` oracle, which cannot flap,
 needs no warm-up, and killed one more mutant than a measured allocation bound
 did. The harness stays what `AGENTS.md` calls it: a last resort.
 
-**ed25519** (4 retained members, all `Ed25519Util`; 3 observed `TIMED_OUT` in
-the 2026-09-05 certification)
+**ed25519** (3 retained members, all `Ed25519Util`, all observed `TIMED_OUT` in
+the 2026-09-05 and 2026-09-25 certifications)
 
-The three observed members also read `TIMED_OUT` identically solo and under
-gate load in the 2026-07-22 mode comparison. The fourth, `pack25519`, remains
-retained pending retirement as described below.
+The three members also read `TIMED_OUT` identically solo and under gate load in
+the 2026-07-22 mode comparison. A fourth, `pack25519`, was retained from
+2026-08-10 until 2026-09-25, as described below.
 
 - `pack25519:385` (`RemoveConditionalMutator_ORDER_IF` on the `j < 2`
-  reduction-pass loop) — **restored 2026-08-10, retirement pending.** The
+  reduction-pass loop) — **restored 2026-08-10, removed 2026-09-25.** The
   2026-08-08 reading was that the mutant is no longer generated at all: `pack25519` now yields only `ORDER_ELSE`
   (`KILLED`) and `ConditionalsBoundary` at line 385, and exactly one `ORDER_IF`
   remains in the whole ed25519 population (`pow2523:420`). `vanity`'s
@@ -777,9 +782,14 @@ retained pending retirement as described below.
   which reads as a mutator-set change rather than two coincidences. Under the
   stale-row rule (sava-build 21.5.37) that reading needs one fresh full
   history-free run with valid committed provenance that omits the coordinate;
-  the line is then removed by hand and the refactor recorded here. Both rows stay
-  listed until that removal lands as its own reviewed change, and the verify's
-  stale-member advisory names them meanwhile.
+  the line is then removed by hand and the change recorded here. The 2026-09-25
+  certification under sava-build 21.6.1 was that run: it reported the coordinate
+  absent from the population for both rows, and both lines were removed by hand
+  as their own reviewed change. No code moved — `pack25519` and
+  `formatCharOptions` are unchanged since 2026-08-08 — so the absence is the
+  licensed mutator set, which generates `ORDER_ELSE` and `ConditionalsBoundary`
+  at those sites but no `ORDER_IF`. Should an `ORDER_IF` timeout reappear at
+  either site it reads as unaudited and has to be argued afresh.
 - `pow2523:420` (`ORDER_IF` on `a >= 0`): the 2^252−3 exponentiation ladder
   loses its countdown exit.
 - `scalarMultBase:938` (`IncrementsMutator`, `var6 -= 4` → `+= 4`): the
@@ -807,8 +817,9 @@ retained pending retirement as described below.
   `i -> i + PUBLIC_KEY_LENGTH` → `0`): the offset cursor collapses to 0,
   stays below `to` forever, and the join accumulates keys until the watchdog.
 
-**vanity** (5 retained members; 4 observed `TIMED_OUT` in the 2026-09-05
-certification)
+**vanity** (4 retained members, all observed `TIMED_OUT` in the 2026-09-05 and
+2026-09-25 certifications; a fifth, `formatCharOptions`, was retained from
+2026-08-10 until 2026-09-25 as described below)
 
 Every mask worker's search is a `for (;;)` with exactly **two** exits: "found
 enough" (`foundHitLimitOrInterrupted` / `foundLimitOrInterrupted`) and "cap
@@ -851,11 +862,12 @@ budget can bound is not a liveness member, it is an unexercised seam.
 `SubsequenceRecord.formatCharOptions` (`RemoveConditionalMutator_ORDER_IF`)
 was removed on 2026-08-08 for a different reason: the member matched no mutant
 in that report — `formatCharOptions` yielded only `ORDER_ELSE` and
-`ConditionalsBoundary`, both `KILLED`. It was **restored 2026-08-10, retirement
-pending**, and remains the fifth retained member despite being absent from the
-2026-09-05 report. Under the stale-row rule (sava-build 21.5.37) one such fresh
-full history-free run with valid committed provenance is enough: the line is then
-removed by hand as its own reviewed change, never by a writer. This was the known
+`ConditionalsBoundary`, both `KILLED`. It was **restored 2026-08-10** and stayed
+the fifth retained member, absent from the 2026-09-05 report, until the
+2026-09-25 certification under sava-build 21.6.1 reported it absent again. Under
+the stale-row rule (sava-build 21.5.37) that one fresh full history-free run with
+valid committed provenance is enough, and the line was **removed by hand on
+2026-09-25** as its own reviewed change, never by a writer. This was the known
 `KILLED`↔`TIMED_OUT` flapper in the `HARDENING_NOTES.md` mode comparisons.
 
 The fixture bound is worth recording explicitly, since the plugin asks whether a

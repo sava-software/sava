@@ -64,10 +64,24 @@ with 0 failures and 0 errors and every test task executed; the two skips are the
 environment-gated `LiveV1ValidatorCheck` and `LiveMainNetDriftCheck`. `-p jmh jmhClasses`
 also passed; `--warning-mode all` on that build shows one Gradle 11 deprecation,
 `Configuration.setVisible(boolean)`, raised by the `me.champeau.jmh` plugin that
-`software.sava.build.feature.jmh.gradle.kts` applies, reported upstream. This entry records no
-mutation or fuzz observation of its own: the release checklist's `:hardeningCertifyAll`
-and bounded `fuzzAll` campaigns run against the commit that carries it, and their
-machine-local, git-ignored receipts under `.pitest-history/` record their own outcomes.
+`software.sava.build.feature.jmh.gradle.kts` applies, reported upstream.
+
+The release-checklist certification ran the same day from a clean detached worktree of
+the adoption commit `50c9728` (the main tree still carried untracked files at the time):
+`:hardeningCertifyAll` certified 17 suites in 12m 50s under `fresh-full-strict`, writing
+schema-8 project receipts bound to that commit with `gitState clean` and the aggregate
+manifest, with zero `RUN_ERROR` at a load average that started near 7 on 10 cores. It
+ended with 19 advisory findings across 13 scopes, none failing the build: the two stale
+audit rows (`ed25519` `pack25519` and `vanity` `formatCharOptions`, both `ORDER_IF`),
+removed by hand in the follow-up commit under the one-run rule; line drift on 68 `accounts`,
+6 `encoding`, 1 `meta`, 14 `sysvar`, 4 `token2022`, 23 `tx`, 7 `vanity`, 2 `client` and 51
+`ws` accepted keys, which is the 2026-09-24 doc-comment trim moving lines and is a
+`BaselineRetag` candidate per suite, not a record change; and prune-candidate previews
+(`accounts` 4, `decimal` 2, `sysvar` 20, `client` 11, `responses` 4, `ws` 77 rows) that
+a certification observation does not advance. The bounded `fuzzAll` campaign
+(`-PmaxFuzzTime=120 -PmaxParallelFuzzTargets=1`, yesterday's bounds) followed in the
+same worktree; its machine-local, git-ignored receipts under `.pitest-history/` record
+their own outcomes.
 
 ## Released sava-build 21.5.35 — 2026-09-12
 
