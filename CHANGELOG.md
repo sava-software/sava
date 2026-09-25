@@ -1,5 +1,29 @@
 # Changelog
 
+## [25.11.2](https://github.com/sava-software/sava/compare/25.11.1...25.11.2) (2026-09-25)
+
+
+### Features
+
+* **rpc:** carry the response id on JsonRpcException ([e10f301](https://github.com/sava-software/sava/commit/e10f3017b0a394b4f35615d067d8023867d210d7))
+* **rpc:** let callers supply the exchange-deadline scheduler ([f875559](https://github.com/sava-software/sava/commit/f8755596f81e45b3710d6a6136b37ea8f30f7802))
+* **tx:** deprecate the instruction-list createTransaction overloads ([329aa39](https://github.com/sava-software/sava/commit/329aa397767487606caa5220909d126569c67703))
+
+
+### Bug Fixes
+
+* **ci:** restrict build workflow token permissions ([c392365](https://github.com/sava-software/sava/commit/c392365704ce0c1a7f2cba7b4e4de416033434be))
+* **core:** read vanity JSON key-pair arrays as solana-sdk's read_keypair does ([e68f47c](https://github.com/sava-software/sava/commit/e68f47c97e303215ef66f1c504e74679fff6e24e))
+* **rpc:** accumulate response bodies in the client and bound the whole exchange ([4796cbe](https://github.com/sava-software/sava/commit/4796cbe9d8d0bdebbc55e38cd8dfbad09cf13163))
+* **rpc:** follow the built request's timeout, clamp the in-memory inflate buffer, saturate the deadline ([c534044](https://github.com/sava-software/sava/commit/c53404477c5ce041d83250b21ff58948dce000d5))
+* **rpc:** honour gzip and its x-gzip alias anywhere in a Content-Encoding list ([92b935f](https://github.com/sava-software/sava/commit/92b935f0fee9db4c2277bb44928a5e68cba95040))
+* **rpc:** mirror the BailOut transaction and instruction error ([253f77d](https://github.com/sava-software/sava/commit/253f77d43bdf68df14ad60aff81ceffddd5c8b00))
+* **rpc:** read the envelope id best-effort and document the deadline scheduler's thread ([17f2d76](https://github.com/sava-software/sava/commit/17f2d76f9392b857365da34412a9d058600eb130))
+* **rpc:** read the envelope id with one reader on both transports ([4d0fbdd](https://github.com/sava-software/sava/commit/4d0fbddb606475616372374bde26238ee65b1f66))
+* **rpc:** read vote-account epoch credits as u64 so the Alpenglow migration marker parses ([e72e1a3](https://github.com/sava-software/sava/commit/e72e1a35b2ae64d01122367fdab803cd123f8fed))
+* **rpc:** reject JSON key-pair arrays that are not 64 elements ([c35555f](https://github.com/sava-software/sava/commit/c35555fd9faab249a12fbd3c92eddf12cf0c477d))
+* **rpc:** schedule the exchange deadline only after the request is submitted ([2f1bbb1](https://github.com/sava-software/sava/commit/2f1bbb1b50e2618257f82828655671807e44bd4a))
+
 ## [25.11.1](https://github.com/sava-software/sava/compare/25.11.0...25.11.1) (2026-09-12)
 
 
