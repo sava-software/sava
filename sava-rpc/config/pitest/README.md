@@ -495,10 +495,14 @@ fresh 2026-08-11 full run produced three timed-out mutants: two
   interrupt is only the fixture's emergency exit.
 - **`SolanaJsonRpcWebsocket.closed` `ORDER_ELSE`.** Forcing `msgId < 0` false prevents the close
   sentinel from ever ending the maintenance loop. It was killed in the current
-  run, but remains in the audited set until the liveness-retirement rule has
-  three distinct fresh quiet full runs over identical evidence inputs and the
-  required solo/gate confirmation. It is not counted among the current three
-  timed-out mutants.
+  run, so its coordinate is still in the population: that is the *quiet* case,
+  not a stale row. It stays in the audited set until the tool's 3+ distinct fresh
+  full-run quiet notice over identical evidence inputs and the solo/gate
+  confirmation, after which its membership line is removed by hand — since
+  sava-build 21.5.37 every timeout membership line is hand-maintained and no
+  writer retires one. Only a coordinate that leaves the population altogether is
+  removed after a single fresh history-free run with valid committed provenance.
+  It is not counted among the current three timed-out mutants.
 
 The old `run`, `close`, connect-lambda, `connect`, `checkCycle`, and
 `ensureCapacity` timeout members were removed. Their mutation sites were

@@ -9,6 +9,66 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.6.1 — 2026-09-25
+
+All three plugin pins now read the published `software.sava:sava-build:21.6.1`, crossing
+21.5.36 through 21.6.1 from 21.5.35. In the root build, `:sava-core:savaBuildIdentity`
+reported that resolved coordinate, the Gradle-cache path of the loaded jar, and JAR SHA-256
+`646c5a434279b790b9cc88c5e9bdc51f54a3e84ebefc7ff467c0f3ed08e17ce8`; the separate JMH
+build registers no identity task and was exercised by a fresh configure and compile
+against the same pin. The identity's "local override: not verified" line records that no
+local test publication was resolved — it is not a provenance failure. `gh attestation
+verify` bound that JAR (with its sources and javadoc jars) to a SLSA v1 provenance
+statement signed by `.github/workflows/gradle_plugin_publish.yml` at `refs/tags/21.6.1`,
+source commit `c58aad458a72710a6a75c70c6805ed97a922b265`.
+
+The hardening template gate is gone. 21.5.37 removed `agentsTemplateInSync` from `check`,
+deleted `hardeningAgentTemplateDiff`, and made the `hardening-template` digest marker
+inert, so `AGENTS.md` dropped its marker (digest `714041431f01`) and the 267-line bounded
+block was replaced by the 45 lines the installed `:sava-core:hardeningAgentTemplate`
+prints. Nothing checks that copy any more; `AGENTS.md` says when to re-take it. The same
+release made timeout membership lines hand-maintained records and added the stale-row
+rule — a member whose line-less coordinate has left the population is removed by hand
+after one fresh history-free run with valid committed provenance omits it — which both
+modules' `config/pitest/README.md` now state in place of the three-consecutive-quiet-runs
+prose; the quiet-streak rule for a member whose mutant is still generated is unchanged.
+Clean certification and `fuzzAll` also now refuse source-set inputs (and fuzz seed-corpus
+files) that the captured tree does not bind, naming each path, so the local scratch
+driver `Integ.java` moved out of `sava-rpc/src/main/java` into `sava-rpc/scratch/`, where
+the existing `Integ.*` ignore rule still covers it (the directory itself is not ignored);
+two Finder `.DS_Store` files were also removed from `sava-rpc/src/test`, as hygiene rather
+than a refusal, since Gradle's default excludes keep them out of source-set inputs. With
+nothing named `Integ` compiling, sava-rpc's `recompileExcludes` and the client suite's
+`Integ*` exclusion were dead and were removed.
+`:sava-rpc:mutationOwnershipAudit` reports 286 production classes owned, 0 declined.
+
+The toolchain is unchanged — PIT 1.30.0 and ArcMutate base 1.7.2 were already the
+21.5.35 configuration, and every suite carrying records is stamped with them — so no
+`BaselineRebase` was expected or needed.
+
+Publishing changed in 21.6.0. `gradle/aggregation/build.gradle.kts` now wires the modules
+into `centralPortalAggregation` (was `nmcpAggregation`), and the hand-written
+`publishToGitHubPackages` task is gone because the plugin registers it: its `--dry-run`
+graph lists `:sava-core:uploadToGitHubPackages`, `:sava-rpc:uploadToGitHubPackages` and
+`:aggregation:publishToGitHubPackages` with no deprecation line, and
+`:aggregation:publishAggregationToCentralPortal --dry-run` still configures, so
+`publish.yml` is unchanged. The Central bundle drops `.sha512` by default and keeps the
+`.md5` and `.sha1` Central requires — measured on the upstream scratch clone as 40 files
+becoming 30 unsigned and 50 becoming 40 signed against Central's monthly allowance — and
+javadoc jars no longer carry `legal/dejavufonts.md`. A module's `publish` uploads to
+GitHub Packages, as it did before 21.6.0 through the Maven repository, so no publish task
+in this pass ran without `--dry-run`.
+
+`test --rerun check` executed 1,723 tests — sava-core 767, sava-rpc 941, sava-vanity 15 —
+with 0 failures and 0 errors and every test task executed; the two skips are the
+environment-gated `LiveV1ValidatorCheck` and `LiveMainNetDriftCheck`. `-p jmh jmhClasses`
+also passed; `--warning-mode all` on that build shows one Gradle 11 deprecation,
+`Configuration.setVisible(boolean)`, raised by the `me.champeau.jmh` plugin that
+`software.sava.build.feature.jmh.gradle.kts` applies, reported upstream. This entry records no
+mutation or fuzz observation of its own: the release checklist's `:hardeningCertifyAll`
+and bounded `fuzzAll` campaigns run against the commit that carries it, and their
+machine-local, git-ignored receipts under `.pitest-history/` record their own outcomes.
+
 ## Released sava-build 21.5.35 — 2026-09-12
 
 All three plugin pins now read the published `software.sava:sava-build:21.5.35`. In the
@@ -469,11 +529,15 @@ expected rather than a signal to retune. `ws` is the suite to watch — its `che
 
 ## Plugin knobs and generated scaffolding — what this repo uses
 
-- **`recompileExcludes = listOf("Integ.java")`** (sava-rpc): `Integ.java` is a
-  git-ignored scratch driver in `src/main/java`, so without the exclusion the
-  PIT/Jazzer recompiles compile a different source set here than in CI. The
-  suite's `excludedClasses` already kept it out of the mutant population; this
-  keeps it off the tool class path too.
+- **No `recompileExcludes`.** sava-rpc carried `recompileExcludes = listOf("Integ.java")`
+  while `Integ.java`, a git-ignored scratch driver, lived in `src/main/java`, so that
+  the PIT/Jazzer recompiles would not compile a different source set here than in CI.
+  From sava-build 21.5.37 a clean certification or fuzz campaign refuses any
+  source-set input (or fuzz seed-corpus file) that the captured Git tree does not
+  bind, naming each path, and `recompileExcludes` does not exempt it; the driver
+  now lives in `sava-rpc/scratch/`, still ignored by the `Integ.*` name rule, and
+  the knob and the client suite's matching `Integ*` exclusion are gone. Keep
+  scratch code outside `src/`, under a name an ignore rule covers.
 - **`-PmutateOnly=<class-glob>`** is the iteration loop for killing a cluster
   (tests still run in full; the report is stamped `.scoped` and cannot touch a
   baseline). `pitest<Suite>Debt` ranks the remaining debt by class.

@@ -27,12 +27,6 @@ testModuleInfo {
 }
 
 hardening {
-  // Integ.java is a git-ignored local scratch driver in src/main/java: present on a
-  // dev machine, absent in CI, so the PIT/Jazzer recompiles would compile a different
-  // source set in each place. The suite's excludedClasses already keep it out of the
-  // mutant population; this keeps it out of the tool class path too.
-  recompileExcludes = listOf("Integ.java")
-
   mutation.register("encoding") {
     // key encodings crossing the JSON boundary, plus the request-shaping enums.
     // RpcEncoding is deliberately missing a jsonParsed constant (AGENTS.md), which
@@ -61,9 +55,7 @@ hardening {
       "software.sava.rpc.json.http.client.*Test*",
       "software.sava.rpc.json.http.client.*Check*",
       "software.sava.rpc.json.http.client.Stub*",
-      "software.sava.rpc.json.http.client.*Fuzz*",
-      // a git-ignored local scratch driver; not part of the build contract
-      "software.sava.rpc.json.http.client.Integ*"
+      "software.sava.rpc.json.http.client.*Fuzz*"
     )
     targetTests = "software.sava.rpc.json.http.client.*Test*"
     // fluent receiver-returning calls (iterator chains, builder-style writes) are

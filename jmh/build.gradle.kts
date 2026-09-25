@@ -3,7 +3,7 @@ import java.util.Properties
 plugins {
   java
   // Keep in sync with the root build's settings.gradle.kts plugins block.
-  id("software.sava.build.feature.jmh") version "21.5.35"
+  id("software.sava.build.feature.jmh") version "21.6.1"
 }
 
 val gprUser = providers.gradleProperty("savaGithubPackagesUsername").orNull

@@ -726,13 +726,23 @@ movement is recorded with its suite below.
 Two rows came BACK on 2026-08-10 — `ed25519`'s `pack25519` and `vanity`'s
 `SubsequenceRecord.formatCharOptions`, both `ORDER_IF`. They were removed on
 2026-08-08 on the argument that the mutator set no longer generates them, which
-may well be right; what it was not is *measured* under the retirement protocol
-the current plugin enforces, which asks for three consecutive quiet runs before
-a member leaves. A single run that does not produce a mutant looks exactly like
-a run that was lucky. Restoring them costs one line each and one quiet-member
-advisory per run until the protocol is satisfied — cheap against the failure it
-prevents, which is a timeout reappearing at a site whose note says it was
-expected to be gone.
+may well be right; what it was not is *measured*: the retirement rule as then
+written asked for three consecutive quiet runs, this note read an absent mutant
+as no different from a quiet one, and a single run that does not produce a
+mutant looked exactly like a run that was lucky. sava-build 21.5.37 wrote the
+distinction between the two ways a member stops timing out into the rule.
+A member whose mutant is still generated but no longer times out is *quiet*: it
+leaves only after the tool's 3+ distinct fresh full-run quiet notice over
+identical evidence inputs and a solo/gate confirmation. A member whose line-less
+coordinate no longer appears at all in a fresh full history-free report with
+valid committed provenance is *stale*: no writer retires it, and its line is
+removed by hand after that one run, with the refactor recorded here. Membership
+lines are hand-maintained records either way; the never-hand-edit rule covers
+baseline rows and provenance stamps. These two rows are the stale case. Restoring
+them cost one line each and one stale-member advisory per run — cheap against
+the failure it prevents, which is a timeout reappearing at a site whose note
+says it was expected to be gone — and their removal now waits only on the
+adoption certification run naming them, landed as its own reviewed change.
 
 **A timeout is not one thing, and the difference decides whether a member
 belongs here at all.** Splitting these by their written cause gives two classes.
@@ -764,10 +774,12 @@ retained pending retirement as described below.
   remains in the whole ed25519 population (`pow2523:420`). `vanity`'s
   `SubsequenceRecord.formatCharOptions:148` went stale the same way in the same
   pass — two `ORDER_IF` rows whose branches now produce only `ORDER_ELSE` —
-  which reads as a mutator-set change rather than two coincidences. That reading
-  now has to earn its retirement the same way every other member does: three
-  consecutive runs with no such mutant. Until then both rows stay listed, and the
-  verify's quiet-member advisory is the countdown.
+  which reads as a mutator-set change rather than two coincidences. Under the
+  stale-row rule (sava-build 21.5.37) that reading needs one fresh full
+  history-free run with valid committed provenance that omits the coordinate;
+  the line is then removed by hand and the refactor recorded here. Both rows stay
+  listed until that removal lands as its own reviewed change, and the verify's
+  stale-member advisory names them meanwhile.
 - `pow2523:420` (`ORDER_IF` on `a >= 0`): the 2^252−3 exponentiation ladder
   loses its countdown exit.
 - `scalarMultBase:938` (`IncrementsMutator`, `var6 -= 4` → `+= 4`): the
@@ -841,7 +853,9 @@ was removed on 2026-08-08 for a different reason: the member matched no mutant
 in that report — `formatCharOptions` yielded only `ORDER_ELSE` and
 `ConditionalsBoundary`, both `KILLED`. It was **restored 2026-08-10, retirement
 pending**, and remains the fifth retained member despite being absent from the
-2026-09-05 report. This was the known
+2026-09-05 report. Under the stale-row rule (sava-build 21.5.37) one such fresh
+full history-free run with valid committed provenance is enough: the line is then
+removed by hand as its own reviewed change, never by a writer. This was the known
 `KILLED`↔`TIMED_OUT` flapper in the `HARDENING_NOTES.md` mode comparisons.
 
 The fixture bound is worth recording explicitly, since the plugin asks whether a
