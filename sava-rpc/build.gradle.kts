@@ -27,6 +27,10 @@ testModuleInfo {
 }
 
 hardening {
+  // The git-ignored Integ.java driver lives in the test sources on a dev machine and
+  // nowhere in CI; kept out of the PIT/Jazzer recompile, it cannot make this checkout's
+  // mutant population or tool class path differ from CI's.
+  recompileExcludes = listOf("Integ.java")
   mutation.register("encoding") {
     // key encodings crossing the JSON boundary, plus the request-shaping enums.
     // RpcEncoding is deliberately missing a jsonParsed constant (AGENTS.md), which

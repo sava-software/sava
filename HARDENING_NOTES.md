@@ -370,9 +370,9 @@ from a downstream Rust adaptation's practice).
   the ordinary one — its 20 surviving rows are argued acceptances; the
   parse-failure diagnostic logs are asserted through the JUL backend and no
   longer count among them.
-- **Excluded main-source classes**: `Integ` (git-ignored scratch driver) is
-  the one deliberate production-class exclusion; fuzz harnesses are
-  test-source and auto-excluded by the plugin.
+- **Excluded main-source classes**: none. The git-ignored `Integ` driver lives
+  in the test sources and is kept out of the recompile (below); fuzz harnesses
+  are test-source and auto-excluded by the plugin.
 - **No JPMS services** (verified 2026-07-22), so the class-path/module-path
   divergence PIT introduces is currently moot — revisit if a service is ever
   declared.
@@ -543,15 +543,15 @@ expected rather than a signal to retune. `ws` is the suite to watch — its `che
 
 ## Plugin knobs and generated scaffolding — what this repo uses
 
-- **No `recompileExcludes`.** sava-rpc carried `recompileExcludes = listOf("Integ.java")`
-  while `Integ.java`, a git-ignored scratch driver, lived in `src/main/java`, so that
-  the PIT/Jazzer recompiles would not compile a different source set here than in CI.
-  From sava-build 21.5.37 a clean certification or fuzz campaign refuses any
-  source-set input (or fuzz seed-corpus file) that the captured Git tree does not
-  bind, naming each path, and `recompileExcludes` does not exempt it; the driver
-  now lives in `sava-rpc/scratch/`, still ignored by the `Integ.*` name rule, and
-  the knob and the client suite's matching `Integ*` exclusion are gone. Keep
-  scratch code outside `src/`, under a name an ignore rule covers.
+- **`recompileExcludes = listOf("Integ.java")` (sava-rpc).** The git-ignored
+  `Integ.java` driver lives in sava-rpc's test sources, in its own package
+  (`software.sava.rpc.json.http.client`), where it compiles but never reaches the
+  jar or the ownership audit; the knob keeps it out of the PIT/Jazzer recompiles,
+  so a checkout with it mutates the same classes as CI. A clean certification or
+  fuzz campaign still refuses a git-ignored file in the main or test sources
+  (sava-build 21.5.37+), so certify and fuzz from a clean `git worktree add
+  --detach` of the commit, which has none, as the 21.6.1 adoption did. It sat in
+  `sava-rpc/scratch/` from 2026-09-25 until it moved back on 2026-09-26.
 - **`-PmutateOnly=<class-glob>`** is the iteration loop for killing a cluster
   (tests still run in full; the report is stamped `.scoped` and cannot touch a
   baseline). `pitest<Suite>Debt` ranks the remaining debt by class.
