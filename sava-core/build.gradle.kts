@@ -3,7 +3,13 @@ plugins {
   id("sava.docs-in-sync")
 }
 
+dependencies {
+  // Independently validate the JSON written for encrypted key files.
+  testImplementation("com.google.code.gson:gson:2.14.0")
+}
+
 testModuleInfo {
+  requires("com.google.gson")
   requires("org.junit.jupiter.api")
   runtimeOnly("org.junit.jupiter.engine")
 }

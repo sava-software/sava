@@ -71,18 +71,22 @@ public record EncryptionEnvelope(KeyDerivation keyDerivation,
     ));
   }
 
+  /// Serializes the envelope with KDF parameters in a nested JSON object named `kdf`.
+  ///
+  /// @param prefix optional raw JSON members to prepend; a nonblank fragment must be
+  ///               valid object members ending with a comma, not a quoted string
   public String toJson(final String prefix) {
     final var encoder = Base64.getEncoder();
     return String.format(
         """
             {
             %s
-              "kdf": "%s",
+              "kdf": %s,
               %s"salt": "%s",
               "iv": "%s",
               "secret": "%s"
             }""",
-        prefix == null || prefix.isBlank() ? "" : prefix.indent(2).strip(),
+        prefix == null ? "" : prefix.indent(2).strip(),
         keyDerivation.toJson().indent(2).strip(),
         aad == null || aad.length == 0 ? "" : "\"aad\": \"" + encoder.encodeToString(aad) + "\",\n  ",
         encoder.encodeToString(salt),

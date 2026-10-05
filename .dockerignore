@@ -9,3 +9,8 @@
 !gradlew
 
 !.dockerignore
+
+**/build/
+**/.gradle/
+**/.kotlin/
+**/out/

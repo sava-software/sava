@@ -1,19 +1,29 @@
 package software.sava.core.accounts.vanity;
 
+import com.google.gson.JsonParser;
+import com.google.gson.Strictness;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.pbkdf.KeyDerivation;
 import software.sava.core.accounts.pbkdf.PBKDFEncryption;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.GeneralSecurityException;
+import java.security.Signature;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,7 +48,7 @@ final class KeyFileRoundTripTests {
     final var results = new ArrayBlockingQueue<Result>(1);
     new BeginsWithMaskWorker(
         keyPath, password, new FixedSeedSecureRandom(seed), encoding, format, keyDerivation, false,
-        null, 1, new AtomicInteger(0), new AtomicLong(0), results, 1024, Long.MAX_VALUE
+        null, 1, new AtomicInteger(0), new AtomicLong(0), results, 1024, 1
     ).run();
     final var result = results.poll();
     assertNotNull(result, "worker returned without queueing a result");
@@ -207,6 +217,80 @@ final class KeyFileRoundTripTests {
     assertEquals(result.publicKey().toBase58(), properties.getProperty("pubKey"));
     final byte[] decrypted = PBKDFEncryption.decrypt("", properties, password);
     assertArrayEquals(result.keyPair(), decrypted);
+  }
+
+  /// Defensive regression for this library's encrypted vanity-file writer: an entire saved
+  /// JSON document must parse, and only its persisted fields must recover a signing key.
+  /// The worker's reported pair and JDK Ed25519 verification are independent of serialization.
+  @Test
+  @Timeout(120)
+  @ResourceLock("argon2id")
+  void encryptedJsonFilesRecoverSigningKeys(@TempDir final Path tempDir)
+      throws IOException, GeneralSecurityException {
+    final var password = "synthetic JSON regression password".toCharArray();
+    final var derivations = List.of(
+        KeyDerivation.createPBKDF2WithHmacSHA512(500_000),
+        KeyDerivation.createArgon2id(19_456, 1, 1)
+    );
+    final var names = List.of("PBKDF2WithHmacSHA512", "Argon2id");
+    for (int i = 0; i < derivations.size(); ++i) {
+      final var dir = Files.createDirectories(tempDir.resolve(names.get(i)));
+      final var result = generateInto(FixedSeedSecureRandom.SEEDS[i], dir, password,
+          PrivateKeyEncoding.base58KeyPair, KeyFileFormat.json, derivations.get(i));
+      final var file = soleFile(dir);
+      assertEquals(result.publicKey().toBase58() + ".json", file.getFileName().toString());
+
+      try (final var reader = new JsonReader(new StringReader(Files.readString(file)))) {
+        reader.setStrictness(Strictness.STRICT);
+        final var json = JsonParser.parseReader(reader).getAsJsonObject();
+        assertEquals(JsonToken.END_DOCUMENT, reader.peek(), "the entire saved file must be JSON");
+        assertEquals(Set.of("pubKey", "kdf", "aad", "salt", "iv", "secret"), json.keySet());
+        assertEquals(result.publicKey().toBase58(), json.get("pubKey").getAsString());
+        assertTrue(json.get("kdf").isJsonObject(), "KDF metadata must be a nested object");
+        final var kdf = json.getAsJsonObject("kdf");
+        assertEquals(names.get(i), kdf.get("kdf").getAsString());
+        final KeyDerivation persistedDerivation;
+        if (kdf.get("kdf").getAsString().equals("PBKDF2WithHmacSHA512")) {
+          assertEquals(Set.of("kdf", "iterations"), kdf.keySet());
+          assertEquals(500_000, kdf.get("iterations").getAsInt());
+          persistedDerivation = KeyDerivation.createPBKDF2WithHmacSHA512(kdf.get("iterations").getAsInt());
+        } else {
+          assertEquals(Set.of("kdf", "iterations", "memoryKB", "parallelism"), kdf.keySet());
+          assertEquals(1, kdf.get("iterations").getAsInt());
+          assertEquals(19_456, kdf.get("memoryKB").getAsInt());
+          assertEquals(1, kdf.get("parallelism").getAsInt());
+          persistedDerivation = KeyDerivation.createArgon2id(kdf.get("memoryKB").getAsInt(),
+              kdf.get("parallelism").getAsInt(), kdf.get("iterations").getAsInt());
+        }
+
+        final var decoder = Base64.getDecoder();
+        final var aad = decoder.decode(json.get("aad").getAsString());
+        final var salt = decoder.decode(json.get("salt").getAsString());
+        final var iv = decoder.decode(json.get("iv").getAsString());
+        final var cipherText = decoder.decode(json.get("secret").getAsString());
+        assertArrayEquals(result.publicKey().toByteArray(), aad);
+        assertEquals(16, salt.length);
+        assertEquals(12, iv.length);
+        assertEquals(80, cipherText.length, "64-byte key pair plus 16-byte GCM tag");
+        final var recoveredPair = PBKDFEncryption.decrypt(password, persistedDerivation, aad, salt, iv, cipherText);
+        assertArrayEquals(result.keyPair(), recoveredPair);
+        final var recoveredSigner = Signer.createFromKeyPair(recoveredPair);
+        assertEquals(result.publicKey(), recoveredSigner.publicKey());
+        final var challenge = "sava encrypted JSON public signing challenge".getBytes(StandardCharsets.UTF_8);
+        final var signature = recoveredSigner.sign(challenge);
+        assertTrue(result.publicKey().verifySignature(challenge, signature));
+        final var verifier = Signature.getInstance("Ed25519", "SunEC");
+        verifier.initVerify(result.publicKey().toJavaPublicKey());
+        verifier.update(challenge);
+        assertTrue(verifier.verify(signature), "JDK must verify against the worker's expected public key");
+        final var tamperedChallenge = challenge.clone();
+        tamperedChallenge[0] ^= 1;
+        assertFalse(result.publicKey().verifySignature(tamperedChallenge, signature));
+        verifier.initVerify(result.publicKey().toJavaPublicKey());
+        verifier.update(tamperedChallenge);
+        assertFalse(verifier.verify(signature));
+      }
+    }
   }
 
   /// Writing uses CREATE_NEW, so a collision surfaces rather than overwriting a

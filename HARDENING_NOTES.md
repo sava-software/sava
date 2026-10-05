@@ -323,9 +323,41 @@ alongside `*Test*` (which also matches `TestClock`).
 ## sava-vanity
 
 Has a test source set (`EntrypointTests` — system-property parsing, key-path
-resolution) but no PIT suite. It is an application module whose `module-info`
-exports nothing, so its helpers are package-private by choice rather than by
-accident.
+resolution; `VerifyKeyTests` — saved encrypted properties recovery, expected-address
+matching, explicit legacy Docker password decoding, heap preflight, and signing checks
+that require both verifiers to accept the original and reject a changed message;
+`VerifyKeyLauncherTests` — the Bash launchers against isolated process stubs) but no
+PIT suite. Injected verifier/signer failures are asserted through the command runner;
+removing its signing block must fail those tests. The launcher tests run in the module's
+ordinary `test` task, so `check` covers them: `LauncherHarness` copies `verifyKey.sh` and
+`genKeys.sh` into a directory tree of hostile names and stubs `java`, `docker` and
+`gradlew` with Bash scripts that record their arguments, the password variable and the
+three JVM-option variables, distinguishing an unset variable from an empty one. Both
+scripts, the host shell's version and the kernel release are declared inputs of `test`, so
+an edited script or a different host shell re-runs it rather than restoring a cached result.
+Launcher coverage includes the exact verifier module and local/Docker heap arguments,
+overflow and final heap-option precedence, clearing runtime JVM environment overrides,
+UTF-8 locale preflight, physical parent-directory resolution through symlinks and `..`,
+and Docker rejection of commas, double quotes and newlines in key paths.
+The cases that need a real terminal — the launcher's `-t` check before `docker run -it`
+and the verifier's console prompt — use `Pty`, a pseudo-terminal opened through the FFM
+linker (`posix_openpt` and friends in libc); `test` therefore grants native access to the
+patched `software.sava.vanity` module and `testVerifyKeyRuntime`, which runs on the class
+path, to `ALL-UNNAMED`, and no external utility such as `script(1)` or Python is involved. `:sava-vanity:check` and root `check` therefore
+require a POSIX host with `/bin/bash`; Windows is unsupported. On Linux the test tasks
+pin the test JVM's locale to `C.UTF-8`, because the JDK encodes child command lines and
+environments with the locale's charset (`sun.jnu.encoding`, not overridable) and a
+non-ASCII password would otherwise reach the launcher as `?` under `LC_ALL=C`; the
+harness fails with that explanation when a JVM runs under another encoding.
+The opt-in `testVerifyKeyRuntime` task runs `VerifyKeyRuntimeTests` (tagged `runtime`
+and excluded from `test`) from the same source set on the class path against the built
+jlink image, exercising the JVM's environment and real console input with public RFC
+8032 fixtures generated in-process; `-PverifyKeyDockerImage=<existing-image>` adds
+Docker and `-PverifyKeyRuntimeTimeout=<seconds>` widens the per-invocation bound. The
+task builds the image, is never UP-TO-DATE, and needs Docker plus an existing explicitly
+selected image for the Docker cases, which it does not build.
+It is an application module whose `module-info` exports nothing, so its helpers are
+package-private by choice rather than by accident.
 
 ## What the ratchet cannot see (sava's instance)
 

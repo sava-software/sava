@@ -256,6 +256,19 @@ if [[ -z "$outDir" ]]; then
   exit 2;
 fi
 
+# Password bytes must have the same meaning when the saved file is verified.
+# Docker supplies its own UTF-8 locale; local encryption requires one on the host.
+if [[ -z "$dockerImage" && "$encrypt" == "true" ]]; then
+  if ! hostCharset="$(locale charmap)"; then
+    printf '%s\n' 'Unable to determine the local character encoding; select an installed UTF-8 locale for encrypted-key generation.' >&2
+    exit 2
+  fi
+  if [[ ! "$hostCharset" =~ ^[uU][tT][fF]-?8$ ]]; then
+    printf '%s\n' 'Local encrypted-key generation requires a UTF-8 locale; select an installed UTF-8 locale using LANG or LC_ALL.' >&2
+    exit 2
+  fi
+fi
+
 if [[ -n "$encrypt" ]]; then
   jvmArgs="$jvmArgs -D$moduleName.encrypt=$encrypt"
 fi

@@ -1,9 +1,9 @@
 ARG PROJECT="sava-vanity"
-ARG MAJOR_JAVA_VERSION="26"
+ARG MAJOR_JAVA_VERSION="27"
 ARG SAVA_OPENJDK_IMAGE="jpe7s/sava-openjdk"
-ARG SAVA_OPENJDK_TAG="26.0.1-debian-trixie"
-# `docker buildx imagetools inspect <image>:<tag> --format '{{.Manifest.Digest}}'`).
-ARG SAVA_OPENJDK_DIGEST="sha256:699e51b11e6fedce8df1eb44857d17fd1809dfec3fac785a8d2dac9362de026b"
+ARG SAVA_OPENJDK_TAG="27.0.2-jdk27-debian-trixie"
+# docker buildx imagetools inspect <image>:<tag> --format '{{.Manifest.Digest}}'
+ARG SAVA_OPENJDK_DIGEST="sha256:9bd0ee26845c6ea829a353918c3b1f10df6438f9dfa7a5539c3b46454cf9a788"
 # UID:GID for the unprivileged build and runtime users. Numeric on purpose: the
 # final image is FROM scratch (no /etc/passwd), so the runtime user can only be
 # referenced by id.
@@ -26,6 +26,7 @@ COPY --chown=build:build settings.gradle.kts .
 COPY --chown=build:build gradle.properties .
 COPY --chown=build:build gradle/modules.properties gradle/sava.properties ./gradle/
 COPY --chown=build:build gradle/wrapper ./gradle/wrapper
+COPY --chown=build:build gradle/plugins ./gradle/plugins
 
 ARG CACHEBUST
 
@@ -47,8 +48,11 @@ RUN --mount=type=cache,target=/home/build/.gradle,uid=${BUILD_UID},gid=${BUILD_U
 
 FROM scratch
 
+# Includes glibc's UTF-8 locale for environment/console passwords.
 COPY --from=jlink /rootfs-libs/ /
-COPY --from=jlink /rootfs/tmp /tmp
+# Copy the parent tree to preserve /tmp's 1777 mode for the runtime user.
+COPY --from=jlink /rootfs/ /
+ENV LANG=C.UTF-8
 
 WORKDIR /sava
 
