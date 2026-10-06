@@ -9,6 +9,15 @@ import java.util.Map;
 
 public record AccountIndexLookupTableEntry(byte[] publicKey, int index) implements PublicKey {
 
+  /// @throws IllegalArgumentException if `publicKey` is not [#PUBLIC_KEY_LENGTH] bytes
+  public AccountIndexLookupTableEntry {
+    if (publicKey.length != PUBLIC_KEY_LENGTH) {
+      throw new IllegalArgumentException(String.format(
+          "Public key needs %d bytes, but %d were given.", PUBLIC_KEY_LENGTH, publicKey.length
+      ));
+    }
+  }
+
   public static int lookupAccountIndex(final AccountIndexLookupTableEntry[] lookupTable, final PublicKey publicKey) {
     final int index = Arrays.binarySearch(lookupTable, publicKey);
     if (index < 0) {

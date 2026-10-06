@@ -174,6 +174,23 @@ final class AccountIndexLookupTableTests {
     assertNotEquals(entry.hashCode(), new AccountIndexLookupTableEntry(key(6), 1).hashCode());
   }
 
+  /// A key is 32 bytes, as `PublicKey.createPubKey` already insists. An entry over any other
+  /// length used to construct: a longer one then disagreed with a view of its first 32 bytes
+  /// about order and equality, and a shorter one made a view's `compareTo` and `equals` throw.
+  @Test
+  void entryRejectsKeysThatAreNotThirtyTwoBytes() {
+    for (final int length : new int[]{0, PUBLIC_KEY_LENGTH - 1, PUBLIC_KEY_LENGTH + 1, PUBLIC_KEY_LENGTH << 1}) {
+      final byte[] keyBytes = new byte[length];
+      assertThrows(IllegalArgumentException.class, () -> PublicKey.createPubKey(keyBytes));
+      final var exception = assertThrows(
+          IllegalArgumentException.class,
+          () -> new AccountIndexLookupTableEntry(keyBytes, 1)
+      );
+      assertEquals("Public key needs 32 bytes, but " + length + " were given.", exception.getMessage());
+    }
+    assertThrows(NullPointerException.class, () -> new AccountIndexLookupTableEntry(null, 1));
+  }
+
   /// One backing array holding three keys behind a junk prefix, so every view offset is
   /// non-zero and offset-arithmetic mutants cannot hide at offset 0.
   private static byte[] backingTable() {
@@ -265,5 +282,34 @@ final class AccountIndexLookupTableTests {
 
     assertEquals(view.hashCode(), PublicKey.createPubKey(key(4)).hashCode());
     assertNotEquals(view.hashCode(), view(table, 2).hashCode());
+  }
+
+  /// A view's 32 bytes must lie inside its table: the windows `PublicKey.readPubKey` accepts.
+  /// Where a window overhung the table's end, `toByteArray` used to pad the missing bytes with
+  /// zeros while the view's own `compareTo` threw.
+  @Test
+  void viewRejectsWindowsThatLeaveTheTable() {
+    final byte[] table = backingTable();
+    final int lastOffset = table.length - PUBLIC_KEY_LENGTH;
+    for (final int offset : new int[]{0, lastOffset}) {
+      assertArrayEquals(
+          PublicKey.readPubKey(table, offset).toByteArray(),
+          new AccountIndexLookupTableView(table, offset, 0).toByteArray(),
+          "offset " + offset
+      );
+    }
+    for (final int offset : new int[]{Integer.MIN_VALUE, -1, lastOffset + 1, table.length, table.length + 1, Integer.MAX_VALUE}) {
+      assertThrows(IndexOutOfBoundsException.class, () -> PublicKey.readPubKey(table, offset), "offset " + offset);
+      assertThrows(
+          IndexOutOfBoundsException.class,
+          () -> new AccountIndexLookupTableView(table, offset, 0),
+          "offset " + offset
+      );
+    }
+    assertThrows(
+        IndexOutOfBoundsException.class,
+        () -> new AccountIndexLookupTableView(new byte[PUBLIC_KEY_LENGTH - 1], 0, 0)
+    );
+    assertThrows(NullPointerException.class, () -> new AccountIndexLookupTableView(null, 0, 0));
   }
 }

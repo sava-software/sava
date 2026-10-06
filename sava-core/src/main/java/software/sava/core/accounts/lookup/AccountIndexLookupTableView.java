@@ -5,10 +5,17 @@ import software.sava.core.encoding.Base58;
 
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Objects;
 
 public record AccountIndexLookupTableView(byte[] lookupTable,
                                           int offset,
                                           int index) implements PublicKey {
+
+  /// @throws IndexOutOfBoundsException if the [#PUBLIC_KEY_LENGTH] bytes at `offset` are not
+  ///                                   all inside `lookupTable`
+  public AccountIndexLookupTableView {
+    Objects.checkFromIndexSize(offset, PUBLIC_KEY_LENGTH, lookupTable.length);
+  }
 
   @Override
   public byte[] toByteArray() {

@@ -468,9 +468,9 @@ transaction signing.
   `/private/tmp/sava-merge-helper-preview2.log`, and
   `/private/tmp/sava-merge-helper-prune.log`.
 - `AccountIndexLookupTableView.compareTo`, `RemoveConditionalMutator_EQUAL_ELSE`:
-  for views of complete 32-byte keys, forcing the view-specific branch off
-  compares the same key bytes through `toByteArray`. The cross-table comparison
-  was fixed on 2026-07-21 and is pinned by
+  a view's constructor admits only a complete 32-byte key, so forcing the
+  view-specific branch off compares the same key bytes through `toByteArray`.
+  The cross-table comparison was fixed on 2026-07-21 and is pinned by
   `AccountIndexLookupTableTests.viewCompareToReadsTheOtherViewsBackingTable`.
   No current row in this family belongs to transaction signing.
 
