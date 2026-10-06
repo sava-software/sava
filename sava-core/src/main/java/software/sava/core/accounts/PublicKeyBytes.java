@@ -162,7 +162,7 @@ final class PublicKeyBytes implements PublicKey {
   @Override
   public int compareTo(final PublicKey o) {
     if (o instanceof PublicKeyBytes publicKeyBytes) {
-      return Arrays.compare(this.publicKey, 0, PUBLIC_KEY_LENGTH, publicKeyBytes.publicKey, 0, PUBLIC_KEY_LENGTH);
+      return Arrays.compareUnsigned(this.publicKey, 0, PUBLIC_KEY_LENGTH, publicKeyBytes.publicKey, 0, PUBLIC_KEY_LENGTH);
     } else {
       return -o.compareTo(this);
     }

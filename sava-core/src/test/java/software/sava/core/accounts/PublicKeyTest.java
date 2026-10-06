@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 import software.sava.core.borsh.Borsh;
 import software.sava.core.crypto.ed25519.Ed25519Util;
 
+import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
@@ -83,6 +85,95 @@ final class PublicKeyTest {
   public void equals() {
     final var key = PublicKey.fromBase58Encoded("11111111111111111111111111111111");
     assertNotEquals(key, PublicKey.fromBase58Encoded("11111111111111111111111111111112"));
+  }
+
+  /// Solana orders addresses by their bytes as unsigned values: Rust's `Address` derives `Ord`
+  /// over `[u8; 32]`. Wrapped SOL (first byte `0x06`) therefore sorts below USDC (first byte
+  /// `0xc6`) on chain, which is what a program computing `min(mint_x, mint_y)` for a seed sees.
+  /// A signed byte comparison reverses this pair and every other one that straddles `0x80`.
+  @Test
+  void naturalOrderPlacesWrappedSolBelowUsdcAsTheChainDoes() {
+    final var wrappedSol = PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112");
+    final var usdc = PublicKey.fromBase58Encoded("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+    assertEquals(0x06, wrappedSol.toByteArray()[0] & 0xFF);
+    assertEquals(0xc6, usdc.toByteArray()[0] & 0xFF);
+
+    assertTrue(wrappedSol.compareTo(usdc) < 0);
+    assertTrue(usdc.compareTo(wrappedSol) > 0);
+    assertEquals(0, usdc.compareTo(PublicKey.fromBase58Encoded(usdc.toBase58())));
+  }
+
+  /// The chain as oracle. Orca's Whirlpool program rejects a pool unless
+  /// `token_mint_a < token_mint_b` and seeds the pool address with the mints in that order, so
+  /// the mainnet SOL/USDC pool with tick spacing 64 sits at the address derived from the lower
+  /// mint first. Seeded the other way round, the derivation lands on an address the program
+  /// refuses to initialize as a pool.
+  @Test
+  void naturalOrderSeedsTheWhirlpoolAddressThatExistsOnMainnet() {
+    final var wrappedSol = PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112");
+    final var usdc = PublicKey.fromBase58Encoded("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+    final boolean usdcIsLower = usdc.compareTo(wrappedSol) < 0;
+
+    final var whirlpool = PublicKey.findProgramAddress(
+        List.of(
+            "whirlpool".getBytes(US_ASCII),
+            PublicKey.fromBase58Encoded("2LecshUwdy9xi7meFgHtFJQNSKk4KdTrcpvaB56dP2NQ").toByteArray(),
+            (usdcIsLower ? usdc : wrappedSol).toByteArray(),
+            (usdcIsLower ? wrappedSol : usdc).toByteArray(),
+            new byte[]{64, 0} // tick spacing, u16 little-endian
+        ),
+        PublicKey.fromBase58Encoded("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc")
+    );
+    assertEquals(PublicKey.fromBase58Encoded("HJPjoWUrhoZzkNfRpHuieeFk9WcZWjwy6PBjZ81ngndJ"), whirlpool.publicKey());
+    assertEquals(255, whirlpool.nonce());
+  }
+
+  /// A key that shares the `0x80` prefix before `index`, holds `value` there and `tail` after.
+  private static PublicKey keyWith(final int index, final int value, final int tail) {
+    final byte[] key = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+    Arrays.fill(key, 0, index, (byte) 0x80);
+    key[index] = (byte) value;
+    Arrays.fill(key, index + 1, key.length, (byte) tail);
+    return PublicKey.createPubKey(key);
+  }
+
+  /// The first differing byte decides, read as `0..255`, wherever it sits: the lower key carries
+  /// `0xff` in every later byte and the higher key `0x00`, so only that byte can order them.
+  @Test
+  void naturalOrderComparesTheFirstDifferingByteUnsigned() {
+    final int[] ascending = {0x00, 0x01, 0x7f, 0x80, 0x81, 0xff};
+    for (int index = 0; index < PublicKey.PUBLIC_KEY_LENGTH; ++index) {
+      for (int lo = 0; lo < ascending.length; ++lo) {
+        final var lower = keyWith(index, ascending[lo], 0xff);
+        assertEquals(0, lower.compareTo(keyWith(index, ascending[lo], 0xff)));
+        for (int hi = lo + 1; hi < ascending.length; ++hi) {
+          final var higher = keyWith(index, ascending[hi], 0x00);
+          final var pair = String.format("byte %d: 0x%02x vs 0x%02x", index, ascending[lo], ascending[hi]);
+          assertTrue(lower.compareTo(higher) < 0, pair);
+          assertTrue(higher.compareTo(lower) > 0, pair);
+        }
+      }
+    }
+  }
+
+  /// Differential check against an oracle that shares nothing with the implementation: read as
+  /// big-endian unsigned 256-bit integers, keys order exactly as their bytes do. The shared
+  /// prefix moves the deciding byte across the whole key; at full length the keys are equal.
+  @Test
+  void naturalOrderMatchesBigEndianUnsignedIntegers() {
+    final var random = new Random(0x5361_7661_4b65_79L);
+    for (int i = 0; i < 4_096; ++i) {
+      final byte[] a = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+      final byte[] b = new byte[PublicKey.PUBLIC_KEY_LENGTH];
+      random.nextBytes(a);
+      random.nextBytes(b);
+      System.arraycopy(a, 0, b, 0, random.nextInt(PublicKey.PUBLIC_KEY_LENGTH + 1));
+      final int expected = new BigInteger(1, a).compareTo(new BigInteger(1, b));
+      final var keyA = PublicKey.createPubKey(a);
+      final var keyB = PublicKey.createPubKey(b);
+      assertEquals(expected, Integer.signum(keyA.compareTo(keyB)), () -> keyA + " vs " + keyB);
+      assertEquals(-expected, Integer.signum(keyB.compareTo(keyA)), () -> keyB + " vs " + keyA);
+    }
   }
 
   @Test

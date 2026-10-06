@@ -100,7 +100,7 @@ final class SolanaJsonRpcWebsocketTests {
 
     @Override
     public int compareTo(final PublicKey other) {
-      return Arrays.compare(toByteArray(), other.toByteArray());
+      return Arrays.compareUnsigned(toByteArray(), other.toByteArray());
     }
 
     @Override

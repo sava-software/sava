@@ -60,6 +60,12 @@ orphan provenance pair. Evidence: `/private/tmp/sava-triage-primitives-first.log
 `/private/tmp/sava-triage-primitives-prune.log`. The suite has no retained acceptance
 rows or untriaged debt after that retirement.
 
+**`PublicKeyBytes.compareTo`, 2026-10-06.** The natural-order tests in `PublicKeyTest`
+and `AccountIndexLookupTableTests` cover a method the accounts suite had never executed,
+and every seeded `NO_COVERAGE` row on it corresponded to a killed mutant. Two matching
+fresh history-free previews selected by key preceded `pitestAccountsBaselinePrune`; the
+selection left the `# removed signature overload pending prune` rows in place.
+
 Never run a `pitest<Suite>BaselineUpdate` task just to make the build pass:
 kill the mutant, refactor it out of existence, or record its equivalence
 reason below. A failure classifies each new row (`newly covered` vs shares an

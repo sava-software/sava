@@ -59,7 +59,7 @@ public record AccountIndexLookupTableEntry(byte[] publicKey, int index) implemen
 
   @Override
   public int compareTo(final PublicKey o) {
-    return Arrays.compare(this.publicKey, o.toByteArray());
+    return Arrays.compareUnsigned(this.publicKey, o.toByteArray());
   }
 
   @Override

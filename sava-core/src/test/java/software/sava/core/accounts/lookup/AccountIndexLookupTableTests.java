@@ -52,6 +52,64 @@ final class AccountIndexLookupTableTests {
     );
   }
 
+  /// Solana compares key bytes as unsigned values, so `0x7f` sorts below `0x80`; a signed
+  /// comparison reverses them. `Arrays.sort` must leave the index in the chain's order, and the
+  /// binary search must then find every key on both sides of that boundary.
+  @Test
+  void lookupAccountIndexSortsAndSearchesKeysOnBothSidesOfTheSignBit() {
+    final int[] fills = {0x80, 0x01, 0xff, 0x7f};
+    final var entries = new AccountIndexLookupTableEntry[fills.length];
+    for (int i = 0; i < fills.length; ++i) {
+      entries[i] = new AccountIndexLookupTableEntry(key(fills[i]), fills[i]);
+    }
+    Arrays.sort(entries);
+    assertArrayEquals(
+        new int[]{0x01, 0x7f, 0x80, 0xff},
+        Arrays.stream(entries).mapToInt(AccountIndexLookupTableEntry::index).toArray()
+    );
+
+    for (final int fill : fills) {
+      assertEquals(fill, AccountIndexLookupTableEntry.lookupAccountIndex(entries, PublicKey.createPubKey(key(fill))));
+    }
+    for (final int miss : new int[]{0x00, 0x02, 0x7e, 0x81, 0xfe}) {
+      assertEquals(Integer.MIN_VALUE, AccountIndexLookupTableEntry.lookupAccountIndex(entries, PublicKey.createPubKey(key(miss))));
+    }
+  }
+
+  /// Each implementation of one key, the view over its own backing table.
+  private static PublicKey[] implementations(final byte[] keyBytes) {
+    final byte[] table = new byte[5 + PUBLIC_KEY_LENGTH];
+    Arrays.fill(table, 0, 5, (byte) 0x77);
+    System.arraycopy(keyBytes, 0, table, 5, PUBLIC_KEY_LENGTH);
+    return new PublicKey[]{
+        PublicKey.createPubKey(keyBytes.clone()),
+        new AccountIndexLookupTableEntry(keyBytes.clone(), 1),
+        new AccountIndexLookupTableView(table, 5, 2)
+    };
+  }
+
+  /// The natural order is Solana's: key bytes compared as unsigned values. The two keys here are
+  /// equal up to their last byte, `0x7f` against `0x80`, which a signed comparison orders the
+  /// other way. Every ordered pair of implementations is checked because each has its own
+  /// `compareTo` and a sorted collection may mix them.
+  @Test
+  void compareToOrdersKeyBytesUnsignedForEveryPairOfImplementations() {
+    final byte[] lowBytes = key(0x80);
+    lowBytes[PUBLIC_KEY_LENGTH - 1] = 0x7f;
+    final var lows = implementations(lowBytes);
+    final var highs = implementations(key(0x80));
+    for (final var low : lows) {
+      for (final var high : highs) {
+        final var pair = low.getClass().getSimpleName() + " vs " + high.getClass().getSimpleName();
+        assertTrue(low.compareTo(high) < 0, pair);
+        assertTrue(high.compareTo(low) > 0, pair);
+      }
+      for (final var sameKey : lows) {
+        assertEquals(0, low.compareTo(sameKey), low.getClass().getSimpleName() + " vs " + sameKey.getClass().getSimpleName());
+      }
+    }
+  }
+
   @Test
   void indexOfResolvesMapEntriesAndFloorsMisses() {
     final var present = PublicKey.createPubKey(key(1));
