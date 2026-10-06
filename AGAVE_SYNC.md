@@ -484,8 +484,11 @@ The locked Rust generator also records that current Solana
 the high first byte is reserved for version discrimination. Sava deliberately retains its
 published permissive builder behavior at that boundary and for overflowing account/header
 counts: it emits narrowed bytes so callers can construct and analyze invalid transactions,
-leaving submission validation to the RPC. No address-lookup-table selection rule or
-within-category account tie-break changed.
+leaving submission validation to the RPC. The array-based lookup is the exception: a lookup
+table holds at most 256 accounts, so `AccountIndexLookupTableEntry.lookupAccountIndexOrThrow`,
+which the `AccountIndexLookupTableEntry[]` overload of `Instruction.serialize` uses, rejects an
+index outside 0 to 255. No address-lookup-table selection rule or within-category account
+tie-break changed.
 
 ### Deliberate divergences: v1 compute budget values
 

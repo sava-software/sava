@@ -27,12 +27,20 @@ public record AccountIndexLookupTableEntry(byte[] publicKey, int index) implemen
     }
   }
 
+  /// @throws IllegalStateException if `publicKey` is not in `lookupTable`, or its index is
+  ///                               outside 0 to 255, the range of a message's one-byte index
   public static byte lookupAccountIndexOrThrow(final AccountIndexLookupTableEntry[] lookupTable, final PublicKey publicKey) {
     final int index = Arrays.binarySearch(lookupTable, publicKey);
     if (index < 0) {
       throw new IllegalStateException(String.format("Could not find %s in lookup table.", publicKey.toBase58()));
     } else {
-      return (byte) lookupTable[index].index;
+      final int accountIndex = lookupTable[index].index;
+      if (accountIndex >>> 8 != 0) {
+        throw new IllegalStateException(String.format(
+            "Account index %d for %s is outside [0, 255].", accountIndex, publicKey.toBase58()
+        ));
+      }
+      return (byte) accountIndex;
     }
   }
 

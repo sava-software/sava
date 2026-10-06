@@ -52,6 +52,38 @@ final class AccountIndexLookupTableTests {
     );
   }
 
+  /// The throwing lookup returns the index as the byte a message stores, so the index must be
+  /// 0 to 255. Any other used to be narrowed silently: 256 came back as 0, the fee payer's slot.
+  /// The `int` lookup returns every index as stored.
+  @Test
+  void lookupAccountIndexOrThrowRejectsIndexesOutsideAByte() {
+    final int[] indexes = {0, 255, 256, -1, Integer.MIN_VALUE, Integer.MAX_VALUE};
+    final var entries = new AccountIndexLookupTableEntry[indexes.length];
+    for (int i = 0; i < indexes.length; ++i) {
+      entries[i] = new AccountIndexLookupTableEntry(key(i + 1), indexes[i]);
+    }
+    for (int i = 0; i < indexes.length; ++i) {
+      final var publicKey = PublicKey.createPubKey(key(i + 1));
+      final int index = indexes[i];
+      if (index != Integer.MIN_VALUE) { // the int lookup's own "absent" value
+        assertEquals(index, AccountIndexLookupTableEntry.lookupAccountIndex(entries, publicKey));
+      }
+      if (index >= 0 && index <= 255) {
+        assertEquals((byte) index, AccountIndexLookupTableEntry.lookupAccountIndexOrThrow(entries, publicKey));
+      } else {
+        final var exception = assertThrows(
+            IllegalStateException.class,
+            () -> AccountIndexLookupTableEntry.lookupAccountIndexOrThrow(entries, publicKey),
+            "index " + index
+        );
+        assertEquals(
+            "Account index " + index + " for " + publicKey.toBase58() + " is outside [0, 255].",
+            exception.getMessage()
+        );
+      }
+    }
+  }
+
   /// Solana compares key bytes as unsigned values, so `0x7f` sorts below `0x80`; a signed
   /// comparison reverses them. `Arrays.sort` must leave the index in the chain's order, and the
   /// binary search must then find every key on both sides of that boundary.
@@ -130,6 +162,13 @@ final class AccountIndexLookupTableTests {
     final Map<PublicKey, Integer> negativeIndexed = Map.of(present, -3);
     assertEquals(Integer.MIN_VALUE, AccountIndexLookupTableEntry.indexOf(negativeIndexed, present));
     assertThrows(IllegalStateException.class, () -> AccountIndexLookupTableEntry.indexOfOrThrow(negativeIndexed, present));
+
+    // above a byte the Map lookup narrows, unlike `lookupAccountIndexOrThrow`: the transaction
+    // builders index through it and emit the wire byte so that an invalid transaction can
+    // still be built and analyzed (AGAVE_SYNC.md, "permissive builder behavior")
+    final Map<PublicKey, Integer> overflowIndexed = Map.of(present, 256, zeroIndexed, 257);
+    assertEquals((byte) 0, AccountIndexLookupTableEntry.indexOfOrThrow(overflowIndexed, present));
+    assertEquals((byte) 1, AccountIndexLookupTableEntry.indexOfOrThrow(overflowIndexed, zeroIndexed));
   }
 
   @Test

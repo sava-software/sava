@@ -182,7 +182,8 @@ final class InstructionBuildingTests {
   @Test
   void serializeOverloadsAgree() {
     // the Map overload is what Transaction serialization uses; the array overload is public
-    // API with no in-repo caller. They must encode identically.
+    // API with no in-repo caller. They must encode identically for indexes 0 to 255. Above
+    // that the array overload throws, while the Map overload narrows the index to a byte.
     final var ix = instruction();
     final var map = indexMap(key(9), PROGRAM, ACCOUNT_A.publicKey(), ACCOUNT_B.publicKey());
     final var entries = indexEntries(map);
