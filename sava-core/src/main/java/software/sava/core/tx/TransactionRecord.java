@@ -28,7 +28,7 @@ final class TransactionRecord extends BaseTransaction {
 
   static final Comparator<AccountMeta> LEGACY_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
-      return -1;
+      return am2.feePayer() ? 0 : -1;
     } else if (am2.feePayer()) {
       return 1;
     } else if (am1.signer() == am2.signer()) {
@@ -44,7 +44,7 @@ final class TransactionRecord extends BaseTransaction {
 
   static final Comparator<AccountMeta> VO_META_COMPARATOR = (am1, am2) -> {
     if (am1.feePayer()) {
-      return -1;
+      return am2.feePayer() ? 0 : -1;
     } else if (am2.feePayer()) {
       return 1;
     } else if (am1.signer() == am2.signer()) {

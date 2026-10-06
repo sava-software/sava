@@ -5,11 +5,14 @@ import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.lookup.AccountIndexLookupTableEntry;
 import software.sava.core.accounts.meta.AccountMeta;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -423,6 +426,68 @@ final class InstructionBuildingTests {
     assertTrue(TransactionRecord.VO_META_COMPARATOR.compare(invoked, readOnly) < 0);
     assertTrue(TransactionRecord.VO_META_COMPARATOR.compare(readOnly, invoked) > 0);
     assertEquals(0, TransactionRecord.VO_META_COMPARATOR.compare(invoked, AccountMeta.createInvoked(key(7))));
+  }
+
+  /// The rank the message layout gives an account: the fee payer, writable signers, read-only
+  /// signers, writable accounts, read-only accounts. The v0 comparator also puts an invoked
+  /// program ahead of the other accounts of its rank.
+  private static int rank(final AccountMeta meta, final boolean invokedFirst) {
+    final int role = meta.feePayer() ? 0 : meta.signer() ? (meta.write() ? 1 : 2) : (meta.write() ? 3 : 4);
+    return (role << 1) | (invokedFirst && !meta.invoked() ? 1 : 0);
+  }
+
+  /// `Arrays.sort` needs a comparator that agrees with itself. Two fee-payer metas used to
+  /// compare as less than each other, and a fee payer as less than itself.
+  @Test
+  void accountComparatorsOrderEveryPairOfMetasByRank() {
+    final var metas = new ArrayList<AccountMeta>();
+    for (final int seed : new int[]{20, 21}) {
+      final var key = key(seed);
+      metas.add(AccountMeta.createFeePayer(key));
+      metas.add(AccountMeta.createWritableSigner(key));
+      metas.add(AccountMeta.createReadOnlySigner(key));
+      metas.add(createWrite(key));
+      metas.add(AccountMeta.createInvoked(key).merge(createWrite(key)));
+      metas.add(AccountMeta.createInvoked(key));
+      metas.add(createRead(key));
+    }
+    for (final var a : metas) {
+      for (final var b : metas) {
+        final var pair = a.getClass().getSimpleName() + " vs " + b.getClass().getSimpleName();
+        assertEquals(
+            Integer.signum(rank(a, false) - rank(b, false)),
+            Integer.signum(TransactionRecord.LEGACY_META_COMPARATOR.compare(a, b)),
+            pair
+        );
+        assertEquals(
+            Integer.signum(rank(a, true) - rank(b, true)),
+            Integer.signum(TransactionRecord.VO_META_COMPARATOR.compare(a, b)),
+            pair
+        );
+      }
+    }
+  }
+
+  /// Regression: with two fee-payer metas placed like this among 34 accounts, the old
+  /// comparators made `Arrays.sort` throw "Comparison method violates its general contract!".
+  /// The sort is stable by rank, so the two stay in the order the account map yields them.
+  @Test
+  void accountSortIsStableByRankWithTwoFeePayerMetas() {
+    final var accounts = new LinkedHashMap<PublicKey, AccountMeta>();
+    for (int i = 0; i < 34; ++i) {
+      final var key = key(i + 1);
+      accounts.put(key, i == 0 || i == 17
+          ? AccountMeta.createFeePayer(key)
+          : i == 18 || i == 19 ? createWrite(key) : createRead(key));
+    }
+    for (final boolean invokedFirst : new boolean[]{false, true}) {
+      final var expected = new ArrayList<>(accounts.values());
+      expected.sort(Comparator.comparingInt(meta -> rank(meta, invokedFirst)));
+      final var sorted = invokedFirst
+          ? TransactionRecord.sortV0Accounts(accounts)
+          : TransactionRecord.sortLegacyAccounts(accounts);
+      assertEquals(expected, List.of(sorted));
+    }
   }
 
   @Test
