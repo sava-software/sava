@@ -89,7 +89,7 @@ public record AccountIndexLookupTableEntry(byte[] publicKey, int index) implemen
 
   @Override
   public String toString() {
-    return String.format("AccountIndexLookupTableEntry[publicKey=[%s, index=%d]", Base58.encode(publicKey), index);
+    return String.format("AccountIndexLookupTableEntry[publicKey=%s, index=%d]", Base58.encode(publicKey), index);
   }
 
   @Override

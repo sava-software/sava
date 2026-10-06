@@ -42,9 +42,15 @@ public final class Base58 {
   }
 
   /// Encodes `input` from `offset` up to the exclusive index `to`. Unlike the ranged `decode`
-  /// overloads, the third argument is an end index, not a length.
+  /// overloads, the third argument is an end index, not a length. An end past the input encodes
+  /// the missing bytes as zeros, as `Arrays.copyOfRange` pads them.
   public static String encode(final byte[] input, final int offset, final int to) {
-    final char[] encoded = new char[input.length << 1]; // upper bound
+    final int length = to - offset;
+    if (length < 0) {
+      // The same rejection Arrays.copyOfRange gives below, before any buffer is sized from it.
+      throw new IllegalArgumentException(offset + " > " + to);
+    }
+    final char[] encoded = new char[length << 1]; // upper bound
     final int outputStart = encode(input, offset, to, encoded);
     return new String(encoded, outputStart, encoded.length - outputStart);
   }
@@ -54,7 +60,8 @@ public final class Base58 {
   }
 
   /// Encodes `input` from `offset` up to the exclusive index `to`. Unlike the ranged `decode`
-  /// overloads, the third argument is an end index, not a length.
+  /// overloads, the third argument is an end index, not a length. An end past the input encodes
+  /// the missing bytes as zeros, as `Arrays.copyOfRange` pads them.
   public static int encode(byte[] input, final int offset, final int to, final char[] output) {
     input = Arrays.copyOfRange(input, offset, to);
 

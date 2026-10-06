@@ -153,9 +153,7 @@ final class AccountIndexLookupTableTests {
     final var base58 = Base58.encode(keyBytes);
     assertEquals(base58, entry.toBase58());
     assertEquals(Base64.getEncoder().encodeToString(keyBytes), entry.toBase64());
-    final var string = entry.toString();
-    assertTrue(string.contains(base58), string);
-    assertTrue(string.contains("index=3"), string);
+    assertEquals("AccountIndexLookupTableEntry[publicKey=" + base58 + ", index=3]", entry.toString());
   }
 
   @Test
@@ -224,6 +222,11 @@ final class AccountIndexLookupTableTests {
 
     assertEquals(Base58.encode(key(4)), view.toBase58());
     assertEquals(Base64.getEncoder().encodeToString(key(4)), view.toBase64());
+    // the key, not the backing table's identity hash
+    assertEquals(
+        "AccountIndexLookupTableView[publicKey=" + Base58.encode(key(4)) + ", offset=37, index=1]",
+        view.toString()
+    );
   }
 
   @Test

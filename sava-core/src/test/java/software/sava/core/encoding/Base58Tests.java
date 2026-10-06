@@ -9,6 +9,7 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Random;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -59,7 +60,9 @@ final class Base58Tests {
         final byte[] bytes = new byte[len];
         random.nextBytes(bytes);
         Arrays.fill(bytes, 0, leadingZeros, (byte) 0);
-        final var msg = "seed=" + seed + " len=" + len + " leadingZeros=" + leadingZeros;
+        final int length = len;
+        final int zeros = leadingZeros;
+        final Supplier<String> msg = () -> "seed=" + seed + " len=" + length + " leadingZeros=" + zeros;
         final var expected = referenceEncode(bytes);
         assertEquals(expected, Base58.encode(bytes), msg);
         assertArrayEquals(bytes, Base58.decode(expected), msg);
@@ -129,7 +132,9 @@ final class Base58Tests {
     for (int offset = 0; offset <= 64; offset += 3) {
       for (int to = offset; to <= buffer.length; to += 13) {
         final var expected = Base58.encode(Arrays.copyOfRange(buffer, offset, to));
-        assertEquals(expected, Base58.encode(buffer, offset, to), "seed=" + seed + " offset=" + offset + " to=" + to);
+        final int from = offset;
+        final int end = to;
+        assertEquals(expected, Base58.encode(buffer, from, end), () -> "seed=" + seed + " offset=" + from + " to=" + end);
       }
     }
     assertArrayEquals(untouched, buffer, "encode must not mutate its input");
@@ -138,6 +143,68 @@ final class Base58Tests {
     final int outputStart = Base58.encode(buffer, output);
     assertEquals(Base58.encode(buffer), new String(output, outputStart, output.length - outputStart));
     assertArrayEquals(untouched, buffer);
+  }
+
+  @Test
+  void rangedEncodePadsAnEndPastTheInputWithZeros() {
+    // Pinned, not specified: copyOfRange pads the missing bytes with zeros, and trailing zeros
+    // change the number, so the text is the encoding of a longer input. TransactionSkeleton.id()
+    // reaches this for a transaction shorter than a signature.
+    final byte[] one = {1};
+    final var padded = Base58.encode(new byte[]{1, 0, 0});
+    assertEquals("LUw", padded); // 65,536 = 19 * 58 * 58 + 27 * 58 + 54
+    assertEquals(padded, Base58.encode(one, 0, 3));
+    final char[] output = new char[6];
+    final int outputStart = Base58.encode(one, 0, 3, output);
+    assertEquals(padded, new String(output, outputStart, output.length - outputStart));
+    assertArrayEquals(new byte[]{1}, one, "encode must not mutate its input");
+  }
+
+  @Test
+  void rangedEncodeRejectsAReversedRange() {
+    // copyOfRange rejects a reversed range with IllegalArgumentException, as it did before this
+    // overload copied first. Sizing the buffer before the copy would turn the first gap into
+    // NegativeArraySizeException and the last into a request for gigabytes.
+    final byte[] bytes = new byte[8];
+    assertThrows(IllegalArgumentException.class, () -> Base58.encode(bytes, 5, 3));
+    assertThrows(IllegalArgumentException.class, () -> Base58.encode(bytes, Integer.MAX_VALUE, 0));
+    assertThrows(IllegalArgumentException.class, () -> Base58.encode(bytes, 1_500_000_000, 0));
+  }
+
+  @Test
+  void emptyRangeEncodesToNothing() {
+    assertEquals("", Base58.encode(new byte[0]));
+    final byte[] bytes = new byte[8];
+    assertEquals("", Base58.encode(bytes, 3, 3));
+    assertEquals(0, Base58.encode(bytes, 3, 3, new char[0]));
+  }
+
+  @Test
+  void rangedEncodeAgreesWithMutableEncode() {
+    // The ranged char[] overload copies and keeps its own digit loop; mutableEncode is its
+    // in-place twin for the vanity search. Pin them to each other at every offset, with and
+    // without leading zero bytes, in the index they return and the characters they write, and
+    // tie the String overload to the same text.
+    final var random = new Random(58);
+    for (int iteration = 0; iteration < 256; ++iteration) {
+      final int length = random.nextInt(0, 80);
+      final int offset = random.nextInt(0, 12);
+      final byte[] input = new byte[offset + length + random.nextInt(0, 6)];
+      random.nextBytes(input);
+      Arrays.fill(input, offset, offset + random.nextInt(0, Math.min(4, length + 1)), (byte) 0);
+      final byte[] untouched = input.clone();
+      final char[] ranged = new char[length << 1];
+      final char[] mutable = new char[length << 1];
+      final int rangedStart = Base58.encode(input, offset, offset + length, ranged);
+      final int mutableStart = Base58.mutableEncode(Arrays.copyOfRange(input, offset, offset + length), mutable);
+      final int i = iteration;
+      final Supplier<String> msg = () -> "iteration=" + i + " offset=" + offset + " length=" + length;
+      assertEquals(mutableStart, rangedStart, msg);
+      final var text = new String(mutable, mutableStart, mutable.length - mutableStart);
+      assertEquals(text, new String(ranged, rangedStart, ranged.length - rangedStart), msg);
+      assertEquals(text, Base58.encode(input, offset, offset + length), msg);
+      assertArrayEquals(untouched, input, "the ranged overload must not mutate its input");
+    }
   }
 
   @Test
@@ -151,7 +218,8 @@ final class Base58Tests {
         final byte[] key = new byte[PublicKey.PUBLIC_KEY_LENGTH];
         random.nextBytes(key);
         Arrays.fill(key, 0, leadingZeros, (byte) 0);
-        final var msg = "seed=" + seed + " leadingZeros=" + leadingZeros;
+        final int zeros = leadingZeros;
+        final Supplier<String> msg = () -> "seed=" + seed + " leadingZeros=" + zeros;
         final var expected = Base58.encode(key);
         // one leading '1' per leading zero byte is the encoding's own rule, so the digit
         // count of the value below the zero bytes is what encode() emits after those '1's;
@@ -175,7 +243,7 @@ final class Base58Tests {
           final int shortLen = shortEncoded.length - shortStart;
           // the split point is where the concatenation cannot see it: the first call emits
           // exactly min(maxLen, digits) characters, never none and never one more
-          assertEquals(Math.min(maxLen, digits), shortLen, msg + " maxLen=" + maxLen + " emitted");
+          assertEquals(Math.min(maxLen, digits), shortLen, () -> msg.get() + " maxLen=" + maxLen + " emitted");
           final int encodedStart = encoded.length - shortLen;
           final int keyStart = Base58.continueMutableEncode(
               mutable,
@@ -187,7 +255,7 @@ final class Base58Tests {
           assertEquals(
               expected,
               new String(encoded, keyStart, encodedStart - keyStart) + new String(shortEncoded, shortStart, shortLen),
-              msg + " maxLen=" + maxLen
+              () -> msg.get() + " maxLen=" + maxLen
           );
         }
       }
@@ -325,7 +393,9 @@ final class Base58Tests {
         if (leadingZeros < len && bytes[leadingZeros] == 0) {
           bytes[leadingZeros] = 1;
         }
-        final var msg = "seed=" + seed + " len=" + len + " leadingZeros=" + leadingZeros;
+        final int length = len;
+        final int zeros = leadingZeros;
+        final Supplier<String> msg = () -> "seed=" + seed + " len=" + length + " leadingZeros=" + zeros;
 
         final var encoded = Base58.encode(bytes);
         assertArrayEquals(bytes, Base58.decode(encoded), msg);

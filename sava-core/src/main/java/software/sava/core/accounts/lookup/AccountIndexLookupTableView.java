@@ -53,6 +53,11 @@ public record AccountIndexLookupTableView(byte[] lookupTable,
   }
 
   @Override
+  public String toString() {
+    return String.format("AccountIndexLookupTableView[publicKey=%s, offset=%d, index=%d]", toBase58(), offset, index);
+  }
+
+  @Override
   public boolean equals(final Object o) {
     if (this == o) return true;
     if (o instanceof PublicKey _publicKey) {
