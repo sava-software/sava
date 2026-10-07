@@ -4,6 +4,7 @@ import io.airlift.compress.v3.zstd.ZstdInputStream;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.Base58;
+import software.sava.rpc.json.http.client.TestLogs;
 import software.sava.rpc.json.http.request.Commitment;
 import systems.comodal.jsoniter.JsonIterator;
 
@@ -17,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
+import java.util.logging.Level;
+import java.util.logging.SimpleFormatter;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -353,6 +356,34 @@ final class ParseResponseFieldTests {
     it.skipUntil("data");
     assertArrayEquals(new byte[0], JsonUtil.parseEncodedData(it));
     assertEquals(41, it.skipUntil("after").readInt());
+  }
+
+  /// A data value that is neither an array nor a string is refused: the parser logs what the
+  /// provider sent, skips it and reads it as empty. That warning is the only record of the
+  /// refused value, so it is asserted through the JUL backend the System.Logger facade
+  /// routes to, as the client parse-failure tails are, rather than assumed.
+  @Test
+  void unsupportedEncodedDataValueTypesAreLoggedSkippedAndReadAsEmpty() {
+    record Refused(String json, String type, int after) {
+    }
+    for (final var refused : List.of(
+        new Refused("""
+            {"data":12345,"after":51}""", "NUMBER", 51),
+        new Refused("""
+            {"data":{"future":true},"after":52}""", "OBJECT", 52),
+        new Refused("""
+            {"data":true,"after":53}""", "BOOLEAN", 53))) {
+      final var it = ji(refused.json());
+      it.skipUntil("data");
+      final var records = TestLogs.capture(JsonUtil.class,
+          () -> assertArrayEquals(new byte[0], JsonUtil.parseEncodedData(it)));
+      assertEquals(1, records.size(), () -> refused.type() + ": one warning per refused value: " + records);
+      final var record = records.getFirst();
+      assertEquals(Level.WARNING, record.getLevel(), refused.type());
+      final var rendered = new SimpleFormatter().formatMessage(record);
+      assertTrue(rendered.contains("Unsupported " + refused.type() + " encoded data"), () -> refused.type() + ": " + rendered);
+      assertEquals(refused.after(), it.skipUntil("after").readInt(), () -> refused.type() + ": the refused value is skipped");
+    }
   }
 
   @Test

@@ -90,11 +90,6 @@ live families; the `JsonUtil.parseEncodedData` pending-prune rows are debt (see
   - The `ORDER_IF` row is absent from the licensed population and has not been
     observed killed; its argument remains valid and the row stays in this family,
     since absence under the licensed toolchain is not a kill.
-- **`# logging only`** — `JsonUtil.parseEncodedData` `VoidMethodCallMutator`.
-  - Reason: removed `System.Logger::log` call on the unsupported-encoding fallback.
-  - Oracle: owed. Invalidated if: owed. This argument does not yet say why the log is
-    not the only record of what the provider sent — the property that withdrew the
-    client log-and-rethrow acceptance (see "History notes (client)").
 - **`# capacity math`** — `JsonUtil.toJsonIntArray` `MathMutator`, two siblings on
   `(data.length << 2) + 2`.
   - Reason: `StringBuilder` sizing only; the builder grows as needed.
@@ -128,6 +123,16 @@ Kept apart from the arguments above; none of it is live evidence.
 
 - A reviewer measured the same two `# best-effort guard` survivors independently
   before that acceptance was written (2026-09-23).
+
+- `JsonUtil.parseEncodedData` `VoidMethodCallMutator`, the warning on the
+  unsupported-encoding fallback, was accepted as `# logging only` from the first
+  baseline until 2026-10-07. The warning is the only record of what the provider sent,
+  the same property that withdrew the client log-and-rethrow acceptance, so
+  `ParseResponseFieldTests.unsupportedEncodedDataValueTypesAreLoggedSkippedAndReadAsEmpty`
+  now asserts it through the JUL backend and the row left through the keyed prune. The
+  three `parseEncodedData` rows whose equivalence arguments `0d68f02` had invalidated
+  left in the same prune; `ParseResponseFieldTests` pins the missing-encoding
+  exception and the cursor after an unknown encoding.
 
 ## client suite
 
@@ -213,6 +218,16 @@ Kept apart from the arguments above; none of it is live evidence.
   status) and the `ReadHttpResponse` pass-through accessors (a stub returning the
   mutator's own replacement value withdraws that mutant before the tests are
   consulted).
+
+- The keyed prune of 2026-10-07 retired the `# killed retained` rows, each observed
+  killed by a fresh licensed run (`EQUAL_*`/`ORDER_*` abbreviate
+  `RemoveConditionalMutator_*`): `BaseSolanaJsonRpcClient.joinKeys` `EQUAL_ELSE`,
+  `JsonHttpClient.gzipBufferSize` `VoidMethodCallMutator`,
+  `JsonHttpClient.wrapResponseParser` `NullReturnValsMutator` and `EQUAL_ELSE`,
+  `JsonRpcHttpClient.applyGenericResponseResult` `NullReturnValsMutator`,
+  `JsonRpcValueResponseParser$Parser.parse` `ORDER_ELSE`,
+  `SolanaJsonRpcClient.getAppliedAccounts` and `lambda$static$0` `EQUAL_ELSE`, and
+  `SolanaRpcClient.sendTransaction` `EQUAL_ELSE` and `EQUAL_IF`.
 
 ## ws suite
 
@@ -402,8 +417,8 @@ member has `cause:liveness`; there are no resource or harness holding rows.
 Shared cause, argued once: each member makes the `SolanaJsonRpcWebsocket` maintenance
 loop lose an exit or its per-cycle work, so the mutated path has no path-owned finite
 completion guarantee. The members are `SolanaJsonRpcWebsocket` `runLoop`
-`RemoveConditionalMutator_EQUAL_ELSE` (two sibling mutants, one key row),
-`runLoop` `VoidMethodCallMutator`, and `closed` `RemoveConditionalMutator_ORDER_ELSE`.
+`RemoveConditionalMutator_EQUAL_ELSE` (two sibling mutants, one key row) and
+`runLoop` `VoidMethodCallMutator`.
 
 - **`runLoop` `EQUAL_ELSE` (two sibling mutants).** One forces the `closed()` exit
   false and the other forces the interruption exit false. In each mutated path the
@@ -415,15 +430,6 @@ completion guarantee. The members are `SolanaJsonRpcWebsocket` `runLoop`
   transition has no path-owned completion. An external close or interrupt is only
   the fixture's emergency exit where the fixture has one (the two `@Timeout` tests
   below); the executor-task tests have none, and PIT's watchdog is their only bound.
-- **`closed` `ORDER_ELSE`.** Forcing `msgId < 0` false prevents the close sentinel
-  from ever ending the maintenance loop. `checkLoopReturnsImmediatelyOnceClosed`
-  asserts `ws.closed()` synchronously right after `ws.close()`, a synchronous reader
-  of exactly the state this mutant breaks: it kills the mutant whenever it is the
-  covering test that runs, and a timeout is recorded only when a test that enters the
-  loop covers the mutant first. It was killed in the fresh 2026-08-11 full run, so
-  its coordinate is still in the population: that is the *quiet* case, not a stale
-  row, and its quiet-retention clock is running. Whether it should leave the audited
-  set on that clock or be argued as a deterministic kill is the owner's call.
 
 Retention: a coordinate still in the population whose timeout went quiet stays in
 the audited set until the tool's 3+ distinct fresh full-run quiet notice over
@@ -450,10 +456,42 @@ test's duration × `timeoutFactor` + `timeoutConst`; `sava-rpc/build.gradle.kts`
 second. The watchdog therefore fires long before 30 s: the JUnit bound is an
 emergency ceiling that cannot fail first and contributes no cause evidence.
 
-Owed (`HARDENING.md`, "`TIMED_OUT` is detected, but does not diagnose its cause"),
-for the two `runLoop` members only: the statement of why no synchronous reader of the
-mutated state (the closed and interruption exits, the cycle's work) serves as a
-deterministic oracle.
+Why no synchronous reader serves as a deterministic oracle for the two `runLoop`
+members (`HARDENING.md`, "`TIMED_OUT` is detected, but does not diagnose its cause"):
+the only observable of either exit is `run()` returning, which never happens on the
+mutated path, so there is no post-call reader. For the interruption sibling,
+`Thread.interrupted()` runs before the removed jump and consumes the flag, so no later
+flag reader exists either. `runLoop` is private and calls `checkCycle` directly, and
+the mutated path touches no injectable collaborator, so no call budget or clock seam
+applies.
+
+### ws history notes
+
+Kept apart from the arguments above; none of it is live evidence.
+
+- `closed` `RemoveConditionalMutator_ORDER_ELSE`, forcing `msgId < 0` false, sat in the
+  audited set until 2026-10-07 under the shared liveness cause. It never met the
+  admission precondition (`HARDENING.md`: liveness is claimed only after deterministic
+  seams have been exhausted): `checkLoopReturnsImmediatelyOnceClosed` asserts
+  `ws.closed()` synchronously right after `ws.close()`, a synchronous reader of exactly
+  the state the mutant breaks, and every covering test that enters the loop exits on
+  interruption or a poisoned clock, or does not wait for the loop thread, so no
+  covering path can hang on it. It has read `KILLED` by that test in every fresh run
+  since 2026-08-11. The owner directed the removal on 2026-10-07 and the membership
+  line was removed by hand; a timeout reappearing at that coordinate reads as
+  unaudited and must be argued afresh.
+
+- The keyed prune of 2026-10-07 retired every `# killed retained` and
+  `# retired implementation retained` row whose key held nothing else. The killed rows
+  (`SolanaJsonRpcWebsocket` unless named) sat on `accountSubscribe`, `checkCycle`,
+  `close`, `lambda$queueUnsubscribe$0`, `lockAndHandlePendingSubscriptions`,
+  `logsSubscribe`, `onClose`, `onError`, `onOpen`, `onWholeMessage`, `publishGeneric`,
+  `queueSubscription`, `rootSubscribe`, `sendPing`, `sendUnSubscription`,
+  `signatureSubscribe`, `slotSubscribe`, `subscribe`, `subscribeToTokenAccounts` and
+  `SolanaRpcWebsocketBuilder.create`; the retired rows on `lambda$connect$0`,
+  `lambda$sendPing$0`, `onWholeMessage`, `removeDanglingSub` and `unsubscribe`. The
+  three rows still blocked at shared keys are listed under "Retained rows and the
+  writer gap".
 
 ## encoding suite
 
@@ -470,8 +508,8 @@ reinterpret an already imported secret).
 These rows stay deliberately. Their labels and status fields record historical
 observations, but **each row still contributes active baseline matching capacity**
 and can accept a later mutant with the same class, method, mutator, and status;
-historical labels do not deactivate matching. In the lists below, `EQUAL_ELSE`,
-`EQUAL_IF`, `ORDER_IF` and `ORDER_ELSE` abbreviate `RemoveConditionalMutator_*`.
+historical labels do not deactivate matching. Below, `EQUAL_ELSE`, `EQUAL_IF`,
+`ORDER_IF` and `ORDER_ELSE` abbreviate `RemoveConditionalMutator_*`.
 
 - **`# killed retained`** — a fresh licensed run observed the same mutant killed.
 - **`# retired implementation retained`** — the mutation site or its containing
@@ -479,18 +517,15 @@ historical labels do not deactivate matching. In the lists below, `EQUAL_ELSE`,
 - **`# unlicensed-only retained`** — rows the licensed ArcMutate population does not
   observe. Absence under that toolchain is not a kill, so each stays until the same
   licensed mutant is observed and killed.
-- **`# killed guard pending prune`**, **`# removed fallback pending prune`**,
-  **`# killed reset pending prune`** — responses rows whose former equivalence
-  arguments no longer hold (below).
 
-Shared rationale, argued per key. A reviewed subset can be retired by key: the named
-prune writer takes `-PpruneBaselineKeys` after two fresh history-free previews
-(`HARDENING.md`, "Retiring a reviewed subset"). Selecting a key selects every row at
-that key. A key holding a matched live-family row is refused by the writer; a key
-holding a protected `# unlicensed-only retained` sibling would be accepted, since
-those rows are unmatched candidates too, and is omitted only by this file's rule that
-toolchain absence is not a kill. These keys are blocked, all `SolanaJsonRpcWebsocket`
-in ws:
+A reviewed subset is retired by key: the named prune writer takes
+`-PpruneBaselineKeys` after two fresh history-free previews (`HARDENING.md`,
+"Retiring a reviewed subset"), and selecting a key selects every row at that key. The
+keyed prunes of 2026-10-07 retired every killed, retired or pending-prune row whose
+key held only such rows (each suite's history notes name them). What remains is
+either protected by this file's rule that toolchain absence is not a kill, or blocked
+at a key it shares with a row that must stay. The blocked keys, all
+`SolanaJsonRpcWebsocket` in ws:
 
 - `ensureCapacity,MathMutator,SURVIVED` — a `# retired implementation retained` row
   beside the live `# capacity math` siblings (refused by the writer).
@@ -500,82 +535,33 @@ in ws:
 - `programSubscribe,EQUAL_ELSE,SURVIVED` — a `# killed retained` row beside the live
   `# redundant outer duplicate guard` row (refused by the writer).
 
-Every other key holding a killed, retired or pending-prune row holds only such rows, so
-the CSVs do not block it; keys holding only unlicensed-only rows stay by the rule above.
-Whether
-each of its rows is an eligible candidate in a given run (not matched,
-timeout-protected, pending a status flip, or flip-insured) is a run observation that
-only the previews confirm; choosing the reviewed keys is the owner's step. What the
-selective prune does not do is retag ungated rows: it performs no incidental retag,
-and `BaselineRetag` refreshes only rows a fresh report matches, so a retained row's
-`# line` tag stays at its last gated observation until the row leaves. Hand-editing
-baseline record structure is not a sanctioned substitute for either writer. Several
-retained rows are `NO_COVERAGE`; they are debt, never equivalences. This is open debt
-in client, ws and responses; it closes key by key, and a blocked key closes only when
-its live or protected sibling no longer needs that capacity or the owner retires the
+The selective prune performs no incidental retag, and `BaselineRetag` refreshes only
+rows a fresh report matches, so a retained row's `# line` tag stays at its last gated
+observation until the row leaves. Hand-editing baseline record structure is not a
+sanctioned substitute for either writer. A blocked key closes when its live or
+protected sibling no longer needs that capacity; a protected row closes when the
+same licensed mutant is observed and killed, or when the owner retires the
 unlicensed population.
 
 ### client
 
-- `# killed retained`: `BaseSolanaJsonRpcClient.joinKeys` `EQUAL_ELSE` (the other
-  direction is killed by direct helper tests distinguishing null, empty, and
-  populated collections); `JsonHttpClient.gzipBufferSize` `VoidMethodCallMutator`
-  (the malformed provider-controlled `Content-Length` diagnostic, asserted through
-  `TestLogs`); `JsonHttpClient.wrapResponseParser` `NullReturnValsMutator` and
-  `EQUAL_ELSE`; `JsonRpcHttpClient.applyGenericResponseResult` `NullReturnValsMutator`
-  (the generic-result parser factory); `JsonRpcValueResponseParser$Parser.parse`
-  `ORDER_ELSE` (the absent-value cursor branch);
-  `SolanaJsonRpcClient.getAppliedAccounts` `EQUAL_ELSE` (empty-account rejection);
-  `SolanaJsonRpcClient.lambda$static$0` `EQUAL_ELSE` (the immutable empty leader
-  schedule); `SolanaRpcClient.sendTransaction` `EQUAL_ELSE` and `EQUAL_IF` (both
-  boolean encodings).
 - `# unlicensed-only retained`: `BaseSolanaJsonRpcClient.joinKeys` `EQUAL_IF`, with no
   counterpart in the licensed population, reported unmatched on every run. It remains
   because absence under the licensed toolchain is not evidence that the old
-  unlicensed mutant was killed. Its key differs from every killed row's key above, so
-  it does not block their selective prune.
+  unlicensed mutant was killed.
 
 ### ws
 
-- `# killed retained` (`SolanaJsonRpcWebsocket` unless named): `accountSubscribe`,
-  `checkCycle`, `close`, `lambda$queueUnsubscribe$0`,
-  `lockAndHandlePendingSubscriptions`, `logsSubscribe`, `onClose`, `onError`,
-  `onOpen`, `onWholeMessage`, `programSubscribe`, `publishGeneric`,
-  `queueSubscription`, `rootSubscribe`, `sendPing`, `sendUnSubscription`,
-  `signatureSubscribe`, `slotSubscribe`, `subscribe`, `subscribeToTokenAccounts`, and
-  `SolanaRpcWebsocketBuilder.create`. The `queueSubscription` and `subscribe`
-  `BooleanTrueReturnValsMutator` rows among them are `NO_COVERAGE`.
-- `# retired implementation retained`: `ensureCapacity` (`MathMutator`),
-  `handlePendingSubscriptions`, `lambda$connect$0`, `lambda$sendPing$0`,
-  `onWholeMessage`, `removeDanglingSub`, and `unsubscribe`. The `onWholeMessage`,
-  `removeDanglingSub` and `unsubscribe` rows include `NO_COVERAGE` rows.
+- `# killed retained`: `SolanaJsonRpcWebsocket.programSubscribe` `EQUAL_ELSE`, blocked
+  as above.
+- `# retired implementation retained`: `ensureCapacity` (`MathMutator`) and
+  `handlePendingSubscriptions` (`EQUAL_IF`), both blocked as above.
 - `# unlicensed-only retained` — itemised because `AGENTS.md` points here: the two
   `lambda$queueUnsubscribe$0 EQUAL_IF` siblings, `ensureCapacity ORDER_IF`,
   `onText ORDER_IF`, the `logsSubscribe` and `programSubscribe EQUAL_IF` rows, two
   `handlePendingSubscriptions EQUAL_IF` siblings, and one `onWholeMessage EQUAL_IF`
   sibling. Each remains until the same licensed mutant is observed and killed; the
   `handlePendingSubscriptions` siblings also block the retired row at their key.
-
-### responses
-
-Each is a `JsonUtil.parseEncodedData` row with no valid equivalence argument.
-
-- `# killed guard pending prune` — `RemoveConditionalMutator_EQUAL_IF,SURVIVED`: the
-  former argument predates the explicit missing-encoding exception introduced in
-  `0d68f02`. Forcing the guard now rejects valid encoded arrays, which
-  `ParseResponseFieldTests` decodes; the same tests pin the missing-encoding
-  exception message.
-- `# removed fallback pending prune` — `NullReturnValsMutator,NO_COVERAGE`: it
-  belonged to a fallback return removed by `0d68f02`. The current throwing branch has
-  no return to mutate. This is removed-source evidence, not identification of that
-  historical sibling among today's return mutants, and it additionally requires
-  reconciliation with the licensed-kill retirement rule.
-- `# killed reset pending prune` — `NakedReceiverMutator,SURVIVED`: the former
-  argument assumed the data element had already been decoded. Unknown encodings leave
-  it unconsumed, so dropping `ji.reset(mark2)` breaks the cursor. Oracle:
-  `unknownResponseEncodingsStillConsumeTheArrayAndReturnEmptyData` in
-  `ParseResponseFieldTests` asserts both empty output and the next enclosing-object
-  field.
 
 ## Mutator sets
 
@@ -590,6 +576,9 @@ Every suite in this module runs `STRONGER,EXPERIMENTAL_NAKED_RECEIVER`;
 | `EXPERIMENTAL_NAKED_RECEIVER`, 2026-07-22 | `client` | 501 | 601 | 100 |
 | `EXPERIMENTAL_NAKED_RECEIVER`, 2026-07-22 | `responses` | 524 | 607 | 83 |
 | `EXPERIMENTAL_NAKED_RECEIVER`, 2026-07-22 | `ws` | 541 | 592 | 51 |
+| `EXPERIMENTAL_NAKED_RECEIVER`, 2026-10-07 | `encoding` | 58 | 65 | 7 |
 
-`encoding` was registered on 2026-08-04, after the trials, and carries
-`EXPERIMENTAL_NAKED_RECEIVER` without a trial row of its own.
+`encoding` was registered on 2026-08-04, after the first trials, and carried the
+mutator untrialed until the 2026-10-07 run of `pitestMutatorTrial`, which measured
+all four suites with the candidate alone: it fired in each (`client` 103, `ws` 67,
+`responses` 90, `encoding` 7 generated), so the set stands everywhere.

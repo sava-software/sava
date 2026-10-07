@@ -3,6 +3,5 @@
 # (audited set)". Every current member is cause:liveness: once mutated, its
 # covering path has no path-owned finite completion guarantee. Membership is a
 # set of keys, so the runLoop EQUAL_ELSE row covers both current sibling mutants.
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,closed,RemoveConditionalMutator_ORDER_ELSE # cause:liveness
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,runLoop,RemoveConditionalMutator_EQUAL_ELSE # cause:liveness
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,runLoop,VoidMethodCallMutator # cause:liveness

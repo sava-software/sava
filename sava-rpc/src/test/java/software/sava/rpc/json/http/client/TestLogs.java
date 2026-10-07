@@ -13,13 +13,13 @@ import java.util.logging.Logger;
 /// only place the HTTP status and offending body are recorded (the rethrown
 /// exception is the parser's own and knows nothing about the exchange), so the
 /// diagnostic is part of the contract and is asserted, not assumed.
-final class TestLogs {
+public final class TestLogs {
 
-  static List<LogRecord> capture(final Class<?> loggerClass, final Runnable action) {
+  public static List<LogRecord> capture(final Class<?> loggerClass, final Runnable action) {
     return capture(loggerClass, Level.ALL, action);
   }
 
-  static List<LogRecord> capture(final Class<?> loggerClass, final Level level, final Runnable action) {
+  public static List<LogRecord> capture(final Class<?> loggerClass, final Level level, final Runnable action) {
     final var records = new ArrayList<LogRecord>();
     final var handler = new Handler() {
       @Override
