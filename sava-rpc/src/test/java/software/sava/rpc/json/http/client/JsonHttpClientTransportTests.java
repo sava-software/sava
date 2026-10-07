@@ -8,24 +8,35 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Proxy;
+import java.net.Authenticator;
+import java.net.CookieHandler;
 import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Deque;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -99,6 +110,17 @@ final class JsonHttpClientTransportTests {
                     final UnaryOperator<HttpRequest.Builder> extendRequest,
                     final BiPredicate<HttpResponse<?>, byte[]> testResponse) {
       super(endpoint, httpClient, requestTimeout, extendRequest, testResponse);
+    }
+
+    /// `deadlineScheduler` is where every route that reads the body arms its exchange
+    /// deadline.
+    TransportClient(final URI endpoint,
+                    final HttpClient httpClient,
+                    final Duration requestTimeout,
+                    final UnaryOperator<HttpRequest.Builder> extendRequest,
+                    final BiPredicate<HttpResponse<?>, byte[]> testResponse,
+                    final ScheduledExecutorService deadlineScheduler) {
+      super(endpoint, httpClient, requestTimeout, extendRequest, testResponse, deadlineScheduler);
     }
   }
 
@@ -349,98 +371,264 @@ final class JsonHttpClientTransportTests {
     assertEquals("application/json", request.headers().firstValue("Content-Type").orElseThrow());
   }
 
-  // the exchange deadline
+  // the exchange deadline: armed on a recording scheduler and fired by the test, never
+  // waited out, so nothing below depends on how long anything takes
 
-  /// On JDK 25 the JDK request timeout stops at the headers, so a stalled body is ended by
-  /// this client's scheduled cancellation at twice the request timeout and the failure's
-  /// cause is the JDK's `CancellationException`. On JDK 26 the request timeout covers the
-  /// body itself, so the JDK ends the stall at one timeout with an `HttpTimeoutException`
-  /// and the cancellation never fires. Both are the contract; which one applies is the
-  /// runtime's.
-  private static void assertStallEnded(final CompletableFuture<?> response,
-                                       final Duration requestTimeout,
-                                       final long startedNanos,
-                                       final String route) {
-    final var failure = assertThrows(ExecutionException.class, () -> response.get(2, TimeUnit.SECONDS), route);
-    final long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
-    if (Runtime.version().feature() >= 26) {
-      assertInstanceOf(HttpTimeoutException.class, failure.getCause(), route + ": JDK 26 ends a stalled body itself");
-      assertTrue(elapsedMillis >= requestTimeout.toMillis(), () -> route + ": ended after " + elapsedMillis + "ms");
-    } else {
-      assertInstanceOf(CancellationException.class, failure.getCause(), route + ": the scheduled cancellation ends it on JDK 25");
-      assertTrue(elapsedMillis >= requestTimeout.toMillis() * 2,
-          () -> route + ": cancelled after " + elapsedMillis + "ms, before the body had its own budget");
+  /// One timer as a route armed it. Nothing runs it until the test calls [#fire], which
+  /// is the deadline arriving.
+  private record Deadline(Runnable task, long delayNanos) {
+
+    void fire() {
+      task.run();
     }
-    assertTrue(response.isCompletedExceptionally(), route);
   }
 
-  /// A body that stalls after the headers must not leave the request pending (or a thread
-  /// parked reading it) for good: the future the route hands back fails -- an ordinary
-  /// failed call to a retrying caller -- instead of hanging; see [#assertStallEnded] for
-  /// which mechanism ends it on which JDK. Checked on the wrapped GET and POST routes, the
-  /// two the JSON-RPC clients use.
+  /// A client's deadline scheduler that records every timer a route arms and runs none;
+  /// the release a settled response asks of its timer is accepted and changes nothing.
+  /// Any other scheduler or timer method throws, so a route that reached for one fails
+  /// loudly instead of going unrecorded.
+  private static final class DeadlineRecorder {
+
+    final List<Deadline> armed = new CopyOnWriteArrayList<>();
+    final ScheduledExecutorService scheduler = (ScheduledExecutorService) Proxy.newProxyInstance(
+        ScheduledExecutorService.class.getClassLoader(),
+        new Class<?>[]{ScheduledExecutorService.class},
+        (_, method, args) -> {
+          if (!method.getName().equals("schedule") || !(args[0] instanceof Runnable task)) {
+            throw new UnsupportedOperationException(method.getName());
+          }
+          armed.add(new Deadline(task, ((TimeUnit) args[2]).toNanos((long) args[1])));
+          return Proxy.newProxyInstance(
+              ScheduledFuture.class.getClassLoader(),
+              new Class<?>[]{ScheduledFuture.class},
+              (_, timerMethod, _) -> {
+                if (!timerMethod.getName().equals("cancel")) {
+                  throw new UnsupportedOperationException(timerMethod.getName());
+                }
+                return Boolean.TRUE;
+              }
+          );
+        }
+    );
+
+    /// The one timer armed so far.
+    Deadline only() {
+      assertEquals(1, armed.size(), "one route call arms exactly one deadline");
+      return armed.getFirst();
+    }
+  }
+
+  /// The shared JDK client with each exchange left observable: the request a route
+  /// built, the arrival of its response headers at the handler the route passed, and the
+  /// JDK's response future, handed to the route unchanged so that cancelling it still
+  /// aborts the exchange.
+  ///
+  /// That future is the one thing settled when a fired deadline's `cancel(true)`
+  /// returns. The JDK often completes a cancelled response from its own pool while the
+  /// cancellation is still running, so the route's future may still be completing then:
+  /// a test checks the JDK's future at once and only then waits for the route's.
+  private static final class ObservedHttpClient extends HttpClient {
+
+    /// `headers` completes with the status when the response headers arrive, or fails
+    /// with the exchange if that ends first, so waiting for it is bounded by the request
+    /// timeout alone.
+    record Exchange(HttpRequest request, CompletableFuture<Integer> headers, CompletableFuture<?> response) {
+    }
+
+    final List<Exchange> exchanges = new CopyOnWriteArrayList<>();
+
+    /// The one exchange sent so far.
+    Exchange only() {
+      assertEquals(1, exchanges.size(), "one route call sends exactly one request");
+      return exchanges.getFirst();
+    }
+
+    @Override
+    public <T> CompletableFuture<HttpResponse<T>> sendAsync(final HttpRequest request,
+                                                            final HttpResponse.BodyHandler<T> bodyHandler) {
+      final var headers = new CompletableFuture<Integer>();
+      final var response = HTTP_CLIENT.sendAsync(request, responseInfo -> {
+        headers.complete(responseInfo.statusCode());
+        return bodyHandler.apply(responseInfo);
+      });
+      response.whenComplete((_, failure) -> {
+        if (failure != null) {
+          headers.completeExceptionally(failure);
+        }
+      });
+      exchanges.add(new Exchange(request, headers, response));
+      return response;
+    }
+
+    @Override
+    public <T> CompletableFuture<HttpResponse<T>> sendAsync(final HttpRequest request,
+                                                            final HttpResponse.BodyHandler<T> bodyHandler,
+                                                            final HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+      throw new UnsupportedOperationException("no route sends with a push promise handler");
+    }
+
+    @Override
+    public <T> HttpResponse<T> send(final HttpRequest request, final HttpResponse.BodyHandler<T> bodyHandler) {
+      throw new UnsupportedOperationException("every route sends asynchronously");
+    }
+
+    @Override
+    public Optional<CookieHandler> cookieHandler() {
+      return HTTP_CLIENT.cookieHandler();
+    }
+
+    @Override
+    public Optional<Duration> connectTimeout() {
+      return HTTP_CLIENT.connectTimeout();
+    }
+
+    @Override
+    public Redirect followRedirects() {
+      return HTTP_CLIENT.followRedirects();
+    }
+
+    @Override
+    public Optional<ProxySelector> proxy() {
+      return HTTP_CLIENT.proxy();
+    }
+
+    @Override
+    public SSLContext sslContext() {
+      return HTTP_CLIENT.sslContext();
+    }
+
+    @Override
+    public SSLParameters sslParameters() {
+      return HTTP_CLIENT.sslParameters();
+    }
+
+    @Override
+    public Optional<Authenticator> authenticator() {
+      return HTTP_CLIENT.authenticator();
+    }
+
+    @Override
+    public Version version() {
+      return HTTP_CLIENT.version();
+    }
+
+    @Override
+    public Optional<Executor> executor() {
+      return HTTP_CLIENT.executor();
+    }
+  }
+
+  /// A stall as this client sees it: the headers have arrived and the body has not, so
+  /// the route is pending under its one deadline, armed for `deadline`. Firing it must
+  /// end the route with the JDK's `CancellationException`, an ordinary failed call to a
+  /// retrying caller. The route is waited on only once the JDK's response future is
+  /// done, so the wait cannot hang, and its cause is checked rather than `isCancelled`:
+  /// when the JDK's own completion wins, the cancellation arrives wrapped.
+  private static void assertTheDeadlineEndsTheStall(final ObservedHttpClient.Exchange exchange,
+                                                    final Deadline armed,
+                                                    final Duration deadline,
+                                                    final CompletableFuture<?> route,
+                                                    final String name) {
+    assertEquals(deadline.toNanos(), armed.delayNanos(), name + ": the deadline");
+    assertEquals(200, exchange.headers().join(), name + ": the headers reach this client");
+    assertFalse(route.isDone(), name + ": a body that stalls after the headers leaves the route pending");
+
+    armed.fire();
+
+    assertTrue(exchange.response().isDone(), name + ": the fired deadline cancels the exchange's response");
+    final var failure = assertThrows(ExecutionException.class, route::get, name);
+    assertInstanceOf(CancellationException.class, failure.getCause(), name + ": the route fails with the cancellation");
+  }
+
+  /// A body that stalls after the headers must not leave the request pending (or a
+  /// thread parked reading it) for good: the route arms one deadline at twice the request
+  /// timeout, and when it fires, the future the route handed back fails instead of
+  /// hanging. Checked on the wrapped GET and POST routes, the two the JSON-RPC clients use.
+  ///
+  /// The test fires the deadline itself, long before the request timeout could expire, so
+  /// the JDK's own timer never takes part. It stops at the headers on JDK 25; on JDK 26 it
+  /// covers the body too, and which of the two ends a real stall first there is the
+  /// runtime's.
   @Test
   void aBodyThatStallsAfterTheHeadersIsCancelledAtTwiceTheRequestTimeout() {
-    final var requestTimeout = Duration.ofMillis(200);
-    final var client = new TransportClient(endpoint, requestTimeout, null, (_, body) -> body.length > 0);
-
     for (final var route : new String[]{"GET", "POST"}) {
-      final long started = System.nanoTime();
+      final var http = new ObservedHttpClient();
+      final var deadlines = new DeadlineRecorder();
+      final var client = new TransportClient(
+          endpoint, http, TIMEOUT, null, (_, body) -> body.length > 0, deadlines.scheduler
+      );
+
       final var response = route.equals("GET")
           ? client.sendGetRequest(WRAPPED_PARSER, "/stall")
           : client.sendPostRequest(endpoint.resolve("/stall"), WRAPPED_PARSER, "{}");
-      assertStallEnded(response, requestTimeout, started, route);
+      assertTheDeadlineEndsTheStall(http.only(), deadlines.only(), Duration.ofSeconds(16), response, route);
     }
   }
 
   /// The no-wrap routes carry the same deadline (they read the body too), while a
   /// body-handler route leaves the body to its handler: with a streaming handler the
-  /// response completes at the headers and this client schedules no deadline for it, so the
-  /// completed future is untouched however long the body stalls. That is all this pins:
-  /// whether the stalled stream itself survives is the runtime's -- JDK 26's request
-  /// timeout ends it, JDK 25's does not -- and is not asserted here.
+  /// response completes at the headers and this client arms no deadline for it, so
+  /// nothing exists that could fail the completed future later, however long the body
+  /// stalls. That is all this pins: whether the stalled stream itself survives is the
+  /// runtime's -- JDK 26's request timeout ends it, JDK 25's does not -- and is not
+  /// asserted here.
   @Test
-  void theNoWrapRoutesShareTheDeadlineAndTheBodyHandlerRoutesDoNot() throws Exception {
-    final var requestTimeout = Duration.ofMillis(200);
-    final var client = new TransportClient(endpoint, requestTimeout, null, null);
+  void theNoWrapRoutesShareTheDeadlineAndTheBodyHandlerRoutesDoNot() {
+    final var http = new ObservedHttpClient();
+    final var deadlines = new DeadlineRecorder();
+    final var client = new TransportClient(endpoint, http, TIMEOUT, null, null, deadlines.scheduler);
 
-    final long started = System.nanoTime();
     final var noWrap = client.sendGetRequestNoWrap(RAW_PARSER, "/stall");
-    assertStallEnded(noWrap, requestTimeout, started, "no-wrap GET");
+    assertTheDeadlineEndsTheStall(http.only(), deadlines.only(), Duration.ofSeconds(16), noWrap, "no-wrap GET");
 
     final var handled = client.sendGetRequestNoWrap(HttpResponse.BodyHandlers.ofInputStream(), HttpResponse::statusCode, "/stall");
-    assertEquals(200, handled.get(2, TimeUnit.SECONDS),
+    assertEquals(1, deadlines.armed.size(), "a body-handler route arms no deadline");
+    assertEquals(200, handled.join(),
         "a caller-supplied handler completes at the headers; the body and its timing are the handler's");
-    Thread.sleep(requestTimeout.toMillis() * 3); // past the exchange deadline: this client schedules nothing for a handler route
-    assertFalse(handled.isCompletedExceptionally(), "the completed future is untouched; the stream's fate is the runtime's");
   }
 
-  /// A response that completes in time is untouched by the deadline: the timer is released
-  /// when the response arrives, and waiting past the deadline changes nothing.
+  /// A response that completes in time is untouched by the deadline: the route arms its
+  /// one timer, and a timer that fires after the response arrived -- one a scheduler
+  /// kept -- finds a finished exchange and changes nothing. Releasing the timer on
+  /// arrival is pinned by `JsonHttpClientDeadlineTests`, where the response completes on
+  /// the test's own thread; here the release runs on the JDK's pool after the route's
+  /// future completes, where only an open-ended wait could observe it.
   @Test
-  void aTimelyResponseIsUnaffectedByTheDeadline() throws InterruptedException {
-    final var requestTimeout = Duration.ofMillis(200);
-    final var client = new TransportClient(endpoint, requestTimeout, null, null);
+  void aTimelyResponseIsUnaffectedByTheDeadline() {
+    final var http = new ObservedHttpClient();
+    final var deadlines = new DeadlineRecorder();
+    final var client = new TransportClient(endpoint, http, TIMEOUT, null, null, deadlines.scheduler);
 
     final var response = client.sendGetRequest(RAW_PARSER, "/timely");
+    final var deadline = deadlines.only();
+    assertEquals(Duration.ofSeconds(16).toNanos(), deadline.delayNanos());
     assertEquals(echoOf("GET", "/timely"), response.join());
-    Thread.sleep(requestTimeout.toMillis() * 3);
+    assertEquals("/timely", lastRecorded().path());
+
+    deadline.fire();
+
     assertEquals(echoOf("GET", "/timely"), response.join());
     assertFalse(response.isCancelled());
+    assertFalse(http.only().response().isCancelled(), "a late deadline cannot cancel a finished exchange");
   }
 
   /// `extendRequest` may replace the request timeout; the exchange deadline follows the
-  /// timeout on the built request, not the client default. Pinned end to end in the fast
-  /// direction: a five-second default overridden down to 200 ms ends within this test's
-  /// two-second bound, where a deadline derived from the default would still be waiting.
+  /// timeout on the built request, not the client default. A five-second default
+  /// overridden down to three seconds arms a six-second deadline, where one derived from
+  /// the default would be ten, and firing that deadline ends the stalled exchange.
   @Test
   void theDeadlineRespectsATimeoutOverriddenByExtendRequest() {
-    final var overridden = Duration.ofMillis(200);
-    final var client = new TransportClient(endpoint, Duration.ofSeconds(5), request -> request.timeout(overridden), null);
+    final var overridden = Duration.ofSeconds(3);
+    final var http = new ObservedHttpClient();
+    final var deadlines = new DeadlineRecorder();
+    final var client = new TransportClient(
+        endpoint, http, Duration.ofSeconds(5), request -> request.timeout(overridden), null, deadlines.scheduler
+    );
 
-    final long started = System.nanoTime();
     final var response = client.sendGetRequest(RAW_PARSER, "/stall");
-    assertStallEnded(response, overridden, started, "overridden GET");
+    final var exchange = http.only();
+    assertEquals(overridden, exchange.request().timeout().orElseThrow(), "the built request carries the override");
+    assertTheDeadlineEndsTheStall(exchange, deadlines.only(), Duration.ofSeconds(6), response, "overridden GET");
   }
 
   /// Executor rejection remains synchronous on the wrapped and no-wrap routes. The
