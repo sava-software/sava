@@ -103,6 +103,12 @@ return shared storage, so callers must copy before modifying it. Sharing depends
 the implementation: a lookup-table view copies its key slice. Mutating retained
 public-key bytes can leave cached Base58 and hash-code values stale.
 
+`PBKDFEncryption.decrypt(keyBytes, aad, iv, cipherText)` wraps the key array without
+copying, and on current JDKs the JCE zeroes that array while initialising AES/GCM for
+decryption (SunJCE on 25.0.2 does so at `init`, in decrypt mode only; encryption leaves
+it intact). A caller that needs the key bytes afterwards passes a copy. The
+password-taking overloads derive a fresh key per call and wipe it themselves.
+
 ## Wire field names vs Java accessors
 
 Where a response record renames a field, cross-referencing the Solana RPC docs
@@ -120,7 +126,7 @@ just this.
 
 ## Test harnesses
 
-Two harnesses already exist; neither is obvious from the outside.
+These harnesses and seams already exist; none is obvious from the outside.
 
 **RPC round trips** — extend `RpcRequestTests` (sava-rpc). It starts a local
 `HttpServer`, and `registerRequest(expectedRequest, response)` both asserts the
@@ -132,11 +138,27 @@ Requests are queued FIFO across a test, so a test that fails mid-way can leave
 entries behind and confuse the *next* assertion — read the first failure in a
 run, not the last.
 
-**WebSocket** — construct `SolanaJsonRpcWebsocket` directly and drive
-`onOpen` / `onText` with a `RecordingWebSocket`. Subscribe *before* the `onOpen`
-you assert on: `queueSubscription` only queues and signals, and of the two things
-that flush the queue — a background thread started in the constructor, and
-`onOpen` — only `onOpen` is synchronous with the test. The dedicated
-`subscriptionResendDelay` controls retry and unanswered-request deadlines; set
-it large when a test needs to keep the background thread away from pending
-subscription work.
+**WebSocket** — construct `SolanaJsonRpcWebsocket` directly (its constructor is
+package-private) and drive `onOpen` / `onText` with a `RecordingWebSocket`. Pass a
+`RecordingExecutor` as its executor and no check-loop thread runs: the loop task the
+constructor submits is captured, never started, so a test calls `checkCycle(0L)` for
+one synchronous cycle, or runs the captured task, which loops until the websocket is
+closed or the thread interrupted and then closes it. A null executor is the
+production default, a dedicated thread started in the constructor. Subscribe
+*before* the `onOpen` you assert on: `queueSubscription` only queues and signals,
+and `onOpen` flushes the queue on the test's own thread. The dedicated
+`subscriptionResendDelay` controls retry and unanswered-request deadlines; with a
+real loop thread, set it large when a test needs to keep that thread away from
+pending subscription work.
+
+**Determinism seams** (sava-rpc test sources):
+
+- `TestLogs` (`json.http.client`) — `capture(loggerClass[, level], action)` returns the
+  `LogRecord`s a class logged through `System.Logger`'s JUL backend while `action` ran.
+- `StubHttpResponse` (`json.http.client`) — an `HttpResponse` built from literals by
+  `of([status,] body, headerPairs...)`, with no server; every accessor returns a
+  distinguishable non-default value.
+- `TestClock` (`json.http.ws`) — a hand-stepped `NanoClock` with a non-zero origin;
+  `advanceMillis` moves it, and `sleep` advances it instead of blocking.
+- `RecordingExecutor` (`json.http.ws`) — captures submitted tasks without running them,
+  so a websocket given one has no check-loop thread (above).

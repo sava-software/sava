@@ -279,7 +279,7 @@ mutators can reach, so do not re-enable them on a hunch.
 
 | Suite | Target | Notes |
 | --- | --- | --- |
-| `pitestResponses` | `json.http.response.*` | Eight observed equivalents; retained retirement candidates are documented in the RPC baseline notes. |
+| `pitestResponses` | `json.http.response.*` | Accepted families are argued in `sava-rpc/config/pitest/README.md`. |
 | `pitestClient` | `json.http.client.*` | Coverage debt cleared 2026-07-31; see below. |
 | `pitestWs` | `json.http.ws.*` | Seeded at 50%, worked to 73% same day; see below. |
 | `pitestEncoding` | `json.*`, `json.http.request.*` | Added 2026-08-04 to close ownership; subtracts the three sibling suites' packages, since the wildcard spans dots. |
@@ -349,9 +349,9 @@ null` fallback — what an unconfigured client actually talks over — driven by
 test. `anOmittedHttpClientDefaultsToANewOne` builds without one and asserts the
 client supplied its own; the class went to 29/29. The generalisation worth
 keeping: a builder test that always configures a value cannot see the default it
-replaces, so each defaulted field needs one build that omits it. `pitestClient`
-is now 538/601 with a 63-row baseline (was 64), pruned via
-`pitestWsBaselinePrune` (then spelled `-PpruneMutationBaseline`).
+replaces, so each defaulted field needs one build that omits it. The killed row
+was then pruned from the `client` baseline with what is now
+`pitestClientBaselinePrune` (then spelled `-PpruneMutationBaseline`).
 
 ### `pitestWs` — the clock seam, and the background-thread ceiling
 
@@ -377,16 +377,16 @@ subscription's send and its confirmation, and it never exited after `close()`,
 stranding the non-daemon thread. Constructor-driven tests inject a
 `RecordingExecutor` (captures the loop task, never runs it), so no background
 thread races clock-stepped assertions; builder-path tests still run real
-internal executors, which is where the loop's remaining flip-insurance rows
-come from. `connect()`'s deferred branch has its own seam — a package-private
+internal executors. `connect()`'s deferred branch has its own seam — a package-private
 `scheduler(ScheduledExecutorService)` on the builder, null defaulting to the
 classic `CompletableFuture.delayedExecutor` (the shared JDK delayer; the
 check-loop executor cannot host deferred connects because its single thread
 is occupied by the loop for the websocket's lifetime). With a
 `RecordingScheduler` the window boundary, remaining-delay arithmetic, and
-deferred `lastWrite` write are pinned deterministically, leaving one
-classic-path body row accepted. Fakes are named `Recording*` and excluded
-alongside `*Test*` (which also matches `TestClock`).
+deferred `lastWrite` write were pinned deterministically, leaving one
+classic-path body row (`lambda$connect$0`) accepted at the time; that mutation site
+has since been removed. Fakes are named `Recording*` and excluded alongside `*Test*`
+(which also matches `TestClock`).
 
 ## sava-vanity
 
@@ -462,14 +462,15 @@ from a downstream Rust adaptation's practice).
   still says nothing about: **sava-vanity's application module**, which registers
   no suite at all.
 - **The ws suites' timing seams have a background-thread ceiling** — the
-  check-loop and ping-pacing rows detectable only under load are the audited
-  timeout set, not ordinary kills (the audited-set section above).
+  check-loop mutants that leave the loop no finite completion are the audited
+  `cause:liveness` timeout set, not ordinary kills
+  (`sava-rpc/config/pitest/README.md`, "Timed-out mutants (audited set)").
 - **`pitestClient`'s 39 `NO_COVERAGE` transport rows — expired 2026-07-31.**
   The escape was attempted and it worked: the whole family fell to the
   transport harness (`pitestClient` section above), a same-day demonstration
   of why unreachable-has-an-expiry-date. The suite's remaining blind spot is
-  the ordinary one — its 20 surviving rows are argued acceptances; the
-  parse-failure diagnostic logs are asserted through the JUL backend and no
+  the ordinary one — its argued acceptances, in `sava-rpc/config/pitest/README.md`;
+  the parse-failure diagnostic logs are asserted through the JUL backend and no
   longer count among them.
 - **Excluded main-source classes**: none. The git-ignored `Integ` driver lives
   in the test sources and is kept out of the recompile (below); fuzz harnesses
@@ -480,10 +481,73 @@ from a downstream Rust adaptation's practice).
 
 ## Per-package hardening history
 
-The per-surface notes — what each package's fuzz corpus covers, which invariants
-are asserted where, and the reasoning behind long-standing accepted mutants —
-live in the hardening sections of `AGAVE_SYNC.md`, alongside the canonical
-sources they mirror.
+The per-surface notes — what each package's fuzz corpus covers and which
+invariants are asserted where — live in the hardening sections of `AGAVE_SYNC.md`,
+alongside the canonical sources they mirror. The reasoning behind accepted mutants
+lives in each module's `config/pitest/README.md`.
+
+## Mutation-testing campaign — 2026-10-07
+
+The process had moved a long way since the baselines were seeded, so a read-only audit
+of the whole setup against the 21.6.5 process ran first (six lenses: suite config,
+debt inventory, audited timeouts, test determinism, fuzz, notes and docs; each finding
+checked by two refuters). What it found, and what closed the same day:
+
+- **Suite configuration.** The build-file `-PtrialMutators` hook reused the plugin's
+  property and had overwritten the real reports of every suite it ran; it is gone and
+  trials go through `pitestMutatorTrial`. The hand-written `*Fuzz*` exclusion globs
+  duplicated the plugin's own harness exclusion and left. Test fakes named for their
+  role are excluded by name with a trailing wildcard (`FixedSeedSecureRandom*`,
+  `QuietWsLogging*`). `pbkdf` gained `EXPERIMENTAL_NAKED_RECEIVER` from the measurement
+  recorded under "Mutator-set trials". The timeout-budget comments in both build files
+  no longer quote measurements; the ranking is re-taken above.
+- **Baselines.** The sava-rpc `client`, `ws` and `responses` records carried every row
+  that had ever been killed or retired, because no writer could retire by key until
+  21.6.2; the keyed prunes removed them, and only the three ws keys blocked by live or
+  protected siblings remain (`sava-rpc/config/pitest/README.md`, "Retained rows and the
+  writer gap"). The `# logging only` acceptance was killed through `TestLogs` on the
+  same reading that had withdrawn the client log-and-rethrow acceptance. In sava-core
+  the seeded `# untriaged` debt of `accounts`, `sysvar`, `pbkdf` and `vanity` was
+  worked down by a test campaign per package (every builder setter, the ranged and
+  `char[]` key overloads, key-pair validation; sysvar write round trips at two offsets;
+  the properties and JSON envelope forms, the password guard, salt and IV draws and key
+  wipes; the generator API on an inline executor) and the unscoped prunes retired what
+  died. `sysvar` now detects its whole population, so its prune removed the record and
+  its provenance pair together (the no-record state `primitives` and rpc `encoding`
+  already sit in); `pbkdf` keeps only argued families.
+  The four `accounts` tombstones left once the two uncalled private `verifySignature`
+  overloads holding their keys' live siblings were deleted.
+- **Audited timeouts.** `ws` `closed ORDER_ELSE` never met the liveness precondition
+  (a synchronous reader existed) and left the audited set; the two `runLoop` members
+  now carry the synchronous-reader argument they owed. `AddressLookupTableOverlay`
+  `keysToString` was refactored from an offset cursor to a counted range, so the tx
+  suite has no member. The four `vanity` members and the `Jex.isValid` member are
+  killed deterministically by draw and call budgets on the test fakes; their lines
+  wait on the three-run quiet notice. `Ed25519Util.scalarMultBase IncrementsMutator`'s
+  argument was corrected to the int wraparound it really is; its category is an owner
+  decision.
+- **Determinism.** The Base58 and Jex differentials draw from fixed seeds; the pbkdf
+  tests take salt and IV from a seeded fake; `PreV1InterfaceShapeTests` resets its key
+  counter per test; `SignerTest` no longer derives at default PBKDF2 cost in a loop
+  whose subject is a refusal.
+- **Fuzz.** `TransactionSkeletonFuzz` judges each parse path on its own, so one
+  tolerated throw no longer skips every cross-path check, and it cross-checks the fee
+  payer against the signer keys and the included accounts. That found a header
+  declaring zero required signatures reading the blockhash as its fee payer and
+  shifting every account down a slot (`NoSignerHeaderTests`); the guard that refuses it
+  mirrors the one `#58` added for the opposite contradiction. Jazzer `slow-unit-*`
+  artifacts are ignored so a slow input cannot refuse a fuzz receipt.
+- **Docs.** `AGAVE_SYNC.md`, `CONVENTIONS.md` and this file lost stale counts, a weekly
+  fuzz schedule that no longer exists, a claim that no test starts a thread, and
+  pointers at retired families; `CONVENTIONS.md` gained the log and clock seams and the
+  decrypt key-array zeroing trap.
+
+Left to the owner: whether the real-clock transport pins in
+`JsonHttpClientTransportTests` should leave the three rpc suites that cover them; the
+`scalarMultBase` member's category (or a refactor to an indexed window loop); the
+`numSearched` accounting that excludes matched keys in the vanity workers; the
+remaining `# untriaged` rows in `accounts` and `vanity`; the forty-odd sava-rpc families
+whose oracle is still "owed"; and `generateTestSupport`.
 
 ## Mutator-set trials
 
@@ -511,8 +575,12 @@ churn for nothing, so it stays off. **Re-trial if Big arithmetic is introduced**
 `EXPERIMENTAL_NAKED_RECEIVER` was trialed 2026-07-22 against every suite, per
 the shared HARDENING.md's fluent-API blind spot (a call returning its receiver
 type is an expression, invisible to `VoidMethodCallMutator` — casebook: the
-EXPERIMENTAL_NAKED_RECEIVER trials). Trials run with the build-file hook:
-`-PtrialMutators=STRONGER,EXPERIMENTAL_X` overrides every suite for a run.
+EXPERIMENTAL_NAKED_RECEIVER trials). Trials run through the plugin's
+`pitestMutatorTrial -PtrialMutators=<CANDIDATE[,...]>`, which writes isolated
+`<suite>-trial` reports and leaves each suite's own evidence alone. The build-file
+hook that once reused the same property (overriding every suite's mutators for the
+run, and so overwriting the real reports of every suite it touched) was deleted on
+2026-10-07.
 
 | Suite | Without | With | Fires |
 |---|---|---|---|
@@ -529,9 +597,27 @@ EXPERIMENTAL_NAKED_RECEIVER trials). Trials run with the build-file hook:
 | rpc `responses` | 524 | 607 | 83 |
 | rpc `ws` | 541 | 592 | 51 |
 
-Enabled on the seven firing suites (`mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"`
-at each registration); the zero-fire suites stay plain `STRONGER` — their mutated
-code returns primitives, arrays, and records, not fluent receivers. 219 of the
+The suites registered on 2026-08-04 (whole-population ownership) were measured on
+2026-10-07, the build-file hook's last use before it was retired that day in favour
+of `pitestMutatorTrial`; `accounts` had carried the mutator since registration
+without a trial row, `pbkdf` gained it from this measurement:
+
+| Suite | Without | With | Fires |
+|---|---|---|---|
+| core `accounts` | 294 | 329 | 35 |
+| core `sysvar` | 201 | 201 | 0 |
+| core `pbkdf` | 96 | 109 | 13 |
+| core `primitives` | 64 | 64 | 0 |
+| rpc `encoding` | 58 | 65 | 7 |
+
+The rpc `encoding` row is the first measurement taken through `pitestMutatorTrial`
+(the same run re-measured `client`, `ws` and `responses` with the candidate alone,
+103, 67 and 90 generated, all consistent with their 2026-07-22 rows).
+
+Enabled on every suite whose trial saw it fire (`mutators =
+"STRONGER,EXPERIMENTAL_NAKED_RECEIVER"` at each registration); the zero-fire suites
+stay plain `STRONGER` — their mutated code returns primitives, arrays, and records,
+not fluent receivers. In the 2026-07-22 trial, 219 of the
 248 fires died against existing tests on the first run; new tests killed 14
 more, and 15 were accepted with reasons (9 in `client`'s documented
 never-entered transport family, 1 `responses` position-equivalent, 5 `ws`
@@ -635,12 +721,44 @@ back-to-back with the report deleted between: **27s → 17s (-37%)**, same
 (57s → 45s) came in at the ~20% the shared casebook predicts. `SURVIVED -> TIMED_OUT` drift in the verify output (the plugin stashes
 each run's statuses under `<module>/.pitest-history/<suite>.statuses` and names
 each newcomer's origin) is the signal that the constant went too low; raise it
-back before suspecting the code. One standing exception: `encoding`
-`Base58.limbsLength:94`, where the mutant inflates the allocation estimate and
-so flips between `SURVIVED` and `TIMED_OUT` on its own — both copies sit in the
-baseline, so the ratchet holds either way and the warning naming that row is
-expected rather than a signal to retune. `ws` is the suite to watch — its `checkCycle`
-`unlock()` mutant and the `run` while-condition are detected *by* timing out.
+back before suspecting the code. The exceptions this section first named have moved
+on: `encoding` `Base58.limbsLength:94`, whose mutant inflated the allocation estimate
+and flipped between `SURVIVED` and `TIMED_OUT`, was killed on 2026-08-05 by a value
+oracle (`Base58LimbBoundTests`), and the `ws` check-loop mutants then read as detected
+*by* timing out are now either killed or audited. Each module's
+`config/pitest/README.md`, "Timed-out mutants (audited set)", holds the timeouts in
+force and their causes.
+
+### Re-ranked 2026-10-07
+
+The table above predates the five suites registered on 2026-08-04 and the tests
+added since. Each suite's slowest covering test is on PIT's "Slowest test"
+stderr line of every run; the history-free runs of 2026-10-07 gave:
+
+| Suite | Slowest |
+| --- | --- |
+| `encoding` | 0.198s (`Base58Tests.testReferenceCrossValidation`) |
+| `tx` | 0.172s (`LegacyMessageConformanceTests.collectionSigningMatchesPinnedSolanaSignerSlotsAndEd25519Bytes`) |
+| `accounts` | 1.243s (`SignerTest.argon2EncryptedFromPropertiesMissingPropertyFails`) |
+| `pbkdf` | 1.218s (`PBKDFEncryptionTest.argon2RoundTrip`) |
+| `vanity` | 0.544s (`KeyFileRoundTripTests.encryptedJsonFilesRecoverSigningKeys`) |
+| `sysvar` | 0.066s (`SysvarTests.epochRewardsReadWithAddressCarriesItAndLengthIsTheWireSize`) |
+
+The multi-second outlier the audit found that day, `SignerTest`'s PBKDF2
+missing-property loop deriving six times at the default iteration count, was
+cut to the minimum count the same day: its subject is the refusal, which runs
+before any derivation. What remains above the plugin's 250 ms advisory is
+memory-hard Argon2id at its default parameters: in `pbkdf` that is the subject of
+the round trip, while the `accounts` missing-property loop still derives at the
+default cost only because the minimum Argon2id parameters are package-private
+constants of the pbkdf package (a small follow-up). Both run under the `argon2id`
+resource lock. The budget argument is
+unchanged: the factor scales with the test, so these suites keep the same
+proportional headroom as the fast ones, and no `SURVIVED -> TIMED_OUT` drift has
+appeared in any of them. The sava-rpc suites' slowest tests are the real-clock
+transport pins in `JsonHttpClientTransportTests` (about a second); whether those
+should leave the three suites that cover them for a class the suites exclude is
+an open owner decision (audit, 2026-10-07).
 
 ## Plugin knobs and generated scaffolding — what this repo uses
 
@@ -656,13 +774,16 @@ expected rather than a signal to retune. `ws` is the suite to watch — its `che
 - **`-PmutateOnly=<class-glob>`** is the iteration loop for killing a cluster
   (tests still run in full; the report is stamped `.scoped` and cannot touch a
   baseline). `pitest<Suite>Debt` ranks the remaining debt by class.
-- **`generateTestSupport` stays off.** The generated `ConcurrencyHarness` /
-  `Ports` / `LoopbackHttpServer` / `JulRecorder` set has no consumer here: no
-  sava test starts a thread — the ws determinism story is seams
-  (`RecordingExecutor`, `RecordingScheduler`, `TestClock`), not concurrency
-  harnesses — and the client tests drive `StubHttpResponse` rather than a
-  socket. Enable it if a suite ever needs a real server or a parked-thread
-  assertion; do not turn it on speculatively.
+- **`generateTestSupport` stays off, for now.** The generated `ConcurrencyHarness` /
+  `Ports` / `LoopbackHttpServer` / `JulRecorder` set has no consumer here because
+  the tests that need such things predate it and roll their own: the request tests
+  extend a base that starts a real `HttpServer` on a loopback port, the transport
+  and cancellation tests open their own sockets, and the websocket lifecycle tests
+  start checker threads and a fixed pool. The mutation-tested determinism story is
+  still seams (`RecordingExecutor`, `RecordingScheduler`, `TestClock`), and the
+  client parsers are driven through `StubHttpResponse`. Whether the hand-rolled
+  harnesses should move onto the generated set is an open owner decision
+  (audit, 2026-10-07); do not turn it on speculatively.
 
 ## Arcmutate incremental analysis — licensed 2026-08-03
 
@@ -855,9 +976,10 @@ seeds to move these two baselines.
 ### Three new fuzz targets: ed25519, responses, ws — 2026-07-31
 
 The fuzz roster grew from four targets to seven, and a weekly `fuzz.yml`
-workflow (ported from ix-proxy's) now soaks all of them on a schedule; the
-seed corpora and what each seed pins are in each module's
-`src/test/resources/fuzz/README.md`.
+workflow (ported from ix-proxy's) was added to soak all of them on a schedule.
+The schedule was removed in `3d61a76` (2026-08-04): the workflow is manual dispatch
+only, exploration rather than release evidence (`AGENTS.md`). The seed corpora and
+what each seed pins are in each module's `src/test/resources/fuzz/README.md`.
 
 - **`fuzzEd25519`** (sava-core) — differential over the first 32 bytes as
   both a point encoding and a keygen seed: `isNotOnCurve` against
@@ -902,7 +1024,8 @@ still reaches the growth arithmetic and its large seed replays it inside
 `check`.
 
 Ratchet effects of the same pass, all verified green: the ws and client
-suites gained `*Fuzz*` exclusions (the sava-core suites always had them —
+suites gained `*Fuzz*` exclusions (the sava-core suites always had them, and all
+seven globs left on 2026-10-07 once the plugin excluded harness classes itself —
 harnesses are killers, not mutant population); the ws seed replay joining
 `pitestWs`'s targetTests newly covered previously-unobserved `onText`
 interiors, and the six unexplained rows it surfaced were all killed with
@@ -930,7 +1053,7 @@ without it the buffer could reach nearly twice a caller-set cap (the
 javadoc's "128 MiB buffer" only held for the default). Footprint-only:
 `Math.min` generates no mutants under STRONGER, so the fix cost a pure
 34-row drift refresh. `fuzz.yml` (here and in ix-proxy) gained `--continue`
-— a crashing target no longer skips the rest of the weekly soak, and the
+— a crashing target no longer skips the remaining targets, and the
 nonzero exit still fires the findings upload — plus a step-level
 `timeout-minutes` scaled from `max-fuzz-time`: a job-level timeout marks the
 job *cancelled*, which skips the `if: failure()` upload, while a step-level

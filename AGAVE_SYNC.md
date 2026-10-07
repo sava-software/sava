@@ -431,9 +431,8 @@ guarantees a *typed* rejection — see the `CompactU16Encoding.decode` leniency 
   exposed was killed the same day (182 → 40 baseline keys) by
   `AccountIndexLookupTableTests`, `TransactionByteHelpersTests`,
   `TransactionFactoryTests`, and `TransactionRecordPlumbingTests`; the baseline in
-  `sava-core/config/pitest/tx-accepted.csv` now carries 27 triaged equivalents
-  (reasons in `config/pitest/README.md`) plus the 13 long-standing skeleton
-  survivors — offset arithmetic a length assertion cannot distinguish. New unkilled
+  `sava-core/config/pitest/tx-accepted.csv` holds triaged survivors only, their
+  reasons grouped by family in `sava-core/config/pitest/README.md`. New unkilled
   mutants fail the build via `pitestTxVerify`; triage per `config/pitest/README.md`.
 - `./gradlew :sava-core:fuzzTxSkeleton -PmaxFuzzTime=<seconds>` — Jazzer over
   `TransactionSkeletonFuzz`: tolerates any `RuntimeException` from deserialization and the
@@ -650,8 +649,8 @@ regressions:
 
 Verification tasks:
 
-- `./gradlew :sava-core:pitestBorsh` — PIT over `Borsh`, `RustEnum`, and their nested
-  interfaces (globbed as `Borsh$*`/`RustEnum$*` to keep test classes out). Baseline
+- `./gradlew :sava-core:pitestBorsh` — PIT over the whole `borsh` package (a package
+  wildcard with test-source exclusions). Baseline
   2026-07-17: 1070 mutations, **100% killed, 0 without coverage** — hold this bar;
   `BorshTests` covers the matrix families, `BorshCoreTests` the string/byte primitives,
   `BorshPrimitiveVectorTests`/`BorshReferenceVectorTests` the 1-D families, checked
@@ -660,8 +659,9 @@ Verification tasks:
   dropped-write mutants are invisible at offset 0 into zeroed arrays.
 - `./gradlew :sava-core:fuzzBorsh -PmaxFuzzTime=<seconds>` — Jazzer over `BorshFuzz`:
   every read family over every input; a successful read must re-serialize into exactly
-  the promised `len*` bytes and re-read equal. No seed corpus: the format is shallow
-  (u32 length prefix + elements), so valid prefixes are reachable from scratch.
+  the promised `len*` bytes and re-read equal. The format is shallow (u32 length
+  prefix + elements), so valid prefixes are reachable from scratch; the committed
+  seeds are its regression corpus, the landing place for findings, replayed by `check`.
 
 ## Encoding hardening (sava-core `encoding/`)
 
@@ -685,15 +685,17 @@ convention when extending them:
 - Randomized tests seed a `Random` from `SecureRandom` and embed the seed in failure
   messages; replay a failure by pinning the seed.
 
-Verification tasks (not part of `test`; run whenever these classes change). Both are
-provided by the shared `software.sava.build.feature.hardening` convention plugin
-(sava-build repo) and configured via the `hardening {}` block in
-`sava-core/build.gradle.kts`:
+Verification tasks (not part of `test`; when each is owed is the gate rule in
+`AGENTS.md`: the suite once per unpushed range, after review and before the push, and
+the fuzz target in the local campaign before a release). Both are provided by the
+shared `software.sava.build.feature.hardening` convention plugin (sava-build repo) and
+configured via the `hardening {}` block in `sava-core/build.gradle.kts`:
 
 - `./gradlew :sava-core:pitestEncoding` — PIT mutation testing of the four classes against
   their tests; report in `sava-core/build/reports/pitest/encoding`. Baseline (2026-07-16,
-  Java 25 bytecode): 1064 mutations, 98% detected (a timed-out mutant — an induced
-  infinite loop — counts as detected), 0 without coverage; the survivors (20 baseline
+  Java 25 bytecode): 1064 mutations, 98% detected (that figure counted timed-out mutants
+  as detected; today a timeout is audited on its own and never counts as a kill), 0
+  without coverage; the survivors (20 baseline
   keys as of 2026-07-18) are individually verified equivalent, reasons grouped in
   `sava-core/config/pitest/README.md`. Any new survivor must be either killed with a
   test or classified equivalent with a reason.
@@ -706,18 +708,25 @@ provided by the shared `software.sava.build.feature.hardening` convention plugin
   small); the corpus persists in `sava-core/build/fuzz/base58-corpus`, so runs accumulate.
 
 Adding a fuzz target: give it a class with `public static void fuzzerTestOneInput(byte[])`
-and no Jazzer imports (so it compiles with the regular test sources), register it in the
-`hardening { fuzz.register("<name>") { ... } }` block with `targetClass`, an optional
-`maxLen`, and — for any structured format — a `seedCorpus` directory of committed seed
-inputs (`layout.projectDirectory.dir("src/test/resources/fuzz/<name>")`, one file per
-input). The plugin passes `seedCorpus` to libFuzzer as a trailing read-only corpus:
-replayed every run, but only newly interesting inputs are written back to the writable
-`build/fuzz/<name>-corpus`. Omit `seedCorpus` only when every prefix of the input is
-already valid (e.g. a raw codec like Base58); leaving a structured target seedless is the
-single most common reason a fuzzer plateaus at low coverage. Then add the task to
-`FUZZ_TARGETS` in `.github/workflows/fuzz.yml`; the job sizes its step timeout from that
-list. Only a target in a module the workflow's "Upload findings" step does not already
-list needs more: add that module's `crash-*`, `oom-*`, `timeout-*` and `build/fuzz/` paths.
+and no Jazzer imports (so it compiles with the regular test sources), and register it in
+the `hardening { fuzz.register("<name>") { ... } }` block with `targetClass`, an optional
+`maxLen`, and a `seedCorpus` directory of committed seed inputs
+(`layout.projectDirectory.dir("src/test/resources/fuzz/<name>")`, one file per input).
+Every target gets a corpus, whatever its input format. For a structured format it is the
+*bootstrap* — leaving such a target seedless is the single most common reason a fuzzer
+plateaus at low coverage — and for every format it is the *regression* corpus: where a
+finding's committed seed lands, replayed inside `check` (and as a killer under PIT) by the
+`<Harness>SeedReplayTest` the plugin generates for it. Where neither job applies, record
+that with `declineSeedCorpus("<reason>")` instead. Say what each seed pins in the module's
+`src/test/resources/fuzz/README.md`, next to the corpus directories and never inside one,
+where it would be fed to the harness as a seed. The plugin passes `seedCorpus` to libFuzzer
+as a trailing read-only corpus: replayed every run, but only newly interesting inputs are
+written back to the writable `build/fuzz/<name>-corpus`. `fuzzAll` derives its task list
+from the registrations, so the new target joins the release campaign by itself. Listing
+it in `FUZZ_TARGETS` in `.github/workflows/fuzz.yml` is optional and only adds it to that
+manual-dispatch exploration run; a listed target in a module the workflow's "Upload
+findings" step does not already cover also needs that module's `crash-*`, `oom-*`,
+`timeout-*` and `build/fuzz/` paths there.
 
 Tooling notes (also explained by comments in the hardening plugin): the plugin recompiles
 the main and test sources into one plain, module-info-free classpath root per tool —
@@ -979,3 +988,5 @@ git -C <solana-sdk-clone> diff 4fb3a9a3..HEAD -- \
    pins stay green after upstream adds a variant until someone bumps them, so the fixture
    is the regression gate and this step is the discovery.
 7. Run `./gradlew :sava-core:test :sava-rpc:test` (integration tests via `integ.sh`).
+8. Before pushing, the mutation gate in `AGENTS.md` ("Quality gate & mutation ratchet")
+   applies once to the whole unpushed range, after review.
