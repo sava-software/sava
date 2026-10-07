@@ -6,6 +6,7 @@ import software.sava.core.accounts.lookup.AddressLookupTable;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE_META_SIZE;
@@ -16,7 +17,7 @@ import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE
 /// offset-walking parsers is tolerated. Jazzer still flags what that contract does not
 /// permit — hangs (its own timeout), stack/heap exhaustion, and any non-[RuntimeException]
 /// throwable — and this harness adds the cross-method structural invariants that must hold
-/// whenever a parse fully succeeds.
+/// whenever the parses they compare succeed, each judged independently of the others.
 ///
 /// Seeded from real legacy and versioned (lookup-table) transactions plus a real
 /// lookup-table account under src/test/resources/fuzz/txSkeleton — the header, offsets, and
@@ -167,62 +168,78 @@ public final class TransactionSkeletonFuzz {
       throw new AssertionError("numIndexedAccounts inconsistent with numAccounts - numIncludedAccounts");
     }
 
-    // The parsers walk raw offsets, so a malformed body may throw here — tolerated. But if
-    // the whole pipeline succeeds, the results must be mutually consistent; a violation is
-    // an AssertionError, which is not caught below and so surfaces as a finding.
-    try {
-      final var accounts = skeleton.parseAccounts();
-      final var instructions = skeleton.parseInstructions(accounts);
-      final var signerAccounts = skeleton.parseSignerAccounts();
-      final var signerKeys = skeleton.parseSignerPublicKeys();
-      final var nonSignerAccounts = skeleton.parseNonSignerAccounts();
-      final var nonSignerKeys = skeleton.parseNonSignerPublicKeys();
-      final var programAccounts = skeleton.parseProgramAccounts();
-      final var withoutAccounts = skeleton.parseInstructionsWithoutAccounts();
-      final int serializedLen = skeleton.serializedInstructionsLength();
-      skeleton.id();
-      skeleton.feePayer();
-      skeleton.base58BlockHash();
+    // The parsers walk raw offsets, so a malformed body may throw on any of them — tolerated.
+    // Each path is attempted on its own, so one tolerated throw cannot cancel the checks between
+    // the paths that did succeed; every check below runs whenever all of its inputs parsed. A
+    // violation is an AssertionError, which [#orNull] does not catch, and so surfaces as a finding.
+    final var accounts = orNull(skeleton::parseAccounts);
+    final var instructions = accounts == null ? null : orNull(() -> skeleton.parseInstructions(accounts));
+    final var signerAccounts = orNull(skeleton::parseSignerAccounts);
+    final var signerKeys = orNull(skeleton::parseSignerPublicKeys);
+    final var nonSignerAccounts = orNull(skeleton::parseNonSignerAccounts);
+    final var nonSignerKeys = orNull(skeleton::parseNonSignerPublicKeys);
+    final var programAccounts = orNull(skeleton::parseProgramAccounts);
+    final var withoutAccounts = orNull(skeleton::parseInstructionsWithoutAccounts);
+    final var serializedLen = orNull(skeleton::serializedInstructionsLength);
+    final var feePayer = orNull(skeleton::feePayer);
+    orNull(skeleton::id);
+    orNull(skeleton::base58BlockHash);
 
-      if (accounts.length != skeleton.numIncludedAccounts()) {
-        throw new AssertionError("parseAccounts length != numIncludedAccounts");
-      }
-      if (instructions.length != skeleton.numInstructions()) {
-        throw new AssertionError("parseInstructions length != numInstructions");
-      }
-      if (withoutAccounts.length != skeleton.numInstructions()) {
-        throw new AssertionError("parseInstructionsWithoutAccounts length != numInstructions");
-      }
-      if (programAccounts.length != skeleton.numInstructions()) {
-        throw new AssertionError("parseProgramAccounts length != numInstructions");
-      }
-      if (serializedLen < 0) {
-        throw new AssertionError("serializedInstructionsLength is negative: " + serializedLen);
-      }
+    if (accounts != null && accounts.length != skeleton.numIncludedAccounts()) {
+      throw new AssertionError("parseAccounts length != numIncludedAccounts");
+    }
+    if (instructions != null && instructions.length != skeleton.numInstructions()) {
+      throw new AssertionError("parseInstructions length != numInstructions");
+    }
+    if (withoutAccounts != null && withoutAccounts.length != skeleton.numInstructions()) {
+      throw new AssertionError("parseInstructionsWithoutAccounts length != numInstructions");
+    }
+    if (programAccounts != null && programAccounts.length != skeleton.numInstructions()) {
+      throw new AssertionError("parseProgramAccounts length != numInstructions");
+    }
+    if (serializedLen != null && serializedLen < 0) {
+      throw new AssertionError("serializedInstructionsLength is negative: " + serializedLen);
+    }
+    if (signerAccounts != null && signerKeys != null) {
       if (signerAccounts.length != signerKeys.length) {
         throw new AssertionError("signer accounts and keys differ in length");
-      }
-      // signers + non-signers partition the included accounts exactly.
-      if (signerAccounts.length + nonSignerAccounts.length != accounts.length) {
-        throw new AssertionError("signers + non-signers != included accounts");
-      }
-      if (nonSignerAccounts.length != nonSignerKeys.length) {
-        throw new AssertionError("non-signer accounts and keys differ in length");
       }
       for (int i = 0; i < signerKeys.length; ++i) {
         if (!signerAccounts[i].publicKey().equals(signerKeys[i])) {
           throw new AssertionError("signer account " + i + " disagrees with signer key");
         }
       }
-      // The instruction program of each instruction must be one of the transaction's
-      // accounts; parseInstructions resolves it by index, parseProgramAccounts re-reads it.
+    }
+    // signers + non-signers partition the included accounts exactly.
+    if (accounts != null && signerAccounts != null && nonSignerAccounts != null
+        && signerAccounts.length + nonSignerAccounts.length != accounts.length) {
+      throw new AssertionError("signers + non-signers != included accounts");
+    }
+    if (nonSignerAccounts != null && nonSignerKeys != null && nonSignerAccounts.length != nonSignerKeys.length) {
+      throw new AssertionError("non-signer accounts and keys differ in length");
+    }
+    // The instruction program of each instruction must be one of the transaction's
+    // accounts; parseInstructions resolves it by index, parseProgramAccounts re-reads it.
+    if (instructions != null && programAccounts != null) {
       for (int i = 0; i < programAccounts.length; ++i) {
         if (!instructions[i].programId().publicKey().equals(programAccounts[i])) {
           throw new AssertionError("program account " + i + " disagrees between parse paths");
         }
       }
-    } catch (final RuntimeException tolerated) {
-      // malformed body reached by a valid header — parsing may fail, that is in contract
+    }
+    // The fee payer is the first address and the first signer — Solana's message sanitizer
+    // requires at least one writable signer to pay — so a fee payer that resolves at all must
+    // head both the signer keys and the included accounts, and every signer must have an address.
+    if (feePayer != null) {
+      if (skeleton.numSigners() > skeleton.numIncludedAccounts()) {
+        throw new AssertionError("feePayer resolved although numSigners > numIncludedAccounts");
+      }
+      if (signerKeys != null && (signerKeys.length == 0 || !feePayer.equals(signerKeys[0]))) {
+        throw new AssertionError("feePayer is not parseSignerPublicKeys()[0]");
+      }
+      if (accounts != null && (accounts.length == 0 || !feePayer.equals(accounts[0].publicKey()))) {
+        throw new AssertionError("feePayer is not parseAccounts()[0]");
+      }
     }
 
     // Versioned transactions with lookup tables have a whole second offset-walking parser
@@ -243,6 +260,16 @@ public final class TransactionSkeletonFuzz {
       } catch (final RuntimeException tolerated) {
         // a malformed lookup-table section reached by a valid header — tolerated
       }
+    }
+  }
+
+  /// Runs one parse path under the malformed-input contract: a [RuntimeException] is tolerated and
+  /// reported as `null`, so the caller skips only the checks that need this result.
+  private static <T> T orNull(final Supplier<T> parse) {
+    try {
+      return parse.get();
+    } catch (final RuntimeException tolerated) {
+      return null;
     }
   }
 

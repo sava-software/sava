@@ -131,8 +131,21 @@ abstract class BaseTransactionSkeleton implements TransactionSkeleton {
     }
   }
 
+  /// Rejects a header declaring no required signatures. No valid message has one: its first
+  /// address is the fee payer and must sign (the sanitizer in solana-sdk `message/src/legacy.rs`
+  /// requires at least one writable signer), so a zero count names no fee payer, and reading one
+  /// anyway returns whatever follows the header, the blockhash when no address is included.
+  ///
+  /// @throws IllegalStateException if the header declares no required signatures
+  protected final void requireFeePayer() {
+    if (numSignatures == 0) {
+      throw new IllegalStateException("Header declares no required signatures, so no address is the fee payer.");
+    }
+  }
+
   @Override
   public final PublicKey feePayer() {
+    requireFeePayer();
     requireAddressesCoverSigners();
     return readPubKey(data, accountsOffset());
   }

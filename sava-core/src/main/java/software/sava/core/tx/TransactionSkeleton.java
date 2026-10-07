@@ -284,6 +284,16 @@ public interface TransactionSkeleton {
   /// views mark their programs invoked in every format.
   AccountMeta[] parseAccounts(final List<PublicKey> writableLoaded, final List<PublicKey> readonlyLoaded);
 
+  /// The first included address, which every valid message has sign as its fee payer.
+  ///
+  /// Odd bytes are read permissively, but a header that names no fee payer has no faithful
+  /// reading: one declaring zero required signatures, or more signers than the message includes
+  /// addresses for, is refused rather than read past the address array, where the blockhash
+  /// would pass for the fee payer. Every account parser that resolves the fee payer refuses the
+  /// same headers.
+  ///
+  /// @throws IllegalStateException if the header declares no required signatures, or more than
+  ///                               the message includes addresses for
   PublicKey feePayer();
 
   AccountMeta[] parseSignerAccounts();
