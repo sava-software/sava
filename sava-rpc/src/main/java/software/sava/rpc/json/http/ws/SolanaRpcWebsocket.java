@@ -21,6 +21,8 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+/// Subscribe calls answer `false` once the socket is closed, or when the key is already
+/// subscribed; unsubscribe calls answer whether a registration was removed.
 public interface SolanaRpcWebsocket extends AutoCloseable {
 
   @FunctionalInterface

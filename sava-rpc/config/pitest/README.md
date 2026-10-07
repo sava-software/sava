@@ -92,11 +92,6 @@ live families; the `JsonUtil.parseEncodedData` pending-prune rows are debt (see
   - The `ORDER_IF` row is absent from the licensed population and has not been
     observed killed; its argument remains valid and the row stays in this family,
     since absence under the licensed toolchain is not a kill.
-- **`# capacity math`** — `JsonUtil.toJsonIntArray` `MathMutator`, two siblings on
-  `(data.length << 2) + 2`.
-  - Reason: `StringBuilder` sizing only; the builder grows as needed.
-  - Oracle: owed.
-  - Invalidated if (derived): the value is used for anything but initial capacity.
 - **`# best-effort guard`** — `JsonRpcException.envelopeRequestId`
   `RemoveConditionalMutator_EQUAL_ELSE` and `RemoveConditionalMutator_ORDER_ELSE`,
   on guards that sit inside the reader's best-effort `catch (RuntimeException)`,
@@ -126,6 +121,16 @@ Kept apart from the arguments above; none of it is live evidence.
 - A reviewer measured the same two `# best-effort guard` survivors independently
   before that acceptance was written (2026-09-23).
 
+- `JsonUtil.toJsonIntArray`'s two `# capacity math` rows (`MathMutator` on the
+  `StringBuilder` hint `(data.length << 2) + 2`) were accepted as sizing-only from the
+  first baseline. The 2026-10-07 oracle pass found the hint's int arithmetic wraps at
+  the top of the domain (an `OutOfMemoryError` from 2^29 - 1 elements and a
+  `NegativeArraySizeException` from 2^29, measured off-heap in a standalone JVM), so
+  the hint moved to a long computation clamped at the VM's array limit in a
+  package-private helper, which `ToJsonIntArrayTests` pins at the boundary; both rows
+  read `KILLED` and left through the prune. The output-identity sweep from the same
+  pass (`outputMatchesAnIndependentRenderingAcrossCapacityShapes`) stays as the
+  regression for the rendering itself.
 - `JsonUtil.parseEncodedData` `VoidMethodCallMutator`, the warning on the
   unsupported-encoding fallback, was accepted as `# logging only` from the first
   baseline until 2026-10-07. The warning is the only record of what the provider sent,
@@ -206,10 +211,18 @@ returns null anyway" acceptance against that capability.
   `VoidMethodCallMutator`.
   - Reason: removing the DEBUG body log does not change the URI, timeout, method,
     headers, body publisher, or returned request. This is an accepted non-contract
-    diagnostic, not a claim that JUL output is impossible to observe.
-  - Oracle: owed.
-  - Invalidated if (derived): the request-body log becomes the only record of
-    something a caller needs, or the owner makes it a contract.
+    diagnostic, not a claim that JUL output is impossible to observe. Unlike the
+    parse-failure tails (history notes), the line is not the only record of what it
+    holds: the body is the caller's own request, which the caller's `extendRequest`
+    receives already set, the caller's `HttpClient` receives it built, and the server
+    reads off the wire (`RpcRequestTests` asserts it per method).
+  - Oracle: `JsonHttpClientRequestTests`'
+    `postRequestCarriesItsBodyWhetherOrNotTheDebugLineRuns` builds the request with the
+    line running and with it suppressed, and asserts that both carry the inputs and the
+    body byte for byte, as does the builder `extendRequest` is handed.
+  - Invalidated if (derived): the body stops reaching the caller's hooks or the wire
+    verbatim, making the log the only record of something a caller needs, or the owner
+    makes it a contract.
 
 ### History notes (client)
 
@@ -268,10 +281,21 @@ invalidation conditions are derived from each reason's premise.
   buffer and performs a same-sized copy only at `maxMessageLength`, without changing
   bytes or parsing. Invalidated if (derived): the growth branch changes bytes, or the
   clamp no longer bounds the copy.
-- **`# capacity math`** — `ensureCapacity` `MathMutator`, two siblings. Reason: they
-  alter only the growth hint before `Math.clamp`, which still allocates at least the
-  required capacity. Invalidated if (derived): the hint can drive the clamped size
-  below the required capacity.
+- **`# capacity math`** — `ensureCapacity` `MathMutator`, the `- 2` sibling on the
+  growth hint `((long) conn.buffer.length << 1) + 2`. Reason: it moves the hint four
+  chars below the doubling, and `Math.clamp` still allocates at least the required
+  capacity and at most `maxMessageLength`, so growth stays geometric and the
+  reassembled chars are the same. Oracle: `ReassemblyCapacityTests`'
+  `fragmentedMessagesDeliverTheirExactPayloadAcrossTheCapacityShapes` and
+  `aMessageAtACapBetweenTwoHintsDeliversItsExactPayload` compare delivered payloads with
+  the generated ones across the lengths where the two hints clamp differently. The
+  shift sibling (`>> 1`) is not a constant factor: it turns doubling into an exact fit
+  that every later fragment copies again, the complexity change `HARDENING.md` keeps
+  out of this family, so `crossingTheCapacityGrowsGeometricallyNotToAnExactFit` and
+  `aCapWithinReachOfTheNextGrowthIsReachedInOneAllocation` kill it through the
+  package-private `reassemblyCapacity()` seam (its row left through the prune on
+  2026-10-07). Invalidated if (derived): the hint can drive the clamped size below the
+  required capacity, or more than a constant factor below the doubling.
 - **`# zero-offset route convergence`** — `onText` `ConditionalsBoundaryMutator`.
   Reason: it sends an unfragmented message through the assembled-buffer route, which
   parses the same characters. Invalidated if (derived): the two routes parse
@@ -287,9 +311,14 @@ invalidation conditions are derived from each reason's premise.
 - **`# literal return equivalent`** — `BooleanTrueReturnValsMutator` and
   `BooleanFalseReturnValsMutator` on `queueSubscription`, `queueUnsubscribe`,
   `rootSubscribe`, `rootUnsubscribe`, `slotSubscribe`, `slotUnsubscribe`, `subscribe`
-  and `unsubscribe`. Reason: each replacement equals the literal at that bytecode
-  exit. Oracle: owed. Invalidated if (derived): the exit stops returning a
-  literal.
+  and `unsubscribe`, one row per exit. Reason: each exit returns a literal from inside
+  the lifecycle lock's `try`/`finally`, which javac compiles to a store, the inlined
+  unlock and a reload, so the mutator replaces the reloaded literal with itself.
+  Oracle: the `SolanaRpcWebsocket` contract (once closed "subscriptions return false";
+  a subscribe's `false` means already subscribed; an unsubscribe answers whether it
+  removed a registration), asserted exit by exit by
+  `SubscriptionResultContractTests`. Invalidated if (derived): an exit stops returning
+  a literal.
 - **`# same-map re-put`** — `queueSubscription` `RemoveConditionalMutator_EQUAL_IF`,
   two siblings. Reason: it stores the map already held at the same key. Invalidated
   if (derived): the put can store a different map.

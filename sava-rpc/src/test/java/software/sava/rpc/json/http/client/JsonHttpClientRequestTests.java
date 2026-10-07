@@ -2,15 +2,22 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.UnknownServiceException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 import java.util.function.Function;
+import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -59,6 +66,42 @@ final class JsonHttpClientRequestTests {
     HttpRequest.Builder post(final String path, final String method, final String body) {
       return newRequest(path, method, HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
     }
+
+    HttpRequest postRequest(final URI endpoint, final Duration timeout, final String body) {
+      return newPostRequest(endpoint, timeout, body);
+    }
+  }
+
+  /// Reads a request's body back through its publisher, the way the JDK client sends it.
+  private static byte[] bodyBytes(final HttpRequest request) {
+    final var collected = new CompletableFuture<byte[]>();
+    request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<>() {
+      private final ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+      @Override
+      public void onSubscribe(final Flow.Subscription subscription) {
+        subscription.request(Long.MAX_VALUE);
+      }
+
+      @Override
+      public void onNext(final ByteBuffer item) {
+        final byte[] chunk = new byte[item.remaining()];
+        item.get(chunk);
+        out.writeBytes(chunk);
+      }
+
+      @Override
+      public void onError(final Throwable throwable) {
+        collected.completeExceptionally(throwable);
+      }
+
+      @Override
+      public void onComplete() {
+        collected.complete(out.toByteArray());
+      }
+    });
+    // BodyPublishers.ofString publishes synchronously on request(), so the future is complete
+    return collected.join();
   }
 
   private static TestClient client(final HttpClient httpClient) {
@@ -160,6 +203,52 @@ final class JsonHttpClientRequestTests {
           testClient.post("POST", "{}"),
           testClient.post("submit", "POST", "{}")}) {
         assertEquals("seen", builder.build().headers().firstValue("X-Tag").orElse(null));
+      }
+    }
+  }
+
+  /// `newPostRequest` writes the body to a DEBUG log line before building the request.
+  /// Unlike the parse-failure tails `TestLogs` was written for, that line is not the only
+  /// record of anything: the body is the caller's own request, carried verbatim by the
+  /// request this returns. The caller's `extendRequest` is handed a builder already holding
+  /// it, the caller's `HttpClient` receives the built request, and the server reads it off
+  /// the wire (`RpcRequestTests` asserts it per method). So the request must be the same
+  /// whether the DEBUG line runs or is suppressed, and must carry the body byte for byte.
+  @Test
+  void postRequestCarriesItsBodyWhetherOrNotTheDebugLineRuns() {
+    final var target = URI.create("https://other.example.invalid/rpc");
+    final var timeout = Duration.ofSeconds(17);
+    // non-ASCII, so a publisher that lost the charset would not round-trip
+    final var body = """
+        {"jsonrpc":"2.0","id":7,"method":"getAccountInfo","params":["Ünïcødé"]}""";
+    final byte[] expected = body.getBytes(StandardCharsets.UTF_8);
+    final var extenderSaw = new ArrayList<byte[]>();
+    try (final var httpClient = HttpClient.newHttpClient()) {
+      final var testClient = new TestClient(httpClient, builder -> {
+        extenderSaw.add(bodyBytes(builder.copy().build()));
+        return builder.header("X-Tag", "seen");
+      });
+      final var requests = new ArrayList<HttpRequest>();
+      // ALL runs the DEBUG line through the JUL backend; OFF suppresses it
+      TestLogs.capture(JsonHttpClient.class, Level.ALL,
+          () -> requests.add(testClient.postRequest(target, timeout, body)));
+      TestLogs.capture(JsonHttpClient.class, Level.OFF,
+          () -> requests.add(testClient.postRequest(target, timeout, body)));
+
+      assertEquals(2, requests.size());
+      for (final var request : requests) {
+        assertEquals("POST", request.method());
+        assertEquals(target, request.uri());
+        assertEquals(timeout, request.timeout().orElseThrow());
+        assertEquals(List.of("application/json"), request.headers().allValues("Content-Type"));
+        assertEquals(List.of("seen"), request.headers().allValues("X-Tag"));
+        assertEquals(2, request.headers().map().size(), () -> request.headers().map().toString());
+        assertEquals(expected.length, request.bodyPublisher().orElseThrow().contentLength());
+        assertArrayEquals(expected, bodyBytes(request));
+      }
+      assertEquals(2, extenderSaw.size());
+      for (final var seen : extenderSaw) {
+        assertArrayEquals(expected, seen, "extendRequest is handed the body before the build");
       }
     }
   }

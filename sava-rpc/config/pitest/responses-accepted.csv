@@ -1,6 +1,4 @@
 !sava-hardening-baseline-schema,1
-software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # capacity math # line 126
-software.sava.rpc.json.http.response.JsonUtil,toJsonIntArray,MathMutator,SURVIVED # capacity math # line 126
 software.sava.rpc.json.http.response.Lamports,amount,ConditionalsBoundaryMutator,SURVIVED # allocation routing # line 24
 software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 58
 software.sava.rpc.json.http.response.RpcCustomError,parseError,ConditionalsBoundaryMutator,SURVIVED # int clamp boundary # line 58

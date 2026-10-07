@@ -3345,4 +3345,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       inFlight.cancel(true);
     }
   }
+
+  /// Test seam: the current connection's reassembly buffer capacity in chars, 0 without a
+  /// connection. Only the listener thread writes the buffer, so read it on that thread.
+  int reassemblyCapacity() {
+    final var conn = this.connection;
+    return conn == null ? 0 : conn.buffer.length;
+  }
 }

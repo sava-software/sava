@@ -4,7 +4,6 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,close,RemoveConditionalMut
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,closed,ConditionalsBoundaryMutator,SURVIVED # positive sentinel gap # line 221
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,ConditionalsBoundaryMutator,SURVIVED # equal-capacity copy # line 2602
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,MathMutator,SURVIVED # capacity math # line 2607
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,ensureCapacity,MathMutator,SURVIVED # capacity math # line 2607
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,ConditionalsBoundaryMutator,SURVIVED # zero-offset route convergence # line 2655
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # equivalent buffer copy # line 2636
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onText,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # equivalent buffer copy # line 2658

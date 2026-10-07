@@ -117,13 +117,25 @@ public final class JsonUtil {
     }
   }
 
+  /// The initial `StringBuilder` capacity for [#toJsonIntArray]: the brackets plus up to
+  /// three digits and a comma per element, computed in `long` and clamped at the VM's array
+  /// limit so the hint cannot wrap for arrays past 2^29 - 1 elements; the builder grows
+  /// past a clamped hint if the rendering needs it.
+  static int jsonIntArrayCapacity(final int length) {
+    return (int) Math.min(((long) length << 2) + 2, Integer.MAX_VALUE - 8);
+  }
+
+  /// Renders the bytes as a JSON array of their unsigned values, `null` for a null array.
+  /// The sizing hint is clamped (see [#jsonIntArrayCapacity]); the rendering itself is
+  /// bounded by the `String` length limit, which the output of about 2^29 elements or
+  /// more exceeds on a compact-strings JVM.
   public static String toJsonIntArray(final byte[] data) {
     if (data == null) {
       return "null";
     } else if (data.length == 0) {
       return "[]";
     } else {
-      final var builder = new StringBuilder((data.length << 2) + 2);
+      final var builder = new StringBuilder(jsonIntArrayCapacity(data.length));
       builder.append('[');
       for (int i = 0; ; ) {
         final byte b = data[i];

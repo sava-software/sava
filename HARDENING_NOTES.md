@@ -524,8 +524,11 @@ checked by two refuters). What it found, and what closed the same day:
   suite has no member. The four `vanity` members and the `Jex.isValid` member are
   killed deterministically by draw and call budgets on the test fakes; their lines
   wait on the three-run quiet notice. `Ed25519Util.scalarMultBase IncrementsMutator`'s
-  argument was corrected to the int wraparound it really is; its category is an owner
-  decision.
+  argument was corrected to the int wraparound it really is, and the owner chose the
+  refactor: the comb walk is driven by a window index into a constant shift table, so a
+  reversed or overrun step subscripts outside it and throws on its first bad window
+  (verified with instrumented traces identical to the old walk over the RFC 8032
+  vectors, and hand-applied mutants dying in milliseconds).
 - **Determinism.** The Base58 and Jex differentials draw from fixed seeds; the pbkdf
   tests take salt and IV from a seeded fake; `PreV1InterfaceShapeTests` resets its key
   counter per test; `SignerTest` no longer derives at default PBKDF2 cost in a loop
@@ -551,6 +554,24 @@ checked by two refuters). What it found, and what closed the same day:
   the last `checkFound` stretch of a worker stopped by another worker's find. Both
   now count, so the CLI's `[numSearched, numSearched + numThreads * checkFound)` range
   holds; the owner asked for the fix.
+- **Transport tests on the seam.** The four real-clock tests in
+  `JsonHttpClientTransportTests` (sleeps, elapsed-time checks, 200 ms timeouts, bounded
+  gets) now drive the deadline through the package-private scheduler seam with a
+  recording scheduler and an observing `HttpClient`: which routes arm the timer, with
+  what delay, and what firing it does are assertions, and a stalled body is released by
+  the test instead of timed. The four went from about three seconds to milliseconds;
+  the owner chose this over excluding them from the suites.
+- **Oracle slice 1.** The `# literal return equivalent`, `# capacity math` and
+  `# request debug only` families name their oracles (`SubscriptionResultContractTests`,
+  `ReassemblyCapacityTests`, `JsonHttpClientRequestTests`), with the shape-search
+  discipline applied to each claim. Two outcomes were not acceptances: the ws
+  `ensureCapacity` shift sibling turns doubling into an exact fit (a complexity change,
+  not a constant factor) and is killed through a package-private capacity seam; and
+  `JsonUtil.toJsonIntArray`'s sizing hint wrapped at the top of its domain (an
+  `OutOfMemoryError` from 2^29 - 1 elements, a `NegativeArraySizeException` from 2^29),
+  fixed with a long computation clamped at the VM's array limit and pinned at the
+  boundary, which kills the responses `# capacity math` family outright. Later slices
+  take the remaining owed families.
 - **Docs.** `AGAVE_SYNC.md`, `CONVENTIONS.md` and this file lost stale counts, a weekly
   fuzz schedule that no longer exists, a claim that no test starts a thread, and
   pointers at retired families; `CONVENTIONS.md` gained the log and clock seams and the
@@ -769,10 +790,9 @@ constants of the pbkdf package (a small follow-up). Both run under the `argon2id
 resource lock. The budget argument is
 unchanged: the factor scales with the test, so these suites keep the same
 proportional headroom as the fast ones, and no `SURVIVED -> TIMED_OUT` drift has
-appeared in any of them. The sava-rpc suites' slowest tests are the real-clock
-transport pins in `JsonHttpClientTransportTests` (about a second); whether those
-should leave the three suites that cover them for a class the suites exclude is
-an open owner decision (audit, 2026-10-07).
+appeared in any of them. The sava-rpc suites' slowest tests were the real-clock
+transport pins in `JsonHttpClientTransportTests` (about a second each) until the same
+day's rewrite onto the scheduler seam took them to milliseconds.
 
 ## Plugin knobs and generated scaffolding — what this repo uses
 
