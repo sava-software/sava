@@ -5,7 +5,6 @@ import software.sava.core.accounts.PublicKey;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Random;
@@ -53,7 +52,7 @@ final class Base58Tests {
 
   @Test
   void testReferenceCrossValidation() {
-    final long seed = new SecureRandom().nextLong();
+    final long seed = 0x5EEDB5800001L; // fixed, so a mutant cannot flip between runs
     final var random = new Random(seed);
     for (int len = 0; len <= 1_232; len = len < 256 ? len + 1 : len + 61) {
       for (int leadingZeros = 0, max = Math.min(len, 2); leadingZeros <= max; ++leadingZeros) {
@@ -122,7 +121,7 @@ final class Base58Tests {
 
   @Test
   void testSliceEncode() {
-    final long seed = new SecureRandom().nextLong();
+    final long seed = 0x5EEDB5800002L; // fixed, so a mutant cannot flip between runs
     final var random = new Random(seed);
     final byte[] buffer = new byte[256];
     random.nextBytes(buffer);
@@ -209,7 +208,7 @@ final class Base58Tests {
 
   @Test
   void testMutableEncode() {
-    final long seed = new SecureRandom().nextLong();
+    final long seed = 0x5EEDB5800003L; // fixed, so a mutant cannot flip between runs
     final var random = new Random(seed);
     final char[] output = new char[64];
     final char[] encoded = new char[64];
@@ -355,7 +354,7 @@ final class Base58Tests {
 
   @Test
   void testCanonicalRoundTrip() {
-    final long seed = new SecureRandom().nextLong();
+    final long seed = 0x5EEDB5800004L; // fixed, so a mutant cannot flip between runs
     final var random = new Random(seed);
     for (int iteration = 0; iteration < 512; ++iteration) {
       final char[] chars = new char[1 + random.nextInt(200)];
@@ -373,7 +372,7 @@ final class Base58Tests {
 
   @Test
   void testRandom() {
-    final long seed = new SecureRandom().nextLong();
+    final long seed = 0x5EEDB5800005L; // fixed, so a mutant cannot flip between runs
     final var random = new Random(seed);
     final byte[] bytes = new byte[4_096];
     random.nextBytes(bytes);
@@ -383,7 +382,7 @@ final class Base58Tests {
 
   @Test
   void testRoundTripLengths() {
-    final long seed = new SecureRandom().nextLong();
+    final long seed = 0x5EEDB5800006L; // fixed, so a mutant cannot flip between runs
     final var random = new Random(seed);
     for (int len = 0; len <= 128; ++len) {
       for (int leadingZeros = 0; leadingZeros <= Math.min(len, 4); ++leadingZeros) {

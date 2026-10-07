@@ -1,5 +1,6 @@
 package software.sava.core.tx;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
@@ -32,6 +33,13 @@ import static org.junit.jupiter.api.Assertions.*;
 final class PreV1InterfaceShapeTests {
 
   private static final AtomicInteger KEY_SEED = new AtomicInteger();
+
+  /// Keys are derived from this counter, so it is reset per test like the sibling classes do;
+  /// otherwise the keys depend on test order.
+  @BeforeEach
+  void resetKeySeed() {
+    KEY_SEED.set(0);
+  }
 
   private static Signer nextSigner() {
     final byte[] privateKey = new byte[Signer.KEY_LENGTH];

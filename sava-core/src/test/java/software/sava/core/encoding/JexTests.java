@@ -3,7 +3,6 @@ package software.sava.core.encoding;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
-import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Locale;
@@ -169,7 +168,7 @@ final class JexTests {
 
   @Test
   void testReferenceCrossValidation() {
-    final long seed = new SecureRandom().nextLong();
+    final long seed = 0x5EED4E500001L; // fixed, so a mutant cannot flip between runs
     final var random = new Random(seed);
     final var hexFormat = HexFormat.of();
     for (int len = 0; len <= 64; ++len) {
@@ -311,5 +310,58 @@ final class JexTests {
     assertPosition(3, () -> Jex.decodeChecked(ByteBuffer.wrap(secondAscii), out, 0));
     assertPosition(2, () -> Jex.decodePrimIterChecked(firstNibble, out, 0));
     assertPosition(3, () -> Jex.decodePrimIterChecked(secondNibble, out, 0));
+  }
+
+  /// A [CharSequence] that counts [#charAt] calls and fails the moment they exceed a budget, so a
+  /// validator whose cursor stops advancing ends in a named failure instead of a hang.
+  private static final class BudgetedChars implements CharSequence {
+
+    private final String delegate;
+    private final int budget;
+    private int reads;
+
+    private BudgetedChars(final String delegate, final int budget) {
+      this.delegate = delegate;
+      this.budget = budget;
+    }
+
+    @Override
+    public int length() {
+      return delegate.length();
+    }
+
+    @Override
+    public char charAt(final int index) {
+      if (++reads > budget) {
+        throw new AssertionError(String.format(
+            "charAt budget of %d exceeded on a %d-char input; last index %d", budget, delegate.length(), index
+        ));
+      }
+      return delegate.charAt(index);
+    }
+
+    @Override
+    public CharSequence subSequence(final int start, final int end) {
+      return delegate.subSequence(start, end);
+    }
+
+    @Override
+    public String toString() {
+      return delegate;
+    }
+  }
+
+  /// Validating a hex string is a single forward pass: every character is read at most a bounded
+  /// number of times, so the read count is linear in the length. The oracle is that budget, not the
+  /// implementation's exact read pattern: twice the length leaves room for any forward scan, while a
+  /// cursor that steps back and forth over the same pair exhausts it after a few passes and fails
+  /// with a named error rather than spinning until the test runner's timeout. Every other covering
+  /// call passes a [String], which cannot observe the reads.
+  @Test
+  void isValidReadsAValidInputInBoundedPasses() {
+    final var hex = "00ff7Ac9e1B23d4f";
+    final var chars = new BudgetedChars(hex, hex.length() << 1);
+    assertTrue(Jex.isValid(chars));
+    assertTrue(chars.reads >= hex.length(), "every character of a valid input must be inspected");
   }
 }
