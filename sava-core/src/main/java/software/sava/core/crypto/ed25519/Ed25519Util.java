@@ -914,6 +914,10 @@ public final class Ed25519Util {
     X25519Field.mul(var4, var9, pointAccum.y);
   }
 
+  // The comb windows of scalarMultBase, most significant first: each is where that
+  // window's signed four-bit digit sits in every block word after groupCombBits.
+  private static final int[] COMB_SHIFTS = {28, 24, 20, 16, 12, 8, 4, 0};
+
   private static PointAccum scalarMultBase(final byte[] var0) {
     final int[] var2 = new int[8];
     Scalar25519.decode(var0, var2);
@@ -923,9 +927,14 @@ public final class Ed25519Util {
     final var pointTemp = PointTemp.create();
     final var pointAccum = PointAccum.pointSetNeutral();
 
-    for (int var5 = 0, var6 = 28; ; ) {
+    // Index-driven so a walk stepped backwards or past the last window subscripts outside
+    // COMB_SHIFTS and throws on its first bad window. Counting the shift itself down let a
+    // reversed step run on until the int wrapped (>>> masks its shift), which mutation
+    // testing could only record as a timeout. No index or shift depends on secret digits.
+    for (int var5 = 0, window = 0; ; ) {
+      final int shift = COMB_SHIFTS[window];
       for (int var7 = 0; var7 < 8; ++var7) {
-        final int var8 = var2[var7] >>> var6;
+        final int var8 = var2[var7] >>> shift;
         final int var9 = var8 >>> 3 & 1;
         final int var10 = (var8 ^ -var9) & 7;
         pointLookup(var7, var10, pointPrecomp);
@@ -935,8 +944,7 @@ public final class Ed25519Util {
         pointAdd(pointPrecomp, pointAccum, pointTemp);
       }
 
-      var6 -= 4;
-      if (var6 < 0) {
+      if (++window == COMB_SHIFTS.length) {
         X25519Field.cnegate(var5, pointAccum.x);
         X25519Field.cnegate(var5, pointAccum.u);
         return pointAccum;

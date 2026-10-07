@@ -208,21 +208,25 @@ equality and parity.
 Every member is in `Ed25519Util`. Each read `TIMED_OUT` identically solo and
 under gate load in the 2026-07-22 mode comparison (`HARDENING_NOTES.md` §Mode
 comparison), and each was observed `TIMED_OUT` again in the 2026-09-05 and
-2026-09-25 certification runs. Each makes a counted loop's only exit
-unreachable:
+2026-09-25 certification runs.
 
 - `Ed25519Util.pow2523`, `RemoveConditionalMutator_ORDER_IF` on `a >= 0`: the
-  2^252−3 exponentiation ladder loses its countdown exit.
-- `Ed25519Util.scalarMultBase`, `IncrementsMutator` (`var6 -= 4` → `+= 4`):
-  the window cursor walks up instead of down. The `var6 < 0` exit is reached only
-  once the `int` wraps, after about 5.4 × 10^8 further ladder steps, each a full
-  point operation, so the loop is finite in arithmetic but not in any run a watchdog
-  admits; the shift `>>> var6` masks its operand and throws nothing on the way.
-  Owner decision pending: keep it as liveness on that reversed-progress reading, or
-  refactor the window walk onto an array index so a reversed step fails on its
-  first pass.
-- `Ed25519Util.scalarMultBase`, `RemoveConditionalMutator_ORDER_ELSE` on
-  `var6 < 0`: the ladder loop's only `return` is forced unreachable.
+  2^252−3 exponentiation ladder loses its countdown exit, a counted loop's only
+  exit made unreachable. Nothing but the watchdog can observe it.
+- `Ed25519Util.scalarMultBase`, `IncrementsMutator` and
+  `RemoveConditionalMutator_ORDER_ELSE`: both sat on the comb walk's exit while the
+  walk counted its shift down (`var6 -= 4; if (var6 < 0) return`). The reversed step
+  was finite only by int wraparound, about 5.4 × 10^8 window passes away, and the
+  removed exit was unbounded. On 2026-10-07 the walk was refactored onto a window
+  index into a constant shift table, the process's refactor-out-of-existence outcome:
+  a reversed or overrun index subscripts outside the table and throws on its first bad
+  window (hand-applied mutants die in milliseconds against the RFC 8032 vectors, and
+  instrumented traces of the old and new walks are byte-identical over them). Neither
+  line-less key has left the population, since the inner block loop keeps an
+  `IncrementsMutator` and an `ORDER_ELSE` mutant of its own, both killed, so the
+  membership lines are quiet rather than stale and stay until the verify's three-run
+  quiet notice and the gate confirmation (`HARDENING.md`); a timeout reappearing at
+  either reads as audited liveness and must be argued afresh.
 
 ## encoding
 

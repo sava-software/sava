@@ -9,6 +9,6 @@ software.sava.core.crypto.ed25519.Ed25519Util,pack25519,VoidMethodCallMutator,SU
 software.sava.core.crypto.ed25519.Ed25519Util,pack25519,ConditionalsBoundaryMutator,SURVIVED # pack25519 passes # line 385
 software.sava.core.crypto.ed25519.Ed25519Util,pack25519,MathMutator,SURVIVED # verdict invisible # line 397
 software.sava.core.crypto.ed25519.Ed25519Util,pack25519,MathMutator,SURVIVED # verdict invisible # line 398
-software.sava.core.crypto.ed25519.Ed25519Util,scalarMultBase,VoidMethodCallMutator,SURVIVED # verdict invisible # line 941
+software.sava.core.crypto.ed25519.Ed25519Util,scalarMultBase,VoidMethodCallMutator,SURVIVED # verdict invisible # line 949
 software.sava.core.crypto.ed25519.Ed25519Util,sel25519,MathMutator,SURVIVED # verdict invisible # line 375
 software.sava.core.crypto.ed25519.Scalar25519,toSignedDigits,MathMutator,SURVIVED # verdict invisible # line 24
