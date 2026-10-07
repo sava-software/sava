@@ -213,8 +213,8 @@ Consequences recorded in `HARDENING_NOTES.md`: sava's baselines were all first w
 unlicensed, so a handful of accepted rows have no licensed counterpart and are reported
 unmatched every run. **A row
 leaves a baseline only when the same licensed mutant is observed and killed** — absence
-under one toolchain is not evidence of a kill, and the nine such `ws` rows are itemised
-in `sava-rpc/config/pitest/README.md`.
+under one toolchain is not evidence of a kill, and the rows of that kind (`ws`, `client`
+and `responses`) are itemised in `sava-rpc/config/pitest/README.md`.
 
 **Baseline schema.** Accepted records carry the schema-1 marker, stamped by
 `migrateMutationBaselines` once all three pins had moved together; `downgradeMutationBaselines`

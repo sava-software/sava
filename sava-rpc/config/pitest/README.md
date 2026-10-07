@@ -72,12 +72,15 @@ live families; the `JsonUtil.parseEncodedData` pending-prune rows are debt (see
     truncation, `code ± (1L << 32)` — are pinned by `ParseCustomErrorCodeTests`.
   - Invalidated if (derived): a defined custom-error code sits at an int boundary, or
     the two routes stop handling the iterator identically.
-- **`# allocation routing`** — `Lamports.amount` `ConditionalsBoundaryMutator` and
-  `RemoveConditionalMutator_ORDER_IF`, boundary/forced-true on `lamports < 0`.
+- **`# allocation routing`** — `Lamports.amount` `ConditionalsBoundaryMutator`, the
+  boundary on `lamports < 0`.
   - Reason: both branches build the same `BigInteger` for non-negative longs,
-    including zero. Negative inputs already take the unsigned-widening branch, so
-    forcing that branch true leaves their result unchanged too. The guard saves
-    allocation for non-negative values — `valueOf` is cheaper than widening the bits.
+    including zero, so moving the boundary to admit zero into the unsigned-widening
+    branch changes no result. The guard saves allocation for non-negative values —
+    `valueOf` is cheaper than widening the bits. The forced-true sibling
+    (`RemoveConditionalMutator_ORDER_IF`, which the same argument covers) is not in
+    the licensed population and is retained under the toolchain rule instead; see
+    "Retained rows and the writer gap".
   - Oracle: sava-core's
     `ByteUtilTests.toUnsignedBigIntegerAgreesWithValueOfWhereCallersBranch` sweeps
     `valueOf` against the widening over seeded non-negative values plus boundaries on
@@ -549,6 +552,16 @@ unlicensed population.
   counterpart in the licensed population, reported unmatched on every run. It remains
   because absence under the licensed toolchain is not evidence that the old
   unlicensed mutant was killed.
+
+### responses
+
+- `# unlicensed-only retained`: `Lamports.amount` `ORDER_IF`, forced-true on
+  `lamports < 0`. Accepted on 2026-08-01 under `# allocation routing` from the stock
+  engine's population; the licensed engine has generated only the boundary and
+  forced-false mutants at that site in every fresh run since the licence was adopted
+  on 2026-08-04, so the row is reported unmatched on every run. It remains because
+  absence under the licensed toolchain is not evidence that the stock mutant was
+  killed; the family's argument would cover it if it returned.
 
 ### ws
 
