@@ -34,6 +34,14 @@ final class MaskWorkerTests {
   /// run, which reports a timeout instead of a failed assertion and tells us nothing.
   private static final long MAX_SEARCHES = 10_000L;
 
+  /// The attempt cap the unsatisfiable searches below run to.
+  private static final int UNSATISFIABLE_CAP = 500;
+
+  /// Draws those searches may make before the entropy source fails them: twice their cap, so it
+  /// never fires on working code (one draw per attempt) but stops a worker whose cap a mutant
+  /// has broken with an assertion instead of a timeout.
+  private static final long UNSATISFIABLE_DRAW_BUDGET = 2L * UNSATISFIABLE_CAP;
+
   private static ArrayBlockingQueue<Result> newResults() {
     return new ArrayBlockingQueue<>(4);
   }
@@ -45,8 +53,19 @@ final class MaskWorkerTests {
                                                        final AtomicLong searched,
                                                        final int checkFound,
                                                        final long maxSearches) {
+    return beginsWithWorker(
+        new FixedSeedSecureRandom(seed), beginsWith, results, found, searched, checkFound, maxSearches);
+  }
+
+  private static BeginsWithMaskWorker beginsWithWorker(final FixedSeedSecureRandom secureRandom,
+                                                       final Subsequence beginsWith,
+                                                       final java.util.Queue<Result> results,
+                                                       final AtomicInteger found,
+                                                       final AtomicLong searched,
+                                                       final int checkFound,
+                                                       final long maxSearches) {
     return new BeginsWithMaskWorker(
-        null, null, new FixedSeedSecureRandom(seed), null, null, null, false,
+        null, null, secureRandom, null, null, null, false,
         beginsWith, 1, found, searched, results, checkFound, maxSearches);
   }
 
@@ -200,7 +219,8 @@ final class MaskWorkerTests {
   }
 
   /// The escape hatch: an eight character target is ~58^8 addresses away, so this
-  /// search never succeeds. Without a cap the worker spins forever.
+  /// search never succeeds. Without a cap the worker spins forever; the draw budget turns a
+  /// broken cap into an assertion rather than a timeout.
   @Test
   @Timeout(60)
   void exhaustingMaxSearchesStopsAnUnsatisfiableSearch() {
@@ -208,7 +228,8 @@ final class MaskWorkerTests {
     final var results = newResults();
     final var found = new AtomicInteger(0);
 
-    beginsWithWorker(1L, beginsWith, results, found, new AtomicLong(0), 16, 500).run();
+    beginsWithWorker(new FixedSeedSecureRandom(1L, UNSATISFIABLE_DRAW_BUDGET),
+        beginsWith, results, found, new AtomicLong(0), 16, UNSATISFIABLE_CAP).run();
 
     assertEquals(0, found.get(), "an unsatisfiable search should not find anything");
     assertTrue(results.isEmpty());
@@ -223,8 +244,8 @@ final class MaskWorkerTests {
     final var found = new AtomicInteger(0);
 
     new MaskWorker(
-        null, null, new FixedSeedSecureRandom(1L), null, null, null, false,
-        null, endsWith, 1, found, new AtomicLong(0), results, 16, 500
+        null, null, new FixedSeedSecureRandom(1L, UNSATISFIABLE_DRAW_BUDGET), null, null, null, false,
+        null, endsWith, 1, found, new AtomicLong(0), results, 16, UNSATISFIABLE_CAP
     ).run();
 
     assertEquals(0, found.get());
@@ -241,8 +262,11 @@ final class MaskWorkerTests {
     // a cap that is not a multiple of checkFound, so the tail is counted too
     for (final int checkFound : new int[]{1, 8, 16}) {
       final var searched = new AtomicLong(0);
-      beginsWithWorker(1L, beginsWith, newResults(), new AtomicInteger(0), searched, checkFound, 500).run();
-      assertEquals(500, searched.get(), "checkFound=" + checkFound);
+      final var secureRandom = new FixedSeedSecureRandom(1L, UNSATISFIABLE_DRAW_BUDGET);
+      beginsWithWorker(secureRandom, beginsWith, newResults(), new AtomicInteger(0), searched,
+          checkFound, UNSATISFIABLE_CAP).run();
+      assertEquals(UNSATISFIABLE_CAP, searched.get(), "checkFound=" + checkFound);
+      assertEquals(UNSATISFIABLE_CAP, secureRandom.draws(), "checkFound=" + checkFound);
     }
   }
 
@@ -258,5 +282,89 @@ final class MaskWorkerTests {
 
     assertDoesNotThrow(worker::run);
     assertNotNull(results.poll());
+  }
+
+  /// Both loop exits consult the interrupt flag: after a queued result, and at every `checkFound`
+  /// boundary of a fruitless stretch. With the flag set before the search starts (on the test
+  /// thread, where nothing else can clear it), a search for two keys that matches every key stops
+  /// after queueing its first, and a search that matches nothing stops at its first boundary
+  /// instead of running to its cap. The workers read the flag and never clear it, so the test
+  /// clears it, and the assertion on that read is also what keeps a stray flag from leaking into
+  /// the next test.
+  @Test
+  void anInterruptedWorkerStopsAtTheNextCheck() {
+    final var everyKey = new FixedSeedSecureRandom(1L, 8);
+    final var found = new AtomicInteger(0);
+    final var results = newResults();
+    Thread.currentThread().interrupt();
+    try {
+      new BeginsWithMaskWorker(
+          null, null, everyKey, null, null, null, false,
+          null, 2, found, new AtomicLong(0), results, 16, 64
+      ).run();
+    } finally {
+      assertTrue(Thread.interrupted(), "the worker must read the flag, not clear it");
+    }
+    assertEquals(1, found.get(), "had the interrupt been ignored, a second key would have been found");
+    assertEquals(1, everyKey.draws());
+    assertEquals(1, results.size());
+
+    final var noKey = Subsequence.create("savasava", true, false, false);
+    final var prefixSource = new FixedSeedSecureRandom(1L, 64);
+    Thread.currentThread().interrupt();
+    try {
+      beginsWithWorker(prefixSource, noKey, newResults(), new AtomicInteger(0), new AtomicLong(0), 4, 64).run();
+    } finally {
+      assertTrue(Thread.interrupted());
+    }
+    assertEquals(4, prefixSource.draws(), "the prefix worker must stop at its first boundary");
+
+    final var tailSource = new FixedSeedSecureRandom(1L, 64);
+    Thread.currentThread().interrupt();
+    try {
+      new MaskWorker(
+          null, null, tailSource, null, null, null, false,
+          null, noKey, 1, new AtomicInteger(0), new AtomicLong(0), newResults(), 4, 64
+      ).run();
+    } finally {
+      assertTrue(Thread.interrupted());
+    }
+    assertEquals(4, tailSource.draws(), "the tail worker must stop at its first boundary");
+  }
+
+  /// The draw budget is what turns a broken attempt cap into a failure, so it has to fire at
+  /// exactly its cap: every draw up to it succeeds, the next one throws and names the cap.
+  @Test
+  void theDrawBudgetFailsTheFirstDrawPastItsCap() {
+    final var secureRandom = new FixedSeedSecureRandom(1L, 3);
+    final var bytes = new byte[32];
+    for (int i = 0; i < 3; ++i) {
+      secureRandom.nextBytes(bytes);
+    }
+    assertEquals(3, secureRandom.draws());
+    final var error = assertThrows(AssertionError.class, () -> secureRandom.nextBytes(bytes));
+    assertTrue(error.getMessage().contains("budget of 3 "), error.getMessage());
+  }
+
+  /// The [AddressWorker] accessors hand back the exact collaborators the worker was built with,
+  /// which is how a caller holding only the worker reaches the shared counters and queue.
+  @Test
+  void workerAccessorsReturnTheirConstructionArguments() {
+    final var secureRandom = new FixedSeedSecureRandom(7L);
+    final var beginsWith = Subsequence.create("ab", true, false, false);
+    final var found = new AtomicInteger(5);
+    final var searched = new AtomicLong(11);
+    final var results = newResults();
+    final var worker = new MaskWorker(
+        null, null, secureRandom, null, null, null, false,
+        beginsWith, Subsequence.create("z", false, false, false), 3, found, searched, results, 16, 64);
+
+    assertSame(secureRandom, worker.secureRandom());
+    assertSame(beginsWith, worker.beginsWith());
+    assertEquals(3, worker.find());
+    assertSame(found, worker.found());
+    assertSame(searched, worker.searched());
+    assertSame(results, worker.results());
+    assertEquals(0, secureRandom.draws(), "building a worker must not start searching");
   }
 }

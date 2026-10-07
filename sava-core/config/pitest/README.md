@@ -71,7 +71,10 @@ calls a last resort (worked example: `Base58.limbsLength`, under History).
 Liveness is admissible only **after deterministic seams and budgets are
 exhausted**: a mutant that a budget can bound is not a liveness member, it is
 an unexercised seam (worked example: the four `vanity` members retired
-2026-08-08, under History). Membership lines are hand-maintained records; a
+2026-08-08, under History). The remaining `vanity` members and the `Jex.isValid`
+member became budget-bounded on 2026-10-07 and read `KILLED` since; they sit in
+their sets only until the quiet notice, as their suites' subsections record.
+Membership lines are hand-maintained records; a
 member leaves under HARDENING.md's quiet or stale rule, never by a writer. A
 *quiet* member — its mutant still generated but no longer timing out — leaves
 only after the tool's 3+ distinct fresh full-run quiet notice over identical
@@ -168,10 +171,13 @@ the 2026-07-22 trial (`HARDENING_NOTES.md` §Mutator-set trials).
 leading `car25519` passes) and its `ConditionalsBoundaryMutator`. The remaining
 passes plus the exact double conditional-subtract reduction still fully
 normalize every limb state reachable from 32-byte `Codec.decode32` inputs; the
-passes are retained as defense. No mutant-active differential run is recorded
-for this family; the argument is that limb-state bound. Invalidated if a caller
-can hand `pack25519` a limb state outside that reachable set, or the reduction
-tail changes.
+passes are retained as defense. Oracle: the same differentials as `# verdict
+invisible` — the BouncyCastle and BigInteger Euler-criterion comparisons over random and
+non-canonical encodings, the RFC 8032 vectors and the boundary sweeps in
+`Ed25519UtilTests` — run with each of the four mutants applied by hand on 2026-10-07,
+all passing (the random encodings are sampled fresh each run). Invalidated if a caller
+can hand `pack25519` a limb state outside that reachable set, or the reduction tail
+changes.
 
 **Static-initializer construction** — baseline label `# static init`. Members:
 `Ed25519Util$PointAccum.create` and `Ed25519Util$PointExtended.create`,
@@ -208,8 +214,13 @@ unreachable:
 - `Ed25519Util.pow2523`, `RemoveConditionalMutator_ORDER_IF` on `a >= 0`: the
   2^252−3 exponentiation ladder loses its countdown exit.
 - `Ed25519Util.scalarMultBase`, `IncrementsMutator` (`var6 -= 4` → `+= 4`):
-  the window cursor walks up instead of down and never crosses the `var6 < 0`
-  exit.
+  the window cursor walks up instead of down. The `var6 < 0` exit is reached only
+  once the `int` wraps, after about 5.4 × 10^8 further ladder steps, each a full
+  point operation, so the loop is finite in arithmetic but not in any run a watchdog
+  admits; the shift `>>> var6` masks its operand and throws nothing on the way.
+  Owner decision pending: keep it as liveness on that reversed-progress reading, or
+  refactor the window walk onto an array index so a reversed step fails on its
+  first pass.
 - `Ed25519Util.scalarMultBase`, `RemoveConditionalMutator_ORDER_ELSE` on
   `var6 < 0`: the ladder loop's only `return` is forced unreachable.
 
@@ -263,7 +274,13 @@ characters each call emits, which kills every mutant on its chunk bound.
 
 - `Jex.isValid`, `IncrementsMutator` on the second `index++` → `index--`: the
   do-while cursor oscillates over the same valid digit pair and never reaches
-  `len`.
+  `len`. Since 2026-10-07 the member is killed deterministically rather than by the
+  watchdog: `JexTests.isValidReadsAValidInputInBoundedPasses` validates through a
+  `CharSequence` that fails on the first `charAt` past twice the input length, a
+  call budget any forward pass stays under and the oscillating cursor exhausts in a
+  few passes. The membership line stays until the verify's three-run quiet notice
+  and the gate confirmation (`HARDENING.md`, admissible liveness members keep
+  earning themselves); a timeout reappearing there reads as audited liveness.
 
 ## meta
 
@@ -468,17 +485,8 @@ zero signatures:
   `TransactionRecord.priorityFeeLamportsToComputeUnitPrice`,
   `ConditionalsBoundaryMutator` in each: each negative-price/fee guard differs
   from `<= 0` only at zero, already handled by the preceding fast return.
-- `TransactionRecord.priorityFeeLamportsToComputeUnitPrice`,
-  `RemoveConditionalMutator_EQUAL_ELSE`, on `priorityFeeLamports == 0`: if the
-  limit is zero the other operand still returns immediately; otherwise
-  bypassing the zero-fee shortcut computes `(limit - 1) / limit`, which is also
-  zero for the positive capped limit. This row skips a redundant shortcut
-  rather than testing a value after that shortcut returned. That is the
-  property `# redundant guard operand` below describes; the row carries this
-  family's label.
 
-Invalidated if the preceding fast return stops handling zero, or the limit can
-reach this arithmetic uncapped or non-positive. The zero-limit operand in
+Invalidated if the preceding fast return stops handling zero. The zero-limit operand in
 `TxBuilder.computeUnitPriceToPriorityFeeLamports` is not equivalent: skipping
 it reaches division by zero in the overflow guard, and
 `testAZeroComputeUnitLimitShortCircuitsBeforeTheOverflowGuardDivides` kills it.
@@ -506,6 +514,12 @@ reaches the identical result:
   by the signature-block invariant above: whenever `headerBlockEnd > data.length`
   holds, `headerBlockEnd > signaturesOffset` follows, so the second operand
   catches every input the first would have.
+- `TransactionRecord.priorityFeeLamportsToComputeUnitPrice`,
+  `RemoveConditionalMutator_EQUAL_ELSE` on the `priorityFeeLamports == 0` half of
+  its fast return: if the limit is zero the other operand still returns
+  immediately; otherwise bypassing the zero-fee shortcut computes
+  `(limit - 1) / limit`, which is also zero for the positive capped limit.
+  Invalidated if the limit can reach that arithmetic uncapped or non-positive.
 
 ### Routing and compaction
 
@@ -589,66 +603,108 @@ starts doing anything beyond that copy when nothing is prepended.
 
 ### Audited timeouts
 
-- `AddressLookupTableOverlay.lambda$keysToString$1`, `PrimitiveReturnsMutator`
-  on the `IntStream.iterate` step `i -> i + PUBLIC_KEY_LENGTH` → `0`: the
-  offset cursor collapses to 0, stays below `to` forever, and the join
-  accumulates keys until the watchdog.
+None. The one member this suite carried, `AddressLookupTableOverlay.lambda$keysToString$1`
+`PrimitiveReturnsMutator`, left with the 2026-10-07 refactor recorded under History.
 
 ## accounts
 
-Mutator set: `STRONGER,EXPERIMENTAL_NAKED_RECEIVER`. The suite was registered
-on 2026-08-04, after the 2026-07-22 trial, and `HARDENING_NOTES.md`
-§Mutator-set trials records no trial row for it.
+Mutator set: `STRONGER,EXPERIMENTAL_NAKED_RECEIVER` — the latter fired in the
+2026-10-07 trial, run after the suite was registered on 2026-08-04 without one
+(`HARDENING_NOTES.md` §Mutator-set trials).
 
 ### Debt
 
-**Removed PublicKey overloads, pending retirement** — baseline label
-`# removed signature overload pending prune`. Members:
-`PublicKey.verifySignature` `NO_COVERAGE` rows, `BooleanFalseReturnValsMutator`
-and `BooleanTrueReturnValsMutator`, two siblings each — the rows in excess of
-the live `verifySignature` population, left by removing the String-signature
-overloads in `0112d69`. These rows still contribute active baseline matching
-capacity. Removed-source evidence establishes absence, not an observed licensed
-kill. Their retirement remains pending reconciliation with the repository's
-licensed-kill removal rule; the labels do not claim that the deleted sites are
-equivalent or still uncovered.
-
-**Seeded debt** — every other row is `# untriaged`, in `SolanaAccountsBuilder`,
-`Signer`, `PublicKey`, `PublicKeyBytes`, `KeyPairSigner` and
-`ProgramDerivedAddress`. The suite was registered on 2026-08-04 to close
-`mutationOwnershipAudit` by targeting rather than declining, and its baseline
-was seeded from the full unkilled population. These rows record untested lines
-(`NO_COVERAGE`) and unargued survivors — debt, not equivalence claims — and
-remain active matching capacity until triage kills, refactors or argues each
-one.
+**Seeded debt** — every row is `# untriaged`. The suite was registered on
+2026-08-04 to close `mutationOwnershipAudit` by targeting rather than declining,
+and its baseline was seeded from the full unkilled population; the 2026-10-07
+campaign (every `SolanaAccountsBuilder` setter, the ranged and `char[]`/ASCII
+`PublicKey` overloads, key-pair validation and generation in `Signer`) killed the
+bulk and the unscoped prune retired those rows. What remains, still debt and not
+equivalence claims: the `Signer.fromProperties` branches (prefix, key form, AAD
+and KDF selection, including its two `NakedReceiverMutator` rows), the
+`Signer.encryptKey` branches, the `validateKeyPair` calls on pairs the method
+just built, the `PublicKeyBytes` buffer and equality arms, `PublicKey.readPubKey`,
+`PublicKey.l`, `PublicKey.createProgramAddress`, `KeyPairSigner.createDedicatedSigner`
+and `ProgramDerivedAddress.createPDA`. The `NO_COVERAGE` rows among them are
+untested lines; each row remains active matching capacity until triage kills,
+refactors or argues it.
 
 ## sysvar
 
-Mutator set: plain `STRONGER`; registered 2026-08-04, no trial row in
-`HARDENING_NOTES.md` §Mutator-set trials.
+Mutator set: plain `STRONGER`: `EXPERIMENTAL_NAKED_RECEIVER` fired nothing in the
+2026-10-07 trial (`HARDENING_NOTES.md` §Mutator-set trials).
 
 ### Debt
 
-Every row is `# untriaged`, in `EpochRewards`, `EpochSchedule`, `Rent`,
-`LastRestartSlot`, `Clock`, `StakeHistory`, `StakeHistoryEntry`, `SlotHashes`
-and `SlotHash`. Seeded from the full unkilled population when the suite was
-registered on 2026-08-04 to close `mutationOwnershipAudit` by targeting rather
-than declining. The rows are untested lines and unargued survivors, not
-equivalence claims, and remain active matching capacity until triaged.
+None: the suite has detected its whole population since 2026-10-07, when
+`SysvarTests` gained a write round trip at a zero and a non-zero offset for every
+sysvar, each with distinct non-zero field values against an independently built
+little-endian wire form, plus the address-taking `read` overloads and `l()`. The
+seeded `# untriaged` rows (every `EpochRewards.write` sibling among them, which the
+licensed population had stopped observing) left through the unscoped prune.
 
 ## pbkdf
 
-Mutator set: plain `STRONGER`; registered 2026-08-04, no trial row in
-`HARDENING_NOTES.md` §Mutator-set trials.
+Mutator set: `STRONGER,EXPERIMENTAL_NAKED_RECEIVER` — the latter fired in the
+2026-10-07 trial, run after the suite was registered on 2026-08-04 without one
+(`HARDENING_NOTES.md` §Mutator-set trials).
 
-### Debt
+### Accepted families
 
-Every row is `# untriaged`, in `PBKDFEncryption`, `PBKDFEncryption.RawSecretKey`,
-`EncryptionEnvelope`, `Argon2id`, `PBKDF2WithHmacSHA512` and `KeyDerivation`.
-Seeded from the full unkilled population when the suite was registered on
-2026-08-04 to close `mutationOwnershipAudit` by targeting rather than
-declining. The rows are untested lines and unargued survivors, not
-equivalence claims, and remain active matching capacity until triaged.
+The seeded `# untriaged` rows left through the unscoped prune on 2026-10-07 after
+the campaign covered the properties and JSON forms, the password guard, the salt
+and IV draws, the key wipes and `RawSecretKey`; what remains is argued here.
+
+- **`# unobservable wipe`** — `Argon2id.derive` `VoidMethodCallMutator` (the UTF-8
+  password bytes), `PBKDF2WithHmacSHA512.derive` `VoidMethodCallMutator`
+  (`PBEKeySpec.clearPassword`, on the spec's own copy of the password) and
+  `PBKDFEncryption.toUtf8Bytes` `VoidMethodCallMutator` (the encoder's buffer).
+  - Reason: each zeroes a local or a JCE-internal copy after its last use; the
+    array never escapes the method, so no caller, test or collaborator can read it
+    afterwards. Removing the wipe changes nothing any test can observe.
+  - Oracle: none executable, by construction; the property is reviewed by reading.
+    The wipes a caller can observe are killed instead: `encryptWipesTheDerivedKey`
+    and `passwordDecryptWipesTheDerivedKeyWhenAuthenticationFails` in
+    `PBKDFEncryptionTest` watch the key array a recording derivation handed out.
+  - Invalidated if: the buffer is returned, retained or shared, at which point the
+    wipe becomes observable and must be tested.
+- **`# wipe preceded by the JCE`** — `PBKDFEncryption.decrypt` `VoidMethodCallMutator`,
+  the `finally` wipe of the key derived from a password.
+  - Reason: `RawSecretKey.getEncoded` returns the key array itself, and SunJCE zeroes
+    that array while initialising AES/GCM for decryption (JDK 25.0.2, measured
+    2026-10-07: at `init`, in decrypt mode only). The wipe runs on an array that is
+    already zero. Encryption leaves the array intact, which is why the matching
+    `encrypt` wipe is killed by `encryptWipesTheDerivedKey`.
+  - Oracle: `theJceZeroesARawKeyArrayAtDecryptInit` in `PBKDFEncryptionTest` pins the
+    JDK behaviour the argument rests on, with a key of its own, not `RawSecretKey`.
+  - Invalidated if: that test fails (a JDK that stops zeroing), or `RawSecretKey`
+    starts copying in `getEncoded`.
+- **`# empty AAD update is a no-op`** — `PBKDFEncryption.encrypt` and
+  `PBKDFEncryption.decrypt` `ConditionalsBoundaryMutator` on `aad.length > 0`.
+  - Reason: the boundary change routes an empty array into `Cipher.updateAAD`, which
+    the JCE treats exactly as no associated data.
+  - Oracle: `emptyAadIsTheSameAsNoAad` in `PBKDFEncryptionTest` seals with each of
+    null and empty and opens with each of the other.
+  - Invalidated if: that test fails (a provider that binds an empty AAD).
+- **`# blank prefix strips to empty`** — `EncryptionEnvelope.toPropertiesString`
+  `RemoveConditionalMutator_EQUAL_ELSE` on the `isBlank` half of the prefix guard.
+  - Reason: forcing the blank check false sends a blank prefix through `strip()`,
+    which yields the empty string the guard would have chosen.
+  - Oracle: `propertiesTextIsExactlyThePrefixLineTheKdfLinesAndTheEncodedFields` in
+    `EncryptionEnvelopePropertiesTests` asserts a blank prefix writes byte for byte
+    the text of no prefix.
+  - Invalidated if: the blank branch writes anything.
+- **`# builder default restated`** — `Argon2id.derive` `NakedReceiverMutator` on
+  `withVersion(ARGON2_VERSION_13)`.
+  - Reason: the Bouncy Castle `Argon2Parameters.Builder` is constructed with version
+    0x13, so dropping the explicit call leaves the same parameters. The sibling
+    calls (`withSalt`, `withMemoryAsKB`, `withParallelism`, `withIterations`) are
+    killed because each default differs from what the vector or the parameter test
+    passes.
+  - Oracle: `argon2idMatchesTheReferenceVector` in `Argon2idVectorTests` pins the
+    version 0x13 output of the reference implementation's vector.
+  - Invalidated if: that vector fails (a builder whose default is another version),
+    or the generator is replaced.
 
 ## vanity
 
@@ -659,12 +715,19 @@ retired `Subsequence*` allowlist).
 
 ### Debt
 
-Every accepted row is `# untriaged`, in `BaseMaskWorker`, `MaskWorker`,
-`BeginsWithMaskWorker`, `ConcurrentVanityAddressGenerator` and
-`VanityAddressGenerator`. Seeded from the full unkilled population when the
-suite was widened on 2026-08-04 to close `mutationOwnershipAudit` by targeting
-rather than declining. The rows are untested lines and unargued survivors, not
-equivalence claims, and remain active matching capacity until triaged.
+Every accepted row is `# untriaged`. Seeded from the full unkilled population when
+the suite was widened on 2026-08-04 to close `mutationOwnershipAudit` by targeting
+rather than declining; the 2026-10-07 campaign drove the generator API end to end
+(`VanityAddressGeneratorTests` on an inline executor and seeded factory,
+`ConcurrentVanityAddressGeneratorTests` on a recording queue), pinned the worker
+accessors, the interrupt exits and the draw budget, and the unscoped prune retired
+the rows those tests killed. What remains, still debt and not equivalence claims:
+the `BaseMaskWorker.queueResult` self-checks (signature verification and the key
+file branches, which `KeyFileRoundTripTests` reaches through the file formats
+rather than the worker), the `foundLimitOrInterrupted` found-count boundary, and in
+`MaskWorker.run` the packed-offset unpacking, the `checkFound` poll branch and the
+`clearSecrets` call. Each remains active matching capacity until triage kills,
+refactors or argues it.
 
 ### Audited timeouts
 
@@ -673,39 +736,71 @@ enough" (`foundHitLimitOrInterrupted` / `foundLimitOrInterrupted`) and "cap
 reached" (`searchExhausted(attempts)`, the bounded-attempts seam whose javadoc
 names tests as its reason for existing). Every member listed below disables
 the cap itself — breaking either the counter that feeds it or the branch that
-consumes it — so the loop is left with no exit any test can reach. This is the
-non-termination class: nothing but the watchdog can observe them. Each was
-observed `TIMED_OUT` in the 2026-09-05 and 2026-09-25 certification runs.
+consumes it. Each was observed `TIMED_OUT` in the 2026-09-05 and 2026-09-25
+certification runs, under an argument that the cap was the only bound and so
+nothing but the watchdog could observe them. That argument was wrong: every
+attempt is exactly one `SecureRandom.nextBytes` draw, a collaborator the tests
+supply, so a draw budget on the test's `FixedSeedSecureRandom` counts attempts
+from outside the loop. Since 2026-10-07 the three unsatisfiable searches in
+`MaskWorkerTests` run on a budget of twice their cap, working code never reaches
+it, and every member below fails on the budget's `AssertionError` within a few
+hundred milliseconds instead of timing out.
 
 - `MaskWorker.run` and `BeginsWithMaskWorker.run`, `MathMutator`
   (`++attempts` → `--attempts`): the attempt counter runs backwards, so
-  `searchExhausted(attempts)` compares an ever-decreasing value against
-  `maxSearches` and never becomes true. No budget can bound this, because the
-  budget is what the mutant destroys.
+  `searchExhausted(attempts)` never becomes true; the draw budget fires at the
+  cap plus one.
 - `MaskWorker.run` and `BeginsWithMaskWorker.run`,
   `RemoveConditionalMutator_EQUAL_ELSE`: the branch that acts on the exhausted
-  cap is forced the way that keeps the loop going, removing the same exit from
-  the consuming side.
+  cap is forced the way that keeps the loop going; the draw budget fires at the
+  same point.
 
-The fixture bound, recorded because the plugin asks whether a claimed bound
+The membership lines stay until the verify's three-run quiet notice and the gate
+confirmation (`HARDENING.md`, admissible liveness members keep earning
+themselves); a timeout reappearing at one of them reads as audited liveness and
+must be argued afresh, because the budget was supposed to make it impossible.
+
+The fixture bounds, recorded because the plugin asks whether a claimed bound
 can fail first: `MaskWorkerTests` drive every satisfiable search with a finite
 `MAX_SEARCHES` (10,000 attempts; the worst real search on its fixed seed takes
 529, as recorded in `8eeb5d9` and in the comment on `MAX_SEARCHES`, so the bound
-is ~19x headroom and never fires on working code).
-`MAX_SEARCHES` is *not* the oracle for these members. For them it is the
-seam that had to be exhausted before liveness could be claimed at all, and the
-mutant's whole effect is to make it unreachable — which is exactly why the
-watchdog is the only remaining observer.
+is ~19x headroom and never fires on working code), and the unsatisfiable
+searches on a cap of 500 with a draw budget of 1,000. Those three tests also
+carry a JUnit `@Timeout(60)`, which interrupts the test thread; the loop polls
+the flag every `checkFound` draws, so an interrupted search ends on the found
+exit. Under PIT that timeout never governs: the watchdog is `2.0 x` the test's
+recorded duration `+ 1500 ms`, under two seconds for these tests, so a mutant that
+escaped the budget would be reported `TIMED_OUT` by the watchdog long before
+JUnit's sixty seconds, exactly the audited state recorded above.
 
 ## primitives
 
-Mutator set: plain `STRONGER`; registered 2026-08-04, no trial row in
-`HARDENING_NOTES.md` §Mutator-set trials.
+Mutator set: plain `STRONGER`: `EXPERIMENTAL_NAKED_RECEIVER` fired nothing in the
+2026-10-07 trial (`HARDENING_NOTES.md` §Mutator-set trials).
 
 No accepted mutants, so there is no `primitives-accepted.csv` and no
 provenance pair.
 
 ## History (not evidence)
+
+- 2026-10-07, accounts: the four `PublicKey.verifySignature` rows labelled
+  `# removed signature overload pending prune` since `666c164` (the tombstones of
+  the String-signature overloads removed in `0112d69`) left through the unscoped
+  prune. Their keys were blocked by live `NO_COVERAGE` siblings in two private
+  `verifySignature` overloads that nothing called; those overloads were deleted the
+  same day (uncalled private code, not published surface), the ranged overload's
+  siblings were killed by `rangedVerificationAcceptsOnlyTheSignedRangeAndAnUntamperedSignature`,
+  and the keys emptied. The "licensed-kill removal rule" the old paragraph deferred
+  to is about ArcMutate toolchain absence, not deleted source, and never applied.
+
+- 2026-10-07, tx: `AddressLookupTableOverlay.keysToString` was refactored from an
+  `IntStream.iterate` offset cursor to an `IntStream.range` over the account count,
+  the casebook's "refactor it out of existence" outcome for a timeout of the
+  heap-race shape (a stalled cursor that appends the same key until the watchdog).
+  Every mutant of the counted range is finite. The fresh history-free run that
+  followed omitted the old `lambda$keysToString$1` `PrimitiveReturnsMutator`
+  coordinate, so its membership line was removed by hand under the stale-row rule
+  and, as the suite's only member, `tx-timeouts.csv` with it.
 
 Retired arguments kept because each teaches something a reader might otherwise
 repeat. Nothing here supports a current row or audited timeout; run counts,

@@ -3,10 +3,14 @@ package software.sava.core.accounts.sysvar;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.encoding.ByteUtil;
+import software.sava.core.serial.Serializable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Objects;
 
@@ -275,6 +279,224 @@ final class SysvarTests {
     final byte[] truncated = new byte[Long.BYTES + StakeHistoryEntry.BYTES - 1];
     ByteUtil.putInt64LE(truncated, 0, 1L);
     assertThrows(IllegalArgumentException.class, () -> StakeHistory.read(truncated));
+  }
+
+  /// Offsets every write round trip runs at. Zero alone cannot tell `i - offset` from
+  /// `i + offset` in the returned length, nor a write that ignores its offset.
+  private static final int[] OFFSETS = {0, 7};
+
+  /// Fills every byte a write must not touch, so a dropped or misplaced field write shows
+  /// up as a sentinel where the expected wire byte should be.
+  private static final byte SENTINEL = 0x5A;
+
+  /// Bytes left after the record in each write buffer, so an over-long write is visible.
+  private static final int TAIL = 3;
+
+  /// A little-endian buffer for building the expected wire form from the upstream field
+  /// order, independently of `ByteUtil`.
+  private static ByteBuffer wire(final int length) {
+    return ByteBuffer.allocate(length).order(ByteOrder.LITTLE_ENDIAN);
+  }
+
+  /// `wire` placed at `offset` in a sentinel-filled buffer with a sentinel tail.
+  private static byte[] atOffset(final byte[] wire, final int offset) {
+    final byte[] buffer = new byte[offset + wire.length + TAIL];
+    Arrays.fill(buffer, SENTINEL);
+    System.arraycopy(wire, 0, buffer, offset, wire.length);
+    return buffer;
+  }
+
+  /// Writes `subject` at `offset` into a sentinel-filled buffer and asserts that it returns
+  /// the wire length and leaves exactly `wire` at `offset` with every other byte untouched.
+  private static void assertWritesAt(final Serializable subject, final byte[] wire, final int offset) {
+    final byte[] buffer = new byte[offset + wire.length + TAIL];
+    Arrays.fill(buffer, SENTINEL);
+    assertEquals(wire.length, subject.write(buffer, offset), () -> "write length at offset " + offset);
+    assertArrayEquals(atOffset(wire, offset), buffer, () -> "written bytes at offset " + offset);
+  }
+
+  /// `Clock` is five little-endian 64-bit fields in upstream order. Every field carries a
+  /// distinct non-zero value so a swapped, dropped or misplaced field is visible; the write
+  /// must return the wire length at any offset, `l()` must report the same, and the
+  /// address-taking `read` overload must carry the address while decoding the same fields.
+  @Test
+  void clockWritesItsWireLengthAtAnyOffsetAndEveryReadOverloadAgrees() {
+    final var address = PublicKey.fromBase58Encoded("SysvarC1ock11111111111111111111111111111111");
+    final var clock = new Clock(null, 432_872_595L, 1_784_036_447L, 1_002L, 1_003L, 1_784_039_987L);
+    final byte[] wire = wire(40)
+        .putLong(432_872_595L)
+        .putLong(1_784_036_447L)
+        .putLong(1_002L)
+        .putLong(1_003L)
+        .putLong(1_784_039_987L)
+        .array();
+
+    assertEquals(40, clock.l());
+    for (final int offset : OFFSETS) {
+      assertWritesAt(clock, wire, offset);
+      assertEquals(clock, Clock.read(atOffset(wire, offset), offset));
+    }
+    assertEquals(clock, Clock.read(wire));
+    assertEquals(
+        new Clock(address, 432_872_595L, 1_784_036_447L, 1_002L, 1_003L, 1_784_039_987L),
+        Clock.read(address, wire)
+    );
+  }
+
+  /// `Rent` is a `u64` lamports per byte-year, an `f64` exemption threshold and a `u8` burn
+  /// percent. The burn percent is above `i8` range to pin its unsigned read, and the
+  /// threshold is neither integer-path value so it cannot pass for a default.
+  @Test
+  void rentWritesItsWireLengthAtAnyOffsetAndEveryReadOverloadAgrees() {
+    final var address = PublicKey.fromBase58Encoded("SysvarRent111111111111111111111111111111111");
+    final var rent = new Rent(null, 6_960L, 1.5, 200);
+    final byte[] wire = wire(17)
+        .putLong(6_960L)
+        .putDouble(1.5)
+        .put((byte) 200)
+        .array();
+
+    assertEquals(17, rent.l());
+    for (final int offset : OFFSETS) {
+      assertWritesAt(rent, wire, offset);
+      assertEquals(rent, Rent.read(atOffset(wire, offset), offset));
+    }
+    assertEquals(rent, Rent.read(wire));
+    assertEquals(new Rent(address, 6_960L, 1.5, 200), Rent.read(address, wire));
+  }
+
+  /// `EpochSchedule` is a `u64` slots per epoch, a `u64` leader schedule slot offset, a `bool`
+  /// warmup byte, then a `u64` first normal epoch and a `u64` first normal slot. The main-net
+  /// fixture has warmup off and both trailing fields zero, which cannot distinguish a dropped
+  /// trailing write or a warmup byte always written as zero; this fixture has warmup on and
+  /// every numeric field distinct and non-zero.
+  @Test
+  void epochScheduleWithWarmupWritesItsWireLengthAtAnyOffsetAndEveryReadOverloadAgrees() {
+    final var address = PublicKey.fromBase58Encoded("SysvarEpochSchedu1e111111111111111111111111");
+    final var epochSchedule = new EpochSchedule(null, 432_000L, 216_000L, true, 14L, 524_256L);
+    final byte[] wire = wire(33)
+        .putLong(432_000L)
+        .putLong(216_000L)
+        .put((byte) 1)
+        .putLong(14L)
+        .putLong(524_256L)
+        .array();
+
+    assertEquals(33, epochSchedule.l());
+    for (final int offset : OFFSETS) {
+      assertWritesAt(epochSchedule, wire, offset);
+      assertEquals(epochSchedule, EpochSchedule.read(atOffset(wire, offset), offset));
+    }
+    assertEquals(epochSchedule, EpochSchedule.read(wire));
+    assertEquals(
+        new EpochSchedule(address, 432_000L, 216_000L, true, 14L, 524_256L),
+        EpochSchedule.read(address, wire)
+    );
+  }
+
+  /// `LastRestartSlot` is a single little-endian `u64`.
+  @Test
+  void lastRestartSlotWritesItsWireLengthAtAnyOffsetAndEveryReadOverloadAgrees() {
+    final var address = PublicKey.fromBase58Encoded("SysvarLastRestartS1ot1111111111111111111111");
+    final var lastRestartSlot = new LastRestartSlot(null, 246_464_040L);
+    final byte[] wire = wire(8).putLong(246_464_040L).array();
+
+    assertEquals(8, lastRestartSlot.l());
+    for (final int offset : OFFSETS) {
+      assertWritesAt(lastRestartSlot, wire, offset);
+      assertEquals(lastRestartSlot, LastRestartSlot.read(atOffset(wire, offset), offset));
+    }
+    assertEquals(lastRestartSlot, LastRestartSlot.read(wire));
+    assertEquals(new LastRestartSlot(address, 246_464_040L), LastRestartSlot.read(address, wire));
+  }
+
+  /// `EpochRewards`' write at a non-zero offset is pinned above; this pins the
+  /// address-taking `read` overload and `l()` against the wire size.
+  @Test
+  void epochRewardsReadWithAddressCarriesItAndLengthIsTheWireSize() {
+    final var address = PublicKey.fromBase58Encoded("SysvarEpochRewards1111111111111111111111111");
+    final byte[] data = Base64.getDecoder().decode("""
+        6FJ+GAAAAAArAQAAAAAAAOpnvqJOxkGk1k3flJB8QnqTBZFakobZO4Y/nYulJqbVVQwykjvxe282cwIAAAAAACmaSKSIdQAAUgoxpIh1AAAA""");
+
+    final var epochRewards = EpochRewards.read(address, data);
+    assertEquals(address, epochRewards.address());
+    assertEquals(410_931_944L, epochRewards.distributionStartingBlockHeight());
+    assertEquals(129_229_730_679_378L, epochRewards.distributedRewards());
+    assertNull(EpochRewards.read(data).address());
+
+    assertEquals(81, data.length);
+    assertEquals(81, epochRewards.l());
+  }
+
+  /// `SlotHashes` is a `u64` entry count followed by that many (`u64` slot, 32-byte hash)
+  /// pairs. Two entries with distinct slots and hashes are written at each offset; the
+  /// returned length, `l()` of the collection and of an entry, and both read overloads
+  /// must agree with the independently built wire form.
+  @Test
+  void slotHashesWriteItsWireLengthAtAnyOffsetAndEveryReadOverloadAgrees() {
+    final var address = PublicKey.fromBase58Encoded("SysvarS1otHashes111111111111111111111111111");
+    final byte[] newerHash = new byte[32];
+    final byte[] olderHash = new byte[32];
+    for (int i = 0; i < 32; ++i) {
+      newerHash[i] = (byte) (i + 1);
+      olderHash[i] = (byte) (0x80 + i);
+    }
+    final var slotHashes = new SlotHashes(null, new SlotHash[]{
+        new SlotHash(432_872_594L, newerHash),
+        new SlotHash(432_872_593L, olderHash)
+    });
+    final byte[] wire = wire(8 + 2 * 40)
+        .putLong(2L)
+        .putLong(432_872_594L).put(newerHash)
+        .putLong(432_872_593L).put(olderHash)
+        .array();
+
+    assertEquals(40, slotHashes.slotHashes()[0].l());
+    assertEquals(wire.length, slotHashes.l());
+    for (final int offset : OFFSETS) {
+      assertWritesAt(slotHashes, wire, offset);
+      assertSlotHashes(slotHashes, SlotHashes.read(atOffset(wire, offset), offset));
+    }
+    assertSlotHashes(slotHashes, SlotHashes.read(wire));
+    final var addressed = SlotHashes.read(address, wire);
+    assertEquals(address, addressed.address());
+    assertSlotHashes(slotHashes, addressed);
+  }
+
+  private static void assertSlotHashes(final SlotHashes expected, final SlotHashes actual) {
+    assertEquals(expected.slotHashes().length, actual.slotHashes().length);
+    for (int i = 0; i < expected.slotHashes().length; ++i) {
+      assertEquals(expected.slotHashes()[i].slot(), actual.slotHashes()[i].slot());
+      assertArrayEquals(expected.slotHashes()[i].hash(), actual.slotHashes()[i].hash());
+    }
+  }
+
+  /// `StakeHistory` is a `u64` entry count followed by that many (epoch, effective,
+  /// activating, deactivating) `u64` quadruples. Two entries with distinct non-zero fields
+  /// are written at each offset; the returned length, `l()` of the collection and of an
+  /// entry, and both read overloads must agree with the independently built wire form.
+  @Test
+  void stakeHistoryWritesItsWireLengthAtAnyOffsetAndEveryReadOverloadAgrees() {
+    final var address = PublicKey.fromBase58Encoded("SysvarStakeHistory1111111111111111111111111");
+    final var newer = new StakeHistoryEntry(1001L, 429023881115486895L, 2778198923647242L, 5915395642511380L);
+    final var older = new StakeHistoryEntry(1000L, 428061830089917206L, 2735681549682863L, 1867022092164017L);
+    final var stakeHistory = new StakeHistory(null, new StakeHistoryEntry[]{newer, older});
+    final byte[] wire = wire(8 + 2 * 32)
+        .putLong(2L)
+        .putLong(1001L).putLong(429023881115486895L).putLong(2778198923647242L).putLong(5915395642511380L)
+        .putLong(1000L).putLong(428061830089917206L).putLong(2735681549682863L).putLong(1867022092164017L)
+        .array();
+
+    assertEquals(32, newer.l());
+    assertEquals(wire.length, stakeHistory.l());
+    for (final int offset : OFFSETS) {
+      assertWritesAt(stakeHistory, wire, offset);
+      assertArrayEquals(stakeHistory.entries(), StakeHistory.read(atOffset(wire, offset), offset).entries());
+    }
+    assertArrayEquals(stakeHistory.entries(), StakeHistory.read(wire).entries());
+    final var addressed = StakeHistory.read(address, wire);
+    assertEquals(address, addressed.address());
+    assertArrayEquals(stakeHistory.entries(), addressed.entries());
   }
 
   private static byte[] readFixture(final String fileName) {

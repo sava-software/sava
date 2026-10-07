@@ -9,6 +9,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -577,5 +578,56 @@ final class PublicKeyTest {
     );
     assertEquals(128, exhaustedClassifications.get());
     assertEquals("Unable to find a viable program derived address nonce", exception.getMessage());
+  }
+
+  /// RFC 8032 section 7.1, TEST 2: an Ed25519 secret key, its public key, the one-byte message
+  /// `0x72` and its signature. Ed25519 signing is deterministic, so the vector is an oracle for
+  /// both the library's signing and its verification that owes nothing to this implementation.
+  private static final String RFC8032_SECRET_KEY = "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb";
+  private static final String RFC8032_PUBLIC_KEY = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c";
+  /// [#RFC8032_PUBLIC_KEY] in base58, computed outside this library.
+  private static final String RFC8032_PUBLIC_KEY_BASE58 = "586Z7H2vpX9qNhN2T4e9Utugie3ogjbxzGaMtM3E6HR5";
+  private static final String RFC8032_SIGNATURE = "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da"
+      + "085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00";
+
+  /// The ranged instance verifier checks the signature over exactly `msgLength` bytes from
+  /// `msgOffset`: it accepts the RFC 8032 signature over the signed byte embedded in a larger
+  /// buffer, and rejects the same signature over a neighbouring range and a copy of it with one
+  /// bit flipped. The fixed secret key signs through the library first, so the signature being
+  /// verified is the library's own, checked byte for byte against the vector.
+  @Test
+  void rangedVerificationAcceptsOnlyTheSignedRangeAndAnUntamperedSignature() {
+    final var hex = HexFormat.of();
+    final var publicKey = PublicKey.createPubKey(hex.parseHex(RFC8032_PUBLIC_KEY));
+    final byte[] buffer = {(byte) 0xEE, 0x72, (byte) 0xEE};
+
+    final var signer = Signer.createFromPrivateKey(hex.parseHex(RFC8032_SECRET_KEY));
+    assertEquals(publicKey, signer.publicKey());
+    final byte[] signature = signer.sign(buffer, 1, 1);
+    assertArrayEquals(hex.parseHex(RFC8032_SIGNATURE), signature);
+
+    assertTrue(publicKey.verifySignature(buffer, 1, 1, signature));
+    assertFalse(publicKey.verifySignature(buffer, 0, 1, signature), "a range other than the signed byte");
+    assertFalse(publicKey.verifySignature(buffer, 1, 2, signature), "the signed byte plus a trailing one");
+
+    final byte[] tampered = signature.clone();
+    tampered[0] ^= 1;
+    assertFalse(publicKey.verifySignature(buffer, 1, 1, tampered), "a signature with one bit flipped");
+  }
+
+  /// The `char[]` overloads and the ASCII `byte[]` overload decode the same key as the base58
+  /// text names, reading only the requested range: the key is wrapped in JSON-style quotes that
+  /// are not base58 digits, so a decoder that read past the range would reject the input. The
+  /// expected bytes are the RFC 8032 public key, not the all-zero key a skipped decode leaves.
+  @Test
+  void charArrayAndAsciiByteOverloadsDecodeTheRequestedRange() {
+    final byte[] expected = HexFormat.of().parseHex(RFC8032_PUBLIC_KEY);
+    final var base58 = RFC8032_PUBLIC_KEY_BASE58;
+    final var quoted = '"' + base58 + '"';
+
+    assertArrayEquals(expected, PublicKey.fromBase58Encoded(base58.toCharArray()).toByteArray());
+    assertArrayEquals(expected, PublicKey.fromBase58Encoded(quoted.toCharArray(), 1, base58.length()).toByteArray());
+    assertArrayEquals(expected, PublicKey.fromBase58Encoded(quoted.getBytes(US_ASCII), 1, base58.length()).toByteArray());
+    assertEquals(base58, PublicKey.fromBase58Encoded(quoted.getBytes(US_ASCII), 1, base58.length()).toBase58());
   }
 }

@@ -115,6 +115,9 @@ public final class PBKDFEncryption {
     }
   }
 
+  /// Opens the envelope with the raw key. The key array is wrapped, not copied, and the JCE
+  /// zeroes it while initialising the cipher for decryption on current JDKs (SunJCE 25 does so
+  /// at `init`); a caller that still needs the bytes afterwards passes a copy.
   public static byte[] decrypt(final byte[] keyBytes,
                                final byte[] aad,
                                final byte[] iv,

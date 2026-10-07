@@ -100,26 +100,6 @@ public interface PublicKey extends Comparable<PublicKey> {
     return verifier.verifySignature(signature);
   }
 
-  private static boolean verifySignature(final Ed25519PublicKeyParameters publicKeyParameters,
-                                         final byte[] msg,
-                                         final byte[] signature) {
-    return verifySignature(
-        publicKeyParameters,
-        msg, 0, msg.length,
-        signature
-    );
-  }
-
-  private static boolean verifySignature(final Ed25519PublicKeyParameters publicKeyParameters,
-                                         final String msg,
-                                         final byte[] signature) {
-    return verifySignature(
-        publicKeyParameters,
-        msg.getBytes(UTF_8),
-        signature
-    );
-  }
-
   static boolean verifySignature(final byte[] publicKey,
                                  final int publicKeyOffset,
                                  final byte[] msg,
