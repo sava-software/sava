@@ -9,6 +9,71 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.6.5 — 2026-10-07
+
+All three plugin pins now read the published `software.sava:sava-build:21.6.5`, crossing
+21.6.2 through 21.6.5 from 21.6.1; the artifact is on GitHub Packages only. In the root
+build, `:sava-core:savaBuildIdentity` reported that resolved coordinate, the Gradle-cache
+path of the loaded jar, JAR SHA-256
+`b1abd62c645b27d9bc730b934f86fec96aa1adf73c88de5091114b6128b4077c`, and
+`local override: inactive (property unset or blank)` — the state 21.6.5 added for an
+unset or blank `savaBuildLocalRepo`; the "not verified" wording the 21.6.1 record quotes
+now means a configured property without a verified local resolution. The separate JMH
+build registers no identity task and was exercised by a fresh configure and compile
+against the same pin. `gh attestation verify` bound that JAR (with its sources and
+javadoc jars) to a SLSA v1 provenance statement signed by
+`.github/workflows/gradle_plugin_publish.yml` at `refs/tags/21.6.5`, source commit
+`09d10e9f1829466265813e5b762a5d66fc6e2952`.
+
+The toolchain is unchanged — `gradle/libs.versions.toml` is identical between the 21.6.1
+and 21.6.5 tags — so no `BaselineRebase` was expected or needed. Completed `pitest<Suite>`
+reports and `hardeningCertify` receipts bind the loaded plugin binary, so the 21.6.1 ones
+do not carry over: a verify over a pre-upgrade report refuses, and the next release
+certifies fresh under 21.6.5, as the release checklist already requires. This adoption
+was pins, `check`, the agent block, one cheap trigger per changed behaviour and this
+record; no certification and no fuzz campaign.
+
+What changed across the four releases, and what was exercised:
+
+- 21.6.2 records a refused `fuzzAll` campaign when a target fails, and
+  `-PpruneBaselineKeys.<suite>` scopes a prune preview to one suite; both apply only
+  when those run.
+- 21.6.3 makes the mutation suites a pre-push gate: suites run once per unpushed range
+  after review, never per commit; a test-only edit owes the suites whose mutated code
+  those tests exercise; `./gradlew qualityGate` from the root when the suites are
+  unclear. `pitest<Suite>Verify` keeps a completed report only while recompiled Java
+  sources are the sole input that moved and every class is byte-identical, so after
+  this upgrade it refuses any pre-upgrade report: `:sava-core:pitestEncodingVerify` over the report the pre-push gate had written under
+  21.6.1 stopped in `pitestEncodingEvidenceValidate`, naming the recorded and current
+  plugin SHA-256 and a fresh run as the only retry. PIT master-JVM
+  settings forwarded to minions are refused; sava's two `hardening {}` blocks set none.
+  The range pushed just before this adoption, `4549b16..bfc1368`, already followed the
+  gate rule: the six suites its code and tests reach ran once, history-free, after the
+  local review and before the push.
+- 21.6.4 keeps `config/pitest/README.md` to the arguments in force, updated in place and
+  never appended to as a pass report, with no restated build totals. sava-core's and
+  sava-rpc's READMEs still carry dated sections; one that argues a live acceptance or
+  timeout stays, dates included, and one that narrates a pass collapses to the argument
+  it supports. That reshaping is owed before the next certification, which binds the
+  README as it then stands, and was not part of this adoption.
+- 21.6.5 warns from verify and Debt about bare baseline rows (`N unlabeled rows — triage
+  state unknown`) and names the README rule and the test-only-edit wording in the
+  printed template. `:sava-core:pitestEncodingDebt` printed its per-label breakdown
+  (8 `# slow path routing`, 6 `# surplus zero strip`, 6 `# allocation size` over 20 rows) with no unlabeled warning; every row of all 13 baselines carries a label, and
+  the four registered suites without a baseline have nothing to warn about.
+
+The agent block in `AGENTS.md` is the 60-line print of the installed
+`:sava-core:hardeningAgentTemplate`, replacing the 43 lines 21.6.1 printed; it now
+carries the final-gate rule, the README rule and the test-only-edit wording with
+`./gradlew qualityGate` as the fallback. Nothing checks the copy.
+
+Root `check` executed 1,785 tests — sava-core 788, sava-rpc 941, sava-vanity 56 — with 0 failures and 0 errors; the
+skips are the environment-gated `LiveV1ValidatorCheck` and `LiveMainNetDriftCheck`.
+`jmhClasses` in the JMH build passed against the new pin after a fresh configure;
+`--warning-mode all` on that build still shows the one Gradle 11 deprecation,
+`Configuration.setVisible(boolean)`, from the `me.champeau.jmh` plugin, as recorded for
+21.6.1.
+
 ## Released sava-build 21.6.1 — 2026-09-25
 
 All three plugin pins now read the published `software.sava:sava-build:21.6.1`, crossing

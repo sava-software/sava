@@ -94,14 +94,26 @@ mutants are accepted and why — lives under "sava-specific hardening facts" aft
 template, and in the documents that section points to.
 
 <!-- hardening-template block:start -->
-- Iterate with the module's `test` task. Before handoff, run each `pitest<Suite>`
-  whose mutated code the change can reach, including suites in dependent modules,
-  and `mutationOwnershipAudit` when production classes or target/exclusion rules
-  change. `hardeningCertify` (or `:hardeningCertifyAll`) is the pre-release check
-  this repo's notes assign an owner to, not the inner loop.
-- Iterate on one cluster with `-PmutateOnly=<class-glob>`. Before any record
-  decision, re-run unscoped with `-PnoMutationHistory`: a `[history]` report cannot
-  support adding, removing, or relabelling records.
+- Work with the module's `test` task. The mutation suites are a final gate, run once
+  per unpushed range when the work is complete and reviewed, before the push: each
+  `pitest<Suite>` whose mutated code the range can reach, including suites in
+  dependent modules, plus `mutationOwnershipAudit` when production classes or
+  target/exclusion rules changed. Never per commit, amend or review round; a change
+  the gate forces goes back through review as a delta. `hardeningCertify` (or
+  `:hardeningCertifyAll`) and `fuzzAll` are the pre-release checks this repo's notes
+  assign an owner to.
+- Test-only edits owe the suites whose mutated code those tests exercise; when scope
+  is unclear, run `./gradlew qualityGate` from the Gradle root. Doc and comment
+  edits owe no suite; a build-script edit only when it changes what
+  PIT is given. A change the gate forced owes it again by the same reachability rule
+  once reviewed. `pitest<Suite>Verify` answers one way: it keeps its report while only
+  recompiled Java sources changed and every recompiled class is byte-identical, which
+  proves that suite is owed nothing; a refusal (a moved line, a resource, a build
+  script, an ArcMutate suite) names its cause and proves nothing by itself.
+- When the gate reports unkilled mutants, iterate on one cluster with
+  `-PmutateOnly=<class-glob>`. Before any record decision, re-run unscoped with
+  `-PnoMutationHistory`: a `[history]` report cannot support adding, removing, or
+  relabelling records.
 - An unkilled mutant has three outcomes: kill it with a test that asserts the
   property it breaks, refactor it out of existence, or accept it with a written
   reason in `config/pitest/README.md` and a family label on the row. Refreshes seed
@@ -119,8 +131,13 @@ template, and in the documents that section points to.
   Never hand-edit baseline
   rows or provenance stamps.
 - Baseline keys are line-less (`class,method,mutator,STATUS`); `# line` tags are
-  review metadata. Identical rows are sibling mutants and the comparison is a
-  multiset: never hand-dedupe.
+  review metadata that belong to their row: `BaselineRetag` refreshes them, a hand
+  edit is a hand-edited row. Identical rows are sibling mutants and the comparison
+  is a multiset: never hand-dedupe.
+- `config/pitest/README.md` holds the arguments in force, each updated in place and
+  never appended to as a pass report: a family's members, reason, oracle and the
+  condition that invalidates it; an audited timeout's cause. The totals the build prints
+  are not restated there; the measurements it cannot reconstruct are kept.
 - A new `TIMED_OUT` mutant is a reviewer stop, never detection. Record it in
   `config/pitest/<suite>-timeouts.csv` with a cause and argue it in the README; only
   `cause:liveness` certifies. A member whose coordinate has left the population is
@@ -130,8 +147,8 @@ template, and in the documents that section points to.
   stubs that return distinguishable non-default values, and the subject built inside
   the test body. Exclusions must cover the test source set, not a naming convention.
 - Verify by the absence of failures: trust the exit code and the `.running`
-  sentinel, not a summary. `MINION_DIED` and `RUN_ERROR` are not results; re-run. A
-  suite that got faster without getting narrower is a bug report.
+  sentinel, not a summary. `MINION_DIED` and `RUN_ERROR` are not results; re-run once
+  on a quiet machine. A suite that got faster without getting narrower is a bug report.
 - Fuzz findings become a committed seed input and a named regression test. Run
   `fuzzAll` locally with an explicit `-PmaxFuzzTime` and `-PmaxParallelFuzzTargets`
   before a release. Where one thing has two representations, fuzz the differential.
@@ -313,7 +330,7 @@ copying a possibly newer block out of sava-build's moving `main`.
 
 **This repo pins a published sava-build release.** The three pins — both ids in
 the root `settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read
-`21.6.1`, adopted on 2026-09-25; `HARDENING_NOTES.md` records the resolved jar's
+`21.6.5`, adopted on 2026-10-07; `HARDENING_NOTES.md` records the resolved jar's
 SHA-256 and attestation. **The pins must move together**; a settings-only bump has
 silently missed the jmh pin more than once. This combination resolves from the
 ordinary published repository; `-PsavaBuildLocalRepo` is needed only while
