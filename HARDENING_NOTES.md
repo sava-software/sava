@@ -537,6 +537,11 @@ checked by two refuters). What it found, and what closed the same day:
   shifting every account down a slot (`NoSignerHeaderTests`); the guard that refuses it
   mirrors the one `#58` added for the opposite contradiction. Jazzer `slow-unit-*`
   artifacts are ignored so a slow input cannot refuse a fuzz receipt.
+- **Vanity counter.** The campaign's generator tests showed `numSearched` leaving out
+  every matched key (a worker flushed its misses on a match and never the match) and
+  the last `checkFound` stretch of a worker stopped by another worker's find. Both
+  now count, so the CLI's `[numSearched, numSearched + numThreads * checkFound)` range
+  holds; the owner asked for the fix.
 - **Docs.** `AGAVE_SYNC.md`, `CONVENTIONS.md` and this file lost stale counts, a weekly
   fuzz schedule that no longer exists, a claim that no test starts a thread, and
   pointers at retired families; `CONVENTIONS.md` gained the log and clock seams and the
@@ -545,7 +550,6 @@ checked by two refuters). What it found, and what closed the same day:
 Left to the owner: whether the real-clock transport pins in
 `JsonHttpClientTransportTests` should leave the three rpc suites that cover them; the
 `scalarMultBase` member's category (or a refactor to an indexed window loop); the
-`numSearched` accounting that excludes matched keys in the vanity workers; the
 remaining `# untriaged` rows in `accounts` and `vanity`; the forty-odd sava-rpc families
 whose oracle is still "owed"; and `generateTestSupport`.
 

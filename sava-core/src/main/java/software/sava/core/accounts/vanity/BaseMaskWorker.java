@@ -247,12 +247,9 @@ abstract class BaseMaskWorker implements AddressWorker {
   }
 
   protected final boolean foundLimitOrInterrupted() {
-    if (found.getOpaque() >= find || Thread.currentThread().isInterrupted()) {
-      return true;
-    } else {
-      searched.getAndAccumulate(checkFound, SUM);
-      return false;
-    }
+    // the stretch just searched counts whether or not this is the last one
+    searched.getAndAccumulate(checkFound, SUM);
+    return found.getOpaque() >= find || Thread.currentThread().isInterrupted();
   }
 
   protected final boolean foundHitLimitOrInterrupted() {

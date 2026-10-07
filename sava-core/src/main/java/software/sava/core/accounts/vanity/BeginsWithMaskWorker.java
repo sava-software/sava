@@ -39,7 +39,8 @@ final class BeginsWithMaskWorker extends BaseMaskWorker {
 
         keyStart = Base58.mutableEncode(mutablePublicKey, encoded);
         if (queueResult(start, keyStart)) {
-          searched.getAndAccumulate(i, SUM);
+          // the misses since the last flush, and the match itself
+          searched.getAndAccumulate(i + 1, SUM);
           if (foundHitLimitOrInterrupted()) {
             return;
           } else {

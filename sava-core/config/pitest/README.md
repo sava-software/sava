@@ -724,10 +724,9 @@ accessors, the interrupt exits and the draw budget, and the unscoped prune retir
 the rows those tests killed. What remains, still debt and not equivalence claims:
 the `BaseMaskWorker.queueResult` self-checks (signature verification and the key
 file branches, which `KeyFileRoundTripTests` reaches through the file formats
-rather than the worker), the `foundLimitOrInterrupted` found-count boundary, and in
-`MaskWorker.run` the packed-offset unpacking, the `checkFound` poll branch and the
-`clearSecrets` call. Each remains active matching capacity until triage kills,
-refactors or argues it.
+rather than the worker), and in `MaskWorker.run` the packed-offset unpacking, the
+`checkFound` poll branch and the `clearSecrets` call. Each remains active matching
+capacity until triage kills, refactors or argues it.
 
 ### Audited timeouts
 

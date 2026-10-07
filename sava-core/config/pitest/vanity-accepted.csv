@@ -1,5 +1,4 @@
 !sava-hardening-baseline-schema,1
-software.sava.core.accounts.vanity.BaseMaskWorker,foundLimitOrInterrupted,ConditionalsBoundaryMutator,SURVIVED # untriaged # line 250
 software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 127
 software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 131
 software.sava.core.accounts.vanity.BaseMaskWorker,queueResult,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 137
@@ -11,4 +10,4 @@ software.sava.core.accounts.vanity.MaskWorker,run,MathMutator,SURVIVED # untriag
 software.sava.core.accounts.vanity.MaskWorker,run,MathMutator,SURVIVED # untriaged # line 54
 software.sava.core.accounts.vanity.MaskWorker,run,MathMutator,SURVIVED # untriaged # line 54
 software.sava.core.accounts.vanity.MaskWorker,run,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 61
-software.sava.core.accounts.vanity.MaskWorker,run,VoidMethodCallMutator,SURVIVED # untriaged # line 85
+software.sava.core.accounts.vanity.MaskWorker,run,VoidMethodCallMutator,SURVIVED # untriaged # line 86

@@ -332,6 +332,22 @@ final class MaskWorkerTests {
     assertEquals(4, tailSource.draws(), "the tail worker must stop at its first boundary");
   }
 
+  /// A worker that learns at a `checkFound` boundary that the search is already over (another
+  /// worker found the last key) still counts the stretch it just searched: those keys were
+  /// generated, and `searched` is what the CLI divides into elapsed time.
+  @Test
+  void aWorkerStoppedAtABoundaryByAnotherWorkersFindCountsItsLastStretch() {
+    final var noKey = Subsequence.create("savasava", true, false, false);
+    final var secureRandom = new FixedSeedSecureRandom(1L, 64);
+    final var searched = new AtomicLong(0);
+    final var alreadyFound = new AtomicInteger(1);
+
+    beginsWithWorker(secureRandom, noKey, newResults(), alreadyFound, searched, 4, 64).run();
+
+    assertEquals(4, secureRandom.draws(), "the worker stops at its first boundary");
+    assertEquals(4, searched.get(), "the last stretch is counted");
+  }
+
   /// The draw budget is what turns a broken attempt cap into a failure, so it has to fire at
   /// exactly its cap: every draw up to it succeeds, the next one throws and names the cap.
   @Test
