@@ -17,29 +17,26 @@ testModuleInfo {
 hardening {
   // suites target by package wildcard with exclusions, never allowlist, so a
   // new class is mutated by default instead of silently skipped (policy:
-  // sava-build's HARDENING.md); packages without a suite are deliberate scope
-  // decisions, not omissions
+  // sava-build's HARDENING.md); mutationOwnershipAudit reports zero declined
+  // classes, so every production class sits in some suite's target universe
   mutation.register("borsh") {
     targetClasses = listOf("software.sava.core.borsh.*")
     excludedClasses = listOf(
-      "software.sava.core.borsh.*Test*",
-      "software.sava.core.borsh.*Fuzz*"
+      "software.sava.core.borsh.*Test*"
     )
     targetTests = "software.sava.core.borsh.*Test*"
   }
   mutation.register("ed25519") {
     targetClasses = listOf("software.sava.core.crypto.ed25519.*")
     excludedClasses = listOf(
-      "software.sava.core.crypto.ed25519.*Test*",
-      "software.sava.core.crypto.ed25519.*Fuzz*"
+      "software.sava.core.crypto.ed25519.*Test*"
     )
     targetTests = "software.sava.core.crypto.ed25519.*Test*"
   }
   mutation.register("encoding") {
     targetClasses = listOf("software.sava.core.encoding.*")
     excludedClasses = listOf(
-      "software.sava.core.encoding.*Test*",
-      "software.sava.core.encoding.*Fuzz*"
+      "software.sava.core.encoding.*Test*"
     )
     targetTests = "software.sava.core.encoding.*Test*"
   }
@@ -50,7 +47,6 @@ hardening {
     )
     excludedClasses = listOf(
       "software.sava.core.tx.*Test*",
-      "software.sava.core.tx.*Fuzz*",
       "software.sava.core.accounts.lookup.*Test*"
     )
     targetTests = "software.sava.core.tx.*Test*,software.sava.core.accounts.lookup.*Test*"
@@ -63,8 +59,7 @@ hardening {
     // the tests share the package with what they mutate, so they need excluding
     // by name the way every other suite does
     excludedClasses = listOf(
-      "software.sava.core.accounts.token.*Test*",
-      "software.sava.core.accounts.token.*Fuzz*"
+      "software.sava.core.accounts.token.*Test*"
     )
     targetTests = "software.sava.core.accounts.token.*Test*"
   }
@@ -103,8 +98,9 @@ hardening {
     targetClasses = listOf("software.sava.core.accounts.vanity.*")
     excludedClasses = listOf(
       "software.sava.core.accounts.vanity.*Test*",
-      // a test fake named for its role, so it matches no *Test* pattern
-      "software.sava.core.accounts.vanity.FixedSeedSecureRandom"
+      // a test fake named for its role, so it matches no *Test* pattern; the trailing
+      // wildcard covers its nested classes too
+      "software.sava.core.accounts.vanity.FixedSeedSecureRandom*"
     )
     targetTests = "software.sava.core.accounts.vanity.*Test*"
     // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
@@ -144,6 +140,8 @@ hardening {
     targetClasses = listOf("software.sava.core.accounts.pbkdf.*")
     excludedClasses = listOf("software.sava.core.accounts.pbkdf.*Test*")
     targetTests = "software.sava.core.accounts.pbkdf.*Test*"
+    // fired in the 2026-10-07 NAKED_RECEIVER trial (HARDENING_NOTES.md)
+    mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("primitives") {
     // the small cross-cutting types that belong to no larger package: RPC
@@ -179,11 +177,12 @@ hardening {
     // shift direction is pinned by tests instead.
   }
   // PIT's default per-test allowance is `recorded time x 1.25 + 4000ms`, and every
-  // hanging-mutant detection pays that flat fee. No test in this module's suites runs
-  // longer than ~0.2s (the ranking is in HARDENING_NOTES.md), so the constant is cut
-  // and the proportional headroom raised instead — load inflates a test in proportion
-  // to its own runtime. Watch for SURVIVED -> TIMED_OUT drift in the verify output if
-  // this is ever retuned; that is the signal the constant went too low.
+  // hanging-mutant detection pays that flat fee. The constant is cut and the
+  // proportional headroom raised instead, because load inflates a test in proportion
+  // to its own runtime; each suite's slowest covering test is on PIT's "Slowest test"
+  // stderr line, and HARDENING_NOTES.md keeps the dated ranking. Watch for
+  // SURVIVED -> TIMED_OUT drift in the verify output if this is ever retuned; that is
+  // the signal the constant went too low.
   mutation.configureEach {
     timeoutFactor = 2.0
     timeoutConst = 1500L
@@ -262,9 +261,3 @@ tasks.test {
     .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
-// Mutator-trial hook (shared HARDENING.md: "trial per suite, enable only what
-// fires"): -PtrialMutators=STRONGER,EXPERIMENTAL_X overrides every suite for a run.
-// Trial results are recorded in HARDENING_NOTES.md ("Mutator-set trials").
-providers.gradleProperty("trialMutators").orNull?.let { trial ->
-  hardening.mutation.configureEach { mutators = trial }
-}

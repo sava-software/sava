@@ -239,8 +239,9 @@ ordinary report rewrite, not a toolchain operation.
 
 **Ruled out here, with the measurement.** `EXPERIMENTAL_BIG_INTEGER` fired zero times in
 every candidate suite (this code constructs and compares Big values but does no Big
-arithmetic) and is left off; `EXPERIMENTAL_NAKED_RECEIVER` fired in seven suites and is
-enabled on exactly those. Both trial tables are in `HARDENING_NOTES.md`, which is also
+arithmetic) and is left off; `EXPERIMENTAL_NAKED_RECEIVER` is enabled on exactly the
+suites whose trial saw it fire, and on no other. Both trial tables are in
+`HARDENING_NOTES.md`, which is also
 where the JUnit-6 `@Execution`/`@TestInstance` inheritance question and the
 `module-info`-services question are settled — no sava module declares or consumes a
 service today. `decimal`'s 91% is four documented equivalents whose "fix" was tried and

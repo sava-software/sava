@@ -58,8 +58,7 @@ hardening {
     excludedClasses = listOf(
       "software.sava.rpc.json.http.client.*Test*",
       "software.sava.rpc.json.http.client.*Check*",
-      "software.sava.rpc.json.http.client.Stub*",
-      "software.sava.rpc.json.http.client.*Fuzz*"
+      "software.sava.rpc.json.http.client.Stub*"
     )
     targetTests = "software.sava.rpc.json.http.client.*Test*"
     // fluent receiver-returning calls (iterator chains, builder-style writes) are
@@ -71,10 +70,11 @@ hardening {
     // paths run against the NanoClock seam so tests advance time instead of waiting
     targetClasses = listOf("software.sava.rpc.json.http.ws.*")
     excludedClasses = listOf(
-      // TestClock matches *Test*; the no-network fakes are named for their role
+      // TestClock matches *Test*; the no-network fakes and the logging extension are
+      // named for their role, so each is excluded by name with a trailing wildcard
       "software.sava.rpc.json.http.ws.*Test*",
       "software.sava.rpc.json.http.ws.Recording*",
-      "software.sava.rpc.json.http.ws.*Fuzz*"
+      "software.sava.rpc.json.http.ws.QuietWsLogging*"
     )
     targetTests = "software.sava.rpc.json.http.ws.*Test*"
     // fired in the 2026-07-22 NAKED_RECEIVER trial (HARDENING_NOTES.md)
@@ -128,24 +128,19 @@ hardening {
   }
 
   // PIT's default per-test allowance is `recorded time x 1.25 + 4000ms`, and every
-  // hanging-mutant detection pays that flat fee. This module's whole test set runs in
-  // ~1.2s, slowest test 0.25s (ranking in HARDENING_NOTES.md), so the constant is cut
-  // and the proportional headroom raised instead — load inflates a test in proportion
-  // to its own runtime. The ws suite is the one to watch: its check-loop and unlock
-  // mutants are detected *by* timing out, so SURVIVED -> TIMED_OUT drift in the verify
-  // output is the signal that the constant went too low.
+  // hanging-mutant detection pays that flat fee. The constant is cut and the
+  // proportional headroom raised instead, because load inflates a test in proportion
+  // to its own runtime; each suite's slowest covering test is on PIT's "Slowest test"
+  // stderr line, and HARDENING_NOTES.md keeps the dated ranking. The ws suite still
+  // carries audited liveness members that only the watchdog detects (config/pitest/
+  // README.md, "Timed-out mutants (audited set)"), so SURVIVED -> TIMED_OUT drift in
+  // the verify output is the signal that the constant went too low.
   mutation.configureEach {
     timeoutFactor = 2.0
     timeoutConst = 1500L
   }
 }
 
-// Mutator-trial hook (shared HARDENING.md: "trial per suite, enable only what
-// fires"): -PtrialMutators=STRONGER,EXPERIMENTAL_X overrides every suite for a run.
-// Trial results are recorded in HARDENING_NOTES.md ("Mutator-set trials").
-providers.gradleProperty("trialMutators").orNull?.let { trial ->
-  hardening.mutation.configureEach { mutators = trial }
-}
 
 // The conformance test verifies its fixture's provenance by hashing the generator's locked
 // inputs (Cargo.lock, Cargo.toml, src/main.rs, rust-toolchain.toml) straight from

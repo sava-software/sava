@@ -71,3 +71,9 @@ node_modules/
 
 # atomic baseline-write temp; a kill in the write window can leave one behind
 *.csv.tmp
+
+# Jazzer writes a slow-unit-* artifact into the module directory when one input exceeds
+# its per-input time budget; it is diagnostic output, not a finding, and an untracked copy
+# refuses a fuzz receipt. crash-* and timeout-* stay visible: each is a finding that is
+# owed a seed and a named test.
+/sava-*/slow-unit-*
