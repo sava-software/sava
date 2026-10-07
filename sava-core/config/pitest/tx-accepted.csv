@@ -9,7 +9,7 @@ software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED 
 software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 312
 software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 503
 software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 126
-software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # short circuit already returned # line 124
+software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # redundant guard operand # line 124
 software.sava.core.tx.TransactionRecord,setComputeBudgetValues,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # prepend path is a no-op when nothing is prepended # line 266
 software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,ConditionalsBoundaryMutator,SURVIVED # result identical routing # line 99
 software.sava.core.tx.TransactionSkeletonImpl,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 390

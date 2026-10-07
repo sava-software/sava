@@ -124,9 +124,10 @@ final class AddressLookupTableOverlay extends AddressLookupTableRoot {
 
   @Override
   protected String keysToString() {
-    final int to = LOOKUP_TABLE_META_SIZE + (numAccounts() << 5);
-    return IntStream.iterate(LOOKUP_TABLE_META_SIZE, i -> i < to, i -> i + PUBLIC_KEY_LENGTH)
-        .mapToObj(i -> readPubKey(data, i))
+    // Indexed, not stepped: a stalled offset cursor would append the same key until the
+    // watchdog, so every mutant of a counted range is finite instead.
+    return IntStream.range(0, numAccounts())
+        .mapToObj(i -> readPubKey(data, LOOKUP_TABLE_META_SIZE + (i << 5)))
         .map(PublicKey::toBase58)
         .collect(Collectors.joining(", ", "[", "]"));
   }
