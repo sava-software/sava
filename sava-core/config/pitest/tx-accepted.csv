@@ -1,39 +1,39 @@
 !sava-hardening-baseline-schema,1
-software.sava.core.accounts.lookup.AccountIndexLookupTableView,compareTo,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead defensive # line 25
+software.sava.core.accounts.lookup.AccountIndexLookupTableView,compareTo,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead defensive # line 32
 software.sava.core.tx.BaseTransaction,feePayerSignatureOffset,MathMutator,SURVIVED # v1 signer count remains nonzero # line 46
-software.sava.core.tx.BaseTransaction,setBlockHash,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # both arms write the same bytes # line 300
+software.sava.core.tx.BaseTransaction,setBlockHash,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # both arms write the same bytes # line 289
 software.sava.core.tx.BaseTransaction,signedIdOffset,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 69
-software.sava.core.tx.BaseTransaction,toString,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 388
-software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 302
-software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 492
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 304
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 494
-software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 133
-software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # short circuit already returned # line 131
-software.sava.core.tx.TransactionRecord,setComputeBudgetValues,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # prepend path is a no-op when nothing is prepended # line 273
-software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,ConditionalsBoundaryMutator,SURVIVED # result identical routing # line 103
-software.sava.core.tx.TransactionSkeletonImpl,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 404
-software.sava.core.tx.TransactionSkeletonImpl,filterInstructionsWithoutAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 429
+software.sava.core.tx.BaseTransaction,toString,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 377
+software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 310
+software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 501
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 312
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 503
+software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 126
+software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # short circuit already returned # line 124
+software.sava.core.tx.TransactionRecord,setComputeBudgetValues,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # prepend path is a no-op when nothing is prepended # line 266
+software.sava.core.tx.TransactionSkeleton,deserializeSkeleton,ConditionalsBoundaryMutator,SURVIVED # result identical routing # line 99
+software.sava.core.tx.TransactionSkeletonImpl,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 390
+software.sava.core.tx.TransactionSkeletonImpl,filterInstructionsWithoutAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 415
 software.sava.core.tx.TransactionSkeletonImpl,parseAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # legacy parse routes converge # line 216
 software.sava.core.tx.TransactionSkeletonImpl,parseAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # legacy parse routes converge # line 223
-software.sava.core.tx.TxBuilder,computeUnitPriceToPriorityFeeLamports,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 103
-software.sava.core.tx.TxBuilder,computeUnitPriceToPriorityFeeLamports,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # redundant guard operand # line 101
-software.sava.core.tx.TxBuilderImpl,createTransaction,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # mergeAccounts rejects it identically # line 226
+software.sava.core.tx.TxBuilder,computeUnitPriceToPriorityFeeLamports,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 86
+software.sava.core.tx.TxBuilder,computeUnitPriceToPriorityFeeLamports,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # redundant guard operand # line 84
+software.sava.core.tx.TxBuilderImpl,createTransaction,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # mergeAccounts rejects it identically # line 225
 software.sava.core.tx.V1Transaction,configValueOffset,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 99
 software.sava.core.tx.V1Transaction,createTransaction,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 82
 software.sava.core.tx.V1Transaction,createTransaction,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 86
 software.sava.core.tx.V1Transaction,createTransaction,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 88
 software.sava.core.tx.V1Transaction,createTransaction,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 90
-software.sava.core.tx.V1Transaction,setPriorityFeeLamportsFromComputeUnitPrice,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 132
-software.sava.core.tx.V1TransactionSkeleton,accountDataSizeLimit,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 229
-software.sava.core.tx.V1TransactionSkeleton,computeUnitLimit,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 223
-software.sava.core.tx.V1TransactionSkeleton,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 411
-software.sava.core.tx.V1TransactionSkeleton,filterInstructionsWithoutAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 433
-software.sava.core.tx.V1TransactionSkeleton,heapSize,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 235
-software.sava.core.tx.V1TransactionSkeleton,messageEnd,ConditionalsBoundaryMutator,SURVIVED # malformed message still rejected # line 74
-software.sava.core.tx.V1TransactionSkeleton,priorityFeeLamports,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 217
-software.sava.core.tx.V1TransactionSkeleton,signaturesOffset,ConditionalsBoundaryMutator,SURVIVED # a v1 buffer always carries signatures # line 486
-software.sava.core.tx.V1TransactionSkeleton,signaturesOffset,RemoveConditionalMutator_ORDER_IF,SURVIVED # redundant guard operand # line 486
+software.sava.core.tx.V1Transaction,setPriorityFeeLamportsFromComputeUnitPrice,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 123
+software.sava.core.tx.V1TransactionSkeleton,accountDataSizeLimit,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 221
+software.sava.core.tx.V1TransactionSkeleton,computeUnitLimit,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 215
+software.sava.core.tx.V1TransactionSkeleton,filterInstructions,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 402
+software.sava.core.tx.V1TransactionSkeleton,filterInstructionsWithoutAccounts,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # array identity only # line 424
+software.sava.core.tx.V1TransactionSkeleton,heapSize,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 227
+software.sava.core.tx.V1TransactionSkeleton,messageEnd,ConditionalsBoundaryMutator,SURVIVED # malformed message still rejected # line 68
+software.sava.core.tx.V1TransactionSkeleton,priorityFeeLamports,ConditionalsBoundaryMutator,SURVIVED # config value offset codomain excludes 0 # line 209
+software.sava.core.tx.V1TransactionSkeleton,signaturesOffset,ConditionalsBoundaryMutator,SURVIVED # a v1 buffer always carries signatures # line 471
+software.sava.core.tx.V1TransactionSkeleton,signaturesOffset,RemoveConditionalMutator_ORDER_IF,SURVIVED # redundant guard operand # line 471
 software.sava.core.tx.InstructionRecord,hashCode,MathMutator,SURVIVED # hash mixing # line 189
 software.sava.core.tx.InstructionRecord,hashCode,MathMutator,SURVIVED # hash mixing # line 191
 software.sava.core.tx.TxBuilderImpl,lambda$static$0,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead defensive # line 15
