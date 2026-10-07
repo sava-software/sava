@@ -577,6 +577,63 @@ checked by two refuters). What it found, and what closed the same day:
   pointers at retired families; `CONVENTIONS.md` gained the log and clock seams and the
   decrypt key-array zeroing trap.
 
+### `RUN_ERROR` under external load — 2026-10-07
+
+Three consecutive runs of the responses suite that afternoon (17:18, 17:29, 17:30)
+each ended with one `RUN_ERROR`, at a different coordinate every time
+(`EpochSchedule.parse` `NullReturnValsMutator`, `LatestBlockHash$Parser.test`
+`RemoveConditionalMutator_EQUAL_IF`, `InflationGovernor$Parser.test` `SwitchMutator`),
+PIT's only words being "Minion did not start or died during analysis", with no minion
+output and no `hs_err` file. The machine's load at the three starts was 32, 49 and 45
+on ten cores, and swap stood at 6.5 of 8 GiB with 1.4 million pageouts, all from other
+processes (two IDEs at 4.3 and 3.7 GiB resident, a browser, an indexer). Earlier the
+same day the same shape had appeared once in ws (`NanoClock$1.nanoTime`) and twice more
+in responses, each time under a load of 25 to 38 while agents ran tests, and each time
+the quiet re-run was clean. A clean responses run sampled every two seconds showed
+PIT's own footprint: the plugin's four worker threads give at most six JVMs (the main
+process, the coverage minion and four mutation minions), peaking at 620 MiB for one
+process and 1.8 GiB in aggregate, with swap flat, while the load from outside swung
+between 10 and 68.
+
+Reading, per `HARDENING.md` ("Invalid execution outcomes are not mutation results"):
+a generic minion death whose coordinate moves run to run is an aggregate-contention
+observation, not a repeatable coordinate; the environment was oversubscribed three to
+seven times and swapping, and PIT's own memory is a small fraction of the machine's,
+so neither `threads` nor `minionJvmArgs` is retuned. Responses shows it first because
+it has the largest test set and fixtures, so its minions take longest to start. The
+operational rule that follows: take previews, prunes and gates when `vm.loadavg` is
+under about ten, and when a `RUN_ERROR` lands, record the coordinate and the load and
+retake the observation quiet instead of retrying under the same load. Every record
+written that day came from a clean run.
+
+### Open items after the campaign
+
+- **Oracle slices 2 and later.** Two client families still say "Oracle: owed"
+  (`# eager deferred convergence`, `# impossible zero mark`), and the ws suite's intro
+  still owes an oracle to every family whose bullet names none, about thirty; four ws
+  families name one. Cheapest next: the families whose argument is a bytecode or
+  contract fact (`# strict wire ordinal`, `# redundant outer duplicate guard`,
+  `# equivalent buffer copy`), then the registry-state families with a recording
+  fake.
+- **Untriaged remainders.** accounts keeps its `# untriaged` rows in
+  `Signer.fromProperties` and `Signer.encryptKey`, `validateKeyPair`, `PublicKeyBytes`,
+  `PublicKey.readPubKey`, `PublicKey.l`, `PublicKey.createProgramAddress`,
+  `KeyPairSigner.createDedicatedSigner` and `ProgramDerivedAddress.createPDA`; vanity
+  keeps the `BaseMaskWorker.queueResult` self-checks and, in `MaskWorker.run`, the
+  packed-offset unpacking, the `checkFound` poll branch and `clearSecrets`. Owner's
+  timing: after the reviewer and gate on this range.
+- **Quiet retirements pending.** Seven audited timeout members now read `KILLED` on
+  every fresh run but keep their membership lines until the verify's three-run quiet
+  notice and the gate confirmation: the four vanity cap mutants, `Jex.isValid`
+  `IncrementsMutator`, and the two `scalarMultBase` members. Remove each line by hand
+  when the notice arrives and move its README argument to History.
+- **`generateTestSupport`.** Whether the hand-rolled loopback and threaded harnesses
+  should move onto sava-build's generated set; no consumer needs it yet.
+- **JDK 26 stall path.** The transport tests no longer exercise the JDK's own timeout
+  ending a stalled body at one request timeout (observable only with a real wait);
+  sava's part, the timeout on the built request, is asserted directly. Revisit if the
+  toolchain moves to JDK 26.
+
 Decided by the owner the same day: the zero-signer fee-payer guard stays; the
 real-clock transport pins in `JsonHttpClientTransportTests` are rewritten onto the
 scheduler seam; `scalarMultBase`'s window walk is refactored onto an array index; the
