@@ -9,502 +9,587 @@ method churns nothing. Full policy — the three legal outcomes for a new
 survivor, determinism requirements, targeting rules — lives in sava-build's
 `HARDENING.md`.
 
-## Newly adopted suite — 2026-08-04, seeded untriaged debt
+This file holds the arguments in force, one section per suite, and the debt
+deliberately left. What a run counted, added, pruned or killed is that run's output
+and git's history; `HARDENING_NOTES.md` holds per-suite scope decisions and selected
+per-package history, not every triage record.
 
-`encoding` (targets `json.*` and `json.http.request.*`, subtracting the three
-sibling suites' packages) was registered to close `mutationOwnershipAudit`: every
-compiled production class in this module now sits in some suite's target
-universe, with no `declineExclusionAudit` anywhere. It measured 62 mutants, 72%
-detected, and its first baseline was seeded from the full unkilled population —
-17 rows (12 `SURVIVED`, 5 `NO_COVERAGE`), all `# untriaged`. Those rows recorded
-debt rather than equivalence claims. `RpcEncoding` is
-the one to read first, since its missing `jsonParsed` constant is a deliberate
-API invariant (`AGENTS.md`) rather than an omission.
+- **The build reads this file.** Verify and Debt warn when a family label on a
+  baseline row has no literal `# <label>` mention here (`# untriaged` is exempt).
+  Every `ws-timeouts.csv` member's simple class name and method name must appear as
+  whole words inside one heading-delimited section: verify warns on a member that
+  does not, and certification treats it as an undocumented, non-certifying row.
+  Renaming a label, or moving a member's class or method out of the section that
+  holds the other, breaks these checks; the timed-out section's heading text matters
+  only because the `ws-timeouts.csv` header comment points at it.
+- **Never run a `pitest<Suite>BaselineUpdate` task just to make the build pass:**
+  kill the mutant, refactor it out of existence, or record its reason here. A failure
+  classifies each new row (`newly covered` vs shares an accepted key vs unexplained).
+- **Arguments name methods and constructs, not line numbers.** Prose anchors are not
+  machine-checked and rot silently on the first refactor. The authoritative anchor is
+  each row's `# line` tag in the CSV, which every refresh rewrites for the rows the
+  report gates. A retained row (see the debt section) keeps the tag of its last gated
+  observation: `BaselineRetag` refreshes only rows a fresh report matches, and a
+  selective prune performs no incidental retag, so its anchor can lag source drift
+  until the row leaves. Cite a line here only where it is the historical record of a
+  past state.
+  A key unkilled at a line no row's `# line` tag names draws the line-drift advisory:
+  the code an acceptance argues about moved, or a new mutant sits under an old
+  acceptance (the line-less key's one documented blind spot). Re-read the argument,
+  then let the next refresh rewrite the tag.
+- **Identical rows are sibling mutants — never dedupe these files.** One compound
+  condition emits a mutant per operand or branch direction at the same
+  `class,method,mutator,STATUS` key, and one `MathMutator` key can cover different
+  operations in one method (`ensureCapacity`'s growth computation is a shift *and* an
+  add), the `# line` tags telling the copies apart. The comparison is a multiset.
+  When one sibling survives and another is killed, the verify names the killing test:
+  the survivor is that test's opposite branch, and it is triaged as its own mutant
+  rather than assumed covered.
+- **Toolchain absence is not a kill.** A row leaves a baseline only when the same
+  licensed mutant is observed and killed (`AGENTS.md`, "ArcMutate licence").
+- **Baseline shrinkage requires row-specific evidence; growth requires a reason here.**
+  Writer options are defined by the installed `hardeningHelp`.
+- **Never accept a `NO_COVERAGE` mutant as equivalent.** The `NO_COVERAGE` rows below
+  sit in the debt section, never in a family.
 
-### Key-import triage — 2026-09-05, JSON parsing fixes verified
+Each family states its members, the reason, the independent oracle, and what
+invalidates it. *Derived* marks an invalidation that is the negation of the reason's
+own premise; *owed* marks an element not yet argued from the source.
 
-The initial focused triage used the fixed RFC 8032 test-1 key pair rather than
-random keys. It reached 59 killed, two uncovered, and one survivor out of 62
-mutants. The newly covered missing-secret-guard survivor failed the gate; the
-baseline stayed unchanged while the field-order behavior awaited the owner.
-Those observations remain in `/private/tmp/sava-triage-rpc-tests.log` and
-`/private/tmp/sava-triage-rpc-encoding-first.log` as machine-local diagnostics.
+## responses suite
 
-The owner-approved fix consumes a deferred `secret` value before continuing to
-later fields, then uses the existing mark/reset path to decode it with the chosen
-encoding and restore the enclosing cursor. Missing encoding is checked explicitly
-before decoding. The original positive regression failed against unchanged
-production; `/private/tmp/sava-key-field-order-red.log` and
-`/private/tmp/sava-key-field-order-red.xml` retain that diagnostic output.
+Targets `software.sava.rpc.json.http.response.*`. The arguments below cover the
+live families; the `JsonUtil.parseEncodedData` pending-prune rows are debt (see
+"Retained rows and the writer gap").
 
-The portable regression is
-[`PrivateKeyEncodingTests`](../../src/test/java/software/sava/rpc/json/PrivateKeyEncodingTests.java).
-Both field orders now require successful import through the shared
-`assertImportedSignerAndOuterArrayCursor` assertion over all five encodings.
-The tests cover byte- and char-backed iterators, absent or later public keys,
-public-key mismatch rejection, missing encoding, and the enclosing array's next
-value and end. The duplicate-encoding test preserves the behavior shipped in
-25.10.0: a later encoding does not reinterpret an already imported secret. That
-case kills the always-defer mutant; eager and deferred decoding are not universally
-equivalent. The declaration documents this retained behavior.
+- **`# int clamp boundary`** — `RpcCustomError.parseError` (both overloads)
+  `ConditionalsBoundaryMutator`, two siblings per overload, on the long→int clamp.
+  - Reason: at the exact `Integer.MIN_VALUE` / `MAX_VALUE` boundaries the mutant
+    returns `Unknown` directly, and the original reaches the switch `default`, which
+    is also `Unknown` — with identical iterator handling (`ji.skip()` on both routes).
+    No defined custom-error code sits at an int boundary, so the routes cannot diverge.
+  - Oracle: the killable near-misses — codes aliasing real ones under `(int)`
+    truncation, `code ± (1L << 32)` — are pinned by `ParseCustomErrorCodeTests`.
+  - Invalidated if (derived): a defined custom-error code sits at an int boundary, or
+    the two routes stop handling the iterator identically.
+- **`# allocation routing`** — `Lamports.amount` `ConditionalsBoundaryMutator` and
+  `RemoveConditionalMutator_ORDER_IF`, boundary/forced-true on `lamports < 0`.
+  - Reason: both branches build the same `BigInteger` for non-negative longs,
+    including zero. Negative inputs already take the unsigned-widening branch, so
+    forcing that branch true leaves their result unchanged too. The guard saves
+    allocation for non-negative values — `valueOf` is cheaper than widening the bits.
+  - Oracle: sava-core's
+    `ByteUtilTests.toUnsignedBigIntegerAgreesWithValueOfWhereCallersBranch` sweeps
+    `valueOf` against the widening over seeded non-negative values plus boundaries on
+    every build.
+  - Harness capability lacking: an allocation bound. See the decimal suite notes in
+    sava-core for why the allocation-bound technique that would kill these was tried
+    and reverted.
+  - Invalidated if (derived): the two branches stop producing equal values, or
+    allocation becomes a contract.
+  - The `ORDER_IF` row is absent from the licensed population and has not been
+    observed killed; its argument remains valid and the row stays in this family,
+    since absence under the licensed toolchain is not a kill.
+- **`# logging only`** — `JsonUtil.parseEncodedData` `VoidMethodCallMutator`.
+  - Reason: removed `System.Logger::log` call on the unsupported-encoding fallback.
+  - Oracle: owed. Invalidated if: owed. This argument does not yet say why the log is
+    not the only record of what the provider sent — the property that withdrew the
+    client log-and-rethrow acceptance (see "History notes (client)").
+- **`# capacity math`** — `JsonUtil.toJsonIntArray` `MathMutator`, two siblings on
+  `(data.length << 2) + 2`.
+  - Reason: `StringBuilder` sizing only; the builder grows as needed.
+  - Oracle: owed.
+  - Invalidated if (derived): the value is used for anything but initial capacity.
+- **`# best-effort guard`** — `JsonRpcException.envelopeRequestId`
+  `RemoveConditionalMutator_EQUAL_ELSE` and `RemoveConditionalMutator_ORDER_ELSE`,
+  on guards that sit inside the reader's best-effort `catch (RuntimeException)`,
+  which exists so that no unreadable id can cost the caller the error object.
+  - Property: an id the reader cannot carry reads as empty and never displaces the
+    error.
+  - Oracle: the reader's own contract (its javadoc and `CONVENTIONS.md`), pinned by
+    `JsonRpcExceptionTests.theEnvelopeReaderCarriesOnlyWhatSavaMints` and the HTTP and
+    websocket envelope tests.
+  - Reason: (1) `skipUntil("id") == null` forced false: a missing `id` then runs
+    `whatIsNext()` at the end of the object, which either throws into the catch or is
+    not a `NUMBER`, and either way the result is empty. (2) `c > '9'` forced false in
+    the digit check: any character above `'9'` also fails `Long.parseLong`, whose
+    exception the same catch swallows, so the guard cannot change the result. Both
+    guards are the non-exceptional fast path in front of that catch; the kills are on
+    the other direction of each (forced true rejects every id) and on the `'0'`/`'9'`
+    boundaries (an id carrying both digits).
+  - Why not refactor: removing the guards to make the mutants killable would turn
+    every ordinary missing or null `id` into an exception used as control flow;
+    narrowing the catch would trade robustness for a killable mutant.
+  - Invalidated if (derived): the `catch (RuntimeException)` is narrowed or removed.
 
-The field-order fix measured **63 killed out of 63 mutants**, with no survivors,
-uncovered mutants, timeouts, or invalid outcomes. Its evidence remains in
-`/private/tmp/sava-key-field-order-final.log` as an optional machine-local diagnostic.
+### History notes (responses)
 
-The owner-approved follow-up skips unknown fields and reports a missing `secret`
-separately from a missing `encoding`. The committed tests first failed against the
-unchanged parser: an unknown string broke traversal, a nested object could supply
-the secret, and a missing secret was reported as missing encoding. The same tests
-now pass. They cover scalar values, objects, and arrays before, between, and after
-the recognized fields in both orders, through byte- and char-backed iterators.
-Nested recognized field names cannot supply or override the outer key fields.
-Another compatibility test preserves the latest encoding seen before an eagerly
-decoded secret; duplicate encoding handling has not changed.
+Kept apart from the arguments above; none of it is live evidence.
 
-Property: unknown fields cannot change the imported signer or consume the enclosing
-array's next value. Oracle: the owner-approved field-skipping contract, the RFC 8032
-public-key fixture, and the enclosing array's explicit next value/end. Outcome:
-production bug fixed.
+- A reviewer measured the same two `# best-effort guard` survivors independently
+  before that acceptance was written (2026-09-23).
 
-Property: missing required fields name the missing field. Oracle: the key-import
-object's required `encoding` and `secret` fields and the owner-approved diagnostic
-correction. Outcome: production bug fixed.
+## client suite
 
-**Encoding baseline retirement is complete.** The field-order fix initially left
-all 17 rows in place: sixteen earlier instances were killed, but the former
-`PrivateKeyEncoding$Parser.createSigner` missing-secret guard's
-`RemoveConditionalMutator_EQUAL_IF` instance was no longer emitted. A killed mutant
-at the outer `signer == null` check did not prove that missing-secret mutation was
-killed. Splitting the guards to give the correct missing-field diagnostic restores
-the actual `secretMark == 0` mutation; the deferred-import regression now kills it.
-All 17 retained instances therefore have observed killed counterparts.
+Targets `software.sava.rpc.json.http.client.*`. Harness capability, for anyone
+re-reading a "needs a harness we don't have" acceptance: `JsonHttpClientTransportTests`
+runs an echo server answering with the method and path it saw, and `StubHttpResponse`
+constructs any status, a real `HttpRequest`, a predecessor response and an
+`SSLSession`, driving the parser controllers without a server. Read every "the stub
+returns null anyway" acceptance against that capability.
 
-Two distinct fresh, full, history-free previews — one following `check`, one
-standalone — had the identical **66 killed** population and the same 17-row candidate
-multiset. The named `:sava-rpc:pitestEncodingBaselinePrune` writer's third fresh run
-matched both. It removed **17 rows / 12 unique keys**, the empty baseline, and its
-orphan provenance pair. No row was retired solely because its mutation disappeared.
-No survivors, uncovered mutants, timeouts, or invalid outcomes occurred in these
-three runs. `check` passed; the affected RPC tests executed with 893 passed and the
-two existing opt-in live checks skipped.
+- **`# dead null arm`** — `BaseJsonResponseController.applyResponse`
+  `RemoveConditionalMutator_EQUAL_ELSE`: the `body == null` guard in the log argument
+  of `applyResponse`'s parse-failure catch, forced false.
+  - Reason: equivalent *in context*, because the base `checkResponse` returns before
+    the parser runs whenever the body is null, so the catch block never sees one —
+    the guard's null arm is defensive dead code there, unreachable by construction
+    rather than untested.
+  - Oracle: through the base `checkResponse`,
+    `GenericJsonResponseParserTests.nullBodyUnderASuccessStatusReturnsNull` and
+    `rejectionWithoutABodyReportsTheStatus` pin that a null body returns null or
+    throws before the parser runs. Owed for the JSON-RPC override in
+    `BaseJsonRpcResponseParser`, which parses the body inside its own `checkResponse`,
+    outside the catch, and which no test drives with a null body.
+  - Invalidated if (derived): `checkResponse` stops ending a null-body exchange before
+    the parse-failure catch, or `applyResponse` is reached by a path that skips
+    `checkResponse`.
+- **`# dead pattern arm`** — `JsonHttpClient.readInputStream`
+  `RemoveConditionalMutator_EQUAL_ELSE`.
+  - Reason: `readInputStream` is private and is called only from the
+    `body instanceof InputStream inputStream` pattern arm. That pattern binding is
+    necessarily non-null, so forcing the method's defensive `inputStream == null`
+    check false cannot change any reachable call. The opposite mutation is killed by
+    the non-empty stream contract.
+  - Oracle: the language guarantee that a pattern binding is non-null.
+  - Invalidated if (derived): `readInputStream` gains a second caller or stops being
+    private.
+- **`# capacity hint only`** — `ProgramAccountsRequestRecord.toJson` `MathMutator`
+  and `RemoveConditionalMutator_EQUAL_IF`.
+  - Reason: both change only the initial `StringBuilder` capacity derived from the
+    filter count. Request content is appended independently by `appendFilters`. The
+    sibling arithmetic mutation that changes appended content is killed.
+  - Oracle: null, empty, and populated filter requests produce the same bytes under
+    these mutants.
+  - Invalidated if (derived): the capacity value feeds anything other than the
+    `StringBuilder` constructor.
+- **`# impossible zero mark`** — `JsonRpcValueResponseParser$Parser.parse`
+  `ConditionalsBoundaryMutator`, on the `valueMark < 0` boundary.
+  - Reason: its only distinguishing value is zero, but a mark captured after the
+    enclosing object's `value` member name can never be zero: the two reachable
+    domains are the `-1` absent-value sentinel and a positive cursor position.
+  - Oracle: owed.
+  - Invalidated if (derived): a mark source that can be zero.
+- **`# eager deferred convergence`** — `JsonRpcValueResponseParser$Parser.test`
+  `RemoveConditionalMutator_EQUAL_IF`: always records and skips a value even when its
+  context was already parsed.
+  - Reason: the final parse resets to the same value bytes and supplies the same
+    context, so eager and deferred paths invoke the value parser once with the same
+    inputs and return the same result.
+  - Oracle: owed.
+  - Invalidated if (derived): the value parser gains side effects, or the context
+    differs between the eager and deferred paths.
+- **`# request debug only`** — `JsonHttpClient.newPostRequest`
+  `VoidMethodCallMutator`.
+  - Reason: removing the DEBUG body log does not change the URI, timeout, method,
+    headers, body publisher, or returned request. This is an accepted non-contract
+    diagnostic, not a claim that JUL output is impossible to observe.
+  - Oracle: owed.
+  - Invalidated if (derived): the request-body log becomes the only record of
+    something a caller needs, or the owner makes it a contract.
 
-Optional machine-local diagnostics are `/private/tmp/sava-key-unknown-fields-red.log`
-and `.xml`, `/private/tmp/sava-key-unknown-fields-check-pit.log`,
-`/private/tmp/sava-key-unknown-fields-preview2.log`, and
-`/private/tmp/sava-key-unknown-fields-prune.log`. The ordinary
-`build/reports/pitest/encoding/` report contains the writer observation; the committed
-regression tests reproduce the behavior without depending on temporary files.
+### History notes (client)
 
-Never run a `pitest<Suite>BaselineUpdate` task just to make the build pass:
-kill the mutant, refactor it out of existence, or record its equivalence
-reason below. A failure classifies each new row (`newly covered` vs shares an
-accepted key vs unexplained) and closes with a churn tally. A key unkilled at
-a line no row's `# line` tag names draws the line-drift advisory: the code an
-acceptance argues about moved, or a new mutant sits under an old acceptance
-(the line-less key's one documented blind spot) — re-read the argument below,
-then let the next refresh rewrite the tag.
+Kept apart from the arguments above; none of it is live evidence.
 
-Arguments below name **methods and constructs, not line numbers**: prose
-anchors are not machine-checked and rot silently on the first refactor (the
-ws family's did, wholesale, before 2026-08-01). The authoritative anchor is
-each row's `# line` tag in the CSV, which every refresh rewrites for the rows
-the report gates and the line-drift advisory checks; a `# killed retained` row
-keeps the tag of its last gated observation, so its anchor can lag source drift
-until a selective writer exists. Cite a line here only where it is the historical
-record of a past state.
+- The parse-failure tails of `applyResponse` and
+  `BaseJsonRpcResponseParser.parseRpcException` log and rethrow. They were first read
+  as logging-only, then killed through the JUL backend (`TestLogs`) once a second read
+  noticed the rethrown exception is the JSON parser's own, so the logged status and
+  body are the *only* record of what the provider sent. `# dead null arm` is what
+  remains of that family.
+- Two acceptances were withdrawn because the unreachability was the fixture's, not
+  the code's: the `checkResponse` status-range boundaries (a stub constructs any
+  status) and the `ReadHttpResponse` pass-through accessors (a stub returning the
+  mutator's own replacement value withdraws that mutant before the tests are
+  consulted).
 
-**Identical rows are sibling mutants — never dedupe these files.** One
-compound condition emits a mutant per operand or branch direction at the same
-`class,method,mutator,STATUS` key (and one `MathMutator` key can cover
-different operations across a method — `ensureCapacity`'s line 928 was a
-shift *and* an add — the `# line` tags telling the copies apart), so a key
-legitimately repeats. The comparison is a multiset: the
-copies were collapsed until 2026-07-23, which let a killed sibling regress
-unnoticed behind its accepted twin. Migrating these baselines materialized 13
-copies — 9 in `ws`, 3 in `responses`, all inside the families below, and one
-in `client` that turned out to be **killable**, not equivalent (see the
-`checkResponse` entry). When one sibling survives and another is killed, the
-verify names the killing test: the survivor is that test's opposite branch,
-and it is triaged as its own mutant rather than assumed covered.
+## ws suite
 
-## Triaged mutants — client suite
+Targets `software.sava.rpc.json.http.ws.*`. Every member below is a
+`SolanaJsonRpcWebsocket` method unless another class is named, and every row is
+`SURVIVED`. Oracles are owed for every ws family whose bullet does not name one;
+invalidation conditions are derived from each reason's premise.
 
-Seeded 2026-07-20 when the `client` suite was added over
-`software.sava.rpc.json.http.client.*`. 56 entries: 27 SURVIVED and 30
-NO_COVERAGE (one shared baseline key), from a population of 501 (88%
-detected). The 2026-07-31 transport-harness pass resolved the coverage debt:
-578/601 detected (96%), 23 rows, all SURVIVED, zero NO_COVERAGE.
+### Hash and sentinel domains
 
-The 2026-08-11 fresh, full, history-free pass generated 586 mutants: 579 killed
-and 7 survived, with zero `NO_COVERAGE`, timeout, or invalid outcomes. All seven
-survivors from that observation are argued below. The 18-row file is deliberately
-larger than that observed survivor set: ten killed rows are marked `# killed retained`,
-and one row generated only by the old unlicensed toolchain is marked
-`# unlicensed-only retained`. Those eleven rows preserve historical evidence and
-still contribute active baseline matching capacity; their labels do not disable
-matching. The reason they remain is recorded below.
+- **`# hash distribution only`** — `RootSubscription.hashCode`
+  `PrimitiveReturnsMutator`. Reason: replacing it with a constant preserves the
+  `equals`/hash contract and changes only bucket distribution. Oracle: the
+  `Object.hashCode` contract. Invalidated if (derived): a caller depends on hash
+  distribution rather than the contract.
+- **`# positive sentinel gap`** — `closed` `ConditionalsBoundaryMutator`. Reason:
+  websocket message ids start positive and close jumps directly to `Long.MIN_VALUE`;
+  zero, the sole value separating `< 0` from `<= 0`, is unreachable. Invalidated if
+  (derived): message ids can reach zero.
 
-**Transport paths not driven by the harness — RESOLVED 2026-07-31, the whole
-family (38 NO_COVERAGE, the baseline's bulk) left in the refresh.** The escape
-this entry named — a local server exercising the GET and no-wrap routes — is
-`JsonHttpClientTransportTests`: an echo server answering with the method and
-path it saw, so a parser asserting the payload asserts end to end which HTTP
-request the route built, plus wrapped-vs-no-wrap pinned by whether the parser
-receives a `ReadHttpResponse`. The never-constructed parser controllers
-(`JsonRpcBytesValueParseController`, `FullContextJsonRpcResponseParser`, the
-`applyGenericResponse` bytes variant) needed no server at all —
-`StubHttpResponse` drives them in `JsonRpcResponseParserTests` and
-`GenericJsonResponseParserTests`. The `simulateTransaction` /
-`simulateTransactionWithInnerInstructions` `Transaction` overloads and the
-`BigInteger` `getProgramAccounts` overload were ordinary `registerRequest`
-cases after all, distinguished by their options objects. What the coverage
-surfaced became the `# logging only` family below; everything else was an
-ordinary kill.
+### Capacity and buffer routing
 
-**Log-and-rethrow diagnostics — killed 2026-07-31, same day they surfaced.**
-The parse-failure tails (`BaseJsonResponseController.applyResponse:42–43`,
-`BaseJsonRpcResponseParser.parseRpcException:22`) log and rethrow; the first
-triage read them as logging-only because the rethrow is pinned by identity.
-The second read noticed the log line is load-bearing after all: the rethrown
-exception is the JSON parser's own and carries no record of the exchange, so
-the logged status and body are the *only* copy of what the provider sent —
-the same only-observable standing as the ws check-loop funnel. Both tails are
-now asserted through the JUL backend (`TestLogs`, the funnel's technique),
-including message content, which kills the log-call removals and the
-forced-empty side of the message's null-guard ternary. One row remains —
-baseline label `# dead null arm`
-(`applyResponse:43`, `RemoveConditionalMutator_EQUAL_ELSE`): forcing the
-`body == null` guard false inside the log argument is equivalent *in
-context*, because `checkResponse` returns before the parser runs whenever the
-body is null, so the catch block never sees one — the guard's null arm is
-defensive dead code there, unreachable by construction rather than untested.
+- **`# equal-capacity copy`** — `ensureCapacity` `ConditionalsBoundaryMutator`.
+  Reason: exact capacity enters the growth branch; the clamp grows a sub-maximum
+  buffer and performs a same-sized copy only at `maxMessageLength`, without changing
+  bytes or parsing. Invalidated if (derived): the growth branch changes bytes, or the
+  clamp no longer bounds the copy.
+- **`# capacity math`** — `ensureCapacity` `MathMutator`, two siblings. Reason: they
+  alter only the growth hint before `Math.clamp`, which still allocates at least the
+  required capacity. A third `ensureCapacity` `MathMutator` row carries
+  `# retired implementation retained` (debt section). Invalidated if (derived): the
+  hint can drive the clamped size below the required capacity.
+- **`# zero-offset route convergence`** — `onText` `ConditionalsBoundaryMutator`.
+  Reason: it sends an unfragmented message through the assembled-buffer route, which
+  parses the same characters. Invalidated if (derived): the two routes parse
+  different characters.
+- **`# equivalent buffer copy`** — `onText` `RemoveConditionalMutator_EQUAL_ELSE`,
+  four siblings. Reason: the mutants choose `arraycopy`, `CharBuffer.get`, or a
+  wrapped buffer for the same remaining characters; only the callback-owned buffer
+  cursor and allocation route differ. Invalidated if (derived): a caller reads the
+  callback-owned buffer cursor after `onText` returns.
 
-One `# unlicensed-only retained` row — `BaseSolanaJsonRpcClient.joinKeys`
-`RemoveConditionalMutator_EQUAL_IF` — has **no counterpart in the licensed
-population** and is reported unmatched on every run, the same way the protected
-`ws` rows are (see the `ws` note on that). It remains because absence under the
-licensed toolchain is not evidence that the old unlicensed mutant was killed.
-The other `joinKeys` direction is now an ordinary kill: direct helper tests
-distinguish null, empty, and populated collections.
+### Literal and convergent registry returns
 
-**Dead input arm** — baseline label `# dead pattern arm` (SURVIVED):
-`JsonHttpClient.readInputStream` is private and is called only from the
-`body instanceof InputStream inputStream` pattern arm. That pattern binding is
-necessarily non-null, so forcing the method's defensive `inputStream == null`
-check false cannot change any reachable call. The opposite mutation is killed
-by the non-empty stream contract.
+- **`# literal return equivalent`** — `BooleanTrueReturnValsMutator` and
+  `BooleanFalseReturnValsMutator` on `queueSubscription`, `queueUnsubscribe`,
+  `rootSubscribe`, `rootUnsubscribe`, `slotSubscribe`, `slotUnsubscribe`, `subscribe`
+  and `unsubscribe`. Reason: each replacement equals the literal at that bytecode
+  exit. Oracle: owed. Invalidated if (derived): the exit stops returning a
+  literal.
+- **`# same-map re-put`** — `queueSubscription` `RemoveConditionalMutator_EQUAL_IF`,
+  two siblings. Reason: it stores the map already held at the same key. Invalidated
+  if (derived): the put can store a different map.
+- **`# redundant outer duplicate guard`** — `RemoveConditionalMutator_EQUAL_ELSE` on
+  `accountSubscribe`, `logsSubscribe`, `programSubscribe` and `signatureSubscribe`.
+  Reason: a duplicate reaches the lock-held `queueSubscription` check, which returns
+  the same result before minting an id. Invalidated if (derived): the lock-held check
+  is removed or answers differently from the outer guard.
+- **`# compute-if-absent convergence`** — `subscribe`
+  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: it returns the already-present
+  generic method map. Invalidated if (derived): the map can be absent on that path.
 
-**Capacity hints only** — baseline label `# capacity hint only` (SURVIVED): the
-two `ProgramAccountsRequestRecord.toJson` survivors change only the initial
-`StringBuilder` capacity derived from the filter count. Request content is
-appended independently by `appendFilters`; null, empty, and populated filter
-requests produce the same bytes under these mutants. The sibling arithmetic
-mutation that changes appended content is killed.
+### Build and reconnect ownership
 
-**Deferred value parsing equivalences** (SURVIVED): `# impossible zero mark`
-marks the `valueMark < 0` boundary mutation in
-`JsonRpcValueResponseParser.Parser.parse`. Its only distinguishing value is
-zero, but a mark captured after the enclosing object's `value` member name can
-never be zero: the two reachable domains are the `-1` absent-value sentinel and
-a positive cursor position. `# eager deferred convergence` marks the mutation
-that always records and skips a value even when its context was already parsed.
-The final parse resets to the same value bytes and supplies the same context, so
-eager and deferred paths invoke the value parser once with the same inputs and
-return the same result.
+- **`# settled prior build`** — `connect` `RemoveConditionalMutator_EQUAL_ELSE`.
+  Reason: follows from the single-flight bridge: a successor cannot reach cleanup
+  until the prior build is done. Invalidated if (derived): builds stop being
+  single-flight.
+- **`# adopted build identity`** — `connect` `RemoveConditionalMutator_EQUAL_ELSE`,
+  two siblings. Reason: a successful build and the socket delivered to its attempt
+  listener are the same object. Invalidated if (derived): the listener can receive a
+  different socket.
+- **`# current socket identity`** — `close` `RemoveConditionalMutator_EQUAL_ELSE`.
+  Reason: the close-side twin of the above: an adopted completed build is the current
+  connection and must remain on the polite close path. Invalidated if (derived): an
+  adopted build can differ from the current connection.
+- **`# zero-delay convergence`** — `connect` `ConditionalsBoundaryMutator`. Reason:
+  it differs only at the exact throttle edge, where both routes connect immediately.
+  Invalidated if (derived): the routes diverge at a zero delay.
+- **`# ignored null completion`** — `lambda$ownBuild$0`
+  `RemoveConditionalMutator_EQUAL_IF`. Reason: it can fault only an ignored dependent
+  stage, not the original build or public bridge. Invalidated if (derived): that
+  dependent stage gains an observer.
 
-**`checkResponse` status-range boundaries** — **withdrawn 2026-07-31, the
-`< 200` side was never unreachable.** The acceptance read "the JDK client
-never surfaces a 1xx as a final status; reaching the guard needs a raw-socket
-stub speaking HTTP/1.1 by hand" — but the transport was never the only way
-in: the gate's contract is over any `HttpResponse`, and `StubHttpResponse`
-constructs a 199 directly, exactly as every other envelope-gate case in
-`JsonRpcResponseParserTests` is driven. The 199 case joined
-`resultEnvelopeUnderANonSuccessStatusIsRejected` (and the generic
-controller's `nonSuccessStatusesAreRejectedWithStatusAndBody`), and both
-suites' `< 200` rows are ordinary kills. Same lesson as the
-`ReadHttpResponse` withdrawal below: the unreachability was the fixture
-strategy's, not the code's — re-read "needs a harness we don't have"
-acceptances against every fixture the suite already owns.
+### Empty scans, deadlines, and wire order
 
-The `>= 300` side had already been killed the same way. The multiset migration
-(2026-07-23) materialized a second `RemoveConditionalMutator_ORDER_IF` copy at
-`checkResponse:32` that the old set-based baseline had absorbed: the `>= 300`
-operand, which is distinguishable by a case the harness simply never had — an
-HTTP failure status carrying a well-formed `result` envelope, where the real
-code lets the status veto the body. `resultEnvelopeUnderANonSuccessStatusIsRejected`
-(300/400/500/503 with `{"result":"ok"}`) pins that contract and killed the
-sibling *and* the `ConditionalsBoundaryMutator` row at the same line — the 300
-case distinguishes `>= 300` from `> 300`. Worked exactly as the casebook's
-sibling entry predicts: the survivor at an accepted coordinate was the opposite
-operand, and it was not equivalent, only untested.
+- **`# empty-scan fast path`** — `escalateUnanswered`
+  `RemoveConditionalMutator_EQUAL_ELSE` and `handleActivePendingSubscriptions`
+  `RemoveConditionalMutator_EQUAL_IF`. Reason: the mutant enters an iteration over an
+  already-empty map and still finds no work. Invalidated if (derived): the iteration
+  does work on an empty map.
+- **`# saturated deadline fringe`** — `escalateUnanswered`
+  `ConditionalsBoundaryMutator`. Reason: it moves an unreachable deadline a few
+  milliseconds below `Long.MAX_VALUE`; no representable age from the monotonic clock
+  reaches either value. Invalidated if (derived): the deadline becomes reachable.
+- **`# saturated-add equality`** — `onWholeMessage` `ConditionalsBoundaryMutator`.
+  Reason: it chooses between two expressions that both equal `Long.MAX_VALUE` at the
+  boundary. Invalidated if (derived): the two expressions differ at the boundary.
+- **`# strict wire ordinal`** — `ConditionalsBoundaryMutator` on
+  `lambda$handleActivePendingSubscriptions$0`, `lambda$onWholeMessage$0` and
+  `onWholeMessage` (two siblings). Reason: distinct lock-held transmissions receive
+  distinct pre-incremented ordinals. Invalidated if (derived): two transmissions can
+  share an ordinal.
+- **`# positive request-id domain`** — `onWholeMessage` `ConditionalsBoundaryMutator`
+  and `RemoveConditionalMutator_ORDER_IF`. Reason: client ids begin at 2; zero and
+  negative ids never occupy correlation maps. Invalidated if (derived): a zero or
+  negative id can enter a correlation map.
 
-**Pass-through accessors on `ReadHttpResponse`** (`request`,
-`previousResponse`, `sslSession`) — **withdrawn 2026-07-24, they were never
-equivalent.** The acceptance read "the tests assert delegation against a stub
-whose own values are null or empty, so returning null/empty directly is
-indistinguishable; a real `HttpRequest` and a non-empty `SSLSession` buy
-nothing" — but the indistinguishability was the *fixture's*, not the code's: a
-stub returning the mutator's own replacement value withdraws that mutant before
-the tests are consulted. `StubHttpResponse` now answers with a real
-`HttpRequest`, a 302 predecessor and the never-connected `SSLSession` from
-`SSLContext.getDefault().createSSLEngine()`, and
-`readHttpResponseDelegatesEverythingButTheBody` asserts delegation by identity;
-all three rows are ordinary kills and left the baseline. Read every remaining
-"the stub returns null anyway" acceptance the same way.
+### Lock-owned registry representation
 
-**Request-body DEBUG diagnostic** — baseline label `# request debug only`
-(SURVIVED): removing `newPostRequest`'s DEBUG body log does not change the URI,
-timeout, method, headers, body publisher, or returned request. This is an
-accepted non-contract diagnostic, not a claim that JUL output is impossible to
-observe. The old combined acceptance with `gzipBufferSize` was wrong:
-`gzipBufferSize` diagnoses a malformed provider-controlled `Content-Length`
-before safely decoding the body, and `TestLogs` now asserts that diagnostic, so
-its log-call mutant is killed.
+- **`# null-channel type invariant`** — `releaseChannelSlot`
+  `RemoveConditionalMutator_EQUAL_IF`. Reason: only `GenericSubscription` has no
+  channel. Invalidated if (derived): another subscription type can lack a channel.
+- **`# identity-owned registry slot`** — `lambda$releaseChannelSlot$0` and
+  `releaseChannelSlot` (two siblings), `RemoveConditionalMutator_EQUAL_IF`; and
+  **`# subId-owner invariant`** — `queueUnsubscribe`
+  `RemoveConditionalMutator_EQUAL_IF`. Reason: these removals are reached with the
+  same subscription that owns the slot or server id. Invalidated if (derived): a
+  removal can be reached with a subscription that does not own the slot or id.
+- **`# prechecked in-flight gate`** — `sendUnSubscriptionLockHeld`
+  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: the helper's lock-held callers have
+  already proved the per-id gate absent. Invalidated if (derived): a caller reaches
+  the helper without that precheck.
+- **`# disjoint registry phases`** — `onWholeMessage`
+  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: a subscription leaves pending before
+  installation and leaves installed before requeue. Invalidated if (derived): a
+  subscription can sit in both registries at once.
+- **`# pruned empty registry`** — `onWholeMessage`
+  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: an empty generic namespace is
+  removed from the outer map. Invalidated if (derived): an empty namespace can remain.
 
-**Freshly killed rows retained by the writer boundary** — baseline label
-`# killed retained`: the 2026-08-11 pass killed ten previously accepted rows.
-They cover the other `joinKeys` direction, the `gzipBufferSize` diagnostic, both
-`wrapResponseParser` rows, the generic-result parser factory, the
-absent-value cursor branch, empty-account rejection, the immutable empty leader
-schedule, and both `sendTransaction` boolean encodings. The named prune/update
-writers cannot remove only those rows: they would also delete the protected
-unlicensed-only `joinKeys` evidence. Because baseline structure is never edited
-by hand, the killed rows remain until a sanctioned selective writer exists.
-Their labels record unfinished pruning, and each row still contributes active
-baseline matching capacity. This writer gap remains outstanding client baseline debt.
+### Correlation and wake hints
 
-## Triaged mutants — ws suite
+- **`# correlation co-registration`** — `onWholeMessage`
+  `RemoveConditionalMutator_EQUAL_ELSE`, two siblings. Reason: they clear correlation
+  structures in the same locked response transition, so either surviving operand
+  proves the same correlated result. Invalidated if (derived): the structures can be
+  cleared in separate transitions.
+- **`# connection-owned registry`** — `onWholeMessage`
+  `RemoveConditionalMutator_EQUAL_IF`. Reason: an acknowledgement map belongs to its
+  `Connection`; a displaced connection cannot share its successor's entry.
+  Invalidated if (derived): connections can share an acknowledgement map.
+- **`# absent-map removal`** — `onWholeMessage` `RemoveConditionalMutator_EQUAL_IF`.
+  Reason: it performs only a no-op removal when the earlier lookup proved the key
+  absent. Invalidated if (derived): the key can appear between lookup and removal.
+- **`# pending-work wake hint`** — `onWholeMessage`
+  `RemoveConditionalMutator_EQUAL_IF`, three siblings. Reason: they add a condition
+  signal when no matching work remains; no state changes. Oracle: condition wakeups
+  are explicitly allowed to be spurious (`Condition` contract). Invalidated if
+  (derived): a waiter treats a wakeup as proof of work.
 
-The suite was seeded on 2026-07-21 over
-`software.sava.rpc.json.http.ws.*` and then hardened through the connection,
-registry, parser, ping, close, and reconnect rewrites. The fresh, full, history-free
-2026-08-11 observation recorded 1,248 mutants, 1,163 killed, 82 survived, 3 timed
-out, and zero `NO_COVERAGE` or invalid outcomes. Every survivor from that
-observation is argued below; no row remains `# untriaged`.
+### Parser rescans
 
-The 159-row accepted file is deliberately larger than that observed survivor
-set: 82 rows represent those survivors, 40 `# killed retained` rows and 28
-`# retired implementation retained` rows are historical records that no longer
-matched an unkilled mutant in that observation, and 9 `# unlicensed-only retained`
-rows preserve the old open-source-PIT population. All 77 retained rows still
-contribute active baseline matching capacity; historical labels do not deactivate them.
+- **`# unique-member rescan`** — `RemoveConditionalMutator_EQUAL_IF` on
+  `onWholeMessage` (two siblings), `publish` (two siblings), `publishGeneric` and
+  `skipToParams`. Reason: the mutant resets and finds the same unique JSON-RPC
+  `params`, `value`, or `subscription` member; duplicate member-name resolution is
+  outside the protocol contract. Invalidated if (derived): duplicate member names
+  become part of the contract.
+- **`# fast-forward funnel`** — `NakedReceiverMutator` on `onWholeMessage` and
+  `publish` (two siblings). Reason: it drops an initial iterator fast-forward, after
+  which the existing mark/reset fallback reaches the same member and dispatches the
+  same notification. Invalidated if (derived): the mark/reset fallback is removed.
 
-### Current accepted survivors
+### Ping and private-tail cleanup
 
-- **Hash and sentinel domains.** `# hash distribution only` records that
-  replacing `RootSubscription.hashCode()` with a constant preserves the
-  `equals`/hash contract and changes only bucket distribution.
-  `# positive sentinel gap` records that websocket message ids start positive
-  and close jumps directly to `Long.MIN_VALUE`; zero, the sole value separating
-  `< 0` from `<= 0`, is unreachable.
-- **Capacity and buffer routing.** `# equal-capacity copy` makes exact capacity
-  enter the growth branch: the clamp grows a sub-maximum buffer and performs a
-  same-sized copy only at `maxMessageLength`, without changing bytes or parsing.
-  The two `# capacity math` siblings alter only the growth
-  hint before `Math.clamp`, which still allocates at least the required
-  capacity. `# zero-offset route convergence` sends an unfragmented message
-  through the assembled-buffer route; it parses the same characters.
-  `# equivalent buffer copy` chooses `arraycopy`, `CharBuffer.get`, or a
-  wrapped buffer for the same remaining characters; only the callback-owned
-  buffer cursor and allocation route differ.
-- **Literal and convergent registry returns.** `# literal return equivalent`
-  marks return-value replacements equal to the literal at that bytecode exit.
-  `# same-map re-put` stores the map already held at the same key.
-  `# redundant outer duplicate guard` lets a duplicate reach the lock-held
-  `queueSubscription` check, which returns the same result before minting an
-  id. `# compute-if-absent convergence` returns the already-present generic
-  method map.
-- **Build and reconnect ownership.** `# settled prior build` follows from the
-  single-flight bridge: a successor cannot reach cleanup until the prior build
-  is done. `# adopted build identity` records that a successful build and the
-  socket delivered to its attempt listener are the same object.
-  `# current socket identity` is the close-side twin: an adopted completed
-  build is the current connection and must remain on the polite close path.
-  `# zero-delay convergence` differs only at the exact throttle edge, where
-  both routes connect immediately. `# ignored null completion` can fault only
-  an ignored dependent stage, not the original build or public bridge.
-- **Empty scans, deadlines, and wire order.** `# empty-scan fast path` enters
-  an iteration over an already-empty map and still finds no work.
-  `# saturated deadline fringe` moves an unreachable deadline a few
-  milliseconds below `Long.MAX_VALUE`; no representable age from the
-  monotonic clock reaches either value. `# saturated-add equality` chooses
-  two expressions that both equal `Long.MAX_VALUE` at the boundary.
-  `# strict wire ordinal` relies on distinct lock-held transmissions receiving
-  distinct pre-incremented ordinals. `# positive request-id domain` relies on
-  client ids beginning at 2; zero and negative ids never occupy correlation
-  maps.
-- **Lock-owned registry representation.** `# null-channel type invariant`
-  records that only `GenericSubscription` has no channel.
-  `# identity-owned registry slot` and `# subId-owner invariant` cover
-  removals reached with the same subscription that owns the slot or server id.
-  `# prechecked in-flight gate` belongs to a helper whose lock-held callers
-  have already proved the per-id gate absent. `# disjoint registry phases`
-  records that a subscription leaves pending before installation and leaves
-  installed before requeue. `# pruned empty registry` records that an empty
-  generic namespace is removed from the outer map.
-- **Correlation and wake hints.** The two `# correlation co-registration`
-  siblings clear correlation structures in the same locked response
-  transition, so either surviving operand proves the same correlated result.
-  `# connection-owned registry` records that an acknowledgement map belongs
-  to its `Connection`; a displaced connection cannot share its successor's
-  entry. `# absent-map removal` performs only a no-op removal when the earlier
-  lookup proved the key absent. The three `# pending-work wake hint` siblings
-  add a condition signal when no matching work remains; condition wakeups are
-  explicitly allowed to be spurious and no state changes.
-- **Parser rescans.** `# unique-member rescan` resets and finds the same
-  unique JSON-RPC `params`, `value`, or `subscription` member; duplicate
-  member-name resolution is outside the protocol contract.
-  `# fast-forward funnel` drops an initial iterator fast-forward, after which
-  the existing mark/reset fallback reaches the same member and dispatches the
-  same notification.
-- **Ping and private-tail cleanup.** `# retired-state write` permits only an
-  extra ping-state write to a displaced `Connection` plus a condition wake;
-  no live state or callback reads it. `# ping-state invariant` follows from
-  the same lock-held transition publishing the failure while changing
-  `ACTIVE` to `PING_FAILED`. `# private-tail normalization` can make only
-  a private discarded completion tail exceptional after cleanup has committed;
-  the next enqueue normalizes that prior exception.
+- **`# retired-state write`** and **`# ping-state invariant`** — `recordFailedPing`
+  `RemoveConditionalMutator_EQUAL_IF`, two siblings, one per label.
+  `# retired-state write`: only an extra ping-state write to a displaced `Connection`
+  plus a condition wake; no live state or callback reads it. `# ping-state invariant`:
+  follows from the same lock-held transition publishing the failure while changing
+  `ACTIVE` to `PING_FAILED`. Invalidated if (derived): live state or a callback reads
+  a displaced connection's ping state, or the failure is published outside that
+  transition.
+- **`# private-tail normalization`** — `lambda$sendSubscription$1`
+  `NullReturnValsMutator`. Reason: it can make only a private discarded completion
+  tail exceptional after cleanup has committed; the next enqueue normalizes that prior
+  exception. Invalidated if (derived): the tail is exposed or no longer normalized.
 
-### Retained historical rows
-
-`# killed retained` means the fresh licensed run observed the corresponding
-behavior as killed. `# retired implementation retained` means the mutation
-site or its containing helper no longer exists. They remain because the named
-update/prune writers cannot delete only those 68 rows without also deleting
-protected unlicensed evidence; hand-editing baseline record structure is not a
-sanctioned substitute. Their labels and status fields record historical observations,
-but each row still contributes active baseline matching capacity and can accept a
-later mutant with the same class, method, mutator, and status. This writer gap remains
-outstanding ws baseline debt until those 68 rows can be retired without deleting
-the nine protected rows.
-
-The nine `# unlicensed-only retained` rows are the two
-`lambda$queueUnsubscribe$0 EQUAL_IF` siblings, `ensureCapacity ORDER_IF`,
-`onText ORDER_IF`, the `logsSubscribe` and `programSubscribe EQUAL_IF`
-rows, two `handlePendingSubscriptions EQUAL_IF` siblings, and one
-`onWholeMessage EQUAL_IF` sibling. The licensed ArcMutate population does not
-observe them. Absence under that toolchain is not a kill, and the line-less
-multiset cannot safely identify them for selective deletion. They remain until
-a sanctioned writer can preserve that evidence while pruning the separately
-killed and retired rows.
-## Triaged equivalent mutants (accepted with reasons)
-
-The 2026-09-23 fresh `responses` observation has ten surviving mutants and no
-`NO_COVERAGE` mutants. The accepted record retains fourteen rows: ten match those
-survivors, one preserves historical `Lamports.amount` evidence absent from the
-current licensed population, and three `JsonUtil` rows await retirement as described
-below. The current equivalence arguments cover the ten observed survivors and
-the retained Lamports instance; they do not apply to the three pending rows.
-
-- `RpcCustomError.parseError` (both overloads) — baseline label
-  `# int clamp boundary` — `changed conditional
-  boundary` on the long→int clamp: at the exact `Integer.MIN_VALUE` /
-  `MAX_VALUE` boundaries the mutant returns `Unknown` directly, and the
-  original reaches the switch `default`, which is also `Unknown` — with
-  identical iterator handling (`ji.skip()` on both routes). No defined
-  custom-error code sits at an int boundary, so the routes cannot diverge.
-  The killable near-misses — codes aliasing real ones under `(int)`
-  truncation, `code ± (1L << 32)` — are pinned by
-  `ParseCustomErrorCodeTests`.
-- `Lamports.amount` — baseline label `# allocation routing` — boundary/forced-true
-  on `lamports < 0`: both branches build the same `BigInteger` for non-negative
-  longs, including zero. Negative inputs already take the unsigned-widening branch,
-  so forcing that branch true leaves their result unchanged too. The guard saves
-  allocation for non-negative values — `valueOf` is cheaper than widening the bits.
-  The agreement is not just prose: sava-core's
-  `ByteUtilTests.toUnsignedBigIntegerAgreesWithValueOfWhereCallersBranch`
-  sweeps `valueOf` vs the widening over 10k seeded non-negative values plus
-  boundaries on every build. See the decimal suite notes in sava-core for why
-  the allocation-bound technique that would kill these was tried and reverted.
-- `JsonUtil.parseEncodedData` — baseline label `# logging only` — removed
-  `System.Logger::log` call on the unsupported-encoding fallback.
-- `JsonUtil.toJsonIntArray` — baseline label `# capacity math` —
-  `(data.length << 2) + 2`:
-  `StringBuilder` sizing only; the builder grows as needed.
-- `JsonRpcException.envelopeRequestId` — baseline label `# best-effort guard` — two
-  `removed conditional` mutants on guards that sit inside the reader's best-effort
-  `catch (RuntimeException)`, which exists so that no unreadable id can cost the caller
-  the error object. Property: an id the reader cannot carry reads as empty and never
-  displaces the error. Oracle: the reader's own contract (its javadoc and
-  `CONVENTIONS.md`), pinned by `JsonRpcExceptionTests.theEnvelopeReaderCarriesOnlyWhatSavaMints`
-  and the HTTP and websocket envelope tests. (1) `skipUntil("id") == null` forced false:
-  a missing `id` then runs `whatIsNext()` at the end of the object, which either throws
-  into the catch or is not a `NUMBER`, and either way the result is empty. (2) `c > '9'`
-  forced false in the digit check: any character above `'9'` also fails
-  `Long.parseLong`, whose exception the same catch swallows, so the guard cannot change
-  the result. Both guards are the non-exceptional fast path in front of that catch; the
-  kills are on the other direction of each (forced true rejects every id) and on the
-  `'0'`/`'9'` boundaries (an id carrying both digits). Removing the guards to make the
-  mutants killable would turn every ordinary missing or null `id` into an exception used
-  as control flow; narrowing the catch would trade robustness for a killable mutant. A
-  reviewer measured the same two survivors independently before this acceptance.
-
-### Pending JsonUtil baseline retirement
-
-Three retained rows no longer have valid equivalence arguments:
-
-- `# killed guard pending prune` — `parseEncodedData`,
-  `RemoveConditionalMutator_EQUAL_IF,SURVIVED`: the former `# single element array`
-  argument predates the explicit missing-encoding exception introduced in `0d68f02`.
-  Forcing the guard now rejects valid encoded arrays; the current guard mutants are
-  killed. `ParseResponseFieldTests` also pins the missing-encoding exception message.
-- `# removed fallback pending prune` — `parseEncodedData`,
-  `NullReturnValsMutator,NO_COVERAGE`: the other former `# single element array` row
-  belonged to a fallback return removed by `0d68f02`. The current throwing branch has
-  no return to mutate. This is removed-source evidence, not identification of that
-  historical sibling among today's return mutants.
-- `# killed reset pending prune` — `parseEncodedData`,
-  `NakedReceiverMutator,SURVIVED`: the former `# reset position equivalent` argument
-  assumed the data element had already been decoded. Unknown encodings leave it
-  unconsumed, so dropping `ji.reset(mark2)` breaks the cursor.
-  `unknownResponseEncodingsStillConsumeTheArrayAndReturnEmptyData` asserts both empty
-  output and the next enclosing-object field, and kills this mutation in a fresh full
-  response suite.
-
-These labels record unfinished pruning; **each row still contributes active baseline
-matching capacity**. Keeping the notes accurate does not retire that capacity.
-The 2026-09-05 fresh response observation also nominated the unrelated
-`Lamports.amount,RemoveConditionalMutator_ORDER_IF,SURVIVED` row under
-`# allocation routing`. It is absent from the licensed population, not observed
-killed, and its equivalence argument remains valid. No baseline membership was
-removed: the available transition would also remove that unrelated evidence.
-The removed fallback additionally requires reconciliation with sava's licensed-kill
-retirement rule. Writer options remain defined by the installed `hardeningHelp`.
-
-Baseline shrinkage requires row-specific evidence; growth requires a reason here.
-
-## Timed-out mutants (audited set)
+### Timed-out mutants (audited set)
 
 `TIMED_OUT` is detected, never accepted, but a watchdog cannot prove that a
 covering assertion observed the defect. `ws-timeouts.csv` therefore holds a
-line-less audited key set, and verification warns on a timeout outside it. The
-fresh 2026-08-11 full run produced three timed-out mutants: two
-`runLoop,RemoveConditionalMutator_EQUAL_ELSE` siblings and one
-`runLoop,VoidMethodCallMutator`. Every current timeout has
-`cause:liveness`; there are no resource or harness holding rows.
+line-less audited key set, and verification warns on a timeout outside it. Every
+member has `cause:liveness`; there are no resource or harness holding rows.
 
-- **`SolanaJsonRpcWebsocket.runLoop` `EQUAL_ELSE` (two sibling mutants).** One forces the
-  `closed()` exit false and the other forces the interruption exit false.
-  In each mutated path the corresponding terminal event can no longer end the
-  loop, and the path owns no replacement finite completion guarantee. Timeout
-  membership is key-level, so one CSV row honestly classifies both siblings.
-- **`SolanaJsonRpcWebsocket.runLoop` `VoidMethodCallMutator`.** Removing `checkCycle` leaves the
-  unbounded loop doing no maintenance work. A covering path waiting for the
-  cycle's state transition has no path-owned completion; an external close or
-  interrupt is only the fixture's emergency exit.
-- **`SolanaJsonRpcWebsocket.closed` `ORDER_ELSE`.** Forcing `msgId < 0` false prevents the close
-  sentinel from ever ending the maintenance loop. It was killed in the current
-  run, so its coordinate is still in the population: that is the *quiet* case,
-  not a stale row. It stays in the audited set until the tool's 3+ distinct fresh
-  full-run quiet notice over identical evidence inputs and the solo/gate
-  confirmation, after which its membership line is removed by hand — since
-  sava-build 21.5.37 every timeout membership line is hand-maintained and no
-  writer retires one. Only a coordinate that leaves the population altogether is
-  removed after a single fresh history-free run with valid committed provenance.
-  It is not counted among the current three timed-out mutants.
+Shared cause, argued once: each member makes the `SolanaJsonRpcWebsocket` maintenance
+loop lose an exit or its per-cycle work, so the mutated path has no path-owned finite
+completion guarantee. The members are `SolanaJsonRpcWebsocket` `runLoop`
+`RemoveConditionalMutator_EQUAL_ELSE` (two sibling mutants, one key row),
+`runLoop` `VoidMethodCallMutator`, and `closed` `RemoveConditionalMutator_ORDER_ELSE`.
 
-The old `run`, `close`, connect-lambda, `connect`, `checkCycle`, and
-`ensureCapacity` timeout members were removed. Their mutation sites were
-eliminated or their finite behavior now has a deterministic killed or accepted
-disposition; none remains under a `cause:harness` label.
+- **`runLoop` `EQUAL_ELSE` (two sibling mutants).** One forces the `closed()` exit
+  false and the other forces the interruption exit false. In each mutated path the
+  corresponding terminal event can no longer end the loop, and the path owns no
+  replacement finite completion guarantee. Timeout membership is key-level, so one
+  CSV row honestly classifies both siblings.
+- **`runLoop` `VoidMethodCallMutator`.** Removing `checkCycle` leaves the unbounded
+  loop doing no maintenance work. A covering path waiting for the cycle's state
+  transition has no path-owned completion. An external close or interrupt is only
+  the fixture's emergency exit where the fixture has one (the two `@Timeout` tests
+  below); the executor-task tests have none, and PIT's watchdog is their only bound.
+- **`closed` `ORDER_ELSE`.** Forcing `msgId < 0` false prevents the close sentinel
+  from ever ending the maintenance loop. `checkLoopReturnsImmediatelyOnceClosed`
+  asserts `ws.closed()` synchronously right after `ws.close()`, a synchronous reader
+  of exactly the state this mutant breaks: it kills the mutant whenever it is the
+  covering test that runs, and a timeout is recorded only when a test that enters the
+  loop covers the mutant first. It was killed in the fresh 2026-08-11 full run, so
+  its coordinate is still in the population: that is the *quiet* case, not a stale
+  row, and its quiet-retention clock is running. Whether it should leave the audited
+  set on that clock or be argued as a deterministic kill is the owner's call.
+
+Retention: a coordinate still in the population whose timeout went quiet stays in
+the audited set until the tool's 3+ distinct fresh full-run quiet notice over
+identical evidence inputs and the solo/gate confirmation, after which its membership
+line is removed by hand — since sava-build 21.5.37 every timeout membership line is
+hand-maintained and no writer retires one. Only a coordinate that leaves the
+population altogether is removed after a single fresh history-free run with valid
+committed provenance. Former members left the set when their mutation sites were
+removed or given a deterministic killed or accepted disposition; none remains under a
+`cause:harness` label.
+
+Fixture bounds, read from the test source rather than from a PIT coverage reading.
+In `SolanaJsonRpcWebsocketLifecycleTests`, `run()` drives `runLoop` inline on the
+test thread, either through `RecordingExecutor`'s captured task
+(`checkLoopExitsOnInterruptAndCloses`, `checkLoopReturnsImmediatelyOnceClosed`,
+`checkLoopClosesAndLogsAnUnhandledException`; no fixture bound) or through a direct
+`ws.run()` call (`aCheckLoopFailureReachesOnErrorBeforeClosing`,
+`aThrowingOnErrorHandlerDoesNotPreventTheClose`, each under a 30 s JUnit `@Timeout`,
+which interrupts the test thread). A websocket built through the public builder, as
+in `SolanaRpcWebsocketTests`, runs the loop on its own single-thread executor, which
+`close()` shuts down without interrupting. PIT's effective watchdog is the covering
+test's duration × `timeoutFactor` + `timeoutConst`; `sava-rpc/build.gradle.kts` sets
+2.0 and 1500 ms, and its comment puts this module's slowest test at a quarter of a
+second. The watchdog therefore fires long before 30 s: the JUnit bound is an
+emergency ceiling that cannot fail first and contributes no cause evidence.
+
+Owed (`HARDENING.md`, "`TIMED_OUT` is detected, but does not diagnose its cause"),
+for the two `runLoop` members only: the statement of why no synchronous reader of the
+mutated state (the closed and interruption exits, the cycle's work) serves as a
+deterministic oracle.
+
+## encoding suite
+
+Targets `software.sava.rpc.json.*` and `software.sava.rpc.json.http.request.*`,
+subtracting the client, responses and ws packages. It has no accepted rows and no
+audited timeouts. `RpcEncoding`'s missing `jsonParsed` constant is a deliberate API
+invariant (`AGENTS.md`), not a gap to triage. `PrivateKeyEncodingTests` pins the
+key-import field-order, unknown-field and missing-field contracts; the declaration
+documents the retained duplicate-encoding behaviour (a later encoding does not
+reinterpret an already imported secret).
+
+## Retained rows and the writer gap
+
+These rows stay deliberately. Their labels and status fields record historical
+observations, but **each row still contributes active baseline matching capacity**
+and can accept a later mutant with the same class, method, mutator, and status;
+historical labels do not deactivate matching. In the lists below, `EQUAL_ELSE`,
+`EQUAL_IF`, `ORDER_IF` and `ORDER_ELSE` abbreviate `RemoveConditionalMutator_*`.
+
+- **`# killed retained`** — a fresh licensed run observed the same mutant killed.
+- **`# retired implementation retained`** — the mutation site or its containing
+  helper no longer exists.
+- **`# unlicensed-only retained`** — rows the licensed ArcMutate population does not
+  observe. Absence under that toolchain is not a kill, so each stays until the same
+  licensed mutant is observed and killed.
+- **`# killed guard pending prune`**, **`# removed fallback pending prune`**,
+  **`# killed reset pending prune`** — responses rows whose former equivalence
+  arguments no longer hold (below).
+
+Shared rationale, argued per key. A reviewed subset can be retired by key: the named
+prune writer takes `-PpruneBaselineKeys` after two fresh history-free previews
+(`HARDENING.md`, "Retiring a reviewed subset"). Selecting a key selects every row at
+that key. A key holding a matched live-family row is refused by the writer; a key
+holding a protected `# unlicensed-only retained` sibling would be accepted, since
+those rows are unmatched candidates too, and is omitted only by this file's rule that
+toolchain absence is not a kill. These keys are blocked, all `SolanaJsonRpcWebsocket`
+in ws:
+
+- `ensureCapacity,MathMutator,SURVIVED` — a `# retired implementation retained` row
+  beside the live `# capacity math` siblings (refused by the writer).
+- `handlePendingSubscriptions,EQUAL_IF,SURVIVED` — a
+  `# retired implementation retained` row beside `# unlicensed-only retained`
+  siblings (omitted by rule).
+- `programSubscribe,EQUAL_ELSE,SURVIVED` — a `# killed retained` row beside the live
+  `# redundant outer duplicate guard` row (refused by the writer).
+
+Every other key holding a killed, retired or pending-prune row holds only such rows, so
+the CSVs do not block it; keys holding only unlicensed-only rows stay by the rule above.
+Whether
+each of its rows is an eligible candidate in a given run (not matched,
+timeout-protected, pending a status flip, or flip-insured) is a run observation that
+only the previews confirm; choosing the reviewed keys is the owner's step. What the
+selective prune does not do is retag ungated rows: it performs no incidental retag,
+and `BaselineRetag` refreshes only rows a fresh report matches, so a retained row's
+`# line` tag stays at its last gated observation until the row leaves. Hand-editing
+baseline record structure is not a sanctioned substitute for either writer. Several
+retained rows are `NO_COVERAGE`; they are debt, never equivalences. This is open debt
+in client, ws and responses; it closes key by key, and a blocked key closes only when
+its live or protected sibling no longer needs that capacity or the owner retires the
+unlicensed population.
+
+### client
+
+- `# killed retained`: `BaseSolanaJsonRpcClient.joinKeys` `EQUAL_ELSE` (the other
+  direction is killed by direct helper tests distinguishing null, empty, and
+  populated collections); `JsonHttpClient.gzipBufferSize` `VoidMethodCallMutator`
+  (the malformed provider-controlled `Content-Length` diagnostic, asserted through
+  `TestLogs`); `JsonHttpClient.wrapResponseParser` `NullReturnValsMutator` and
+  `EQUAL_ELSE`; `JsonRpcHttpClient.applyGenericResponseResult` `NullReturnValsMutator`
+  (the generic-result parser factory); `JsonRpcValueResponseParser$Parser.parse`
+  `ORDER_ELSE` (the absent-value cursor branch);
+  `SolanaJsonRpcClient.getAppliedAccounts` `EQUAL_ELSE` (empty-account rejection);
+  `SolanaJsonRpcClient.lambda$static$0` `EQUAL_ELSE` (the immutable empty leader
+  schedule); `SolanaRpcClient.sendTransaction` `EQUAL_ELSE` and `EQUAL_IF` (both
+  boolean encodings).
+- `# unlicensed-only retained`: `BaseSolanaJsonRpcClient.joinKeys` `EQUAL_IF`, with no
+  counterpart in the licensed population, reported unmatched on every run. It remains
+  because absence under the licensed toolchain is not evidence that the old
+  unlicensed mutant was killed. Its key differs from every killed row's key above, so
+  it does not block their selective prune.
+
+### ws
+
+- `# killed retained` (`SolanaJsonRpcWebsocket` unless named): `accountSubscribe`,
+  `checkCycle`, `close`, `lambda$queueUnsubscribe$0`,
+  `lockAndHandlePendingSubscriptions`, `logsSubscribe`, `onClose`, `onError`,
+  `onOpen`, `onWholeMessage`, `programSubscribe`, `publishGeneric`,
+  `queueSubscription`, `rootSubscribe`, `sendPing`, `sendUnSubscription`,
+  `signatureSubscribe`, `slotSubscribe`, `subscribe`, `subscribeToTokenAccounts`, and
+  `SolanaRpcWebsocketBuilder.create`. The `queueSubscription` and `subscribe`
+  `BooleanTrueReturnValsMutator` rows among them are `NO_COVERAGE`.
+- `# retired implementation retained`: `ensureCapacity` (`MathMutator`),
+  `handlePendingSubscriptions`, `lambda$connect$0`, `lambda$sendPing$0`,
+  `onWholeMessage`, `removeDanglingSub`, and `unsubscribe`. The `onWholeMessage`,
+  `removeDanglingSub` and `unsubscribe` rows include `NO_COVERAGE` rows.
+- `# unlicensed-only retained` — itemised because `AGENTS.md` points here: the two
+  `lambda$queueUnsubscribe$0 EQUAL_IF` siblings, `ensureCapacity ORDER_IF`,
+  `onText ORDER_IF`, the `logsSubscribe` and `programSubscribe EQUAL_IF` rows, two
+  `handlePendingSubscriptions EQUAL_IF` siblings, and one `onWholeMessage EQUAL_IF`
+  sibling. Each remains until the same licensed mutant is observed and killed; the
+  `handlePendingSubscriptions` siblings also block the retired row at their key.
+
+### responses
+
+Each is a `JsonUtil.parseEncodedData` row with no valid equivalence argument.
+
+- `# killed guard pending prune` — `RemoveConditionalMutator_EQUAL_IF,SURVIVED`: the
+  former argument predates the explicit missing-encoding exception introduced in
+  `0d68f02`. Forcing the guard now rejects valid encoded arrays, which
+  `ParseResponseFieldTests` decodes; the same tests pin the missing-encoding
+  exception message.
+- `# removed fallback pending prune` — `NullReturnValsMutator,NO_COVERAGE`: it
+  belonged to a fallback return removed by `0d68f02`. The current throwing branch has
+  no return to mutate. This is removed-source evidence, not identification of that
+  historical sibling among today's return mutants, and it additionally requires
+  reconciliation with the licensed-kill retirement rule.
+- `# killed reset pending prune` — `NakedReceiverMutator,SURVIVED`: the former
+  argument assumed the data element had already been decoded. Unknown encodings leave
+  it unconsumed, so dropping `ji.reset(mark2)` breaks the cursor. Oracle:
+  `unknownResponseEncodingsStillConsumeTheArrayAndReturnEmptyData` in
+  `ParseResponseFieldTests` asserts both empty output and the next enclosing-object
+  field.
+
+## Mutator sets
+
+Every suite in this module runs `STRONGER,EXPERIMENTAL_NAKED_RECEIVER`;
+`EXPERIMENTAL_BIG_INTEGER` is off. The trials, recorded with their method in
+`HARDENING_NOTES.md` ("Mutator-set trials"), measured for this module:
+
+| Trial | Suite | Without | With | Fires |
+|---|---|---|---|---|
+| `EXPERIMENTAL_BIG_INTEGER`, 2026-07-21 | `client` | 498 | 498 | 0 |
+| `EXPERIMENTAL_BIG_INTEGER`, 2026-07-21 | `responses` | 524 | 524 | 0 |
+| `EXPERIMENTAL_NAKED_RECEIVER`, 2026-07-22 | `client` | 501 | 601 | 100 |
+| `EXPERIMENTAL_NAKED_RECEIVER`, 2026-07-22 | `responses` | 524 | 607 | 83 |
+| `EXPERIMENTAL_NAKED_RECEIVER`, 2026-07-22 | `ws` | 541 | 592 | 51 |
+
+`encoding` was registered on 2026-08-04, after the trials, and carries
+`EXPERIMENTAL_NAKED_RECEIVER` without a trial row of its own.

@@ -193,7 +193,7 @@ Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
   that matter here: a trailing decoy field of the same JSON type with a different value
   kills always-match dispatch mutants; a leading unknown field kills stop-iteration
   mutants; zero-value probes pin the `< 0` absent-sentinels; `assertSame` pins sentinel
-  identity. The 8 baseline keys are all triaged equivalent (int-clamp boundaries,
+  identity. Each baseline key is argued by family or as debt (int-clamp boundaries,
   unsigned reinterpret at zero, logging/capacity — reasons in
   `sava-rpc/config/pitest/README.md`). Fixed 2026-07-17 after the first baseline:
   `TxStatus.parse`'s nil-status dedup compared `whatIsNext()` against Java null instead of

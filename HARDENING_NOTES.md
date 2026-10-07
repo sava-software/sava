@@ -43,23 +43,26 @@ What changed across the four releases, and what was exercised:
   those tests exercise; `./gradlew qualityGate` from the root when the suites are
   unclear. `pitest<Suite>Verify` keeps a completed report only while recompiled Java
   sources are the sole input that moved and every class is byte-identical, so after
-  this upgrade it refuses any pre-upgrade report: `:sava-core:pitestEncodingVerify` over the report the pre-push gate had written under
-  21.6.1 stopped in `pitestEncodingEvidenceValidate`, naming the recorded and current
-  plugin SHA-256 and a fresh run as the only retry. PIT master-JVM
-  settings forwarded to minions are refused; sava's two `hardening {}` blocks set none.
+  this upgrade it refuses any pre-upgrade report: `:sava-core:pitestEncodingVerify` over
+  the report the pre-push gate had written under 21.6.1 stopped in
+  `pitestEncodingEvidenceValidate`, naming the recorded and current plugin SHA-256 and a
+  fresh run as the only retry. PIT master-JVM settings forwarded to minions are refused;
+  sava's two `hardening {}` blocks set none.
   The range pushed just before this adoption, `4549b16..bfc1368`, already followed the
   gate rule: the six suites its code and tests reach ran once, history-free, after the
   local review and before the push.
 - 21.6.4 keeps `config/pitest/README.md` to the arguments in force, updated in place and
-  never appended to as a pass report, with no restated build totals. sava-core's and
-  sava-rpc's READMEs still carry dated sections; one that argues a live acceptance or
-  timeout stays, dates included, and one that narrates a pass collapses to the argument
-  it supports. That reshaping is owed before the next certification, which binds the
-  README as it then stands, and was not part of this adoption.
+  never appended to as a pass report, with no restated build totals. At adoption,
+  sava-core's and sava-rpc's READMEs carried dated sections; one that argues a live
+  acceptance or timeout stays, dates included, and one that narrates a pass collapses to
+  the argument it supports. That reshaping was done in a later commit, `docs(hardening):
+  reshape the triage READMEs to the arguments in force`, so the next certification, which
+  binds the README as it then stands, binds the reshaped files.
 - 21.6.5 warns from verify and Debt about bare baseline rows (`N unlabeled rows — triage
   state unknown`) and names the README rule and the test-only-edit wording in the
   printed template. `:sava-core:pitestEncodingDebt` printed its per-label breakdown
-  (8 `# slow path routing`, 6 `# surplus zero strip`, 6 `# allocation size` over 20 rows) with no unlabeled warning; every row of all 13 baselines carries a label, and
+  (8 `# slow path routing`, 6 `# surplus zero strip`, 6 `# allocation size` over 20
+  rows) with no unlabeled warning; every row of all 13 baselines carries a label, and
   the four registered suites without a baseline have nothing to warn about.
 
 The agent block in `AGENTS.md` is the 60-line print of the installed
@@ -67,8 +70,9 @@ The agent block in `AGENTS.md` is the 60-line print of the installed
 carries the final-gate rule, the README rule and the test-only-edit wording with
 `./gradlew qualityGate` as the fallback. Nothing checks the copy.
 
-Root `check` executed 1,785 tests — sava-core 788, sava-rpc 941, sava-vanity 56 — with 0 failures and 0 errors; the
-skips are the environment-gated `LiveV1ValidatorCheck` and `LiveMainNetDriftCheck`.
+Root `check` executed 1,785 tests — sava-core 788, sava-rpc 941, sava-vanity 56 — with 0
+failures and 0 errors; the skips are the environment-gated `LiveV1ValidatorCheck` and
+`LiveMainNetDriftCheck`.
 `jmhClasses` in the JMH build passed against the new pin after a fresh configure;
 `--warning-mode all` on that build still shows the one Gradle 11 deprecation,
 `Configuration.setVisible(boolean)`, from the `me.champeau.jmh` plugin, as recorded for
@@ -221,7 +225,7 @@ The existing local certification and fuzz receipts record their own later outcom
 | `pitestMeta` | `core.accounts.meta.*` | |
 | `pitestDecimal` | `core.util.*` | |
 | `pitestCrypto` | `core.crypto.*` | Excludes the `ed25519` subpackage, which has its own suite — the `crypto.*` wildcard spans dots. |
-| `pitestVanity` | `core.accounts.vanity.*` | Widened from a `Subsequence*` allowlist 2026-08-04; 8 audited timeouts are the price. See below. |
+| `pitestVanity` | `core.accounts.vanity.*` | Widened from a `Subsequence*` allowlist 2026-08-04; its audited timeout set is the price (members and causes in `sava-core/config/pitest/README.md`). See below. |
 | `pitestAccounts` | `core.accounts.*` | Top-level only: every sub-package with its own suite is subtracted, since the wildcard spans dots. |
 | `pitestSysvar` | `core.accounts.sysvar.*` | Parsers over untrusted account data. |
 | `pitestPbkdf` | `core.accounts.pbkdf.*` | Tests pin PBKDF2 to `MIN_ITERATIONS` and lock around Argon2id; keep that or the suite cost multiplies by mutant count. |
@@ -244,9 +248,8 @@ generated"). `MaskWorkerTests` has been driving every worker with a finite
 `maxSearches` all along. The argument was stale rather than wrong: it described
 the code before the seam landed and was never re-measured afterwards.
 
-The committed audited-timeout set for the suite currently holds **five members**,
-all `cause:liveness` (`SubsequenceRecord.formatCharOptions` plus the four
-`MaskWorker`/`BeginsWithMaskWorker` search-loop keys), audited in
+The committed audited-timeout set for the suite holds the
+`MaskWorker`/`BeginsWithMaskWorker` search-loop keys, all `cause:liveness`, audited in
 `sava-core/config/pitest/README.md` — that set, not a count, is the present price
 of mutating the package, and widening the suite closed the last ownership gap in
 this module.
@@ -453,7 +456,8 @@ from a downstream Rust adaptation's practice).
   suite, and the `pitestVanity` widening — so the repo carries **no**
   `declineExclusionAudit` record and the audit reports 0 explicitly declined in
   both modules. The cost was 413 seeded `# untriaged` rows in sava-core and 17
-  in sava-rpc, itemised in each module's `config/pitest/README.md`; that debt is
+  in sava-rpc, itemised in each module's `config/pitest/README.md` (sava-rpc's 17 were
+  triaged and pruned on 2026-09-05, recorded in git history); that debt is
   now visible instead of invisible, which is the whole point. What a clean gate
   still says nothing about: **sava-vanity's application module**, which registers
   no suite at all.
@@ -594,7 +598,7 @@ no case where an HTTP failure status carries a well-formed `result` envelope.
 vetoes the body) and killed both it and the `ConditionalsBoundaryMutator` row on
 the same line — the 300 case separates `>= 300` from `> 300`. So the migration
 converted one silent acceptance into a test and shrank the `client` baseline by
-a row. Details in `sava-rpc/config/pitest/README.md`.
+a row. Details in the git history of `sava-rpc/config/pitest/README.md`.
 
 `ws` was refreshed with the union writer, not the full
 rewrite: its accepted `checkCycle:235` `unlock()` row read

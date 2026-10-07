@@ -1635,7 +1635,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
   /// The loop interior, driven deterministically through the checkCycle seam: an
   /// unconfirmed subscription re-sends only once its retry window passes. This
   /// interior was previously reachable only by threads racing the test scheduler
-  /// (the run-loop flip-insurance family in the ws triage README).
+  /// (the former run-loop flip-insurance family; see the ws triage README's git history).
   @Test
   void checkCycleResendsAnUnconfirmedSubscription() throws InterruptedException {
     final var clock = new TestClock();
