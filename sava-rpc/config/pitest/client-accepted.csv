@@ -1,6 +1,5 @@
 !sava-hardening-baseline-schema,1
 software.sava.rpc.json.http.client.BaseJsonResponseController,applyResponse,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead null arm # line 43
-software.sava.rpc.json.http.client.BaseSolanaJsonRpcClient,joinKeys,RemoveConditionalMutator_EQUAL_IF,SURVIVED # unlicensed-only retained # line 81
 software.sava.rpc.json.http.client.JsonHttpClient,newPostRequest,VoidMethodCallMutator,SURVIVED # request debug only # line 389
 software.sava.rpc.json.http.client.JsonHttpClient,readInputStream,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead pattern arm # line 268
 software.sava.rpc.json.http.client.JsonRpcValueResponseParser$Parser,parse,ConditionalsBoundaryMutator,SURVIVED # impossible zero mark # line 46

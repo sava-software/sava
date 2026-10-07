@@ -210,11 +210,12 @@ numbers move with the source: after the 2026-08-08 websocket liveness work the l
 `pitestWs` population is **580**. The unlicensed count has not been re-measured since, so
 treat the 605/573 pair as a ratio observed once rather than a current figure.
 Consequences recorded in `HARDENING_NOTES.md`: sava's baselines were all first written
-unlicensed, so a handful of accepted rows have no licensed counterpart and are reported
-unmatched every run. **A row
-leaves a baseline only when the same licensed mutant is observed and killed** — absence
-under one toolchain is not evidence of a kill, and the rows of that kind (`ws`, `client`
-and `responses`) are itemised in `sava-rpc/config/pitest/README.md`.
+unlicensed, so a handful of accepted rows had no licensed counterpart and were reported
+unmatched on every run until 2026-10-07, when the owner settled that **the licensed
+toolchain is the population of record**: a row the licensed engine never generates is an
+unmatched row like any other and leaves through the prune writer, and the stock engine's
+population is not consulted. The rows retired that day are listed under History in
+`sava-rpc/config/pitest/README.md`.
 
 **Baseline schema.** Accepted records carry the schema-1 marker, stamped by
 `migrateMutationBaselines` once all three pins had moved together; `downgradeMutationBaselines`

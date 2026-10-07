@@ -537,6 +537,15 @@ checked by two refuters). What it found, and what closed the same day:
   shifting every account down a slot (`NoSignerHeaderTests`); the guard that refuses it
   mirrors the one `#58` added for the opposite contradiction. Jazzer `slow-unit-*`
   artifacts are ignored so a slow input cannot refuse a fuzz receipt.
+- **Licensed engine as the population of record.** The baselines were first written
+  under the stock engine, and a dozen or so rows (nine ws, one client, one responses,
+  plus the ws rows blocked at the same keys) had no licensed counterpart and were
+  reported unmatched on every run under a rule that absence under one toolchain is not
+  a kill. The owner settled on 2026-10-07 that the licensed toolchain is the
+  population of record, so those rows left through the unscoped prune writer after
+  two matching previews per suite; `AGENTS.md` carries the rule. Two rows that had
+  carried retained labels matched live licensed mutants all along and were relabelled
+  into the families that argue them (the sava-rpc README's ws history note).
 - **Vanity counter.** The campaign's generator tests showed `numSearched` leaving out
   every matched key (a worker flushed its misses on a match and never the match) and
   the last `checkFound` stretch of a worker stopped by another worker's find. Both
@@ -547,11 +556,12 @@ checked by two refuters). What it found, and what closed the same day:
   pointers at retired families; `CONVENTIONS.md` gained the log and clock seams and the
   decrypt key-array zeroing trap.
 
-Left to the owner: whether the real-clock transport pins in
-`JsonHttpClientTransportTests` should leave the three rpc suites that cover them; the
-`scalarMultBase` member's category (or a refactor to an indexed window loop); the
-remaining `# untriaged` rows in `accounts` and `vanity`; the forty-odd sava-rpc families
-whose oracle is still "owed"; and `generateTestSupport`.
+Decided by the owner the same day: the zero-signer fee-payer guard stays; the
+real-clock transport pins in `JsonHttpClientTransportTests` are rewritten onto the
+scheduler seam; `scalarMultBase`'s window walk is refactored onto an array index; the
+sava-rpc families whose oracle is still "owed" are worked in slices, cheapest first;
+the remaining `# untriaged` rows in `accounts` and `vanity` wait for the reviewer and
+gate on this range. Still open: `generateTestSupport`.
 
 ## Mutator-set trials
 
