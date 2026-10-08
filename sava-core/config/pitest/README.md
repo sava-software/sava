@@ -616,22 +616,59 @@ Mutator set: `STRONGER,EXPERIMENTAL_NAKED_RECEIVER` — the latter fired in the
 2026-10-07 trial, run after the suite was registered on 2026-08-04 without one
 (`HARDENING_NOTES.md` §Mutator-set trials).
 
-### Debt
+### Accepted families
 
-**Seeded debt** — every row is `# untriaged`. The suite was registered on
-2026-08-04 to close `mutationOwnershipAudit` by targeting rather than declining,
-and its baseline was seeded from the full unkilled population; the 2026-10-07
-campaign (every `SolanaAccountsBuilder` setter, the ranged and `char[]`/ASCII
-`PublicKey` overloads, key-pair validation and generation in `Signer`) killed the
-bulk and the unscoped prune retired those rows. What remains, still debt and not
-equivalence claims: the `Signer.fromProperties` branches (prefix, key form, AAD
-and KDF selection, including its two `NakedReceiverMutator` rows), the
-`Signer.encryptKey` branches, the `validateKeyPair` calls on pairs the method
-just built, the `PublicKeyBytes` buffer and equality arms, `PublicKey.readPubKey`,
-`PublicKey.l`, `PublicKey.createProgramAddress`, `KeyPairSigner.createDedicatedSigner`
-and `ProgramDerivedAddress.createPDA`. The `NO_COVERAGE` rows among them are
-untested lines; each row remains active matching capacity until triage kills,
-refactors or argues it.
+- **`# derived key passes full validation`** — `Signer.validateKeyPair`
+  `RemoveConditionalMutator_EQUAL_ELSE`, once in each overload: the throw after
+  `Ed25519.validatePublicKeyFull` forced off.
+  - Reason: each overload validates the key it derived from the seed itself (Bouncy
+    Castle's derivation in the split form, `Ed25519Util`'s in the 64-byte form), never a
+    key the caller passed; the caller's key meets it only in the equality check, whose
+    mutants are killed. A derived key is `[s]B` for the clamped scalar `s` (bit 254 set,
+    bit 255 and the low three bits clear), so it is a canonically encoded point of the
+    prime-order subgroup and fails the check only if the group order L divides `s`. The
+    multiples of L inside the clamped range are 4L to 7L, and L is odd, so none is a
+    multiple of 8: no seed reaches the throw.
+  - Oracle: `noClampedScalarIsAMultipleOfTheGroupOrder` in `SignerTest` checks that
+    arithmetic over the whole clamped range, and
+    `keysDerivedFromStructuredSeedsPassFullValidation` measures the check at the
+    all-zero, single-bit and one-byte-fill seeds and two RFC 8032 secret keys.
+  - Invalidated if: an overload starts validating a key it did not derive, or
+    `Ed25519Util.generatePublicKey` stops matching RFC 8032 (the ed25519 suite's keygen
+    vectors and Bouncy Castle differentials).
+- **`# self-check on a derived pair`** — `Signer.createFromPrivateKey`,
+  `Signer.createKeyPairBytesFromPrivateKey` and `Signer.generatePrivateKeyPairBytes`,
+  `VoidMethodCallMutator` each: the `validateKeyPair` call on the pair the method has
+  just built, removed.
+  - Reason: the pair's public half was derived from the same 32 bytes one statement
+    earlier. `validateKeyPair(byte[])` repeats the same deterministic `Ed25519Util`
+    derivation, `validateKeyPair(byte[], byte[])` repeats it with Bouncy Castle, which
+    agrees for every seed while both implement RFC 8032, and the full-validation half
+    never fails (`# derived key passes full validation`). `createFromPrivateKey` and
+    `generatePrivateKeyPairBytes` derive from an array of their own; only a thread
+    writing the caller's array between the two reads in
+    `createKeyPairBytesFromPrivateKey` could make that pair disagree, and no
+    deterministic test can schedule that write.
+  - Oracle: the agreement is pinned by the ed25519 suite
+    (`Ed25519UtilTests.generatePublicKeyMatchesRfc8032TestVectors`, its two Bouncy
+    Castle differentials and the `Ed25519Fuzz` keygen target) and re-checked here by
+    `keysDerivedFromStructuredSeedsPassFullValidation` in `SignerTest`.
+  - Invalidated if: a method validates a pair it did not derive, or the two
+    derivations can disagree for some seed.
+- **`# unobservable wipe`** — `Signer.fromProperties` `VoidMethodCallMutator`, the
+  `finally` wipe of the decrypted secret.
+  - Reason: the secret is the array `Cipher.doFinal` returns inside
+    `PBKDFEncryption.decrypt`. `fromProperties` hands it only to `createFromPrivateKey`
+    and `createFromKeyPair`, which copy the bytes they keep, and no message or return
+    value carries it, so nothing outside the method can read it after the wipe.
+  - Oracle: declined rather than impossible. The array can be observed by installing a
+    JVM-wide AES/GCM provider that delegates to SunJCE and keeps each decrypt result (a
+    probe did so on JDK 25.0.2 and saw the mutant leave the plaintext in place); these
+    suites do not swap providers to read buffers the code wipes, only to drive a
+    production branch (`FoundKeySelfCheckTests`), so the wipe is reviewed by reading.
+  - Invalidated if: the array escapes the method (a factory retains it, or a message or
+    result carries it), at which point the wipe is observable without a provider swap
+    and must be tested.
 
 ## sysvar
 
@@ -717,21 +754,28 @@ Mutator set: `STRONGER,EXPERIMENTAL_NAKED_RECEIVER` — the latter fired in the
 package since 2026-08-04 (`HARDENING_NOTES.md` §pitestVanity records the
 retired `Subsequence*` allowlist).
 
-### Debt
+### Accepted families
 
-Every accepted row is `# untriaged`. Seeded from the full unkilled population when
-the suite was widened on 2026-08-04 to close `mutationOwnershipAudit` by targeting
-rather than declining; the 2026-10-07 campaign drove the generator API end to end
-(`VanityAddressGeneratorTests` on an inline executor and seeded factory,
-`ConcurrentVanityAddressGeneratorTests` on a recording queue), pinned the worker
-accessors, the interrupt exits and the draw budget, and the unscoped prune retired
-the rows those tests killed. What remains, still debt and not equivalence claims:
-the `BaseMaskWorker.queueResult` self-checks (signature verification and the key
-file branches, which `KeyFileRoundTripTests` reaches through the file formats
-rather than the worker), and in `MaskWorker.run` the packed-offset unpacking, the
-`checkFound` poll branch and the `clearSecrets` call. Each remains active matching
-capacity until triage kills, refactors or argues it.
-
+- **`# unreachable library self-check`** — `BaseMaskWorker.queueResult`
+  `RemoveConditionalMutator_EQUAL_ELSE` on the throw when the library verifier rejects the
+  `sigVerify` signature.
+  - Reason: by then `Signer.createFromKeyPair` has re-derived the public half with Bouncy
+    Castle and validated it, and the signature is SunEC's, through the provider object
+    `SunCrypto` resolves once at class initialisation. Bouncy Castle's lightweight
+    verifier can reject it only if one of the two libraries is defective, or if the
+    provider named "SunEC" was replaced before `SunCrypto` initialised, the one
+    configuration a caller could arrange and one these suites decline to install:
+    provider replacement in the vanity tests (`FoundKeySelfCheckTests`) is used to drive
+    the JDK verifier's own rejection branch, which resolves its provider per call, not
+    to corrupt the signer.
+  - Oracle: none executable short of that replacement. The checks beside it are killed
+    through the seams they do have, in `FoundKeySelfCheckTests`:
+    `sigVerifyRefusesAPairTheJdkVerifierRejects` for the JDK verifier, which
+    `Signature.getInstance("Ed25519")` resolves by provider preference order, and
+    `aPairWhosePrivateHalfNoLongerDerivesItsPublicHalfIsRefused` for the key-pair check
+    through a caller-supplied `SecureRandom` that keeps the seed buffer.
+  - Invalidated if: the signer or verifier is resolved per call through a provider the
+    caller can set, or the self-check gains a seam.
 ### Audited timeouts
 
 Every mask worker's search is a `for (;;)` with exactly **two** exits: "found
@@ -785,6 +829,23 @@ No accepted mutants, so there is no `primitives-accepted.csv` and no
 provenance pair.
 
 ## History (not evidence)
+
+- 2026-10-07, vanity: the triage pass had accepted `MaskWorker.run`'s two `MathMutator`
+  rows on the packed-offset unpacking as `# scratch offset relocation` and `# resume over
+  zeroed bytes`, arguing from tails of at most eight characters. The refuter noted that
+  `Subsequence` is a public interface and `createGenerator` passes any caller mask
+  unchecked, so a tail of eleven or more characters makes the relocated start overrun
+  the scratch buffer under the first mutant and a tail of thirty-three or more under the
+  second, where the original works for every tail tried.
+  `aLongCallerTailResumesTheEncodeInsideTheScratchBuffer` runs tails of twelve and
+  thirty-four and kills both; the rows left through the prune.
+- 2026-10-07, accounts and vanity: the seeded `# untriaged` rows that remained after the
+  campaign were triaged row by row; the kills (every `Signer.fromProperties` and
+  `encryptKey` branch, `PublicKeyBytes`, `PublicKey.readPubKey`, `l` and
+  `createProgramAddress`, `KeyPairSigner.createDedicatedSigner`,
+  `ProgramDerivedAddress.createPDA`; the `queueResult` self-checks and key-file branches,
+  `MaskWorker.run`'s poll branch and `clearSecrets`) left through the prunes, and the
+  rows that remain are argued above.
 
 - 2026-10-07, accounts: the four `PublicKey.verifySignature` rows labelled
   `# removed signature overload pending prune` since `666c164` (the tombstones of

@@ -16,8 +16,8 @@ import java.util.Random;
 /// Fixing the seed is about reproducibility; it is not an invitation to pin
 /// golden values that would couple these tests to ed25519 derivation internals.
 ///
-/// Obviously not secure. Public only so the pbkdf tests can share it; it lives in the
-/// test sources and is excluded from the vanity mutation suite by name.
+/// Obviously not secure. Public only so tests in other packages (pbkdf, accounts) can share
+/// it; it lives in the test sources and is excluded from the vanity mutation suite by name.
 public final class FixedSeedSecureRandom extends SecureRandom {
 
   /// Arbitrary fixed seeds. Several rather than one so the suite still samples

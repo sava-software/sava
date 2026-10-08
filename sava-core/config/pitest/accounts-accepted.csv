@@ -1,36 +1,7 @@
 !sava-hardening-baseline-schema,1
-software.sava.core.accounts.KeyPairSigner,createDedicatedSigner,NullReturnValsMutator,NO_COVERAGE # untriaged # line 68
-software.sava.core.accounts.ProgramDerivedAddress,createPDA,NullReturnValsMutator,NO_COVERAGE # untriaged # line 8
-software.sava.core.accounts.PublicKey,createProgramAddress,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 200
-software.sava.core.accounts.PublicKey,l,PrimitiveReturnsMutator,NO_COVERAGE # untriaged # line 286
-software.sava.core.accounts.PublicKey,readPubKey,MathMutator,SURVIVED # untriaged # line 137
-software.sava.core.accounts.PublicKey,readPubKey,NullReturnValsMutator,NO_COVERAGE # untriaged # line 144
-software.sava.core.accounts.PublicKeyBytes,copyByteArray,NullReturnValsMutator,NO_COVERAGE # untriaged # line 135
-software.sava.core.accounts.PublicKeyBytes,createBuffer,RemoveConditionalMutator_ORDER_ELSE,SURVIVED # untriaged # line 57
-software.sava.core.accounts.PublicKeyBytes,equals,RemoveConditionalMutator_EQUAL_ELSE,NO_COVERAGE # untriaged # line 185
-software.sava.core.accounts.PublicKeyBytes,equals,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 185
-software.sava.core.accounts.PublicKeyBytes,equals,RemoveConditionalMutator_EQUAL_IF,NO_COVERAGE # untriaged # line 185
-software.sava.core.accounts.Signer,createFromPrivateKey,VoidMethodCallMutator,SURVIVED # untriaged # line 71
-software.sava.core.accounts.Signer,createKeyPairBytesFromPrivateKey,VoidMethodCallMutator,SURVIVED # untriaged # line 63
-software.sava.core.accounts.Signer,encryptKey,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 97
-software.sava.core.accounts.Signer,encryptKey,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 97
-software.sava.core.accounts.Signer,encryptKey,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 100
-software.sava.core.accounts.Signer,encryptKey,VoidMethodCallMutator,NO_COVERAGE # untriaged # line 99
-software.sava.core.accounts.Signer,fromProperties,NakedReceiverMutator,SURVIVED # untriaged # line 122
-software.sava.core.accounts.Signer,fromProperties,NakedReceiverMutator,SURVIVED # untriaged # line 124
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,NO_COVERAGE # untriaged # line 109
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,NO_COVERAGE # untriaged # line 111
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 109
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 112
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 117
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 117
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 119
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 129
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 136
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_IF,NO_COVERAGE # untriaged # line 111
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 129
-software.sava.core.accounts.Signer,fromProperties,RemoveConditionalMutator_EQUAL_IF,SURVIVED # untriaged # line 131
-software.sava.core.accounts.Signer,fromProperties,VoidMethodCallMutator,SURVIVED # untriaged # line 141
-software.sava.core.accounts.Signer,generatePrivateKeyPairBytes,VoidMethodCallMutator,SURVIVED # untriaged # line 55
-software.sava.core.accounts.Signer,validateKeyPair,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 32
-software.sava.core.accounts.Signer,validateKeyPair,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # untriaged # line 41
+software.sava.core.accounts.Signer,createFromPrivateKey,VoidMethodCallMutator,SURVIVED # self-check on a derived pair # line 71
+software.sava.core.accounts.Signer,createKeyPairBytesFromPrivateKey,VoidMethodCallMutator,SURVIVED # self-check on a derived pair # line 63
+software.sava.core.accounts.Signer,fromProperties,VoidMethodCallMutator,SURVIVED # unobservable wipe # line 141
+software.sava.core.accounts.Signer,generatePrivateKeyPairBytes,VoidMethodCallMutator,SURVIVED # self-check on a derived pair # line 55
+software.sava.core.accounts.Signer,validateKeyPair,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # derived key passes full validation # line 32
+software.sava.core.accounts.Signer,validateKeyPair,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # derived key passes full validation # line 41

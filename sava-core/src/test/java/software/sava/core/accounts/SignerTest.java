@@ -4,17 +4,21 @@ import org.bouncycastle.math.ec.rfc8032.Ed25519;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import software.sava.core.accounts.pbkdf.KeyDerivation;
+import software.sava.core.crypto.ed25519.Ed25519Util;
 import software.sava.core.encoding.Base58;
 import software.sava.core.tx.Transaction;
 
 import javax.crypto.AEADBadTagException;
 import java.io.StringReader;
+import java.math.BigInteger;
 import java.security.InvalidKeyException;
 import java.security.PrivateKey;
 import java.security.ProviderException;
 import java.security.Signature;
 import java.security.SignatureException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.Properties;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -39,6 +43,16 @@ final class SignerTest {
   /// The RFC 8032 section 7.1 TEST 2 public key: a valid Ed25519 key that belongs to a different
   /// private key than [#FIXED_KEY_PAIR]'s.
   private static final String UNRELATED_PUBLIC_KEY = "586Z7H2vpX9qNhN2T4e9Utugie3ogjbxzGaMtM3E6HR5";
+  /// RFC 8032 section 7.1 TEST 1 secret key.
+  private static final String RFC8032_TEST1_SECRET_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60";
+  /// RFC 8032 section 7.1 TEST 2: the secret key of [#UNRELATED_PUBLIC_KEY], and its
+  /// signature over the one-byte message `0x72`.
+  private static final String RFC8032_TEST2_SECRET_KEY = "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb";
+  private static final String RFC8032_TEST2_SIGNATURE = "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da"
+      + "085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00";
+  /// The order L of the Ed25519 base point, RFC 8032 section 5.1.
+  private static final BigInteger GROUP_ORDER = BigInteger.TWO.pow(252)
+      .add(new BigInteger("27742317777372353535851937790883648493"));
 
   private static byte[] fixedKeyPair() {
     return Base58.decode(FIXED_KEY_PAIR);
@@ -207,6 +221,145 @@ final class SignerTest {
     assertEquals(FIXED_PUBLIC_KEY, signer.publicKey().toBase58());
     final byte[] message = "split key pair".getBytes(UTF_8);
     assertTrue(PublicKey.verifySignature(Base58.decode(FIXED_PUBLIC_KEY), 0, message, 0, message.length, signer.sign(message)));
+  }
+
+  /// The premise of the `# derived key passes full validation` acceptance in the accounts
+  /// README. `validateKeyPair` runs `Ed25519.validatePublicKeyFull` on a key it derived
+  /// from the seed itself, and a derived key is `[s]B` for the clamped scalar `s`: bit 254
+  /// set, bit 255 and the low three bits clear. That is a point of the order-L subgroup,
+  /// the identity only when L divides `s`; the check rejects small-order and non-canonical
+  /// encodings and points outside the subgroup, so it could fail only for such an `s`.
+  /// Exhaustive over the clamped range: the multiples of L inside it are 4L to 7L, and L is
+  /// odd, so none is a multiple of 8.
+  @Test
+  void noClampedScalarIsAMultipleOfTheGroupOrder() {
+    final var lowest = BigInteger.ONE.shiftLeft(254);
+    final var highest = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(8));
+    final var firstFactor = lowest.add(GROUP_ORDER).subtract(BigInteger.ONE).divide(GROUP_ORDER);
+    int multiples = 0;
+    for (var multiple = firstFactor.multiply(GROUP_ORDER);
+         multiple.compareTo(highest) <= 0;
+         multiple = multiple.add(GROUP_ORDER)) {
+      ++multiples;
+      final var hex = multiple.toString(16);
+      assertNotEquals(0, multiple.intValue() & 7, () -> "a clamped scalar is a multiple of L: " + hex);
+    }
+    assertEquals(4, multiples);
+  }
+
+  /// The same premise measured at the seed shapes a derivation could plausibly mishandle:
+  /// all zero, every single-bit seed, every one-byte fill (all ones among them), and the
+  /// RFC 8032 TEST 1 and TEST 2 secret keys. Each derived key passes full validation, the
+  /// library's derivation agrees with Bouncy Castle's, and both `validateKeyPair` forms
+  /// accept the pair.
+  @Test
+  void keysDerivedFromStructuredSeedsPassFullValidation() {
+    final var seeds = new ArrayList<byte[]>();
+    seeds.add(new byte[KEY_LENGTH]);
+    for (int bit = 0; bit < KEY_LENGTH << 3; ++bit) {
+      final byte[] seed = new byte[KEY_LENGTH];
+      seed[bit >> 3] = (byte) (1 << (bit & 7));
+      seeds.add(seed);
+    }
+    for (int fill = 1; fill < 256; ++fill) {
+      final byte[] seed = new byte[KEY_LENGTH];
+      Arrays.fill(seed, (byte) fill);
+      seeds.add(seed);
+    }
+    seeds.add(HexFormat.of().parseHex(RFC8032_TEST1_SECRET_KEY));
+    seeds.add(HexFormat.of().parseHex(RFC8032_TEST2_SECRET_KEY));
+
+    for (final byte[] seed : seeds) {
+      final var label = HexFormat.of().formatHex(seed);
+      final byte[] expected = new byte[KEY_LENGTH];
+      Ed25519.generatePublicKey(seed, 0, expected, 0);
+      assertTrue(Ed25519.validatePublicKeyFull(expected, 0), label);
+
+      final byte[] derived = new byte[KEY_LENGTH];
+      Ed25519Util.generatePublicKey(seed, derived);
+      assertArrayEquals(expected, derived, label);
+
+      final byte[] keyPair = Arrays.copyOf(seed, KEY_LENGTH << 1);
+      System.arraycopy(expected, 0, keyPair, KEY_LENGTH, KEY_LENGTH);
+      assertDoesNotThrow(() -> Signer.validateKeyPair(seed, expected), label);
+      assertDoesNotThrow(() -> Signer.validateKeyPair(keyPair), label);
+    }
+  }
+
+  /// A dedicated signer holds the same keys but signs with an engine of its own, which is
+  /// what lets another thread sign without sharing the original's stateful [Signature]. The
+  /// original here signs through an engine that counts its uses; signing with the dedicated
+  /// signer leaves that count at zero and yields the RFC 8032 TEST 2 signature.
+  @Test
+  void aDedicatedSignerSignsWithAnEngineOfItsOwn() throws InvalidKeyException {
+    final var hex = HexFormat.of();
+    final var publicKey = PublicKey.fromBase58Encoded(UNRELATED_PUBLIC_KEY);
+    final PrivateKey privateKey = KeyPairSigner.generatePrivateKey(hex.parseHex(RFC8032_TEST2_SECRET_KEY));
+    final var originalEngine = new CountingSignature();
+    originalEngine.initSign(privateKey);
+    final var original = new KeyPairSigner(publicKey, privateKey, originalEngine);
+
+    final var dedicated = original.createDedicatedSigner();
+    assertNotSame(original, dedicated);
+    assertSame(publicKey, dedicated.publicKey());
+    assertSame(privateKey, dedicated.privateKey());
+    assertArrayEquals(hex.parseHex(RFC8032_TEST2_SIGNATURE), dedicated.sign(new byte[]{0x72}));
+    assertEquals(0, originalEngine.uses, "the dedicated signer used the original's engine");
+  }
+
+  /// A [Signature] engine that counts the updates and signatures asked of it, and signs
+  /// with a fixed non-zero pattern no real signature matches.
+  private static final class CountingSignature extends Signature {
+
+    private int uses;
+
+    private CountingSignature() {
+      super("test-counting-ed25519");
+    }
+
+    @Override
+    protected void engineInitVerify(final java.security.PublicKey publicKey) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void engineInitSign(final PrivateKey privateKey) {
+    }
+
+    @Override
+    protected void engineUpdate(final byte b) {
+      ++uses;
+    }
+
+    @Override
+    protected void engineUpdate(final byte[] data, final int offset, final int length) {
+      ++uses;
+    }
+
+    @Override
+    protected byte[] engineSign() {
+      ++uses;
+      final byte[] signature = new byte[Transaction.SIGNATURE_LENGTH];
+      Arrays.fill(signature, (byte) 0x5A);
+      return signature;
+    }
+
+    @Override
+    protected boolean engineVerify(final byte[] signature) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void engineSetParameter(final String parameter, final Object value) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected Object engineGetParameter(final String parameter) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /// The JCA form wraps the given keys as they are: the signer returns the given [PublicKey]

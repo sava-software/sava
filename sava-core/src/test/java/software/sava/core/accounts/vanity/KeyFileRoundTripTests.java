@@ -1,5 +1,6 @@
 package software.sava.core.accounts.vanity;
 
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
@@ -63,14 +64,40 @@ final class KeyFileRoundTripTests {
     }
   }
 
-  private static String secretFromJson(final String content) {
-    final int at = content.indexOf("\"secret\":");
-    assertTrue(at >= 0, "no secret field in " + content);
-    var value = content.substring(at + "\"secret\":".length(), content.lastIndexOf('}')).strip();
-    if (value.startsWith("\"") && value.endsWith("\"")) {
-      value = value.substring(1, value.length() - 1);
+  /// Parses `content` as exactly one JSON object under Gson's strict mode, which rejects
+  /// the unquoted strings and trailing content a lenient reader would accept.
+  private static JsonObject strictJsonObject(final String content) throws IOException {
+    try (final var reader = new JsonReader(new StringReader(content))) {
+      reader.setStrictness(Strictness.STRICT);
+      final var json = JsonParser.parseReader(reader).getAsJsonObject();
+      assertEquals(JsonToken.END_DOCUMENT, reader.peek(), "the entire saved file must be JSON");
+      return json;
     }
-    return value;
+  }
+
+  /// The secret of a plaintext JSON key file, typed by its encoding: `jsonKeyPairArray` is
+  /// the bare array of unsigned bytes that the Solana CLI's own key files hold, never a
+  /// string holding that array, and every other encoding is a JSON string.
+  ///
+  /// @return the secret in the form [PrivateKeyEncoding#parseSecret] reads
+  private static String typedSecret(final JsonObject json,
+                                    final PrivateKeyEncoding encoding,
+                                    final byte[] keyPair,
+                                    final String label) {
+    final var secret = json.get("secret");
+    if (encoding == PrivateKeyEncoding.jsonKeyPairArray) {
+      assertTrue(secret.isJsonArray(), label + ": the secret must be a JSON array, found " + secret);
+      final var array = secret.getAsJsonArray();
+      assertEquals(keyPair.length, array.size(), label);
+      for (int i = 0; i < keyPair.length; ++i) {
+        assertEquals(Byte.toUnsignedInt(keyPair[i]), array.get(i).getAsInt(), label + " element " + i);
+      }
+      return array.toString();
+    } else {
+      assertTrue(secret.isJsonPrimitive() && secret.getAsJsonPrimitive().isString(),
+          label + ": the secret must be a JSON string, found " + secret);
+      return secret.getAsString();
+    }
   }
 
   private static Properties properties(final String content) throws IOException {
@@ -80,7 +107,8 @@ final class KeyFileRoundTripTests {
   }
 
   /// Every encoding, in both file formats, must survive a write and read back to
-  /// the same address.
+  /// the same address. A JSON file must also be strict JSON with its secret typed by the
+  /// encoding, as [#typedSecret] reads it.
   @Test
   @Timeout(120)
   void everyEncodingRoundTripsInBothFormats(@TempDir final Path tempDir) throws IOException {
@@ -104,9 +132,11 @@ final class KeyFileRoundTripTests {
           assertEquals(encoding.name(), properties.getProperty("encoding"), label);
           secret = properties.getProperty("secret");
         } else {
-          assertTrue(content.contains("\"pubKey\": \"" + address + '"'), label + ": " + content);
-          assertTrue(content.contains("\"encoding\": \"" + encoding.name() + '"'), label + ": " + content);
-          secret = secretFromJson(content);
+          final var json = strictJsonObject(content);
+          assertEquals(Set.of("pubKey", "encoding", "secret"), json.keySet(), label);
+          assertEquals(address, json.get("pubKey").getAsString(), label);
+          assertEquals(encoding.name(), json.get("encoding").getAsString(), label);
+          secret = typedSecret(json, encoding, result.keyPair(), label);
         }
 
         assertNotNull(secret, label);

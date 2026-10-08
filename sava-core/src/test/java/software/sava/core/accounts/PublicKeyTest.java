@@ -1,6 +1,8 @@
 package software.sava.core.accounts;
 
 import org.junit.jupiter.api.Test;
+import software.sava.core.accounts.lookup.AccountIndexLookupTableEntry;
+import software.sava.core.accounts.lookup.AccountIndexLookupTableView;
 import software.sava.core.borsh.Borsh;
 import software.sava.core.crypto.ed25519.Ed25519Util;
 
@@ -629,5 +631,181 @@ final class PublicKeyTest {
     assertArrayEquals(expected, PublicKey.fromBase58Encoded(quoted.toCharArray(), 1, base58.length()).toByteArray());
     assertArrayEquals(expected, PublicKey.fromBase58Encoded(quoted.getBytes(US_ASCII), 1, base58.length()).toByteArray());
     assertEquals(base58, PublicKey.fromBase58Encoded(quoted.getBytes(US_ASCII), 1, base58.length()).toBase58());
+  }
+
+  /// The truncation error reports the bytes actually left after the offset: 39 bytes read
+  /// from offset 8 leave 31.
+  @Test
+  void readPubKeyReportsTheBytesLeftAfterTheOffset() {
+    final var failure = assertThrowsExactly(
+        IndexOutOfBoundsException.class,
+        () -> PublicKey.readPubKey(new byte[39], 8)
+    );
+    assertEquals("Public key needs 32 bytes at offset 8, but only 31 are available.", failure.getMessage());
+  }
+
+  /// The one-argument overload reads the key at offset zero into an array of its own, so a
+  /// later write to the buffer does not reach the key; a buffer shorter than a key is
+  /// refused.
+  @Test
+  void readPubKeyWithoutAnOffsetCopiesTheFirst32Bytes() {
+    final byte[] buffer = new byte[PublicKey.PUBLIC_KEY_LENGTH + 8];
+    for (int i = 0; i < buffer.length; ++i) {
+      buffer[i] = (byte) (i + 1);
+    }
+    final byte[] expected = new byte[32];
+    for (int i = 0; i < expected.length; ++i) {
+      expected[i] = (byte) (i + 1);
+    }
+
+    final var key = PublicKey.readPubKey(buffer);
+    assertArrayEquals(expected, key.toByteArray());
+    Arrays.fill(buffer, (byte) 0);
+    assertArrayEquals(expected, key.toByteArray());
+
+    assertThrowsExactly(IndexOutOfBoundsException.class, () -> PublicKey.readPubKey(new byte[31]));
+  }
+
+  /// `copyByteArray` returns the key's bytes in a new array on every call, so modifying the
+  /// result never changes the key (`CONVENTIONS.md`, byte-array ownership).
+  @Test
+  void copyByteArrayReturnsAFreshIndependentCopy() {
+    final byte[] bytes = HexFormat.of().parseHex(RFC8032_PUBLIC_KEY);
+    final var key = PublicKey.createPubKey(bytes.clone());
+
+    final byte[] copy = key.copyByteArray();
+    assertArrayEquals(bytes, copy);
+    assertNotSame(key.toByteArray(), copy);
+    assertNotSame(copy, key.copyByteArray());
+
+    copy[0] ^= 1;
+    assertArrayEquals(bytes, key.toByteArray());
+    assertEquals(RFC8032_PUBLIC_KEY_BASE58, key.toBase58());
+  }
+
+  /// `l()` is a key's serialized length: the 32 bytes that `write` emits.
+  @Test
+  void serializedLengthIsThe32BytesWriteEmits() {
+    final var key = PublicKey.createPubKey(HexFormat.of().parseHex(RFC8032_PUBLIC_KEY));
+    assertEquals(32, key.l());
+    assertEquals(key.write(new byte[PublicKey.PUBLIC_KEY_LENGTH], 0), key.l());
+  }
+
+  /// Equality holds in both directions whatever the implementation. The lookup-table entry
+  /// and view call themselves equal to any [PublicKey] with the same 32 bytes, so a key
+  /// from [PublicKey#createPubKey] must say the same of them, and must still deny a
+  /// different key, an object that is not a key, and `null`.
+  @Test
+  void equalityWithOtherPublicKeyImplementationsIsSymmetric() {
+    final byte[] bytes = HexFormat.of().parseHex(RFC8032_PUBLIC_KEY);
+    final var key = PublicKey.createPubKey(bytes.clone());
+    final var entry = new AccountIndexLookupTableEntry(bytes.clone(), 3);
+    final byte[] table = new byte[7 + PublicKey.PUBLIC_KEY_LENGTH];
+    System.arraycopy(bytes, 0, table, 7, PublicKey.PUBLIC_KEY_LENGTH);
+    final var view = new AccountIndexLookupTableView(table, 7, 4);
+
+    assertTrue(entry.equals(key), "the entry's own answer, which the key must mirror");
+    assertTrue(key.equals(entry));
+    assertTrue(view.equals(key), "the view's own answer, which the key must mirror");
+    assertTrue(key.equals(view));
+
+    final byte[] otherBytes = bytes.clone();
+    otherBytes[PublicKey.PUBLIC_KEY_LENGTH - 1] ^= 1;
+    final var otherEntry = new AccountIndexLookupTableEntry(otherBytes, 3);
+    assertFalse(otherEntry.equals(key));
+    assertFalse(key.equals(otherEntry));
+    assertFalse(key.equals(RFC8032_PUBLIC_KEY_BASE58), "the key's base58 text is not the key");
+    assertFalse(key.equals(null));
+  }
+
+  /// Solana caps every seed at 32 bytes (`MAX_SEED_LEN`): `create_program_address` fails
+  /// with `MaxSeedLengthExceeded` past it, and `find_program_address` treats that as a miss
+  /// on every bump and panics that no viable bump seed exists. Both derivations here refuse
+  /// a 33-byte seed and accept one of exactly 32 bytes.
+  @Test
+  void programAddressSeedsLongerThan32BytesAreRefused() {
+    final var programId = PublicKey.fromBase58Encoded("BPFLoader1111111111111111111111111111111111");
+    final var overlong = "a".repeat(33);
+    final var seeds = List.of("seed".getBytes(US_ASCII), overlong.getBytes(US_ASCII));
+
+    final var create = assertThrowsExactly(
+        IllegalArgumentException.class,
+        () -> PublicKey.createProgramAddress(seeds, programId)
+    );
+    assertEquals("Seed [" + overlong + "] exceeds maximum length of [32].", create.getMessage());
+    final var find = assertThrowsExactly(
+        IllegalArgumentException.class,
+        () -> PublicKey.findProgramAddress(seeds, programId)
+    );
+    assertEquals(create.getMessage(), find.getMessage());
+
+    final var maximum = List.of("seed".getBytes(US_ASCII), "a".repeat(32).getBytes(US_ASCII));
+    assertDoesNotThrow(() -> PublicKey.createProgramAddress(maximum, programId));
+    assertDoesNotThrow(() -> PublicKey.findProgramAddress(maximum, programId));
+  }
+
+  private static final BigInteger FIELD_PRIME = BigInteger.TWO.pow(255).subtract(BigInteger.valueOf(19));
+  // d = -121665/121666 mod p
+  private static final BigInteger EDWARDS_D = BigInteger.valueOf(-121665)
+      .multiply(BigInteger.valueOf(121666).modInverse(FIELD_PRIME))
+      .mod(FIELD_PRIME);
+
+  /// Whether `encoded` decompresses to a curve point as curve25519-dalek decides it for
+  /// Solana's `bytes_are_curve_point`: mask the sign bit, read `y` little-endian and reduce
+  /// it mod p, then ask Euler's criterion whether `x^2 = (y^2 - 1) / (d y^2 + 1)` has a
+  /// root. `BigInteger` arithmetic, sharing nothing with `Ed25519Util`.
+  private static boolean decompresses(final byte[] encoded) {
+    final byte[] bigEndian = new byte[encoded.length];
+    for (int i = 0; i < bigEndian.length; ++i) {
+      bigEndian[i] = encoded[bigEndian.length - 1 - i];
+    }
+    bigEndian[0] &= 0x7f;
+    final var y = new BigInteger(1, bigEndian).mod(FIELD_PRIME);
+    final var yy = y.multiply(y).mod(FIELD_PRIME);
+    final var u = yy.subtract(BigInteger.ONE).mod(FIELD_PRIME);
+    // d*y^2 + 1 is never 0 mod p because -1/d is not a square, so the inverse always exists
+    final var v = EDWARDS_D.multiply(yy).add(BigInteger.ONE).mod(FIELD_PRIME);
+    final var xx = u.multiply(v.modInverse(FIELD_PRIME)).mod(FIELD_PRIME);
+    return xx.signum() == 0 || xx.modPow(FIELD_PRIME.shiftRight(1), FIELD_PRIME).equals(BigInteger.ONE);
+  }
+
+  /// Solana refuses a program address on the ed25519 curve, which could have a private key
+  /// (`create_program_address` returns `InvalidSeeds`); this library returns `null`
+  /// instead. Every one-byte seed under one program is checked against [#decompresses],
+  /// hashing here the documented preimage: the seeds, then the program id, then the
+  /// ASCII marker `ProgramDerivedAddress`. Both outcomes must occur.
+  @Test
+  void createProgramAddressIsNullExactlyWhenTheHashIsOnTheCurve() throws Exception {
+    final var programId = PublicKey.fromBase58Encoded("BPFLoader1111111111111111111111111111111111");
+    final var sha256 = MessageDigest.getInstance("SHA-256");
+    int onCurve = 0;
+    for (int b = 0; b < 256; ++b) {
+      final byte[] seed = {(byte) b};
+      sha256.update(seed);
+      sha256.update(programId.toByteArray());
+      sha256.update("ProgramDerivedAddress".getBytes(US_ASCII));
+      final byte[] hash = sha256.digest();
+
+      final var address = PublicKey.createProgramAddress(List.of(seed), programId);
+      if (decompresses(hash)) {
+        ++onCurve;
+        assertNull(address, "seed " + b);
+      } else {
+        assertEquals(PublicKey.createPubKey(hash), address, "seed " + b);
+      }
+    }
+    assertNotEquals(0, onCurve, "no seed hashed onto the curve");
+    assertNotEquals(256, onCurve, "every seed hashed onto the curve");
+  }
+
+  /// The two-argument factory wraps an address and bump found elsewhere and keeps both; it
+  /// is given no seeds, so it records none.
+  @Test
+  void programDerivedAddressFromAnAddressAndBumpKeepsBoth() {
+    final var address = PublicKey.fromBase58Encoded("HJPjoWUrhoZzkNfRpHuieeFk9WcZWjwy6PBjZ81ngndJ");
+    final var pda = ProgramDerivedAddress.createPDA(address, 255);
+    assertSame(address, pda.publicKey());
+    assertEquals(255, pda.nonce());
+    assertNull(pda.seeds());
   }
 }

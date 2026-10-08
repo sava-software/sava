@@ -2,10 +2,15 @@ package software.sava.core.accounts.vanity;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.Signer;
+import software.sava.core.encoding.Base58;
 
+import java.util.Arrays;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -18,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /// [software.sava.core.accounts.PublicKey] is read straight from those bytes, so
 /// comparing against `publicKey().toBase58()` checks the incremental encode
 /// against a full one. A mis-unpacked offset shows up as a match that does not
-/// hold on the real address.
+/// hold on the real address, or as a real match the worker misses; the
+/// leading-zero count only shows on a key with a leading zero byte.
 ///
 /// Every search runs off a [FixedSeedSecureRandom], so a failure here is
 /// reproducible rather than a one-off draw.
@@ -67,6 +73,34 @@ final class MaskWorkerTests {
     return new BeginsWithMaskWorker(
         null, null, secureRandom, null, null, null, false,
         beginsWith, 1, found, searched, results, checkFound, maxSearches);
+  }
+
+  /// One key of a fixed-seed search, re-derived outside the workers.
+  ///
+  /// @param number    the 1-based attempt that generates it
+  /// @param publicKey the key's public half
+  /// @param address   its address
+  private record Draw(int number, byte[] publicKey, String address) {
+  }
+
+  /// Replays the key sequence a worker on `FixedSeedSecureRandom(seed)` generates: every
+  /// attempt is exactly one 32-byte draw, so the n-th draw here is the seed of the worker's
+  /// n-th key. The key comes from [Signer#createFromPrivateKey] and the address from the
+  /// copying [Base58#encode], neither of which shares the workers' incremental encoders.
+  ///
+  /// @return the first draw within `limit` that `matches` accepts
+  private static Draw firstDraw(final long seed, final int limit, final Predicate<Draw> matches) {
+    final var replay = new FixedSeedSecureRandom(seed);
+    final byte[] privateKey = new byte[32];
+    for (int number = 1; number <= limit; ++number) {
+      replay.nextBytes(privateKey);
+      final byte[] publicKey = Signer.createFromPrivateKey(privateKey).publicKey().toByteArray();
+      final var draw = new Draw(number, publicKey, Base58.encode(publicKey));
+      if (matches.test(draw)) {
+        return draw;
+      }
+    }
+    return fail("no key of seed " + seed + " within " + limit + " draws matched");
   }
 
   private static Result runToResult(final BeginsWithMaskWorker worker, final ArrayBlockingQueue<Result> results) {
@@ -172,6 +206,69 @@ final class MaskWorkerTests {
     final var address = result.publicKey().toBase58();
     assertEquals("zz", address.substring(address.length() - 2).toLowerCase(),
         "address did not end with a match: " + address);
+  }
+
+  /// A key's leading zero bytes are the leading `1`s of its address, one each, and a
+  /// prefix mask must see them: the tail worker resumes its encode from a packed state
+  /// that carries the leading-zero count, and writes those `1`s back before checking the
+  /// prefix. For each seed the replay finds the first key with a leading zero byte, and
+  /// the search asks for a `1` prefix and that key's own last character, so no earlier key
+  /// matches both ends and the worker must find exactly that key on exactly that attempt.
+  @Test
+  @Timeout(60)
+  void aPrefixMaskSeesTheLeadingOnesOfLeadingZeroBytes() {
+    final var head = Subsequence.create("1", true, false, false);
+    for (final long seed : FixedSeedSecureRandom.SEEDS) {
+      final var target = firstDraw(seed, 5_000, draw -> draw.publicKey()[0] == 0);
+      final var address = target.address();
+      assertEquals('1', address.charAt(0), "base58 writes a leading zero byte as a 1: " + address);
+      final var tail = Subsequence.create(address.substring(address.length() - 1), true, false, false);
+
+      final var entropy = new FixedSeedSecureRandom(seed, 2L * target.number());
+      final var results = newResults();
+      new MaskWorker(
+          null, null, entropy, null, null, null, false,
+          head, tail, 1, new AtomicInteger(0), new AtomicLong(0), results, CHECK_FOUND, target.number()
+      ).run();
+
+      final var result = results.poll();
+      assertNotNull(result, "seed " + seed + " missed " + address + " at attempt " + target.number());
+      assertEquals(address, result.publicKey().toBase58(), "seed " + seed);
+      assertEquals(target.number(), entropy.draws(), "seed " + seed);
+    }
+  }
+
+  /// A key whose tail matches but whose head does not is a miss, like any other: it
+  /// counts once and the attempt cap still ends the search on it. Only a real match lets
+  /// the tail worker skip the cap check, as `createGenerator` documents. The replay finds
+  /// the first key ending in the tail mask; the cap is set to that attempt and the prefix
+  /// mask can never match, so the search must end there having drawn and counted exactly
+  /// the cap.
+  @Test
+  @Timeout(60)
+  void aTailOnlyMatchOnTheLastAttemptStillEndsTheSearchAtTheCap() {
+    final long seed = FixedSeedSecureRandom.SEEDS[0];
+    final var head = Subsequence.create("savasava", true, false, false);
+    final var tail = Subsequence.create("z", false, false, false);
+    final var tailOnly = firstDraw(seed, 1_000,
+        draw -> draw.address().endsWith("z") || draw.address().endsWith("Z"));
+    assertFalse(tailOnly.address().startsWith("savasava"), tailOnly.address());
+    final int cap = tailOnly.number();
+    assertTrue(cap < CHECK_FOUND, "no checkFound boundary may fall inside the search");
+
+    final var entropy = new FixedSeedSecureRandom(seed, 2L * cap);
+    final var found = new AtomicInteger(0);
+    final var searched = new AtomicLong(0);
+    final var results = newResults();
+    new MaskWorker(
+        null, null, entropy, null, null, null, false,
+        head, tail, 1, found, searched, results, CHECK_FOUND, cap
+    ).run();
+
+    assertEquals(cap, entropy.draws(), "the search ran past its cap after a tail-only match");
+    assertEquals(cap, searched.get());
+    assertEquals(0, found.get());
+    assertTrue(results.isEmpty());
   }
 
   /// A budget tight enough that exhausting it is itself the assertion.
@@ -382,5 +479,66 @@ final class MaskWorkerTests {
     assertSame(searched, worker.searched());
     assertSame(results, worker.results());
     assertEquals(0, secureRandom.draws(), "building a worker must not start searching");
+  }
+
+  /// A tail mask that matches every key, at a length the library's own masks never reach.
+  private record AnyTail(int length) implements Subsequence {
+
+    @Override
+    public boolean contains(final char[] encoded, final int from) {
+      return true;
+    }
+
+    @Override
+    public String subsequence() {
+      return "?".repeat(length);
+    }
+
+    @Override
+    public boolean caseSensitive() {
+      return true;
+    }
+
+    @Override
+    public boolean _1337Numbers() {
+      return false;
+    }
+
+    @Override
+    public boolean _1337Letters() {
+      return false;
+    }
+
+    @Override
+    public int numCombinations() {
+      return 1;
+    }
+  }
+
+  /// `Subsequence` is a public interface, so a caller's tail mask can be longer than the eight
+  /// characters `Subsequence.create` allows. The tail worker resumes the full encode from the
+  /// offsets `beginMutableEncode` packed into a long, relocated into the scratch buffer by the
+  /// tail's length: an offset unpacked from the wrong bits or relocated the wrong way lands
+  /// outside the buffer once the tail is long, where a short tail would have hidden it. A tail
+  /// that matches every key sends the first draw down that path at two long lengths, and the
+  /// result must be the genuine key pair with its genuine address.
+  @Test
+  void aLongCallerTailResumesTheEncodeInsideTheScratchBuffer() {
+    for (final int tailLength : new int[]{12, 34}) {
+      final var results = newResults();
+      final var secureRandom = new FixedSeedSecureRandom(1L, 8);
+      new MaskWorker(
+          null, null, secureRandom, null, null, null, false,
+          null, new AnyTail(tailLength), 1, new AtomicInteger(0), new AtomicLong(0), results, 16, 64
+      ).run();
+
+      final var result = results.poll();
+      assertNotNull(result, () -> "tail length " + tailLength + ": the first draw matches");
+      assertEquals(1, secureRandom.draws());
+      final byte[] keyPair = result.keyPair();
+      assertEquals(PublicKey.readPubKey(keyPair, 32), result.publicKey());
+      assertEquals(Signer.createFromPrivateKey(Arrays.copyOfRange(keyPair, 0, 32)).publicKey(), result.publicKey());
+      assertEquals(Base58.encode(Arrays.copyOfRange(keyPair, 32, 64)), result.publicKey().toBase58());
+    }
   }
 }
