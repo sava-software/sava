@@ -1,5 +1,30 @@
 # Changelog
 
+## [25.12.0](https://github.com/sava-software/sava/compare/25.11.2...25.12.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** PublicKey.compareTo orders keys by their bytes as unsigned values, matching Solana's Pubkey order. The relative order of two keys whose first differing byte straddles 0x80 flips, so TreeMap, TreeSet and sorted-stream iteration over keys changes, and anything persisted in the old order must be re-sorted before it is binary-searched. A value already derived from the old order must keep being derived with it: compare the key bytes with Arrays.compare over toByteArray. A PublicKey implementation outside this library must order the same way.
+
+### Features
+
+* **vanity:** add saved-key signing verification ([4029202](https://github.com/sava-software/sava/commit/402920224757783b87d263976b70d7062af987c5))
+
+
+### Bug Fixes
+
+* **core:** count matched keys and the final stretch in the vanity search counter ([1326aca](https://github.com/sava-software/sava/commit/1326aca0188802f35523abfa6a31989ebc505ac1))
+* **core:** fix lookup record string forms and size the ranged Base58 encode's buffer from the range ([f5df205](https://github.com/sava-software/sava/commit/f5df205fc89a138b6c79b1dd3a638dcef92cf241))
+* **core:** order PublicKey by unsigned bytes, as Solana does ([9c56350](https://github.com/sava-software/sava/commit/9c5635057418ad8fda1f23a00d91f012d343f1e8))
+* **core:** refuse a header declaring no required signatures where a fee payer is resolved ([1754a99](https://github.com/sava-software/sava/commit/1754a99648538c7ad22708364a80dc28e450aab4))
+* **core:** reject account indexes outside a byte in lookupAccountIndexOrThrow ([bfc1368](https://github.com/sava-software/sava/commit/bfc1368f498233b6d9bb01e6c1c6ad32fa3aec35))
+* **core:** reject malformed lookup-table entries and views at construction ([b01c3f3](https://github.com/sava-software/sava/commit/b01c3f3010cec0624f701680513ea832582722fc))
+* **core:** serialize encrypted KDF metadata as a JSON object ([4029202](https://github.com/sava-software/sava/commit/402920224757783b87d263976b70d7062af987c5))
+* **core:** treat two fee-payer metas as a tie when sorting accounts ([1658037](https://github.com/sava-software/sava/commit/165803719b925414d24153f9389594329b963d4b))
+* **rpc:** refuse malformed notification results and null generic keys, and attribute account notifications by params.subscription ([ccb123b](https://github.com/sava-software/sava/commit/ccb123b94046422e94f0c36c825796b5e64ba3e0))
+* **vanity:** preserve Unicode passwords in Docker and require saved-key verification ([4029202](https://github.com/sava-software/sava/commit/402920224757783b87d263976b70d7062af987c5))
+
 ## [25.11.2](https://github.com/sava-software/sava/compare/25.11.1...25.11.2) (2026-09-25)
 
 
