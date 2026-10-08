@@ -127,8 +127,9 @@ public final class JsonUtil {
 
   /// Renders the bytes as a JSON array of their unsigned values, `null` for a null array.
   /// The sizing hint is clamped (see [#jsonIntArrayCapacity]); the rendering itself is
-  /// bounded by the `String` length limit, which the output of about 2^29 elements or
-  /// more exceeds on a compact-strings JVM.
+  /// bounded by the `String` length limit, which the worst-case output (three digits per
+  /// element) reaches at 2^29 elements on a compact-strings JVM; smaller values render
+  /// more compactly, down to two characters per element, and reach it at about 2^30.
   public static String toJsonIntArray(final byte[] data) {
     if (data == null) {
       return "null";
