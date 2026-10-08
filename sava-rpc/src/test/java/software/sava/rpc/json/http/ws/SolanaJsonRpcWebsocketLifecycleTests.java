@@ -1256,6 +1256,8 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         cycleCompleted.complete(null);
       }
     }, "parked-websocket-maintenance-test");
+    // A hold leaked by the listener path would park the cycle thread for good below; fail here.
+    assertEquals(0, ws.lock.getHoldCount(), "the listener path must release the lifecycle lock");
     cycle.start();
 
     boolean enteredAwait = false;
@@ -1377,6 +1379,8 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
 
     boolean enteredAwait = false;
     boolean queuedBeforeClose = false;
+    // A hold leaked by the listener path would park the cycle thread for good below; fail here.
+    assertEquals(0, ws.lock.getHoldCount(), "the listener path must release the lifecycle lock");
     cycle.start();
     try {
       // Completing beforeAwait while retaining the lifecycle lock makes this acquisition wait
@@ -2186,6 +2190,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertEquals(1, scheduler.deferred.size(), "the cancellation must not admit another attempt");
 
       scheduler.deferred.getFirst().task().run();
+      assertTrue(owner.isDone() && stillJoined.isDone(), "the attempt must be settled before it is joined");
       assertSame(built, owner.join());
       assertSame(built, stillJoined.join());
       assertTrue(joined.isCancelled(), "only the caller's abandoned view remains cancelled");
@@ -2439,6 +2444,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
           "a failed prior builder future must not escape from the retry's caller stack");
 
       assertNotNull(retry);
+      assertTrue(retry.isDone(), "the successor attempt must be settled before it is joined");
       assertSame(successor, retry.join());
       assertEquals(2, builder.builds, "the retry owns a fresh builder invocation");
     } finally {
@@ -2519,6 +2525,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertEquals(2, builder.builds,
           "the queued successor starts only after the throwing builder invocation exits");
       assertNotNull(retry.get());
+      assertTrue(retry.get().isDone(), "the successor attempt must be settled before it is joined");
       assertSame(successor, retry.get().join());
       assertLifecycleLockReleasedFromAnotherThread(ws);
     } finally {
@@ -2555,6 +2562,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
       assertEquals(2, builder.builds,
           "exceptional builder release transfers ownership to the queued successor");
       assertNotNull(retry.get());
+      assertTrue(retry.get().isDone(), "the successor attempt must be settled before it is joined");
       assertSame(successor, retry.get().join());
       assertLifecycleLockReleasedFromAnotherThread(ws);
     } finally {
@@ -2689,6 +2697,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         }, null, null, null);
     final var connected = ws.connect();
     assertNotNull(connected);
+    assertTrue(connected.isDone(), "the attempt must be settled before it is joined");
     assertSame(socket, connected.join(), "the build succeeded even though onOpen is still queued");
 
     ws.close();
@@ -3004,6 +3013,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     try {
       final var completed = ws.connect();
       assertNotNull(completed);
+      assertTrue(completed.isDone(), "the attempt must be settled before it is joined");
       assertSame(first, completed.join(), "the first handshake has produced a socket");
 
       assertNotNull(ws.connect());
@@ -3246,6 +3256,7 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
           "the immediate branch's bridge must settle the attempt before connect() returns");
       assertFalse(attempt.toCompletableFuture().isCompletedExceptionally(),
           "a successful build must settle the attempt successfully, not strand or fail it");
+      assertTrue(attempt.toCompletableFuture().isDone(), "the attempt must be settled before it is joined");
       assertSame(socket, attempt.toCompletableFuture().join());
     }
   }
@@ -3655,7 +3666,9 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
         new RecordingExecutor(), scheduler, null, (_, _, _) -> {
         }, null, null, null);
     try {
-      assertSame(socket, ws.connect().join());
+      final var attempt = ws.connect();
+      assertTrue(attempt.toCompletableFuture().isDone(), "the attempt must be settled before it is joined");
+      assertSame(socket, attempt.toCompletableFuture().join());
 
       ws.close();
 

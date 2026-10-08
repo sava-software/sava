@@ -2020,6 +2020,7 @@ final class SolanaJsonRpcWebsocketReconnectTests {
 
       scheduler.deferred.getFirst().task().run();
       assertEquals(1, webSocketBuilder.builds, "the one attempt builds once");
+      assertTrue(second.toCompletableFuture().isDone(), "the attempt must be settled before it is joined");
       assertSame(socket, second.toCompletableFuture().join());
       assertTrue(first.toCompletableFuture().isCancelled(), "the abandoned view stays abandoned");
     }

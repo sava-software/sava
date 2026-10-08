@@ -193,20 +193,37 @@ returns null anyway" acceptance against that capability.
     `StringBuilder` constructor.
 - **`# impossible zero mark`** — `JsonRpcValueResponseParser$Parser.parse`
   `ConditionalsBoundaryMutator`, on the `valueMark < 0` boundary.
-  - Reason: its only distinguishing value is zero, but a mark captured after the
-    enclosing object's `value` member name can never be zero: the two reachable
-    domains are the `-1` absent-value sentinel and a positive cursor position.
-  - Oracle: owed.
-  - Invalidated if (derived): a mark source that can be zero.
+  - Reason: its only distinguishing value is zero, which the mark cannot take. It is
+    the `-1` sentinel until a `value` member is seen, then the iterator's position just
+    past that member's name-separator: an index into the body, which `checkResponse`
+    parses from its first byte. A `value` member inside `result` sits behind at least
+    `{"result":{"value":`, so the position is never zero.
+  - Oracle: `ValueResponseRouteTests.aValueBeforeItsContextIsParsedFromWhereTheValueStarts`
+    sweeps the shortest value-first envelopes, with whitespace and every value type,
+    and finds the parser handed the iterator exactly where the JSON grammar puts the
+    value.
+  - Invalidated if (derived): the mark can fall on the first byte of the iterator's
+    buffer, as it could if the parser were handed an iterator over a bare `value`.
 - **`# eager deferred convergence`** — `JsonRpcValueResponseParser$Parser.test`
   `RemoveConditionalMutator_EQUAL_IF`: always records and skips a value even when its
   context was already parsed.
-  - Reason: the final parse resets to the same value bytes and supplies the same
-    context, so eager and deferred paths invoke the value parser once with the same
-    inputs and return the same result.
-  - Oracle: owed.
-  - Invalidated if (derived): the value parser gains side effects, or the context
-    differs between the eager and deferred paths.
+  - Reason: on a well-formed response the final parse resets to the same value bytes
+    and supplies the same context, so eager and deferred paths invoke the value parser
+    once with the same inputs and return the same result. The paths leave the cursor in
+    different places, which nothing observes: `applyResponse` returns the parser's
+    result and drops the iterator. They part on a result holding two `context` members
+    around the value, or two `value` members (RFC 8259 section 4 leaves that
+    unpredictable), on a truncated or malformed body (the eager path skips the value
+    before parsing it, so the parser may run once or not at all before the failure), and
+    on a value parser that reads past its own value (`applyGenericResponseValue` is
+    protected, so a caller's parser can).
+  - Oracle: `ValueResponseRouteTests.bothMemberOrdersParseTheValueOnceWithTheSameInputs`
+    records each call's context, starting position and consumed text for every value
+    type in both member orders, and `theClientsValueParsersAgreeAcrossMemberOrders`
+    compares a sample of the client's own value parsers across the two orders.
+  - Invalidated if (derived): the client's value parsers gain side effects or stop
+    consuming exactly their value, the context differs between the eager and deferred
+    paths, or something reads the iterator after `parseResponse` returns.
 - **`# request debug only`** — `JsonHttpClient.newPostRequest`
   `VoidMethodCallMutator`.
   - Reason: removing the DEBUG body log does not change the URI, timeout, method,
@@ -259,8 +276,8 @@ Kept apart from the arguments above; none of it is live evidence.
 
 Targets `software.sava.rpc.json.http.ws.*`. Every member below is a
 `SolanaJsonRpcWebsocket` method unless another class is named, and every row is
-`SURVIVED`. Oracles are owed for every ws family whose bullet does not name one;
-invalidation conditions are derived from each reason's premise.
+`SURVIVED`. Every family names its oracle; an invalidation condition marked
+"(derived)" negates its reason's premise, the others are concrete.
 
 ### Hash and sentinel domains
 
@@ -269,18 +286,20 @@ invalidation conditions are derived from each reason's premise.
   `equals`/hash contract and changes only bucket distribution. Oracle: the
   `Object.hashCode` contract. Invalidated if (derived): a caller depends on hash
   distribution rather than the contract.
-- **`# positive sentinel gap`** — `closed` `ConditionalsBoundaryMutator`. Reason:
-  websocket message ids start positive and close jumps directly to `Long.MIN_VALUE`;
-  zero, the sole value separating `< 0` from `<= 0`, is unreachable. Invalidated if
-  (derived): message ids can reach zero.
+- **`# positive sentinel gap`** — `closed` `ConditionalsBoundaryMutator`. Reason: the
+  request-id counter is the closed flag, and `< 0` and `<= 0` differ only at zero. The
+  counter starts at 1 and every request of every kind adds one, so while open it
+  reaches zero only by wrapping past `Long.MAX_VALUE`; `close()` replaces it with
+  `Long.MIN_VALUE`, and only the lock-held requests already past their closed check,
+  and the listener thread's orphan cancellation (gated by connection resolution), step
+  it up from there, each by one. Oracle: `MessageIdSentinelTests` reads the counter off
+  the wire (ids 2, 3, … across subscribes and a cancellation) and holds `closed()` to
+  the `SolanaRpcWebsocket` contract, "says only that close() was called"; a closed
+  instance mints no id. Invalidated if: a path other than `close()` sets, decrements or
+  resets the counter, or ids stop starting positive.
 
 ### Capacity and buffer routing
 
-- **`# equal-capacity copy`** — `ensureCapacity` `ConditionalsBoundaryMutator`.
-  Reason: exact capacity enters the growth branch; the clamp grows a sub-maximum
-  buffer and performs a same-sized copy only at `maxMessageLength`, without changing
-  bytes or parsing. Invalidated if (derived): the growth branch changes bytes, or the
-  clamp no longer bounds the copy.
 - **`# capacity math`** — `ensureCapacity` `MathMutator`, the `- 2` sibling on the
   growth hint `((long) conn.buffer.length << 1) + 2`. Reason: it moves the hint four
   chars below the doubling, and `Math.clamp` still allocates at least the required
@@ -297,14 +316,35 @@ invalidation conditions are derived from each reason's premise.
   2026-10-07). Invalidated if (derived): the hint can drive the clamped size below the
   required capacity, or more than a constant factor below the doubling.
 - **`# zero-offset route convergence`** — `onText` `ConditionalsBoundaryMutator`.
-  Reason: it sends an unfragmented message through the assembled-buffer route, which
-  parses the same characters. Invalidated if (derived): the two routes parse
-  different characters.
+  Reason: it sends a whole frame through the assembled-buffer route, which parses the
+  same characters. A frame with no backing array takes identical steps either way; an
+  array-backed one is copied into the reassembly buffer, which may grow (the
+  `reassemblyCapacity()` seam shows it), where the original parses it in place: a
+  constant factor bounded by `maxMessageLength`, as for `# capacity math`, and not a
+  property any contract states. A malformed frame's `JsonException` reports a
+  position and a context excerpt from whichever buffer was parsed (`offset()`,
+  `context()` and so `getMessage()`), which already differ between backings in the
+  original; only the failure's `op()` is message-relative. Oracle:
+  `TextFrameBackingParityTests` delivers one message from the backings a listener's
+  `CharSequence` commonly takes (heap at zero and non-zero offsets,
+  slice, read-only, byte view, wrapped `String`, `String`, `StringBuilder`), whole and
+  in fragments, and compares the payload read back with the generated one, and a
+  malformed frame's reported failure by its `op()`. Invalidated if: parsing whole
+  frames in place becomes a contract (no copy, or a reassembly buffer whole frames
+  never grow), or parse failures promise message-relative positions or excerpts.
 - **`# equivalent buffer copy`** — `onText` `RemoveConditionalMutator_EQUAL_ELSE`,
-  four siblings. Reason: the mutants choose `arraycopy`, `CharBuffer.get`, or a
-  wrapped buffer for the same remaining characters; only the callback-owned buffer
-  cursor and allocation route differ. Invalidated if (derived): a caller reads the
-  callback-owned buffer cursor after `onText` returns.
+  four siblings: the `instanceof CharBuffer` test and the three `hasArray()` tests.
+  Reason: the mutants choose `arraycopy`, `CharBuffer.get`, or a wrapped buffer for
+  the same remaining characters. What changes is the delivered buffer's position,
+  which `CharBuffer.get` advances, and, for the two siblings that reach a whole
+  array-backed frame, the allocation route of `# zero-offset route convergence`. The
+  position belongs to the caller's buffer: the engine promises nothing about it, the
+  original already advances it for every buffer without an array, and the listener
+  contract ends the engine's access when its returned stage completes. Oracle:
+  `TextFrameBackingParityTests` (above), and JDK 25's `WebSocketImpl.processText`,
+  which reads nothing back from the buffer it delivered. Invalidated if: the engine
+  promises to leave the delivered buffer's position alone, or keeps the buffer past
+  its returned stage.
 
 ### Literal and convergent registry returns
 
@@ -320,136 +360,318 @@ invalidation conditions are derived from each reason's premise.
   `SubscriptionResultContractTests`. Invalidated if (derived): an exit stops returning
   a literal.
 - **`# same-map re-put`** — `queueSubscription` `RemoveConditionalMutator_EQUAL_IF`,
-  two siblings. Reason: it stores the map already held at the same key. Invalidated
-  if (derived): the put can store a different map.
-- **`# redundant outer duplicate guard`** — `RemoveConditionalMutator_EQUAL_ELSE` on
-  `accountSubscribe`, `logsSubscribe`, `programSubscribe` and `signatureSubscribe`.
-  Reason: a duplicate reaches the lock-held `queueSubscription` check, which returns
-  the same result before minting an id. Invalidated if (derived): the lock-held check
-  is removed or answers differently from the outer guard.
+  two siblings, one per overload (String-keyed and `PublicKey`-keyed). Reason: forcing
+  the `byCommitment == null` guard re-puts the commitment map the same lock hold just
+  read; every mutator of the typed registries holds the lifecycle lock, so the key still
+  maps to that map, and putting the identical value leaves the mapping as it was.
+  Oracle: the `Map.put` contract; `HeldRegistryNamespaceTests`'
+  `aSecondCommitmentJoinsTheHeldMapOfAStringKey` and
+  `aSecondCommitmentJoinsTheHeldMapOfAPublicKey` sweep an absent, held, emptied and
+  re-created key and assert what both routes keep: a second commitment joins the held
+  map, the first stays addressable, and the key leaves with its last commitment.
+  Invalidated if (derived): the put can store a different map, or a typed-registry
+  mutator runs without the lifecycle lock.
 - **`# compute-if-absent convergence`** — `subscribe`
-  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: it returns the already-present
-  generic method map. Invalidated if (derived): the map can be absent on that path.
+  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: forced past its `registered != null`
+  arm, `subscribe` asks `computeIfAbsent` for the namespace that `get` returned in the
+  same lock hold, and every `genericSubs` mutator holds that lock, so the present
+  namespace comes back. Oracle: the `Map.computeIfAbsent` contract (it returns the
+  current value when one is present);
+  `HeldRegistryNamespaceTests.aSecondKeyJoinsTheHeldNamespaceOfAGenericMethod` sweeps an
+  absent, held, emptied and re-created namespace and asserts that a second key joins the
+  held one, is bound to its first key's cancellation method, and the namespace leaves
+  only with its last key. Invalidated if (derived): the namespace can be absent or
+  replaced on that path.
 
 ### Build and reconnect ownership
 
 - **`# settled prior build`** — `connect` `RemoveConditionalMutator_EQUAL_ELSE`.
-  Reason: follows from the single-flight bridge: a successor cannot reach cleanup
-  until the prior build is done. Invalidated if (derived): builds stop being
-  single-flight.
+  Reason: it sends the predecessor's build to the `join()` arm instead of `cancel`,
+  which differs only while that build is pending, and no successor is admitted then:
+  a build is installed only beside its own bridge, an installed build's bridge settles
+  only from that build's completion (the scheduler seam honours `schedule()`'s
+  contract, so a call that throws or returns null never runs its task), and retirement
+  and `close()` clear the two together. Oracle: `ConnectSuccessorAdmissionTests`
+  asserts, at each admission, that the installed build is done or cancelled and that
+  the build count moved as the shape predicts, across a pending handshake joined by
+  callers, a deferred attempt, a build call that throws, a transport retired mid-build
+  and a re-entrant `connect()` from the attempt's own completion. Invalidated if: a
+  successor can be admitted while an installed build is pending, or the scheduler seam
+  is driven outside `schedule()`'s contract.
 - **`# adopted build identity`** — `connect` `RemoveConditionalMutator_EQUAL_ELSE`,
-  two siblings. Reason: a successful build and the socket delivered to its attempt
-  listener are the same object. Invalidated if (derived): the listener can receive a
-  different socket.
-- **`# current socket identity`** — `close` `RemoveConditionalMutator_EQUAL_ELSE`.
-  Reason: the close-side twin of the above: an adopted completed build is the current
-  connection and must remain on the polite close path. Invalidated if (derived): an
-  adopted build can differ from the current connection.
+  the two operands of `replaced == null || replaced.socket != unadopted`. Reason: the
+  first sibling aborts the displaced connection's socket a second time, after the
+  displacement above aborted it; the second skips the abort whenever a connection was
+  displaced, which differs only if that connection's socket is not the build's
+  result. Oracle: the `java.net.http.WebSocket` contract. `abort()`: "Subsequent
+  invocations of abort will have no effect"; and a `WebSocket` "invokes methods of the
+  associated listener passing itself as an argument", so the socket a build completes
+  with is the one its attempt listener adopts, and production adoption is fenced to
+  the current attempt's listener (the engine's own `WebSocket.Listener.onOpen` is
+  reachable only by casting the published type to the JDK interface, outside the
+  published API). Invalidated if: `abort()` stops being idempotent, or builders that
+  hand their listener a socket other than the one their future completes with are
+  supported.
+- **`# current socket identity`** — `close` `RemoveConditionalMutator_EQUAL_ELSE`, the
+  second operand of `conn == null || conn.socket != unadopted` (the first is killed by
+  `closeKeepsAnAdoptedBuildPoliteUntilItsWatchdog`). Reason: it skips the abort of the
+  settled build's socket whenever a connection is current, which differs only if that
+  connection's socket is not the build's result. Oracle: the `WebSocket` identity
+  contract quoted above, for production adoption. Invalidated if: the same
+  out-of-contract builders are supported.
 - **`# zero-delay convergence`** — `connect` `ConditionalsBoundaryMutator`. Reason:
-  it differs only at the exact throttle edge, where both routes connect immediately.
-  Invalidated if (derived): the routes diverge at a zero delay.
-- **`# ignored null completion`** — `lambda$ownBuild$0`
-  `RemoveConditionalMutator_EQUAL_IF`. Reason: it can fault only an ignored dependent
-  stage, not the original build or public bridge. Invalidated if (derived): that
-  dependent stage gains an observer.
-
+  `<` and `<=` differ only at `elapsed == reConnectDelay`, where the deferral arm
+  computes `reConnectDelay - elapsed`, exactly zero, and a zero delay builds at once
+  as the other arm does; the identity holds over the whole domain, the
+  `Long.MAX_VALUE` first attempt included. Oracle: `ReconnectThrottleEdgeTests` reads
+  the `connect()` contract ("waits out whatever remains of reConnectDelay") one
+  millisecond short of, on, and past the edge, and the reconnect tests'
+  `maximalDelaysDoNotSuppressTheFirstAttempt` reads the edge at `Long.MAX_VALUE`.
+  Invalidated if: the deferral arm stops computing the remainder, or a zero delay is
+  scheduled rather than built.
 ### Empty scans, deadlines, and wire order
 
 - **`# empty-scan fast path`** — `escalateUnanswered`
-  `RemoveConditionalMutator_EQUAL_ELSE` and `handleActivePendingSubscriptions`
-  `RemoveConditionalMutator_EQUAL_IF`. Reason: the mutant enters an iteration over an
-  already-empty map and still finds no work. Invalidated if (derived): the iteration
-  does work on an empty map.
+  `RemoveConditionalMutator_EQUAL_ELSE` (the `inFlightSends.isEmpty()` operand) and
+  `handleActivePendingSubscriptions` `RemoveConditionalMutator_EQUAL_IF` (the
+  `killedSubIds` emptiness check). Reason: the mutant enters a loop over an empty
+  `HashMap` entry set, whose iterator yields no element, so the per-entry body, the only
+  place either loop does work, never runs; the deadline computed before it reads only a
+  record accessor. Oracle: the `Iterator` contract and `Collection.removeIf`'s default
+  traversal, which JDK 25's `HashMap.EntrySet` does not override;
+  `MaintenancePassBoundaryTests.aPassWithNothingInFlightAndNoKillFindsNoWorkAtAnyAge`
+  runs passes with nothing in flight from age zero to the largest clock step and asserts
+  no escalation, frame, ping or ordinal entry. Invalidated if (derived): either loop
+  gains work outside its per-entry body.
 - **`# saturated deadline fringe`** — `escalateUnanswered`
-  `ConditionalsBoundaryMutator`. Reason: it moves an unreachable deadline a few
-  milliseconds below `Long.MAX_VALUE`; no representable age from the monotonic clock
-  reaches either value. Invalidated if (derived): the deadline becomes reachable.
+  `ConditionalsBoundaryMutator`. Reason: it differs only at a resend window of exactly
+  `Long.MAX_VALUE / UNANSWERED_ESCALATION_FACTOR`, where the deadline becomes
+  `Long.MAX_VALUE` instead of `Long.MAX_VALUE - 3`; an age is the difference of two
+  `pacingMillis()` readings, each a long nanosecond difference over a million, so no age
+  exceeds about 1.9e13 ms and neither deadline is reachable. Oracle: that bound;
+  `MaintenancePassBoundaryTests`'
+  `aWindowAtTheSaturationBoundaryNeverEscalatesAtTheLargestAge` ages a transmitted
+  request by the largest step a `TestClock` admits (about 9.2e12 ms) under windows one
+  below, at and one above the boundary with no escalation, while a window whose deadline
+  sits below that age escalates. Invalidated if (derived): the deadline becomes
+  reachable, through a stamp or `now` that is not a `pacingMillis()` reading or pacing
+  in units finer than a millisecond.
 - **`# saturated-add equality`** — `onWholeMessage` `ConditionalsBoundaryMutator`.
-  Reason: it chooses between two expressions that both equal `Long.MAX_VALUE` at the
-  boundary. Invalidated if (derived): the two expressions differ at the boundary.
+  Reason: the two arms disagree only at the boundary window `Long.MAX_VALUE - now`,
+  where `now + window` is `Long.MAX_VALUE` as well. Oracle: that identity;
+  `MaintenancePassBoundaryTests.aRetryAtTheSaturatedAddBoundaryStaysParked` rejects a
+  cancellation at pacing time 1 under windows `Long.MAX_VALUE - 2`, `Long.MAX_VALUE - 1`
+  (the boundary) and `Long.MAX_VALUE`, and finds the retry parked past the largest clock
+  step, while a reachable window re-sends it on time. Invalidated if (derived): the two
+  expressions differ at the boundary.
 - **`# strict wire ordinal`** — `ConditionalsBoundaryMutator` on
-  `lambda$handleActivePendingSubscriptions$0`, `lambda$onWholeMessage$0` and
-  `onWholeMessage` (two siblings). Reason: distinct lock-held transmissions receive
-  distinct pre-incremented ordinals. Invalidated if (derived): two transmissions can
-  share an ordinal.
+  `lambda$handleActivePendingSubscriptions$0` (the kill sweep), `lambda$onWholeMessage$0`
+  (the kill record) and `onWholeMessage` (two siblings: the casualty replay and the
+  dead-grant check). Reason: each compares a subscribe attempt's ordinal with a
+  cancellation's, both pre-incremented from the connection's one `nextWireSeq` under the
+  lifecycle lock (in `sendSubscription` and `sendUnSubscriptionLockHeld`), so the two are
+  never equal, and the `Long.MAX_VALUE` absent default cannot equal a minted ordinal.
+  Oracle: `WireOrderAdjudicationTests` builds, for each of the four comparisons, the
+  attempts adjacent before and after one cancellation, reads their positions off the
+  recording socket, and asserts the outcome wire order demands on each side.
+  Invalidated if (derived): an attempt and a cancellation can share an ordinal, through
+  an ordinal taken off the lock or attempts and cancellations counted separately.
 - **`# positive request-id domain`** — `onWholeMessage` `ConditionalsBoundaryMutator`
-  and `RemoveConditionalMutator_ORDER_IF`. Reason: client ids begin at 2; zero and
-  negative ids never occupy correlation maps. Invalidated if (derived): a zero or
+  and `RemoveConditionalMutator_ORDER_IF`. Reason: `JsonRpcException.envelopeRequestId`
+  yields a non-negative id or nothing, which the websocket maps to -1, and ids are
+  minted from 2 (the counter starts at 1 and every mint pre-increments), so 0 and -1,
+  the only ids on which the mutants decide differently, name no entry in any correlation
+  map. Oracle: `envelopeRequestId`'s documented domain ("the only ids this client
+  mints"); `ResponseIdDomainTests` sends rejections carrying 0, 1, null, negative,
+  fractional, string and out-of-range ids, which release no registration and re-arm no
+  send until one names the request's own id. Invalidated if (derived): a zero or
   negative id can enter a correlation map.
 
 ### Lock-owned registry representation
 
 - **`# null-channel type invariant`** — `releaseChannelSlot`
-  `RemoveConditionalMutator_EQUAL_IF`. Reason: only `GenericSubscription` has no
-  channel. Invalidated if (derived): another subscription type can lack a channel.
-- **`# identity-owned registry slot`** — `lambda$releaseChannelSlot$0` and
-  `releaseChannelSlot` (two siblings), `RemoveConditionalMutator_EQUAL_IF`; and
-  **`# subId-owner invariant`** — `queueUnsubscribe`
-  `RemoveConditionalMutator_EQUAL_IF`. Reason: these removals are reached with the
-  same subscription that owns the slot or server id. Invalidated if (derived): a
-  removal can be reached with a subscription that does not own the slot or id.
+  `RemoveConditionalMutator_EQUAL_IF` on the null-channel branch's
+  `instanceof GenericSubscription` test. Reason: forced true, the branch casts every
+  channel-less registration to `GenericSubscription`; the typed subscribes,
+  `slotSubscribe` and `rootSubscribe` build theirs with a `Channel` constant and only the
+  generic `subscribe` builds one without, so the cast never meets another type. Oracle:
+  `RegistryOwnershipInvariantTests`' `onlyGenericRegistrationsLackAChannel` collects the
+  handle of every registration kind through `onSub`, checks that only the generic one
+  lacks a channel, then releases every kind through a request-defect rejection with no
+  error but the server's. Invalidated if: a construction site passes a null `Channel` to
+  a non-generic subscription.
+- **`# identity-owned registry slot`** — `RemoveConditionalMutator_EQUAL_IF` on the
+  identity tests guarding a release in `releaseChannelSlot`: the generic namespace's
+  (`lambda$releaseChannelSlot$0`) and the slot and root singletons' (two siblings).
+  Reason: forced true, a release frees whatever holds the key; both callers, a
+  request-defect rejection and a coalesced grant, release only a registration they just
+  took out of the current connection's pending map, and a pending registration always
+  owns its slot: an unsubscribe frees the slot and drops the registration from the
+  current connection's pending map under one lock hold, adoption re-derives pending from
+  the durable registries, and the casualty and killed-grant replays re-queue only
+  registrations that still hold theirs. Oracle: `RegistryOwnershipInvariantTests`'
+  `aPredecessorsLateRejectionCannotReleaseItsSuccessor` (slot, root and generic: the
+  predecessor's terminal answer leaves the successor registered and served) and
+  `SolanaJsonRpcWebsocketReconnectTests`'
+  `aCoalescedGrantRejectsTheSecondRegistrationLoudly`. Invalidated if: a registration can
+  stay pending after its slot is freed or reassigned, or a caller releases a registration
+  it did not take from the current connection.
+- **`# subId-owner invariant`** — `queueUnsubscribe` `RemoveConditionalMutator_EQUAL_IF`
+  on the value-conditional `subscriptionsBySubId.remove(subId, sub)`. Reason: forced
+  true, an unsubscribe would queue a cancellation for an id its registration does not
+  own; a non-null `subId` names the registration's own mapping on the current
+  connection, since adoption and the casualty replay clear it with the mapping and a
+  coalesced loser never gets one. The one path that drops a mapping and keeps the
+  `subId`, a terminal signature notification, frees the durable slot in the same locked
+  block on the current connection; on a connection retired with no successor the
+  mapping goes and the handle keeps its `subId`, but no connection is current, so
+  `queueUnsubscribe` returns before this check and the next adoption clears the id
+  before any frame could name it. Oracle:
+  `RegistryOwnershipInvariantTests`'
+  `anUnsubscribeCancelsOnlyTheIdItsRegistrationWasGranted` (after adoption and after a
+  casualty replay, the wire never names the dead id) and
+  `SolanaJsonRpcWebsocketInboundHardeningTests`'
+  `tombstonedEquivalentGrantLeavesItsLiveOwnerUntouched`. Invalidated if: a path on
+  the current connection removes or replaces a mapping without clearing the handle's
+  `subId` while the handle stays registered, or an unsubscribe can reach this check
+  with no current connection.
 - **`# prechecked in-flight gate`** — `sendUnSubscriptionLockHeld`
-  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: the helper's lock-held callers have
-  already proved the per-id gate absent. Invalidated if (derived): a caller reaches
-  the helper without that precheck.
+  `RemoveConditionalMutator_EQUAL_ELSE` on `!conn.inFlightUnsubs.add(subId)`. Reason:
+  forced false, the helper would send while another cancellation for the id is
+  unanswered; both callers, `sendUnSubscription` and `flushPendingUnSubscriptions`, test
+  `inFlightUnsubs.contains` under the same lock hold just before the call, nothing
+  between that test and the helper's `add` calls out, and every mutation of the set
+  holds the lock, so the `add` always succeeds. Oracle: one wire cancellation per id at
+  a time, the property `Connection#inFlightUnsubs` states, asserted on the direct path by
+  `SolanaJsonRpcWebsocketReconnectTests`'
+  `repeatedUnknownIdNotificationsMintOneCancellation` and on the flush by
+  `RegistryOwnershipInvariantTests`' `aGatedIdGetsNoSecondCancellationFromTheFlush`.
+  Invalidated if: a caller reaches the helper without the lock-held precheck, or code
+  between a precheck and the helper's `add` can mark the id in flight.
 - **`# disjoint registry phases`** — `onWholeMessage`
-  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: a subscription leaves pending before
-  installation and leaves installed before requeue. Invalidated if (derived): a
-  subscription can sit in both registries at once.
+  `RemoveConditionalMutator_EQUAL_ELSE` on the `previous == pendingSub` operand of a
+  grant's install test. Reason: forced false, a grant for a registration that already
+  owns the granted id would take the coalesced-collision path and release it; a
+  registration leaves the pending map before it is installed and is unmapped before the
+  casualty replay re-queues it, so `putIfAbsent` never returns the pending registration
+  itself. Oracle: `RegistryOwnershipInvariantTests`'
+  `aCasualtyReGrantedItsOldIdIsInstalledWithoutACollision`, the one shape in which a
+  pending registration meets its own former id: it is installed with no collision report
+  and counted once by `retainedRegistrations`. Invalidated if: a path re-queues a
+  registration without removing its mapping, or installs one still in the pending map.
 - **`# pruned empty registry`** — `onWholeMessage`
-  `RemoveConditionalMutator_EQUAL_ELSE`. Reason: an empty generic namespace is
-  removed from the outer map. Invalidated if (derived): an empty namespace can remain.
+  `RemoveConditionalMutator_EQUAL_ELSE` on the `registered.isEmpty()` operand of the
+  generic-notification lookup. Reason: an empty namespace cannot be resident. A
+  namespace is created beside its first registration (a null key is refused before the
+  namespace or a request id exists, since 2026-10-07; before that the registry put
+  threw after both had been created and the empty namespace stayed), and `unsubscribe`
+  and the terminal release prune a namespace with its last registration. Forced false,
+  the operand would read the first element of an empty map, which never exists, so the
+  mutant decides nothing. Oracle: `FailedGenericSubscribeTests`
+  (`aFailedSubscribeRetainsNoNotificationNamespace` holds `retainedRegistrations()` at
+  zero after a refused key, and `aNotificationUnderAFailedSubscribesNamespaceIsIgnored`
+  ignores the frame) and the unsubscribe prune tests. Invalidated if: a registration can
+  fail after `computeIfAbsent` created its namespace, or a prune stops removing an
+  emptied namespace.
 
 ### Correlation and wake hints
 
 - **`# correlation co-registration`** — `onWholeMessage`
-  `RemoveConditionalMutator_EQUAL_ELSE`, two siblings. Reason: they clear correlation
-  structures in the same locked response transition, so either surviving operand
-  proves the same correlated result. Invalidated if (derived): the structures can be
-  cleared in separate transitions.
-- **`# connection-owned registry`** — `onWholeMessage`
-  `RemoveConditionalMutator_EQUAL_IF`. Reason: an acknowledgement map belongs to its
-  `Connection`; a displaced connection cannot share its successor's entry.
-  Invalidated if (derived): connections can share an acknowledgement map.
-- **`# absent-map removal`** — `onWholeMessage` `RemoveConditionalMutator_EQUAL_IF`.
-  Reason: it performs only a no-op removal when the earlier lookup proved the key
-  absent. Invalidated if (derived): the key can appear between lookup and removal.
+  `RemoveConditionalMutator_EQUAL_ELSE`, two siblings: the `rejectedUnsub != null` and
+  `cancelledRequests.remove(requestId) != null` operands of an error response's
+  `correlated`. Reason: forced false, either can only drop a correlation the
+  `inFlightSends.remove(requestId) != null` operand already proves. A cancellation's
+  acknowledgement entry and its in-flight entry are added together by
+  `sendUnSubscriptionLockHeld` and removed together by its send-failure path and by the
+  acknowledgement, numeric-answer and error branches; `queueUnsubscribe` tombstones only
+  a request in `inFlightSends`, and the error and confirmation branches and
+  `sendSubscription`'s recall and send-failure paths remove both under one lock hold.
+  Oracle: a response correlates by id with the request this connection sent, so a
+  correlated error is consumer news whatever its wording:
+  `CorrelatedRejectionWordingTests`' `aRejectedCancellationIsDeliveredWhateverItsWording`
+  and `aRejectedCancelledSubscribeIsDeliveredWhateverItsWording` deliver the "Invalid
+  subscription id" wording for each structure and drop it for an id not in flight.
+  Invalidated if: a path removes an `inFlightSends` entry while the acknowledgement entry
+  or tombstone for the same request id stays.
+- **`# absent-map removal`** — `onWholeMessage` `RemoveConditionalMutator_EQUAL_IF` on the
+  grant branch's `kill != null` test before `killedSubIds.remove`. Reason: forced true,
+  it removes a key the `get` just above, in the same lock hold, found absent:
+  `killedSubIds` is written only through `merge` with a non-null wire ordinal, so a null
+  `get` means no mapping, and nothing between the lookup and the removal writes the map.
+  Oracle: the `Map.merge` contract (a merge never stores a null value) and the
+  `Map.remove` contract (removing an absent key leaves the map unchanged). Invalidated
+  if: `killedSubIds` gains a writer that can store null, or code between the lookup and
+  the removal can add the key.
 - **`# pending-work wake hint`** — `onWholeMessage`
-  `RemoveConditionalMutator_EQUAL_IF`, four siblings: the acknowledged-unsubscribe,
-  rejected-unsubscribe and notification paths each signal `newSubscription` only
-  when a matching pending cancellation exists. Reason: forcing the check true adds a
-  condition signal (and the wake hint that goes with it) when no matching work
-  remains; no registry state changes. Oracle: condition wakeups are explicitly
-  allowed to be spurious (`Condition` contract). Invalidated if (derived): a waiter
-  treats a wakeup as proof of work.
+  `RemoveConditionalMutator_EQUAL_IF`, three siblings: the rejected-unsubscribe path,
+  the acknowledged-unsubscribe path (`stillQueued`) and the numeric-answer path each
+  signal `newSubscription` only when a matching pending cancellation exists. Reason:
+  forcing the check true adds a condition signal (and the wake hint that goes with it)
+  when no matching work remains; no registry state changes. Oracle: condition wakeups
+  are explicitly allowed to be spurious (`Condition` contract). Invalidated if
+  (derived): a waiter treats a wakeup as proof of work.
 
 ### Parser rescans
 
-- **`# unique-member rescan`** — `RemoveConditionalMutator_EQUAL_IF` on
-  `onWholeMessage` (two siblings), `publish` (two siblings), `publishGeneric` and
-  `skipToParams`. Reason: the mutant resets and finds the same unique JSON-RPC
-  `params`, `value`, or `subscription` member; duplicate member-name resolution is
-  outside the protocol contract. Invalidated if (derived): duplicate member names
+- **`# unique-member rescan`** — `RemoveConditionalMutator_EQUAL_IF` on `skipToParams`
+  (`params`), `onWholeMessage` (two siblings: the keyed channels' `value` scan beside
+  `context`, and the signature path's `subscription` scan), `publish` (two siblings,
+  one per overload) and `publishGeneric`, each forcing the rescan from the object's
+  mark after a forward scan that already found its member. Reason: on a well-formed
+  frame the forward scan and the rescan read the same object, so the rescan re-finds
+  the member; they part only on an object with two members of one name, one on each
+  side of the cursor, which RFC 8259 section 4 leaves unpredictable. Two conditions
+  that argument needs are enforced since 2026-10-07: the account path's `publish`
+  overload skips the value and the rest of `result` before its forward scan, so that
+  scan reads `params` (a `result` member named `subscription` used to redirect the
+  notification; `AccountNotificationAttributionTests`), and a keyed notification whose
+  `params` has no `result` or whose `result` has no `context` is refused rather than
+  scanned past (`NotificationResultShapeTests`), since scanning on would read the rest
+  of `params` as the context and the value. Oracle: `NotificationMemberOrderTests`
+  sends a logs, program, account, signature and generic notification in every member
+  order, with decoy members nesting the same names, and requires the same item from the
+  forward route and the rescan route (RFC 8259 section 1: object members are
+  unordered). Invalidated if (derived): a site's forward scan and rescan stop reading
+  the same object, a required member stops being enforced, or duplicate member names
   become part of the contract.
-- **`# fast-forward funnel`** — `NakedReceiverMutator` on `onWholeMessage` and
-  `publish` (two siblings). Reason: it drops an initial iterator fast-forward, after
-  which the existing mark/reset fallback reaches the same member and dispatches the
-  same notification. Invalidated if (derived): the mark/reset fallback is removed.
+- **`# fast-forward funnel`** — `NakedReceiverMutator` on `onWholeMessage` (signature
+  path) and `publish` (two siblings, one per overload), each dropping the
+  `skipRestOfObject()` in front of the forward `subscription` scan. Reason: none in
+  force; the acceptance is withdrawn. It held that the mark/reset fallback reaches the
+  same member, but without the skip the forward scan reads the rest of `result` (logs,
+  program, signature) or the account object itself (account), where an unknown member
+  named `subscription` is payload. The mutant attributes the notification to that
+  member: it drops the notification with an unsubscribe for the nested id, or hands it
+  to the registration the id names. Oracle: `NestedSubscriptionMemberTests` kills all
+  three; the code attributes those frames by `params.subscription`. Invalidated if:
+  already; the rows leave through the prune writers after two matching fresh previews,
+  and this bullet then moves to the history notes.
 
 ### Ping and private-tail cleanup
 
-- **`# retired-state write`** and **`# ping-state invariant`** — `recordFailedPing`
-  `RemoveConditionalMutator_EQUAL_IF`, two siblings, one per label.
-  `# retired-state write`: only an extra ping-state write to a displaced `Connection`
-  plus a condition wake; no live state or callback reads it. `# ping-state invariant`:
-  follows from the same lock-held transition publishing the failure while changing
-  `ACTIVE` to `PING_FAILED`. Invalidated if (derived): live state or a callback reads
-  a displaced connection's ping state, or the failure is published outside that
-  transition.
+- **`# ping-state invariant`** — `recordFailedPing` `RemoveConditionalMutator_EQUAL_IF`,
+  forcing `pingFailure == null` true (its two siblings at this key are killed: the
+  `lifecycle == ACTIVE` operand by `aPingFailureLosingToAnAlreadyClaimedDeadlineIsDropped`,
+  the `!superseded` operand by `TeardownPingFailureTests`, see the history notes).
+  Reason: the operand is implied by the `lifecycle == ACTIVE` operand before it.
+  `pingFailure` is set non-null at one site, in the locked transition that moves `ACTIVE`
+  to `PING_FAILED`; no assignment returns a connection to `ACTIVE`, and only
+  `takePingFailure` clears the field, after retirement. Oracle: the `Connection` field
+  contracts (`lifecycle` "Leaves ACTIVE at most once"; `pingFailure` is "published under
+  the lifecycle lock with the `PING_FAILED` transition"). Invalidated if (derived):
+  `pingFailure` gains a writer outside that transition, or a connection can return to
+  `ACTIVE`.
 - **`# private-tail normalization`** — `lambda$sendSubscription$1`
-  `NullReturnValsMutator`. Reason: it can make only a private discarded completion
-  tail exceptional after cleanup has committed; the next enqueue normalizes that prior
-  exception. Invalidated if (derived): the tail is exposed or no longer normalized.
+  `NullReturnValsMutator`, on the `return` of the recall branch, which drops a
+  subscribe cancelled while it waited in the chain. Reason: the null return makes the
+  link's `thenCompose` stage complete exceptionally, and that stage is read only as
+  the next link's predecessor. `queueText` and `sendSubscription` both begin with
+  `outboundTail.exceptionally(_ -> null)`, the tolerance that keeps a failed send from
+  blocking the chain, and nothing else reads the tail. Oracle:
+  `RecalledFrameChainTests` recalls a frame and chains a successor behind it through
+  each reader, requiring the successor on the wire in order and no report from the
+  error, send-error, ping-error or exception seams. Invalidated if (derived): anything
+  but a link's `exceptionally` reads the tail, or a reader drops that normalization.
 
 ### Timed-out mutants (audited set)
 
@@ -553,6 +775,42 @@ Kept apart from the arguments above; none of it is live evidence.
   rejected-unsubscribe signal in `onWholeMessage` at line 2101
   (`# pending-work wake hint`). The "Retained rows and the writer gap" section that
   itemised all of this is gone with them.
+
+- The oracle pass of 2026-10-07 (every family swept for a counterexample over the input
+  shapes its mutated control flow keys on) withdrew five acceptances and killed their
+  rows; each left through the prune writer after two matching previews:
+  - `# equal-capacity copy` (`ensureCapacity` `ConditionalsBoundaryMutator`): at exact
+    capacity the mutant grows a buffer the message still fits, and at the cap it copies
+    the whole buffer for every empty continuation fragment, a complexity change;
+    `ReassemblyGrowthGuardTests` kills it through the `reassemblyCapacity()` seam.
+  - `# ignored null completion` (`lambda$ownBuild$0` `EQUAL_IF`): `whenComplete` adds an
+    action's exception as suppressed to its source's, so the mutant's
+    `NullPointerException` rides the cancelled build's `CancellationException` to
+    `connect()`'s caller; `AbandonedAttemptCancellationTests` kills it.
+  - `# redundant outer duplicate guard` (`accountSubscribe`, `logsSubscribe`,
+    `signatureSubscribe` `EQUAL_ELSE`, and the misfamilied `programSubscribe` row, which
+    was the `containsKey` operand): the public guard is a fast path with observable
+    effects, a refused duplicate renders nothing of the caller's key and never waits for
+    the lifecycle lock, and the `programSubscribe` operand refused a second commitment of
+    a held program; `DuplicateSubscribeRoutesTests` kills all four.
+  - `# connection-owned registry` (`onWholeMessage` `EQUAL_IF`, the acknowledgement
+    branch's `conn == this.connection` re-check): a true acknowledgement's casualty
+    replay clears the durable handle's `subId`, which the successor has by then re-armed,
+    so a stale acknowledgement inside the displaced parser erased the successor's grant;
+    `DisplacedAcknowledgementTests` kills it.
+  - `# retired-state write` (`recordFailedPing` `EQUAL_IF`, forcing `!superseded` true):
+    `onError` and `onClose` read the retired connection's ping failure through
+    `takePingFailure` right after the abort, so the mutant turned teardown noise into a
+    ping failure; `TeardownPingFailureTests` kills it. Its sibling keeps
+    `# ping-state invariant`.
+  The same pass found two parser defects, fixed with regression tests: the account
+  notification path scanned the rest of `result` for `subscription` (a member of that name
+  inside `result` redirected the notification) and a keyed notification missing `result` or
+  `context` was scanned past its end rather than refused; and the generic `subscribe`
+  accepted a null key late enough to leave an empty namespace resident, now refused up
+  front. Four rows of the `onWholeMessage` `EQUAL_IF` key had been re-tagged positionally
+  by earlier retags and carried another construct's label; they were relabelled by hand
+  to the family that argues the line each tag names.
 
 ## encoding suite
 

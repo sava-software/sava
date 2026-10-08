@@ -9,6 +9,7 @@ import java.net.URI;
 import java.nio.CharBuffer;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -417,6 +418,9 @@ final class SolanaRpcWebsocketBuilderTests {
         .create()) {
       final var future = websocket.connect();
       assertNotNull(future);
+      // Settled before joined: a dropped completion bridge then fails here instead of parking
+      // until PIT's watchdog calls the wedge a timeout.
+      assertTrue(future.toCompletableFuture().isDone(), "the attempt must be settled");
       assertSame(socket, future.toCompletableFuture().join());
       assertEquals(endpoint, webSocketBuilder.builtUri.get());
 
@@ -461,6 +465,9 @@ final class SolanaRpcWebsocketBuilderTests {
 
       clock.advanceMillis(60_000L);
       scheduler.deferred.getFirst().task().run();
+      // Settled before joined: a dropped completion bridge then fails here instead of parking
+      // until PIT's watchdog calls the wedge a timeout.
+      assertTrue(future.toCompletableFuture().isDone(), "the attempt must be settled");
       assertSame(socket, future.toCompletableFuture().join());
       assertEquals(endpoint, webSocketBuilder.builtUri.get());
 
@@ -570,6 +577,9 @@ final class SolanaRpcWebsocketBuilderTests {
       assertNotNull(future);
       assertTrue(scheduler.deferred.isEmpty(), "the window has fully elapsed; nothing to defer");
       assertNotNull(webSocketBuilder.builtUri.get(), "the build happens synchronously");
+      // Settled before joined: a dropped completion bridge then fails here instead of parking
+      // until PIT's watchdog calls the wedge a timeout.
+      assertTrue(future.toCompletableFuture().isDone(), "the attempt must be settled");
       assertSame(socket, future.toCompletableFuture().join());
     }
   }
@@ -641,7 +651,9 @@ final class SolanaRpcWebsocketBuilderTests {
 
       final var future = websocket.connect();
       assertNotNull(future);
-      assertSame(socket, future.toCompletableFuture().join());
+      // The one real wait: bounded, so a dropped completion bridge fails here within the bound
+      // instead of parking until PIT's watchdog calls the wedge a timeout.
+      assertSame(socket, future.toCompletableFuture().orTimeout(500L, TimeUnit.MILLISECONDS).join());
     }
   }
 }
