@@ -12,8 +12,8 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveCondi
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # pending-work wake hint # line 2110
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # pending-work wake hint # line 2234
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # pending-work wake hint # line 2316
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # pending-work wake hint # line 2386
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # absent-map removal # line 2543
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # absent-map removal # line 2386
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # unique-member rescan # line 2543
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,onWholeMessage,RemoveConditionalMutator_EQUAL_IF,SURVIVED # unique-member rescan # line 2556
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,RemoveConditionalMutator_EQUAL_IF,SURVIVED # unique-member rescan # line 1970
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,publish,RemoveConditionalMutator_EQUAL_IF,SURVIVED # unique-member rescan # line 2005
@@ -49,7 +49,7 @@ software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueSubscription,BooleanT
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueSubscription,BooleanTrueReturnValsMutator,SURVIVED # literal return equivalent # line 1198
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueUnsubscribe,BooleanTrueReturnValsMutator,SURVIVED # literal return equivalent # line 1361
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,queueUnsubscribe,RemoveConditionalMutator_EQUAL_IF,SURVIVED # subId-owner invariant # line 1313
-software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,recordFailedPing,RemoveConditionalMutator_EQUAL_IF,SURVIVED # retired-state write # line 3092
+software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,recordFailedPing,RemoveConditionalMutator_EQUAL_IF,SURVIVED # ping-state invariant # line 3092
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,releaseChannelSlot,RemoveConditionalMutator_EQUAL_IF,SURVIVED # null-channel type invariant # line 1253
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,releaseChannelSlot,RemoveConditionalMutator_EQUAL_IF,SURVIVED # identity-owned registry slot # line 1276
 software.sava.rpc.json.http.ws.SolanaJsonRpcWebsocket,releaseChannelSlot,RemoveConditionalMutator_EQUAL_IF,SURVIVED # identity-owned registry slot # line 1281

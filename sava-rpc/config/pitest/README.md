@@ -810,7 +810,14 @@ Kept apart from the arguments above; none of it is live evidence.
   accepted a null key late enough to leave an empty namespace resident, now refused up
   front. Four rows of the `onWholeMessage` `EQUAL_IF` key had been re-tagged positionally
   by earlier retags and carried another construct's label; they were relabelled by hand
-  to the family that argues the line each tag names.
+  to the family that argues the line each tag names. The retag taken after the parser
+  fixes rotated two of them again (the `kill != null` row under the wake-hint label, the
+  `value`-scan row under the absent-map label), and the surviving `recordFailedPing` row
+  still carried its killed sibling's `# retired-state write`, which the label check
+  accepted because that literal stands in this note. The local reviewer caught all three
+  on 2026-10-07; they were relabelled by hand after a pass that compared every row's
+  tagged line with its family and flagged every label whose only mention is a History
+  note.
 
 ## encoding suite
 
