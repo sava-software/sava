@@ -608,31 +608,57 @@ written that day came from a clean run.
 
 ### Open items after the campaign
 
-- **Oracle slices 2 and later.** Two client families still say "Oracle: owed"
-  (`# eager deferred convergence`, `# impossible zero mark`), and the ws suite's intro
-  still owes an oracle to every family whose bullet names none, about thirty; four ws
-  families name one. Cheapest next: the families whose argument is a bytecode or
-  contract fact (`# strict wire ordinal`, `# redundant outer duplicate guard`,
-  `# equivalent buffer copy`), then the registry-state families with a recording
-  fake.
-- **Untriaged remainders.** accounts keeps its `# untriaged` rows in
-  `Signer.fromProperties` and `Signer.encryptKey`, `validateKeyPair`, `PublicKeyBytes`,
-  `PublicKey.readPubKey`, `PublicKey.l`, `PublicKey.createProgramAddress`,
-  `KeyPairSigner.createDedicatedSigner` and `ProgramDerivedAddress.createPDA`; vanity
-  keeps the `BaseMaskWorker.queueResult` self-checks and, in `MaskWorker.run`, the
-  packed-offset unpacking, the `checkFound` poll branch and `clearSecrets`. Owner's
-  timing: after the reviewer and gate on this range.
+- **Oracle slices 2 and later: done the same evening.** Every accepted family in the
+  sava-rpc README now names its oracle. The pass ran as six worktree-isolated agents,
+  each followed by a refuter that tried to construct counterexamples and hand-applied
+  every claimed kill; the refuters overturned five ws acceptances (now killed, listed in
+  the rpc README's ws history notes), corrected the wording of a dozen more, and found
+  three defects in production that the fixes below closed with regression tests: the
+  account notification path scanned the rest of `result` for `subscription`, so a
+  member of that name inside `result` redirected the notification to another
+  registration; a keyed notification whose `params` lacked `result` or whose `result`
+  lacked `context` was scanned past its end, so a top-level member could be delivered
+  under a registration; and the generic `subscribe` accepted a null key late enough to
+  leave an empty namespace resident. Four rows of one ws key had carried another
+  construct's label since the positional retags and were relabelled by hand.
+- **Untriaged remainders: done the same evening.** The accounts and vanity rows were
+  triaged row by row with the same agent-and-refuter shape. accounts: every
+  `Signer.fromProperties` and `encryptKey` branch, `PublicKeyBytes`, `readPubKey`, `l`,
+  `createProgramAddress`, `createDedicatedSigner` and `createPDA` are killed; the
+  `validateKeyPair` calls on pairs the method itself derived and the decrypted-secret
+  wipe are argued (three families). vanity: the `queueResult` self-checks and key-file
+  branches, the poll branch and `clearSecrets` are killed, two of them through a test
+  that briefly installs a rejecting Ed25519 provider (`@Isolated`); the refuter's
+  long-tail counterexample turned the two packed-offset acceptances into kills; one
+  library self-check is argued. The owner's "later" became "now" when asked why items
+  stayed open.
+- **Timeouts that were kills in disguise.** The new ws tests changed the order in which
+  PIT reaches the tests covering three long-killed mutants, and three older classes
+  parked under them instead of failing: unbounded `join()`s on connect attempts that a
+  dropped completion bridge never settles, and two parked-cycle tests whose helper thread
+  waits on a lifecycle lock that a dropped `unlock()` leaves held. Each now asserts the
+  attempt is settled before joining (the repository's own idiom, applied everywhere the
+  attempt is synchronous; the one real 25 ms wait is bounded), or that the test thread
+  holds no lock before starting the helper. The ws suite is back to its three audited
+  members; the lesson is that a test which can only pass or hang is a timeout waiting
+  for a reordering.
 - **Quiet retirements pending.** Seven audited timeout members now read `KILLED` on
   every fresh run but keep their membership lines until the verify's three-run quiet
   notice and the gate confirmation: the four vanity cap mutants, `Jex.isValid`
   `IncrementsMutator`, and the two `scalarMultBase` members. Remove each line by hand
   when the notice arrives and move its README argument to History.
-- **`generateTestSupport`.** Whether the hand-rolled loopback and threaded harnesses
-  should move onto sava-build's generated set; no consumer needs it yet.
-- **JDK 26 stall path.** The transport tests no longer exercise the JDK's own timeout
-  ending a stalled body at one request timeout (observable only with a real wait);
-  sava's part, the timeout on the built request, is asserted directly. Revisit if the
-  toolchain moves to JDK 26.
+- **`generateTestSupport`: closed, stays off.** The hand-rolled harnesses (the request
+  tests' loopback `HttpServer` base, the transport and cancellation sockets, the
+  websocket lifecycle threads and recording executors) are deterministic,
+  mutation-tested and specific to what they drive; the generated `ConcurrencyHarness` /
+  `Ports` / `LoopbackHttpServer` / `JulRecorder` set adds no capability sava lacks and
+  migrating onto it would be churn without a defect behind it. Turn it on only when a
+  new harness is needed, and then for that harness.
+- **JDK 26 stall path: closed by design.** The JDK's own timeout ending a stalled body at
+  one request timeout is the JDK's contract and is observable only with a real wait,
+  which the suites forbid; sava's part of it, the timeout carried on the built request,
+  is asserted directly by the transport tests. Nothing to revisit unless the toolchain
+  moves to JDK 26 and that behaviour becomes sava's to pin.
 
 Decided by the owner the same day: the zero-signer fee-payer guard stays; the
 real-clock transport pins in `JsonHttpClientTransportTests` are rewritten onto the

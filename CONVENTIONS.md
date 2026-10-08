@@ -162,3 +162,16 @@ pending subscription work.
   `advanceMillis` moves it, and `sleep` advances it instead of blocking.
 - `RecordingExecutor` (`json.http.ws`) — captures submitted tasks without running them,
   so a websocket given one has no check-loop thread (above).
+
+**Seeded entropy and JCA providers** (sava-core test sources):
+
+- `FixedSeedSecureRandom` (`accounts.vanity`, public so the pbkdf and accounts tests share
+  it) — a `SecureRandom` whose `nextBytes` draws from `java.util.Random(seed)`; the
+  `(seed, maxDraws)` constructor fails the first draw past the budget, which turns a
+  worker whose attempt cap a mutant destroyed into a named assertion instead of a timeout,
+  and `draws()` counts the attempts from outside the loop.
+- Provider replacement is used in one place and for one purpose: `FoundKeySelfCheckTests`
+  (`@Isolated`, try/finally) installs a rejecting Ed25519 provider at position 1 for the
+  span of a test to drive the JDK verifier's own rejection branch, which the production
+  code reaches only that way. It is not used to observe buffers the code wipes; those
+  acceptances say so in the triage READMEs.
