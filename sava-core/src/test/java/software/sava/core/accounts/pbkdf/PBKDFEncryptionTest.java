@@ -274,6 +274,25 @@ final class PBKDFEncryptionTest {
     assertArrayEquals(new byte[32], kdf.handedOut.get(1));
   }
 
+  /// The derived key is wiped when decryption fails before the cipher is ever initialised. A
+  /// null IV throws from the `GCMParameterSpec` constructor, which Java evaluates before
+  /// `Cipher.init` is called, so the JCE never sees the key and the `finally` wipe is the only
+  /// zeroing on that path; the JCE's own zeroing of a raw key array at decrypt `init` (pinned by
+  /// `theJceZeroesARawKeyArrayAtDecryptInit`) covers only the paths that reach `init`.
+  @Test
+  void passwordDecryptWipesTheDerivedKeyWhenTheCipherIsNeverInitialised() {
+    final var kdf = new RecordingKeyDerivation(distinctKey());
+    final byte[] salt = new byte[16];
+    Arrays.fill(salt, (byte) 5);
+
+    assertThrows(IllegalArgumentException.class, () -> PBKDFEncryption.decrypt(
+        "correct horse".toCharArray(), kdf, AAD, salt, null, new byte[16]
+    ));
+
+    assertEquals(1, kdf.handedOut.size());
+    assertArrayEquals(new byte[32], kdf.handedOut.getFirst(), "the derived key must not outlive the failed call");
+  }
+
   /// An empty AAD binds nothing, exactly like no AAD: an envelope sealed with either opens with
   /// the other. This is the oracle for accepting the `aad.length > 0` boundary mutants, which
   /// route an empty array through `Cipher.updateAAD`, a call the JCE treats as a no-op.

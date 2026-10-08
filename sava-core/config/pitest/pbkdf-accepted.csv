@@ -2,7 +2,6 @@
 software.sava.core.accounts.pbkdf.Argon2id,derive,VoidMethodCallMutator,SURVIVED # unobservable wipe # line 65
 software.sava.core.accounts.pbkdf.PBKDF2WithHmacSHA512,derive,VoidMethodCallMutator,SURVIVED # unobservable wipe # line 46
 software.sava.core.accounts.pbkdf.PBKDFEncryption,decrypt,ConditionalsBoundaryMutator,SURVIVED # empty AAD update is a no-op # line 129
-software.sava.core.accounts.pbkdf.PBKDFEncryption,decrypt,VoidMethodCallMutator,SURVIVED # wipe preceded by the JCE # line 114
 software.sava.core.accounts.pbkdf.PBKDFEncryption,encrypt,ConditionalsBoundaryMutator,SURVIVED # empty AAD update is a no-op # line 91
 software.sava.core.accounts.pbkdf.PBKDFEncryption,toUtf8Bytes,VoidMethodCallMutator,SURVIVED # unobservable wipe # line 145
 software.sava.core.accounts.pbkdf.Argon2id,derive,NakedReceiverMutator,SURVIVED # builder default restated # line 53

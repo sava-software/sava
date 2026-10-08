@@ -687,22 +687,12 @@ and IV draws, the key wipes and `RawSecretKey`; what remains is argued here.
     array never escapes the method, so no caller, test or collaborator can read it
     afterwards. Removing the wipe changes nothing any test can observe.
   - Oracle: none executable, by construction; the property is reviewed by reading.
-    The wipes a caller can observe are killed instead: `encryptWipesTheDerivedKey`
-    and `passwordDecryptWipesTheDerivedKeyWhenAuthenticationFails` in
+    The wipes a caller can observe are killed instead: `encryptWipesTheDerivedKey`,
+    `passwordDecryptWipesTheDerivedKeyWhenAuthenticationFails` and
+    `passwordDecryptWipesTheDerivedKeyWhenTheCipherIsNeverInitialised` in
     `PBKDFEncryptionTest` watch the key array a recording derivation handed out.
   - Invalidated if: the buffer is returned, retained or shared, at which point the
     wipe becomes observable and must be tested.
-- **`# wipe preceded by the JCE`** — `PBKDFEncryption.decrypt` `VoidMethodCallMutator`,
-  the `finally` wipe of the key derived from a password.
-  - Reason: `RawSecretKey.getEncoded` returns the key array itself, and SunJCE zeroes
-    that array while initialising AES/GCM for decryption (JDK 25.0.2, measured
-    2026-10-07: at `init`, in decrypt mode only). The wipe runs on an array that is
-    already zero. Encryption leaves the array intact, which is why the matching
-    `encrypt` wipe is killed by `encryptWipesTheDerivedKey`.
-  - Oracle: `theJceZeroesARawKeyArrayAtDecryptInit` in `PBKDFEncryptionTest` pins the
-    JDK behaviour the argument rests on, with a key of its own, not `RawSecretKey`.
-  - Invalidated if: that test fails (a JDK that stops zeroing), or `RawSecretKey`
-    starts copying in `getEncoded`.
 - **`# empty AAD update is a no-op`** — `PBKDFEncryption.encrypt` and
   `PBKDFEncryption.decrypt` `ConditionalsBoundaryMutator` on `aad.length > 0`.
   - Reason: the boundary change routes an empty array into `Cipher.updateAAD`, which
@@ -777,6 +767,15 @@ provenance pair.
 
 ## History (not evidence)
 
+- 2026-10-07, pbkdf: `# wipe preceded by the JCE` (`PBKDFEncryption.decrypt`
+  `VoidMethodCallMutator`, the password overload's `finally` wipe) was withdrawn in review.
+  The argument held only on paths that reach `Cipher.init`, where SunJCE zeroes the raw
+  key array; a null IV throws from the `GCMParameterSpec` constructor before `init` is
+  called, so on that path the wipe is the only zeroing and a recording derivation observes
+  it. `passwordDecryptWipesTheDerivedKeyWhenTheCipherIsNeverInitialised` kills it (checked
+  with the wipe removed by hand), and the row left through the prune writer after two
+  matching history-free previews. `theJceZeroesARawKeyArrayAtDecryptInit` stays as the pin
+  of the JDK behaviour the `decrypt(byte[]…)` javadoc documents.
 - 2026-10-07, vanity: the four cap-destroying members (`MaskWorker.run` and
   `BeginsWithMaskWorker.run`, `MathMutator` on `++attempts` and
   `RemoveConditionalMutator_EQUAL_ELSE` on the exhausted branch) had been audited as
