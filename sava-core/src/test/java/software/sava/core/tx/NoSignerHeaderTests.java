@@ -5,6 +5,7 @@ import org.junit.jupiter.api.function.Executable;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.meta.AccountMeta;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -22,7 +23,9 @@ import static software.sava.core.accounts.PublicKey.PUBLIC_KEY_LENGTH;
 /// The address-coverage guard compares signers to addresses with `<`, which zero signers always
 /// pass, so a second guard refuses the header wherever a fee payer is resolved, while the readers
 /// that resolve none keep reading their own fields verbatim. Found by the fee-payer cross-checks
-/// in [TransactionSkeletonFuzz], which reject both inputs.
+/// in [TransactionSkeletonFuzz]; both inputs are committed as the `no_signers_*` seeds of its
+/// corpus, which the generated seed replay feeds to the harness on every `check`, and each test
+/// here asserts its bytes are the committed seed's.
 final class NoSignerHeaderTests {
 
   private static final String NO_FEE_PAYER =
@@ -51,6 +54,14 @@ final class NoSignerHeaderTests {
     return data;
   }
 
+  /// The committed seed of that name under `src/test/resources/fuzz/txSkeleton`.
+  private static byte[] committedSeed(final String name) throws IOException {
+    try (final var in = NoSignerHeaderTests.class.getResourceAsStream("/fuzz/txSkeleton/" + name)) {
+      assertNotNull(in, "seed " + name + " is committed");
+      return in.readAllBytes();
+    }
+  }
+
   private static PublicKey filledKey(final byte b) {
     final byte[] key = new byte[PUBLIC_KEY_LENGTH];
     Arrays.fill(key, b);
@@ -61,8 +72,10 @@ final class NoSignerHeaderTests {
   /// would be read from outside the address array: before the guard it was the blockhash, the
   /// same misread #58 closed for a header declaring more signers than addresses.
   @Test
-  void aMessageWithNoSignersAndNoAddressesHasNoFeePayer() {
-    final var skeleton = TransactionSkeleton.deserializeSkeleton(noSigners(0));
+  void aMessageWithNoSignersAndNoAddressesHasNoFeePayer() throws IOException {
+    final byte[] data = noSigners(0);
+    assertArrayEquals(committedSeed("no_signers_no_accounts"), data, "the committed seed is this input");
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
     assertEquals(0, skeleton.numSigners());
     assertEquals(0, skeleton.numIncludedAccounts());
 
@@ -78,8 +91,10 @@ final class NoSignerHeaderTests {
   /// came back as the last account, while `feePayer()` still answered the first address: two
   /// views that disagreed without either throwing.
   @Test
-  void aMessageWithNoSignersIsRefusedWhereAFeePayerIsResolvedAndReadVerbatimElsewhere() {
-    final var skeleton = TransactionSkeleton.deserializeSkeleton(noSigners(2));
+  void aMessageWithNoSignersIsRefusedWhereAFeePayerIsResolvedAndReadVerbatimElsewhere() throws IOException {
+    final byte[] data = noSigners(2);
+    assertArrayEquals(committedSeed("no_signers_two_accounts"), data, "the committed seed is this input");
+    final var skeleton = TransactionSkeleton.deserializeSkeleton(data);
     assertEquals(0, skeleton.numSigners());
     assertEquals(2, skeleton.numIncludedAccounts());
 

@@ -151,10 +151,18 @@ and by a full RPC envelope in
 
 ## `txSkeleton` — [TransactionSkeletonFuzz](../../java/software/sava/core/tx/TransactionSkeletonFuzz.java)
 
-Bootstrap corpus. Real transactions whose header/offset/length agreement a
-from-scratch test doesn't assemble, plus a real lookup-table account:
+Bootstrap corpus, plus one regression pair. Real transactions whose
+header/offset/length agreement a from-scratch test doesn't assemble, a real
+lookup-table account, and the inputs of the one finding closed so far:
 
 - `legacy` — a legacy transaction.
 - `versioned_lut` — a versioned transaction using an address lookup table.
 - `versioned_trunc` — a truncated versioned transaction.
 - `alt_account` — a real address-lookup-table account.
+- `no_signers_no_accounts`, `no_signers_two_accounts` — regression pair: legacy
+  headers declaring zero required signatures, which no valid message does. The
+  fee-payer cross-checks flagged both on 2026-10-07, when `feePayer()` answered
+  the blockhash and the included-account parse shifted every key down a slot;
+  every parser that resolves a fee payer now refuses the header.
+  `NoSignerHeaderTests` is the named regression test and asserts its inputs are
+  these bytes.

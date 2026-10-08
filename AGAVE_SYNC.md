@@ -443,7 +443,8 @@ guarantees a *typed* rejection — see the `CompactU16Encoding.decode` leniency 
   (the harness's class doc enumerates the invariants; the overlay differential found the
   loop-bound bug pinned by `danglingBytesAreFloored`). Committed seeds live in
   `src/test/resources/fuzz/txSkeleton` (real legacy + versioned/lookup-table transactions,
-  plus `alt_account`, a real mainnet lookup table), wired via the plugin's `seedCorpus`
+  `alt_account`, a real mainnet lookup table, and the zero-signer regression pair that
+  `NoSignerHeaderTests` replays), wired via the plugin's `seedCorpus`
   property; the writable corpus persists in `build/fuzz/txSkeleton-corpus`. Worst-case
   allocation from a hostile header is bounded (~16MB, then AIOOBE) — verified under a
   512MB heap, so a large fuzzer RSS is Jazzer's own sizing, not a per-input bomb.

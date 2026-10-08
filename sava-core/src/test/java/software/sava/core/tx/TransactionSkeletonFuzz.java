@@ -22,8 +22,10 @@ import static software.sava.core.accounts.lookup.AddressLookupTable.LOOKUP_TABLE
 /// Seeded from real legacy and versioned (lookup-table) transactions plus a real
 /// lookup-table account under src/test/resources/fuzz/txSkeleton — the header, offsets, and
 /// lengths must all agree before any body-walking runs, so a from-scratch mutator never
-/// reaches these paths. Every input is also fed to [AddressLookupTable#read] (see
-/// [#fuzzLookupTable]), the other untrusted account-data parser on the versioned path.
+/// reaches these paths. The corpus also carries the zero-signer regression pair the fee-payer
+/// cross-checks found (`NoSignerHeaderTests`). Every input is also fed to
+/// [AddressLookupTable#read] (see [#fuzzLookupTable]), the other untrusted account-data parser
+/// on the versioned path.
 ///
 /// Deliberately free of Jazzer imports so it compiles with the regular test sources.
 ///
