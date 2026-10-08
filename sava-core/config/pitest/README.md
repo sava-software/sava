@@ -69,19 +69,19 @@ bound over an allocation or timing harness, which sava-build's `HARDENING.md`
 calls a last resort (worked example: `Base58.limbsLength`, under History).
 
 Liveness is admissible only **after deterministic seams and budgets are
-exhausted**: a mutant that a budget can bound is not a liveness member, it is
-an unexercised seam (worked example: the four `vanity` members retired
-2026-08-08, under History). The remaining `vanity` members and the `Jex.isValid`
-member became budget-bounded on 2026-10-07 and read `KILLED` since; they sit in
-their sets only until the quiet notice, as their suites' subsections record.
-Membership lines are hand-maintained records; a
-member leaves under HARDENING.md's quiet or stale rule, never by a writer. A
-*quiet* member — its mutant still generated but no longer timing out — leaves
-only after the tool's 3+ distinct fresh full-run quiet notice over identical
-evidence inputs and a solo/gate confirmation. A *stale* member — its line-less
-coordinate absent from one fresh full history-free report with valid committed
-provenance — is removed by hand after that run, and the removal is recorded
-under History.
+exhausted**: a mutant that a budget can bound is not a liveness member, it is an
+unexercised seam (worked example: the four `vanity` members retired 2026-08-08,
+under History). Members a seam later kills leave this way: on 2026-10-07 the
+four `vanity` cap members, the `Jex.isValid` member and the two `scalarMultBase`
+members had read `KILLED` for three or more fresh runs and under the gate, and
+their lines were removed (History). Membership lines are hand-maintained
+records; a member leaves under HARDENING.md's quiet or stale rule, never by a
+writer. A *quiet* member — its mutant still generated but no longer timing out —
+leaves only after the tool's 3+ distinct fresh full-run quiet notice over
+identical evidence inputs and a solo/gate confirmation. A *stale* member — its
+line-less coordinate absent from one fresh full history-free report with valid
+committed provenance — is removed by hand after that run, and the removal is
+recorded under History.
 
 ## borsh
 
@@ -213,20 +213,9 @@ comparison), and each was observed `TIMED_OUT` again in the 2026-09-05 and
 - `Ed25519Util.pow2523`, `RemoveConditionalMutator_ORDER_IF` on `a >= 0`: the
   2^252−3 exponentiation ladder loses its countdown exit, a counted loop's only
   exit made unreachable. Nothing but the watchdog can observe it.
-- `Ed25519Util.scalarMultBase`, `IncrementsMutator` and
-  `RemoveConditionalMutator_ORDER_ELSE`: both sat on the comb walk's exit while the
-  walk counted its shift down (`var6 -= 4; if (var6 < 0) return`). The reversed step
-  was finite only by int wraparound, about 5.4 × 10^8 window passes away, and the
-  removed exit was unbounded. On 2026-10-07 the walk was refactored onto a window
-  index into a constant shift table, the process's refactor-out-of-existence outcome:
-  a reversed or overrun index subscripts outside the table and throws on its first bad
-  window (hand-applied mutants die in milliseconds against the RFC 8032 vectors, and
-  instrumented traces of the old and new walks are byte-identical over them). Neither
-  line-less key has left the population, since the inner block loop keeps an
-  `IncrementsMutator` and an `ORDER_ELSE` mutant of its own, both killed, so the
-  membership lines are quiet rather than stale and stay until the verify's three-run
-  quiet notice and the gate confirmation (`HARDENING.md`); a timeout reappearing at
-  either reads as audited liveness and must be argued afresh.
+
+The two `scalarMultBase` members left the set on 2026-10-07 after the comb walk was
+refactored onto a window index (History).
 
 ## encoding
 
@@ -276,15 +265,9 @@ characters each call emits, which kills every mutant on its chunk bound.
 
 ### Audited timeouts
 
-- `Jex.isValid`, `IncrementsMutator` on the second `index++` → `index--`: the
-  do-while cursor oscillates over the same valid digit pair and never reaches
-  `len`. Since 2026-10-07 the member is killed deterministically rather than by the
-  watchdog: `JexTests.isValidReadsAValidInputInBoundedPasses` validates through a
-  `CharSequence` that fails on the first `charAt` past twice the input length, a
-  call budget any forward pass stays under and the oscillating cursor exhausts in a
-  few passes. The membership line stays until the verify's three-run quiet notice
-  and the gate confirmation (`HARDENING.md`, admissible liveness members keep
-  earning themselves); a timeout reappearing there reads as audited liveness.
+None since 2026-10-07, when the `Jex.isValid` `IncrementsMutator` member was retired
+after a call budget on the validator's `CharSequence` made it a deterministic kill
+(History).
 
 ## meta
 
@@ -778,47 +761,11 @@ retired `Subsequence*` allowlist).
     caller can set, or the self-check gains a seam.
 ### Audited timeouts
 
-Every mask worker's search is a `for (;;)` with exactly **two** exits: "found
-enough" (`foundHitLimitOrInterrupted` / `foundLimitOrInterrupted`) and "cap
-reached" (`searchExhausted(attempts)`, the bounded-attempts seam whose javadoc
-names tests as its reason for existing). Every member listed below disables
-the cap itself — breaking either the counter that feeds it or the branch that
-consumes it. Each was observed `TIMED_OUT` in the 2026-09-05 and 2026-09-25
-certification runs, under an argument that the cap was the only bound and so
-nothing but the watchdog could observe them. That argument was wrong: every
-attempt is exactly one `SecureRandom.nextBytes` draw, a collaborator the tests
-supply, so a draw budget on the test's `FixedSeedSecureRandom` counts attempts
-from outside the loop. Since 2026-10-07 the three unsatisfiable searches in
-`MaskWorkerTests` run on a budget of twice their cap, working code never reaches
-it, and every member below fails on the budget's `AssertionError` within a few
-hundred milliseconds instead of timing out.
-
-- `MaskWorker.run` and `BeginsWithMaskWorker.run`, `MathMutator`
-  (`++attempts` → `--attempts`): the attempt counter runs backwards, so
-  `searchExhausted(attempts)` never becomes true; the draw budget fires at the
-  cap plus one.
-- `MaskWorker.run` and `BeginsWithMaskWorker.run`,
-  `RemoveConditionalMutator_EQUAL_ELSE`: the branch that acts on the exhausted
-  cap is forced the way that keeps the loop going; the draw budget fires at the
-  same point.
-
-The membership lines stay until the verify's three-run quiet notice and the gate
-confirmation (`HARDENING.md`, admissible liveness members keep earning
-themselves); a timeout reappearing at one of them reads as audited liveness and
-must be argued afresh, because the budget was supposed to make it impossible.
-
-The fixture bounds, recorded because the plugin asks whether a claimed bound
-can fail first: `MaskWorkerTests` drive every satisfiable search with a finite
-`MAX_SEARCHES` (10,000 attempts; the worst real search on its fixed seed takes
-529, as recorded in `8eeb5d9` and in the comment on `MAX_SEARCHES`, so the bound
-is ~19x headroom and never fires on working code), and the unsatisfiable
-searches on a cap of 500 with a draw budget of 1,000. Those three tests also
-carry a JUnit `@Timeout(60)`, which interrupts the test thread; the loop polls
-the flag every `checkFound` draws, so an interrupted search ends on the found
-exit. Under PIT that timeout never governs: the watchdog is `2.0 x` the test's
-recorded duration `+ 1500 ms`, under two seconds for these tests, so a mutant that
-escaped the budget would be reported `TIMED_OUT` by the watchdog long before
-JUnit's sixty seconds, exactly the audited state recorded above.
+None since 2026-10-07. The four cap-destroying members of `MaskWorker.run` and
+`BeginsWithMaskWorker.run` (`MathMutator` on the attempt counter and
+`RemoveConditionalMutator_EQUAL_ELSE` on the exhausted branch) were retired after the
+draw budget on the test fakes made them deterministic kills; History carries the
+argument and the retirement.
 
 ## primitives
 
@@ -829,6 +776,27 @@ No accepted mutants, so there is no `primitives-accepted.csv` and no
 provenance pair.
 
 ## History (not evidence)
+
+- 2026-10-07, vanity: the four cap-destroying members (`MaskWorker.run` and
+  `BeginsWithMaskWorker.run`, `MathMutator` on `++attempts` and
+  `RemoveConditionalMutator_EQUAL_ELSE` on the exhausted branch) had been audited as
+  liveness since 2026-08 on the argument that the cap was the loop's only bound. Every
+  attempt is one `SecureRandom.nextBytes` draw, a collaborator the tests supply, so a draw
+  budget on `FixedSeedSecureRandom` (twice the cap, in the three unsatisfiable searches)
+  turned each into an `AssertionError` within milliseconds. They read `KILLED` on seven
+  consecutive fresh runs and under the quality gate, the verify emitted its quiet notice,
+  and the membership lines were removed with the file.
+- 2026-10-07, encoding: `Jex.isValid` `IncrementsMutator` (the oscillating cursor) was
+  killed by `isValidReadsAValidInputInBoundedPasses`, whose `CharSequence` fails past
+  twice the input length in `charAt` calls; quiet for five fresh runs and under the gate,
+  the line left with the file.
+- 2026-10-07, ed25519: `scalarMultBase` `IncrementsMutator` and
+  `RemoveConditionalMutator_ORDER_ELSE` had sat on the comb walk's exit while the walk
+  counted its shift down; the reversed step was finite only by int wraparound and the
+  removed exit unbounded. The walk now runs on a window index into a constant shift table,
+  so a mis-stepped index throws on its first bad window, and the inner block loop's own
+  mutants under the same keys are killed; quiet for five fresh runs and under the gate, the
+  two lines were removed. `pow2523` stays the suite's one member.
 
 - 2026-10-07, vanity: the triage pass had accepted `MaskWorker.run`'s two `MathMutator`
   rows on the packed-offset unpacking as `# scratch offset relocation` and `# resume over

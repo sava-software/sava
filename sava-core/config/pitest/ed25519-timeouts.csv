@@ -2,5 +2,3 @@
 # timeouts missing from this set). Structural causes: README.md "Timed-out mutants
 # (audited set)".
 software.sava.core.crypto.ed25519.Ed25519Util,pow2523,RemoveConditionalMutator_ORDER_IF # cause:liveness line 420
-software.sava.core.crypto.ed25519.Ed25519Util,scalarMultBase,IncrementsMutator # cause:liveness line 938
-software.sava.core.crypto.ed25519.Ed25519Util,scalarMultBase,RemoveConditionalMutator_ORDER_ELSE # cause:liveness line 939

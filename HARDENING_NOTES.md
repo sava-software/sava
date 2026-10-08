@@ -642,11 +642,12 @@ written that day came from a clean run.
   holds no lock before starting the helper. The ws suite is back to its three audited
   members; the lesson is that a test which can only pass or hang is a timeout waiting
   for a reordering.
-- **Quiet retirements pending.** Seven audited timeout members now read `KILLED` on
-  every fresh run but keep their membership lines until the verify's three-run quiet
-  notice and the gate confirmation: the four vanity cap mutants, `Jex.isValid`
-  `IncrementsMutator`, and the two `scalarMultBase` members. Remove each line by hand
-  when the notice arrives and move its README argument to History.
+- **Quiet retirements: done.** The four vanity cap members, `Jex.isValid`
+  `IncrementsMutator` and the two `scalarMultBase` members read `KILLED` on every fresh
+  run (five to seven in a row) and under the quality gate, the verify emitted its
+  three-run quiet notice for each, and the membership lines were removed by hand with
+  their arguments moved to History; the vanity and encoding audit files went with their
+  last lines, and `pow2523` is the ed25519 suite's one member.
 - **`generateTestSupport`: closed, stays off.** The hand-rolled harnesses (the request
   tests' loopback `HttpServer` base, the transport and cancellation sockets, the
   websocket lifecycle threads and recording executors) are deterministic,
