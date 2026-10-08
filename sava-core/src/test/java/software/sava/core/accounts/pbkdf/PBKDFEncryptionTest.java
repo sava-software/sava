@@ -312,10 +312,10 @@ final class PBKDFEncryptionTest {
     }
   }
 
-  /// The JDK fact behind accepting the password-decrypt wipe as redundant: SunJCE zeroes a key
-  /// array that a `SecretKey` hands out by reference while initialising AES/GCM for decryption,
-  /// and leaves it alone for encryption. The key here is the test's own, so this pins the JDK,
-  /// not sava; if it ever fails, that acceptance no longer holds.
+  /// The JDK fact the `decrypt(byte[]…)` javadoc documents: SunJCE zeroes a key array that a
+  /// `SecretKey` hands out by reference while initialising AES/GCM for decryption, and leaves it
+  /// alone for encryption. The key here is the test's own, so this pins the JDK, not sava. It
+  /// covers only paths that reach `init`; the password overload's wipe is tested on its own.
   @Test
   void theJceZeroesARawKeyArrayAtDecryptInit() throws GeneralSecurityException {
     record RawKey(byte[] key) implements SecretKey {
