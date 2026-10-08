@@ -1705,6 +1705,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     validateJsonToken(subscribeMethod, "subscribeMethod");
     validateJsonToken(unSubscribeMethod, "unSubscribeMethod");
     validateJsonToken(notificationMethod, "notificationMethod");
+    if (key == null) {
+      // Refused here, before the namespace and a request id exist: the registry put below would
+      // reject a null key after both had been created, leaving an empty namespace resident.
+      throw new IllegalArgumentException("key must not be null: it identifies the registration under " + notificationMethod);
+    }
     for (final var channel : Channel.values()) {
       if ((channel.name() + "Notification").equals(notificationMethod)) {
         // Built-in routing always wins, so a generic registration under a built-in name would
@@ -1992,6 +1997,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                            final int paramsMark,
                            final Function<Subscription<T>, T> factory) {
     final int mark = ji.mark();
+    // The factory parses the value from the mark below, so the cursor still sits in front of
+    // it: skip it first, or skipRestOfObject consumes only the value and the scan below reads
+    // the rest of result, where a member named subscription would redirect the notification.
+    ji.skip();
     ji.skipRestOfObject();
     if (ji.skipUntil("subscription") == null) {
       ji.reset(paramsMark).skipUntil("subscription");
@@ -2520,10 +2529,16 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             }
           } else {
             final int paramsMark = ji.mark();
-            ji.skipUntil("result");
+            if (ji.skipUntil("result") == null) {
+              throw new IllegalStateException(channel + "Notification params carry no result");
+            }
 
             final int resultMark = ji.mark();
-            ji.skipUntil("context");
+            if (ji.skipUntil("context") == null) {
+              // Scanning on from here would read the rest of params as the context and the value,
+              // and could deliver a member outside result under a registration.
+              throw new IllegalStateException(channel + "Notification result carries no context");
+            }
             final var context = Context.parse(ji);
             if (ji.skipUntil("value") == null) {
               ji.reset(resultMark).skipUntil("value");
