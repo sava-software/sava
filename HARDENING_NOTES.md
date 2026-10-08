@@ -666,7 +666,29 @@ real-clock transport pins in `JsonHttpClientTransportTests` are rewritten onto t
 scheduler seam; `scalarMultBase`'s window walk is refactored onto an array index; the
 sava-rpc families whose oracle is still "owed" are worked in slices, cheapest first;
 the remaining `# untriaged` rows in `accounts` and `vanity` wait for the reviewer and
-gate on this range. Still open: `generateTestSupport`.
+gate on this range. `generateTestSupport` was closed as recorded above; nothing from the
+campaign is still open.
+
+### Review delta — 2026-10-07
+
+The local reviewer's pass over the range returned five findings, each confirmed against
+the source and fixed on top of it; none was refuted. One acceptance was wrong: pbkdf's
+`# wipe preceded by the JCE` held only on paths that reach `Cipher.init`, and a null IV
+throws from the `GCMParameterSpec` constructor first, so on that path the `finally` wipe
+is the only zeroing, a recording derivation observes it, and the new test kills the mutant
+(the pbkdf History entry has the detail). Three ws rows carried another construct's label:
+the retag taken after the parser fixes had rotated two rows of the `onWholeMessage`
+`EQUAL_IF` key again, and the surviving `recordFailedPing` row kept its killed sibling's
+label, which the README label check accepted because that literal still stands in a
+History note. Two scans caught nothing else and are the check to repeat after every retag
+or prune: each row's tagged source line against the construct its family argues, and each
+label against the README with the History sections excluded. A candidate for sava-build,
+not done here: the label check itself should skip History. The zero-signer finding's two
+inputs are committed as seeds (`no_signers_*` under `fuzz/txSkeleton`) that
+`NoSignerHeaderTests` asserts byte for byte and the generated replay feeds to the harness
+on every `check`; and two javadocs were qualified (`toJsonIntArray`'s `String`-limit bound
+is the worst case, and a duplicate subscription is the same key at the same commitment, or
+under the same notification method).
 
 ## Mutator-set trials
 
