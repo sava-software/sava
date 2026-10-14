@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  # A manual run warms the Gradle cache a fork pull request restores read-only, which
+  # a quiet main lets expire.
+  workflow_dispatch:
 
 permissions:
   contents: read
