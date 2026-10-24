@@ -6,6 +6,18 @@ import software.sava.core.encoding.ByteUtil;
 
 import java.util.function.BiFunction;
 
+/// The Clock sysvar, 40 bytes, a layout Alpenglow left unchanged.
+///
+/// @param epochStartTimestamp The `unixTimestamp` of the first block of the current epoch.
+/// @param unixTimestamp       Wall-clock seconds for this slot as the cluster agreed them, the
+///                            leader's clock rather than a trusted time source. Under Alpenglow,
+///                            which every public cluster has run since October 2026, the leader
+///                            writes a nanosecond timestamp into its block footer and agave stores
+///                            it here in whole seconds, bounded to after the parent block's
+///                            timestamp and within twice the slot time elapsed since the parent
+///                            (`update_clock_from_footer` in `agave:runtime/src/bank.rs`). Under
+///                            TowerBFT it was the stake-weighted median of the timestamps
+///                            validators attached to their votes.
 public record Clock(PublicKey address,
                     long slot,
                     long epochStartTimestamp,
