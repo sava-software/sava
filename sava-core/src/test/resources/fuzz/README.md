@@ -54,8 +54,12 @@ consume exactly the promised `len*` bytes and re-read equal:
   rejection as a malformed-input outcome; `malformedUtf8StringsAreRejected` is
   the named strict-decoding oracle.
 - `u128_vector` — the `BigInteger` element path, 16 bytes with the high bit set.
-- `oversized_length_prefix` — a `u32` count larger than the remaining bytes can
-  back: the allocation guard, the invariant this harness exists for.
+- `oversized_length_prefix` — a `u32` count of five with only four payload bytes:
+  the allocation guard, the invariant this harness exists for. The smallest
+  invalid count keeps allocations bounded when PIT removes that guard; the
+  named `corruptVectorLengthsAreRejectedBeforeAllocation` and
+  `corruptReferenceVectorLengthsAreRejectedBeforeAllocation` tests retain the
+  `Integer.MAX_VALUE` cases.
 - `empty_vector` — a zero-length vector, the boundary where an off-by-one in
   the prefix arithmetic is invisible to every larger case.
 - `int_matrix` — two 2-element vectors: the multi-dimension reader, whose outer

@@ -9,6 +9,67 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.6.9 — 2026-10-24
+
+All three plugin pins advance from 21.6.5 to the published
+`software.sava:sava-build:21.6.9`. With `-PsavaBuildLocalRepo=` explicitly clearing
+the local override, `:sava-core:savaBuildIdentity` reported that coordinate and loaded
+JAR SHA-256 `f501f52e3d0888d1d98c4cba5f88fa30e766fb8c513cd0d2012a230ce52ae086`.
+`gh attestation verify` verified its SLSA v1 provenance from
+`.github/workflows/gradle_plugin_publish.yml` at `refs/tags/21.6.9`, source commit
+`c78e97fb6d3770577a1ed5ae8a3b6c49ed9205ef`.
+
+The installed `hardeningAgentTemplate` was copied verbatim into `AGENTS.md`.
+Its new scratch-source rule requires the ignored RPC `Integ.java` driver to leave
+the regular test source set: it now lives in `src/scratch/java`, preserving its
+package and contents, with a disabled scratch test suite excluded from dependency
+analysis. The obsolete `recompileExcludes` entry is removed. The template also
+narrows the ArcMutate source-text restriction to `src/main/java`; test-only text
+changes can retain a report when recompilation produces byte-identical classes.
+
+The release range adds one dynamic regression replay per fuzz seed, improves
+baseline-label pairing, identifies the plugin behind debt reports, and reports
+per-class mutant-population changes. The plugin now explicitly targets Java 21
+regardless of its build JDK. Its version catalog is unchanged between the two tags:
+PIT 1.30.0, the PIT JUnit plugin 1.2.3, and ArcMutate base 1.7.2 remain in force, so
+the upgrade does not require `BaselineRebase`.
+
+The revised gate policy explicitly makes a plugin upgrade owe the project's suites
+unless every intervening release declares PIT execution and inputs unchanged.
+This range changes both, so all 17 suites ran history-free after review. The first
+root `qualityGate` stopped before accounts coverage with a localhost handshake
+`SocketTimeoutException` and `MINION_DIED`, confirmed in the daemon log. The failed
+suite and the eight suites not yet reached passed in the subsequent invocation;
+that result closes the failed attempt without establishing its cause.
+
+Borsh's `readVectorLength` `RemoveConditionalMutator_ORDER_ELSE` at line 223 timed
+out in both the gate and a solo retry. The verbose diagnostic placed the individual
+`oversized_length_prefix` replay before the named rejection tests. Its scaffold seed
+claimed 268,435,455 elements with four payload bytes; removing the allocation guard
+there permits large finite allocations. The seed now claims five elements, the
+smallest count those bytes cannot back, while the existing named tests retain their
+`Integer.MAX_VALUE` cases. This preserves the rejection boundary and bounds the
+mutated replay's allocation cost without changing production, exclusions, timeout
+budgets or accepted records. The corpus README records that fixture choice.
+After review, the fresh full Borsh rerun killed all 1,033 mutants with zero timeouts
+and an unchanged population; the formerly timed-out coordinate was `KILLED` by
+`corruptReferenceVectorLengthsAreRejectedBeforeAllocation`. All 17 suites now have
+completed history-free reports under 21.6.9 with no invalid execution outcomes.
+The ownership audits report 170 core and 286 RPC production classes owned, zero
+unowned and zero explicitly declined. No baseline, timeout membership or provenance
+record changed.
+Certification and bounded fuzz campaigns remain the separate pre-release checks.
+
+Validation used the existing working tree's Gradle 9.8.2 and BOM 25.30.40.
+After clearing stale RPC build outputs, root `test --rerun check` passed 2,038 test
+cases (sava-core 919, sava-rpc 1,063, sava-vanity 56), with zero failures or errors
+and two environment-gated skips. `:sava-rpc:scratchClasses` compiled the preserved
+driver; `check --dry-run` contains no scratch tasks, and the regular test output
+contains no `Integ` class. All 919 core tests passed again after bounding the Borsh
+seed. Standalone `jmhClasses --rerun-tasks` passed; the existing
+`me.champeau.jmh` warning about `Configuration.setVisible(boolean)` becoming
+unavailable in Gradle 11 remains.
+
 ## Released sava-build 21.6.5 — 2026-10-07
 
 All three plugin pins now read the published `software.sava:sava-build:21.6.5`, crossing

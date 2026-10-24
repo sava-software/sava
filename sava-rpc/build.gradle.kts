@@ -1,3 +1,5 @@
+import org.gradle.api.plugins.jvm.JvmTestSuite
+
 plugins {
   id("org.gradlex.extra-java-module-info")
   id("software.sava.build.feature.hardening")
@@ -26,11 +28,27 @@ testModuleInfo {
   runtimeOnly("org.junit.jupiter.engine")
 }
 
+// Local drivers keep package-private access without entering hardening inputs.
+testing {
+  suites {
+    register<JvmTestSuite>("scratch") {
+      useJUnitJupiter()
+      targets.configureEach {
+        testTask.configure {
+          enabled = false
+        }
+      }
+    }
+  }
+}
+
+dependencyAnalysis {
+  issues {
+    ignoreSourceSet("scratch")
+  }
+}
+
 hardening {
-  // The git-ignored Integ.java driver lives in the test sources on a dev machine and
-  // nowhere in CI; kept out of the PIT/Jazzer recompile, it cannot make this checkout's
-  // mutant population or tool class path differ from CI's.
-  recompileExcludes = listOf("Integ.java")
   mutation.register("encoding") {
     // key encodings crossing the JSON boundary, plus the request-shaping enums.
     // RpcEncoding is deliberately missing a jsonParsed constant (AGENTS.md), which

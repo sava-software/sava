@@ -94,14 +94,13 @@ mutants are accepted and why — lives under "sava-specific hardening facts" aft
 template, and in the documents that section points to.
 
 <!-- hardening-template block:start -->
-- Work with the module's `test` task. The mutation suites are a final gate, run once
-  per unpushed range when the work is complete and reviewed, before the push: each
-  `pitest<Suite>` whose mutated code the range can reach, including suites in
-  dependent modules, plus `mutationOwnershipAudit` when production classes or
-  target/exclusion rules changed. Never per commit, amend or review round; a change
-  the gate forces goes back through review as a delta. `hardeningCertify` (or
-  `:hardeningCertifyAll`) and `fuzzAll` are the pre-release checks this repo's notes
-  assign an owner to.
+- Work with the module's `test` task. The mutation suites are a final gate, run once per
+  unpushed range when the work is complete and reviewed, before the push: each
+  `pitest<Suite>` whose mutated code the range can reach, including suites in dependent
+  modules, plus `mutationOwnershipAudit` when production classes or target/exclusion
+  rules changed. Never per commit, amend or review round; a change the gate forces goes
+  back through review as a delta. `hardeningCertify` (or `:hardeningCertifyAll`) and
+  `fuzzAll` are the pre-release checks this repo's notes assign an owner to.
 - Test-only edits owe the suites whose mutated code those tests exercise; when scope
   is unclear, run `./gradlew qualityGate` from the Gradle root. Doc and comment
   edits owe no suite; a build-script edit only when it changes what
@@ -109,7 +108,7 @@ template, and in the documents that section points to.
   once reviewed. `pitest<Suite>Verify` answers one way: it keeps its report while only
   recompiled Java sources changed and every recompiled class is byte-identical, which
   proves that suite is owed nothing; a refusal (a moved line, a resource, a build
-  script, an ArcMutate suite) names its cause and proves nothing by itself.
+  script, `src/main/java` under ArcMutate) names its cause and proves nothing by itself.
 - When the gate reports unkilled mutants, iterate on one cluster with
   `-PmutateOnly=<class-glob>`. Before any record decision, re-run unscoped with
   `-PnoMutationHistory`: a `[history]` report cannot support adding, removing, or
@@ -123,13 +122,12 @@ template, and in the documents that section points to.
   oracle independent of the implementation before writing the killing test. If they
   contradict current behaviour, prove the bug with a failing regression test first,
   then fix production; never lock a bug in with a passing assertion.
-- Write records only through the installed writer tasks: `BaselineUnion` adds
-  reviewed rows, `BaselineRetag` refreshes `# line` metadata, `BaselinePrune` deletes
-  only after two matching fresh history-free previews, `BaselineUpdate` is for a
-  first seed or a reviewed complete rewrite, and `pitest<Suite>BaselineRebase`
-  follows a PIT, PIT-plugin/tool-artifact, ArcMutate-base, or certificate change.
-  Never hand-edit baseline
-  rows or provenance stamps.
+- Write records only through the installed writer tasks: `BaselineUnion` adds reviewed
+  rows, `BaselineRetag` refreshes `# line` metadata, `BaselinePrune` deletes only after
+  two matching fresh history-free previews, `BaselineUpdate` is for a first seed or a
+  reviewed complete rewrite, and `pitest<Suite>BaselineRebase` follows a PIT,
+  PIT-plugin/tool-artifact, ArcMutate-base, or certificate change. Never hand-edit
+  baseline rows or provenance stamps.
 - Baseline keys are line-less (`class,method,mutator,STATUS`); `# line` tags are
   review metadata that belong to their row: `BaselineRetag` refreshes them, a hand
   edit is a hand-edited row. Identical rows are sibling mutants and the comparison
@@ -146,6 +144,8 @@ template, and in the documents that section points to.
 - Tests are deterministic: fixed seeds, no sleeps, a clock with a non-zero origin,
   stubs that return distinguishable non-default values, and the subject built inside
   the test body. Exclusions must cover the test source set, not a naming convention.
+- Git-ignored scratch sources (`Integ.java` drivers) never sit in a hardened project's
+  `main` or `test` source set; keep them in a git-ignored `scratch` source set instead.
 - Verify by the absence of failures: trust the exit code and the `.running`
   sentinel, not a summary. `MINION_DIED` and `RUN_ERROR` are not results; re-run once
   on a quiet machine. A suite that got faster without getting narrower is a bug report.
@@ -332,7 +332,7 @@ copying a possibly newer block out of sava-build's moving `main`.
 
 **This repo pins a published sava-build release.** The three pins — both ids in
 the root `settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read
-`21.6.5`, adopted on 2026-10-07; `HARDENING_NOTES.md` records the resolved jar's
+`21.6.9`, adopted on 2026-10-24; `HARDENING_NOTES.md` records the resolved jar's
 SHA-256 and attestation. **The pins must move together**; a settings-only bump has
 silently missed the jmh pin more than once. This combination resolves from the
 ordinary published repository; `-PsavaBuildLocalRepo` is needed only while

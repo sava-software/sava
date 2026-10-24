@@ -55,6 +55,9 @@ keys
 Integ.*
 integ.*
 
+# Machine-local drivers live outside the main/test hardening inputs.
+/sava-*/src/scratch/
+
 # Cargo build output for the Rust conformance-vector generators under
 # sava-core/src/test/solana/ and sava-rpc/src/test/solana/. Kept here rather than in a
 # per-crate .gitignore so the rule
