@@ -50,8 +50,9 @@ public record ClusterNode(String gossip,
   }
 
   /// @deprecated The UDP port on which a TowerBFT node takes in vote transactions. Alpenglow
-  /// votes are not transactions and travel over their own gossip socket, so nothing on an
-  /// Alpenglow cluster, which every public cluster has been since October 2026, uses it; agave's
+  /// votes are not transactions and travel over their own QUIC socket, the Alpenglow address each
+  /// node advertises in gossip and `getClusterNodes` does not report, so nothing on an Alpenglow
+  /// cluster, which every public cluster has been since October 2026, uses it; agave's
   /// master branch drops the key from `getClusterNodes` and stops advertising the socket, while
   /// 4.3 and 4.4 servers still send it. Reads `null` when the server omits the key or the peer
   /// advertises no UDP vote socket. There is no replacement; a TowerBFT cluster, such as an agave

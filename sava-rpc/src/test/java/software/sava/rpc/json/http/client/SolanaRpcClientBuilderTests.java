@@ -107,13 +107,13 @@ final class SolanaRpcClientBuilderTests {
           .endpoint(ENDPOINT)
           .httpClient(httpClient)
           .requestTimeout(Duration.ofSeconds(11))
-          .defaultCommitment(Commitment.FINALIZED)
+          .defaultCommitment(Commitment.CONFIRMED)
           .createClient();
 
       assertEquals(ENDPOINT, client.endpoint());
       assertSame(httpClient, client.httpClient());
       assertEquals(Duration.ofSeconds(11), client.defaultRequestTimeout());
-      assertEquals(Commitment.FINALIZED, client.defaultCommitment());
+      assertEquals(Commitment.CONFIRMED, client.defaultCommitment());
     }
   }
 

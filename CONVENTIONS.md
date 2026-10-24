@@ -51,11 +51,17 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - **A negative `long` is the top half of the range**, not an error. `-1L`
   serialises as `18446744073709551615`. `Long.toUnsignedString` /
   `new BigInteger(1, bytes)` appear throughout for this reason.
-- **`EpochCredits` straddles Alpenglow.** The migration marker row reads as three `-1L`;
-  rows before it count TowerBFT vote credits and rows after it count cumulative reward
-  lamports, with the migration epoch appearing twice. Sum per-row
-  `credits - previousCredits` and skip the marker; never difference across it, compare
-  pre- and post-marker deltas, or key the history by epoch.
+- **`EpochCredits` straddles Alpenglow.** The migration marker row reads as three `-1L`. A
+  row's unit follows its epoch against the cluster's migration epoch (the `epoch` column of
+  AGAVE_SYNC.md's activation table): earlier epochs count TowerBFT vote credits and later
+  epochs count cumulative reward lamports, with or without a marker in view. A
+  migration-epoch row counts vote credits before the marker and lamports after it; agave
+  writes the marker only for an account paid an Alpenglow reward during that epoch, and the
+  five-row window scrolls it out, so with no marker in the window leave migration-epoch rows
+  out. Each row's `credits - previousCredits` is meaningful on its own; add deltas only
+  within one unit, because `credits` is continuous across the migration and a sum that spans
+  it adds vote credits to lamports. Never compare pre- and post-migration deltas or use
+  `epoch` as a unique key.
 - **`0` is often a sentinel for "unset"**, not a real value.
   `getProgramAccounts(..., long minContextSlot, ...)` omits the field entirely
   when it is `0`; `dataSliceLength(offset, 0)` means "whole account". Use the

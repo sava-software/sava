@@ -154,8 +154,9 @@ final class ClusterInfoRpcRequestTests extends RpcRequestTests {
     assertEquals(10, commitment.commitment()[8]);
   }
 
-  /// What every Alpenglow node answers for every slot after its genesis, captured from mainnet
-  /// on 2026-10-24: no lockout array and a zero total, parsed as an empty array rather than null.
+  /// What an agave node started since the Alpenglow switch answers for every slot after the
+  /// Alpenglow genesis, captured from mainnet on 2026-10-24: no lockout array and a zero total,
+  /// parsed as an empty array rather than null.
   @SuppressWarnings("removal")
   @Test
   void getBlockCommitmentOnAnAlpenglowNode() {

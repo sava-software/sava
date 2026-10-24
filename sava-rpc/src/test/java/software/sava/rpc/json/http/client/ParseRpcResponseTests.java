@@ -53,7 +53,6 @@ final class ParseRpcResponseTests {
     return JsonIterator.parse(readFileBytes(fileName)).skipUntil("result");
   }
 
-  @SuppressWarnings("removal")
   @Test
   void getBlock() {
     final var ji = readJsonFile("getBlock.json.zip");
@@ -181,7 +180,6 @@ final class ParseRpcResponseTests {
     assertEquals(405146599541901117L, bc.totalStake());
   }
 
-  @SuppressWarnings("removal")
   @Test
   void getBlockProduction() {
     final var ji = readJsonFile("getBlockProduction.json");

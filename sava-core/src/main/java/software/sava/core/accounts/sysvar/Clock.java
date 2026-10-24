@@ -12,10 +12,14 @@ import java.util.function.BiFunction;
 /// @param unixTimestamp       Wall-clock seconds for this slot as the cluster agreed them, the
 ///                            leader's clock rather than a trusted time source. Under Alpenglow,
 ///                            which every public cluster has run since October 2026, the leader
-///                            writes a nanosecond timestamp into its block footer and agave stores
-///                            it here in whole seconds, bounded to after the parent block's
-///                            timestamp and within twice the slot time elapsed since the parent
-///                            (`update_clock_from_footer` in `agave:runtime/src/bank.rs`). Under
+///                            writes a nanosecond timestamp into its block footer, which replay
+///                            rejects unless it is strictly after the parent block's and at most
+///                            twice the slot time elapsed since the parent past it
+///                            (`enforce_nanosecond_clock_bounds` in
+///                            `agave:runtime/src/block_component_processor.rs`), and agave stores
+///                            it here truncated to whole seconds (`update_clock_from_footer` in
+///                            `agave:runtime/src/bank.rs`), so the value never decreases from a
+///                            block to its child but consecutive blocks commonly share it. Under
 ///                            TowerBFT it was the stake-weighted median of the timestamps
 ///                            validators attached to their votes.
 public record Clock(PublicKey address,

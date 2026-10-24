@@ -144,7 +144,7 @@ final class SolanaRpcWebsocketBuilderTests {
         .reConnectDelay(1_111L)
         .pingDelay(2_222L)
         .subscriptionAndPingCheckDelay(3_333L)
-        .commitment(Commitment.FINALIZED)
+        .commitment(Commitment.CONFIRMED)
         .solanaAccounts(SolanaAccounts.MAIN_NET);
 
     assertEquals(uri, builder.wsUri());
@@ -152,7 +152,7 @@ final class SolanaRpcWebsocketBuilderTests {
     assertEquals(1_111L, builder.reConnectDelay());
     assertEquals(2_222L, builder.pingDelay());
     assertEquals(3_333L, builder.subscriptionAndPingCheckDelay());
-    assertEquals(Commitment.FINALIZED, builder.commitment());
+    assertEquals(Commitment.CONFIRMED, builder.commitment());
   }
 
   @Test
@@ -222,9 +222,9 @@ final class SolanaRpcWebsocketBuilderTests {
     try (final var websocket = builder()
         .uri(SolanaNetwork.DEV_NET.getWebSocketEndpoint())
         .webSocketBuilder(new RecordingWebSocketBuilder(new AtomicReference<>()))
-        .commitment(Commitment.FINALIZED)
+        .commitment(Commitment.CONFIRMED)
         .create()) {
-      assertEquals(Commitment.FINALIZED, websocket.defaultCommitment());
+      assertEquals(Commitment.CONFIRMED, websocket.defaultCommitment());
       assertEquals(SolanaNetwork.DEV_NET.getWebSocketEndpoint(), websocket.endpoint());
     }
   }

@@ -14,13 +14,20 @@ import java.util.List;
 /// `agave:votor-messages/src/migration.rs`, therefore reads as three `-1L` and is kept in the
 /// history rather than dropped; the signed reader this replaced threw on it.
 ///
-/// The marker also divides two units. Rows before it count TowerBFT vote credits. Rows after it
-/// count cumulative reward lamports, the vote account's share of each block's vote reward
-/// (`increment_credits` in `agave:runtime/src/block_component_processor/vote_reward.rs`), which
-/// agave's own CLI labels "lamports earned". The first row after the marker restarts from the
-/// final TowerBFT total, so the migration epoch appears twice with `credits` continuous across
-/// the marker. Per-row `credits - previousCredits` stays meaningful; a difference across the
-/// marker, a comparison of pre- and post-marker deltas, or a map keyed by `epoch` is not.
+/// The unit of `credits` follows the epoch, not the marker. Rows for epochs before the cluster's
+/// migration epoch count TowerBFT vote credits. Rows for later epochs count cumulative reward
+/// lamports whether or not a marker comes before them: the vote account's share of each block's
+/// vote reward (`increment_credits` in `agave:runtime/src/block_component_processor/vote_reward.rs`),
+/// which agave's own CLI labels "lamports earned". The migration epochs are mainnet-beta 1064,
+/// devnet 1167 and testnet 1042 (AGAVE_SYNC.md, "Alpenglow"). agave writes the marker only into
+/// accounts it pays an Alpenglow reward during the migration epoch, so the marker matters only
+/// there: a migration-epoch row before it is the TowerBFT half and the row after it the Alpenglow
+/// half, and that epoch appears twice for an account that earned both. `getVoteAccounts` returns
+/// only the last five rows, which drop the marker but can keep the Alpenglow half, so a
+/// migration-epoch row with no marker before it in the window cannot be classified from the window
+/// alone. `credits` is continuous across the switch. Per-row `credits - previousCredits` is
+/// meaningful within one unit; a sum, difference or comparison across the switch, or a map keyed
+/// by `epoch`, is not.
 public record EpochCredits(long epoch, long credits, long previousCredits) {
 
   static List<EpochCredits> parse(final JsonIterator ji) {

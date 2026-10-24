@@ -162,7 +162,7 @@ Agave canonical sources:
   `RpcBlockhash`, `RpcSupply`, `RpcVoteAccountStatus`, …).
 
 Coverage note (2026-10): the Java client implements the full active agave method set except
-the two Alpenglow-only methods, `getAgGenesisCert` (agave 4.3) and `getRankMap` (agave 4.5, in
+the two Alpenglow-only methods, `getAgGenesisCert` (agave 4.2.0) and `getRankMap` (agave 4.5, in
 no release the public clusters ran as of 2026-10-24), both left out under the owner's policy in
 the Alpenglow section; agave's deprecated methods are intentionally not implemented, and
 `getBlockCommitment` is implemented but deprecated for removal here because Alpenglow nodes
@@ -202,12 +202,9 @@ Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
   `sava-rpc/config/pitest/README.md`). Fixed 2026-07-17 after the first baseline:
   `TxStatus.parse`'s nil-status dedup compared `whatIsNext()` against Java null instead of
   `ValueType.NULL` and so never fired, and `TxSimulation.unitsConsumed` read an unguarded
-  `readInt` where `fee` skips non-numbers. Known parser quirks, pinned not changed:
+  `readInt` where `fee` skips non-numbers. Known parser quirk, pinned not changed:
   `JsonUtil.parseEncodedData`'s single-element-array branch always throws (real providers
-  send `[data, encoding]` pairs); `BlockCommitment` keeps its doubled buffer when a
-  commitment array exceeds 32 entries, a path only a TowerBFT node or synthetic input reaches
-  now that Alpenglow nodes answer `commitment: null` (see Alpenglow; the record and its method
-  are deprecated for removal). A JSON fuzz harness would add little at this
+  send `[data, encoding]` pairs). A JSON fuzz harness would add little at this
   strength — revisit only if the parsers start accepting deeper provider-controlled
   structures.
 
@@ -222,8 +219,11 @@ Java: `sava-rpc/src/main/java/software/sava/rpc/json/http/ws/`
 
 Agave canonical source: `agave:rpc/src/rpc_pubsub.rs` — subscription registrations. Agave also
 serves `slotsUpdatesSubscribe` and `blockSubscribe`, which have no typed Java wrapper
-(reachable via the generic passthrough), and still registers `voteSubscribe`, which under
-Alpenglow accepts a subscription and never notifies (see Alpenglow and Known gaps).
+(reachable via the generic passthrough), and still registers `voteSubscribe`: every agave
+release through v4.5.0-alpha.2 (so the 4.3.x/4.4.x servers on the public clusters) refuses it
+with `-32601 Method not found` unless started with `--rpc-pubsub-enable-vote-subscription`, and
+master `1513b7a5bb` (unreleased) drops that gate; wherever it is accepted under Alpenglow it
+never notifies (see Alpenglow and Known gaps).
 
 Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/ws/SolanaJsonRpcWebsocketTests.java`
 and `SolanaRpcWebsocketTests.java` (subscription lifecycle and framing).
@@ -799,9 +799,9 @@ Alpenglow (SIMD-0326 Votor consensus, plus SIMD-0357 VAT, SIMD-0384 migration, S
 BLS vote keys, SIMD-0388 BLS syscalls; the SIMD files still read `status: Review` as of
 2026-10-24, so SIMD status lags activation) replaced TowerBFT and PoH with off-chain
 BLS-signed votes and finalization certificates. Feature gates in `agave:feature-set/src/lib.rs`:
-`alpenglow` = `A1pengvuM6JEcyNuTnMqepBKhwHE3N6PmUrdATGawhJS`, `alpenglow_fast_leader_handover`,
-and `bls_pubkey_management_in_vote_account` = `AnAP9zPV4KL7czAPQbFhpDKV2tx7g4UGNbK9wvXwjaRo`,
-which governs the `VoterWithBLS` path below. Status probed 2026-10-24 through each cluster's
+`alpenglow` = `A1pengvuM6JEcyNuTnMqepBKhwHE3N6PmUrdATGawhJS` and
+`bls_pubkey_management_in_vote_account` = `AnAP9zPV4KL7czAPQbFhpDKV2tx7g4UGNbK9wvXwjaRo`, which
+governs the `VoterWithBLS` path below. Status probed 2026-10-24 through each cluster's
 public RPC (`getAccountInfo` on the `alpenglow` feature account, `getAgGenesisCert`,
 `getEpochInfo`, `getVersion`):
 
@@ -817,20 +817,25 @@ certificate names the last slot before it (the genesis block is the latest ances
 migration slot). Epochs come from each cluster's `getEpochInfo` (`absoluteSlot − slotIndex`),
 not from dividing the slot by 432,000: testnet's epoch 0 did not start at slot 0. The related
 gates activated on mainnet months earlier: SIMD-0185 vote account v4 (epoch 949), SIMD-0387 BLS
-key management (999), SIMD-0337 fast leader handover (1005), SIMD-0357 VAT (1006). The agave
-wiki's feature-gate tracker lists SIMD-0326 as needing Agave ≥ 4.3.0 or Firedancer ≥ 26.10.4,
-and Frankendancer was not supported for the migration. Mainnet has also run 200 ms slots since
+key management (999), SIMD-0337 fast-leader-handover block markers
+(`discard_unexpected_data_complete_shreds` = `disCA4efguFL6Wqa4pGdG7jpjC7C5uiKzKnhEBqchBe`, 1005),
+SIMD-0357 VAT (1006). The agave wiki's feature-gate tracker (`feature-gate-tracker-schedule.json`,
+`e2968a3`, read 2026-10-24) lists SIMD-0326 as needing Agave ≥ 4.3.0 or Firedancer ≥ v26.10.4,
+with Frankendancer not supported; the Foundation guide says neither Firedancer nor Frankendancer
+was supported for the migration, and the tracker's Firedancer minimum is a release tagged after
+the switch. Mainnet has also run 200 ms slots since
 epoch 1053 (2026-10-09, SIMD-0525, all four gates live; `agave:runtime/src/slot_params.rs`), so
 an epoch takes about 24 hours and the 150-block blockhash window about 30 seconds. The Solana
 Foundation's consumer guide is `solana-com:apps/media/content/upgrades/alpenglow.mdx`.
 **Policy (owner, 2026-09-24): sava carries whatever activation breaks for an existing
 caller — the vote-credit parsing below — and leaves Alpenglow-only surfaces
-(`getAgGenesisCert`, `getRankMap`) unimplemented until a consumer needs one.**
+(`getAgGenesisCert`) unimplemented until a consumer needs one.** `getRankMap` (agave
+`0cc6cf3acc`, 2026-10-06) falls under the same rule.
 
 What activation changed for this library, on every public cluster:
 - **Vote-credit history carries a marker no signed reader can hold.** At the migration
   epoch agave pushes `AG_MIGRATION_EPOCH_CREDIT` = `(Epoch::MAX, u64::MAX, u64::MAX)` into
-  the `epoch_credits` of every vote account credited during that epoch (`ensure_marker`,
+  the `epoch_credits` of every vote account paid an Alpenglow reward during that epoch (`ensure_marker`,
   reached from `increment_credits` in
   `agave:runtime/src/block_component_processor/vote_reward.rs`), and `getVoteAccounts`
   serialises the tuple as plain JSON numbers, so the marker arrives as three
@@ -853,22 +858,30 @@ What activation changed for this library, on every public cluster:
   windows that move only when they earn credits again, and the default response lists staked
   delinquents, so for a consumer on sava-rpc below 25.11.2 the unfiltered failure has no end
   date: upgrading is the only fix.
-- **The unit of `epochCredits` changed, and the migration epoch appears twice.** After the
-  marker, `increment_credits` adds each block's vote reward in lamports (the validator half of
-  `calculate_reward`, plus the leader's share for the leader), not vote credits; agave's own CLI
-  labels those deltas `lamports earned`. The first Alpenglow entry restarts as
-  `(migration_epoch, reward + final_tower_credits, final_tower_credits)`, so `credits` is
-  continuous across the marker and the migration epoch has a TowerBFT half and an Alpenglow
-  half. Per-row `credits − previousCredits` stays valid; a difference across the marker, a
-  pre/post comparison, or a map keyed by epoch is not. The stake program's `credits_observed`
-  inherits the unit, since it copies the vote account's latest credits
-  (`agave:runtime/src/inflation_rewards/points.rs`), and is documented at
-  `StakeAccount.creditsObserved` in idl-clients-spl. `EpochCredits` and `VoteAccount` carry the
-  consumer-facing version.
-- **`lastVote` and `rootSlot` stay current.** For every signer of a finalization certificate a
-  block carries, `vote_reward.rs` (`maybe_update_votes`, `maybe_update_root`) replaces the
-  on-chain `votes` with one `LandedVote` at the greatest of the certificate slot, the last vote
-  and the root, and advances `root_slot`, so the `current`/`delinquent` split of
+- **The unit of `epochCredits` changed with the migration, and the migration epoch can appear
+  twice.** After the migration, `increment_credits` adds each block's vote reward in lamports
+  (the validator half of `calculate_reward`, plus the leader's share for the leader), not vote
+  credits; agave's own CLI labels those deltas `lamports earned` and classifies rows by epoch
+  against the migration epoch (`get_epoch_history` in `agave:cli-output/src/cli_output.rs`),
+  consulting the marker only for the migration epoch's own rows. An account paid an Alpenglow
+  reward during the migration epoch gets the marker and then an entry
+  `(migration_epoch, reward + final_tower_credits, final_tower_credits)`, so its `credits` is
+  continuous across the marker and that epoch has a TowerBFT half and an Alpenglow half; an
+  account first paid in a later epoch gets no marker and its first lamport row follows the
+  TowerBFT rows directly. The five-row RPC window drops the marker after four more epochs while
+  it can keep the Alpenglow half, so a migration-epoch row with no marker in view cannot be
+  classified from the window alone. Per-row `credits − previousCredits` stays valid within one
+  unit; a sum, difference or comparison across the switch, or a map keyed by epoch, is not. The
+  stake program's `credits_observed` inherits the unit, since it tracks the vote account's
+  latest credits (`agave:runtime/src/inflation_rewards/points.rs`), and is documented at
+  `StakeAccount.creditsObserved` in idl-clients-spl. `EpochCredits`, `VoteAccount` and
+  CONVENTIONS.md carry the consumer-facing version.
+- **`lastVote` and `rootSlot` stay current.** For every validator in a block's reward
+  certificate (`RewardState::update_votes`, at the reward slot) and every signer of a
+  finalization certificate a block carries (`FinalCertState::update_account`), `vote_reward.rs`
+  (`maybe_update_votes`, `maybe_update_root`) replaces the on-chain `votes` with one `LandedVote`
+  at the greatest of the certificate slot, the last vote and the root; only the finalization
+  path advances `root_slot`. So the `current`/`delinquent` split of
   `getVoteAccounts` (`DELINQUENT_VALIDATOR_SLOT_DISTANCE`) still works; live, `lastVote` sat
   within about ten slots of the head. jsonParsed vote accounts
   (`agave:account-decoder/src/parse_vote.rs`) carry the SIMD-0185 v4 commission and collector
@@ -905,19 +918,23 @@ What activation changed for this library, on every public cluster:
 - **TowerBFT RPC cleanup upstream.** agave master commit `1513b7a5bb` (after the v4.5.0-alpha.2
   tag, in no release and absent from the 4.5.0 changelog as of 2026-10-24) removes `tpu_vote`
   from `RpcContactInfo`, deprecates `RpcTransactionLogsFilter::AllWithVotes` ("Alpenglow has no
-  vote transactions; use `All`"), removes `RpcVote`, keeps `voteSubscribe` registered with an
-  empty `notify_vote`, and makes `getHealth` compare only against Votor's highest finalized
-  slot; `ca21544655` stops binding and advertising the UDP TPU vote socket. 4.3.x and 4.4.x RPC
+  vote transactions; use `All`"), documents `RpcVote` as a legacy payload kept until the next
+  major release, keeps `voteSubscribe` registered with an empty `notify_vote` and turns
+  `--rpc-pubsub-enable-vote-subscription` into a no-op (so master accepts the subscription by
+  default and never notifies it, where every release through v4.5.0-alpha.2 refuses it with
+  `-32601` unless started with that flag), and makes `getHealth` compare only against Votor's
+  highest finalized slot; `ca21544655` stops binding and advertising the UDP TPU vote socket. 4.3.x and 4.4.x RPC
   servers still send `tpuVote` (3,345 of 3,922 mainnet nodes on 2026-10-24), while `tpu` and
   `tpuForwards` have been `null` from every agave ≥ 4.0 server (`tpu: None`,
   `tpu_forwards: None` in `agave:rpc/src/rpc.rs`); sava deprecated all three `ClusterNode`
   accessors for removal on 2026-10-24. sava never exposed `allWithVotes` or wrapped
   `voteSubscribe`.
-- `getAgGenesisCert` (`agave:rpc/src/rpc.rs`, agave 4.3) returns the finalized bank's genesis
-  certificate — the ≥ 82 % genesis-vote aggregate that names Alpenglow's genesis block
-  (SIMD-0384): `{block: {slot, blockId}, signature: {bitmap, signature}}`
-  (`agave:votor-messages/src/wire.rs`); every public cluster now returns one, for the slots in
-  the table above. `getRankMap` (agave `0cc6cf3acc`, first in v4.5.0-alpha.2; `-32601` on
+- `getAgGenesisCert` (`agave:rpc/src/rpc.rs`, shipped in agave 4.2.0) returns the finalized
+  bank's genesis certificate — the ≥ 82 % genesis-vote aggregate that names Alpenglow's genesis
+  block (SIMD-0384): `{block: {slot, blockId}, signature: {bitmap, signature}}`
+  (`agave:votor-messages/src/wire.rs`; camelCase keys since 4.3.0, from `dce3730aad` on master
+  with the v4.3 backport `0ca0646bde`, while 4.2.x serialized `block_id`); every public cluster
+  now returns one, for the slots in the table above. `getRankMap` (agave `0cc6cf3acc`, first in v4.5.0-alpha.2; `-32601` on
   4.3.2) returns an epoch's validators ordered by Alpenglow rank with vote and node keys, the
   compressed BLS key and stake, the rank being the index into certificate bitmaps. Both are
   deliberately unimplemented — see the policy above.
@@ -934,18 +951,21 @@ What activation changed for this library, on every public cluster:
   exemption; active validator set capped at 2,000.
 - **`Clock.unix_timestamp` has a new source.** Under TowerBFT it was the stake-weighted median
   of the timestamps validators attached to their votes; under Alpenglow the leader writes a
-  nanosecond timestamp into its block footer and `update_clock_from_footer`
-  (`agave:runtime/src/bank.rs`) stores it in whole seconds, bounded to after the parent's
-  timestamp and within twice the slot time elapsed since the parent, taking
+  nanosecond timestamp into its block footer, which replay rejects unless it is strictly after
+  the parent's and at most twice the slot time elapsed since the parent past it
+  (`enforce_nanosecond_clock_bounds`, `nanosecond_time_bounds` in
+  `agave:runtime/src/block_component_processor.rs`), and `update_clock_from_footer`
+  (`agave:runtime/src/bank.rs`) stores it truncated to whole seconds, never decreasing from
+  parent to child but commonly repeated across consecutive 200 ms blocks, taking
   `epoch_start_timestamp` from it at epoch boundaries. The layout is unchanged; `Clock`'s
   javadoc carries the consumer-facing version.
 - Test tooling: `solana-test-validator` 4.2.x through 4.4.x runs TowerBFT unless started with
   `--alpenglow`; from agave 4.5 (`fd2f68b6ee`, v4.5.0-alpha.2) Alpenglow is on at genesis and
   the flag has no effect, so a TowerBFT test validator can no longer be started. Surfpool
   serves `confirmed` at the tip minus 1 and `finalized` at the tip minus 31
-  (`FINALIZATION_SLOT_THRESHOLD`), and its `getVoteAccounts` returns empty lists, so the marker
-  path is covered only by the fixtures and the fuzz seed. Firedancer's RPC was not supported for
-  the migration.
+  (`FINALIZATION_SLOT_THRESHOLD` in `surfpool:crates/core/src/surfnet/mod.rs`, `bbd2c23`, read
+  2026-10-25), and its `getVoteAccounts` (`surfpool:crates/core/src/rpc/minimal.rs`) returns
+  empty lists, so the marker path is covered only by the fixtures and the fuzz seed.
 
 Explicitly unchanged: all sysvar layouts (Clock, EpochSchedule, EpochRewards, Rent,
 StakeHistory, SlotHashes, LastRestartSlot), the transaction wire format, recent-blockhash
@@ -964,7 +984,8 @@ SIMD files in the solana-improvement-documents repo.
   answer it with no data.
 - WebSocket: typed wrappers for `slotsUpdatesSubscribe`, `blockSubscribe`, and
   `voteSubscribe` are deliberately omitted — public RPC infrastructure does not support
-  those subscriptions, and `voteSubscribe` is dead under Alpenglow (accepted, never notified). The generic
+  those subscriptions, and `voteSubscribe` is dead under Alpenglow (refused by default on
+  released servers, never notified wherever accepted). The generic
   `SolanaRpcWebsocket.subscribe(...)` passthrough is the intended mechanism for
   provider-specific or unsupported methods; see the sava-software/helius-sdk repo
   (`software.sava.helius.ws.HeliusRpcWebsocket` wrapping Helius' `transactionSubscribe`)
@@ -1046,7 +1067,7 @@ completes.**
 | solana-sdk, address ordering only | `3da2b8b9` | 2026-10-06 | `address/src/lib.rs`: `Address` (re-exported as `Pubkey`) derives `Ord`/`PartialOrd` over `[u8; 32]`, with no manual impl in `address/` or `pubkey/`; `PublicKey.compareTo` mirrors that order. Nothing else in solana-sdk was checked in this pass, PDA derivation in the same crate included. |
 | solana-com | `ccf32de8e` | 2026-10-24 | Documented HTTP/WebSocket method lists (`apps/docs/content/docs/en/rpc/`) re-compared to the client surface: the only documented, unimplemented HTTP method is `getAgGenesisCert` (deliberate), `getRankMap` is not yet documented, and the WebSocket gaps are the ones listed under Known gaps; `apps/media/content/upgrades/alpenglow.mdx` and `reduced-slot-times.mdx` read for the Alpenglow section |
 | solana-improvement-documents | `a084840` | 2026-10-24 | Alpenglow SIMDs 0326/0357/0384/0387/0388 unchanged since `05f2ae9` and still `status: Review`; 0185 (`Accepted`) and 0525 (`Draft`, live on mainnet) read for the Alpenglow section |
-| agave, Alpenglow only | `bceaf2eed1` | 2026-10-24 | `votor-messages/src/migration.rs` (marker, `MIGRATION_SLOT_OFFSET`), `runtime/src/block_component_processor/vote_reward.rs` (marker insertion, lamport credits, `maybe_update_votes`/`maybe_update_root`), `rpc/src/rpc.rs` (`getVoteAccounts` window, `getAgGenesisCert`, `getRankMap`, `fn bank`, `getSignatureStatuses` confirmations, `get_block_commitment`, `getClusterNodes`), `rpc-client-types/src/{request,response,config}.rs` (`MAX_RPC_VOTE_ACCOUNT_INFO_EPOCH_CREDITS_HISTORY`, `RpcContactInfo`, `RpcRankMap`, `AllWithVotes`), `core/src/commitment_service.rs`, `votor/src/{root_utils,commitment}.rs`, `runtime/src/commitment.rs`, `runtime/src/bank.rs` (`update_clock_from_footer`), `runtime/src/slot_params.rs`, `runtime/src/inflation_rewards/points.rs`, `programs/vote/src/vote_processor.rs`, `rpc/src/{rpc_pubsub,rpc_subscriptions}.rs` (`voteSubscribe` stub), `CHANGELOG.md`; the same paths compared at tag `v4.3.2` where the section cites the mainnet release; feature status probed on mainnet-beta, devnet and testnet |
+| agave, Alpenglow only | `bceaf2eed1` | 2026-10-24 | `votor-messages/src/migration.rs` (marker, `MIGRATION_SLOT_OFFSET`), `runtime/src/block_component_processor/vote_reward.rs` (marker insertion, lamport credits, `maybe_update_votes`/`maybe_update_root`), `rpc/src/rpc.rs` (`getVoteAccounts` window, `getAgGenesisCert`, `getRankMap`, `fn bank`, `getSignatureStatuses` confirmations, `get_block_commitment`, `getClusterNodes`), `rpc-client-types/src/{request,response,config}.rs` (`MAX_RPC_VOTE_ACCOUNT_INFO_EPOCH_CREDITS_HISTORY`, `RpcContactInfo`, `RpcRankMap`, `AllWithVotes`), `core/src/commitment_service.rs`, `votor/src/{root_utils,commitment}.rs`, `runtime/src/commitment.rs`, `runtime/src/bank.rs` (`update_clock_from_footer`), `runtime/src/block_component_processor.rs` (`enforce_nanosecond_clock_bounds`, `nanosecond_time_bounds`), `core/src/replay_stage.rs` (Rooted publish, `fa399f89f9`), `runtime/src/slot_params.rs`, `runtime/src/inflation_rewards/points.rs`, `programs/vote/src/vote_processor.rs`, `rpc/src/{rpc_pubsub,rpc_subscriptions,rpc_health}.rs` (`voteSubscribe` gate and stub, `getHealth`), `gossip/src/node.rs` (UDP `tpu_vote`, `ca21544655`), `cli-output/src/cli_output.rs` (`lamports earned`, `get_epoch_history`), `feature-set/src/lib.rs`, `account-decoder/src/parse_vote.rs`, `votor-messages/src/wire.rs`, `CHANGELOG.md`; the same paths compared at tag `v4.3.2` where the section cites the mainnet release; feature status probed on mainnet-beta, devnet and testnet |
 | agave-sdk | — | — | **Never verified.** Declared as a reference repo and cited for `transaction-view/` (the zero-copy v1 parser and its `sanitize`), but no sync pass has ever recorded a hash here, so there is no diff base. |
 | transaction-v1-examples | — | — | **Never verified.** Cited for `ts/kit/src/estimate.ts` (kit's v1 resource-limit flow); no sync pass has ever recorded a hash, so there is no diff base. |
 

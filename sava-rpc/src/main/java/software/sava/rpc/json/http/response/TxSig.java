@@ -14,8 +14,8 @@ import java.util.function.Supplier;
 ///                           pre-dates this field.
 /// @param confirmationStatus The cluster confirmation level, or `null` for a level this client cannot
 ///                           parse. Under Alpenglow `confirmed` and `finalized` move together, so this is
-///                           `FINALIZED` for every signature past the node's newest root and `CONFIRMED`
-///                           at most transiently; see [TxStatus#confirmationStatus()].
+///                           `FINALIZED` for every signature in a slot at or below the node's newest root
+///                           and `CONFIRMED` at most transiently; see [TxStatus#confirmationStatus()].
 public record TxSig(long slot,
                     OptionalInt transactionIndex,
                     OptionalLong blockTime,

@@ -469,6 +469,8 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
       throw unsupportedTiming("subscriptionResendDelay");
     }
 
+    /// The commitment every subscribe and unsubscribe overload without a commitment uses. Defaults
+    /// to [Commitment#FINALIZED]; see [Commitment].
     Builder commitment(final Commitment commitment);
 
     Builder solanaAccounts(final SolanaAccounts solanaAccounts);
