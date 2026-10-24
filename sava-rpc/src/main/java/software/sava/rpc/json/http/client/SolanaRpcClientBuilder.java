@@ -13,7 +13,7 @@ import java.util.function.BiPredicate;
 import java.util.function.UnaryOperator;
 
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.DEFAULT_REQUEST_TIMEOUT;
-import static software.sava.rpc.json.http.request.Commitment.CONFIRMED;
+import static software.sava.rpc.json.http.request.Commitment.FINALIZED;
 
 public final class SolanaRpcClientBuilder {
 
@@ -29,12 +29,13 @@ public final class SolanaRpcClientBuilder {
   }
 
   /// Unset values take defaults, notably the [SolanaNetwork#MAIN_NET] endpoint and
-  /// [Commitment#CONFIRMED].
+  /// [Commitment#FINALIZED], which on an Alpenglow node costs no more latency than `confirmed`
+  /// and is the level the Solana Foundation points new code at; see [Commitment].
   public SolanaRpcClient createClient() {
     final var endpoint = this.endpoint == null ? SolanaNetwork.MAIN_NET.getEndpoint() : this.endpoint;
     final var httpClient = this.httpClient == null ? HttpClient.newHttpClient() : this.httpClient;
     final var requestTimeout = this.requestTimeout == null ? DEFAULT_REQUEST_TIMEOUT : this.requestTimeout;
-    final var defaultCommitment = this.defaultCommitment == null ? CONFIRMED : this.defaultCommitment;
+    final var defaultCommitment = this.defaultCommitment == null ? FINALIZED : this.defaultCommitment;
 
     return new SolanaJsonRpcClient(
         endpoint,

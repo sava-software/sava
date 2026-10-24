@@ -25,7 +25,7 @@ import java.util.function.BiFunction;
 
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.DEFAULT_REQUEST_TIMEOUT;
 import static software.sava.rpc.json.http.client.SolanaJsonRpcClient.PROGRAM_ACCOUNTS_TIMEOUT;
-import static software.sava.rpc.json.http.request.Commitment.CONFIRMED;
+import static software.sava.rpc.json.http.request.Commitment.FINALIZED;
 import static software.sava.rpc.json.http.request.Commitment.PROCESSED;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
 
@@ -52,8 +52,10 @@ public interface SolanaRpcClient {
     return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, defaultCommitment);
   }
 
+  /// Defaults to [Commitment#FINALIZED], which on an Alpenglow node costs no more latency than
+  /// `confirmed`; see [Commitment].
   static SolanaRpcClient createClient(final URI endpoint, final HttpClient httpClient) {
-    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, CONFIRMED);
+    return createClient(endpoint, httpClient, DEFAULT_REQUEST_TIMEOUT, FINALIZED);
   }
 
   URI endpoint();

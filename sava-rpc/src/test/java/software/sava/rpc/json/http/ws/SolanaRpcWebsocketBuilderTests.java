@@ -39,7 +39,7 @@ final class SolanaRpcWebsocketBuilderTests {
     assertEquals(30_000L, builder.keepAliveDelay());
     // reConnectDelay 3s, floored at the 2s check delay, so the floor does not bind at defaults
     assertEquals(3_000L, builder.subscriptionResendDelay());
-    assertEquals(Commitment.CONFIRMED, builder.commitment());
+    assertEquals(Commitment.FINALIZED, builder.commitment());
     assertSame(SolanaAccounts.MAIN_NET, builder.solanaAccounts());
   }
 

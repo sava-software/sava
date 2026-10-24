@@ -172,7 +172,7 @@ final class ClientDefaultsRpcRequestTests extends RpcRequestTests {
 
       final var twoArg = SolanaRpcClient.createClient(endpoint, httpClient);
       assertEquals(endpoint, twoArg.endpoint());
-      assertEquals(Commitment.CONFIRMED, twoArg.defaultCommitment());
+      assertEquals(Commitment.FINALIZED, twoArg.defaultCommitment());
       assertEquals(SolanaJsonRpcClient.DEFAULT_REQUEST_TIMEOUT, twoArg.defaultRequestTimeout());
 
       final var withCommitment = SolanaRpcClient.createClient(endpoint, httpClient, Commitment.FINALIZED);

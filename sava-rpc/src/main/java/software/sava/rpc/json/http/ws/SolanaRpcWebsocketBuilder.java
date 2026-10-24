@@ -38,7 +38,9 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   /// [#subscriptionAndPingCheckDelay()].
   private long subscriptionResendDelay = 0;
   private SolanaAccounts solanaAccounts = SolanaAccounts.MAIN_NET;
-  private Commitment commitment = Commitment.CONFIRMED;
+  /// Default [#commitment(Commitment)]; see [Commitment] for why finalized costs nothing on an
+  /// Alpenglow node.
+  private Commitment commitment = Commitment.FINALIZED;
   private Consumer<SolanaRpcWebsocket> onOpen;
   private SolanaRpcWebsocket.OnClose onClose;
   private BiConsumer<SolanaRpcWebsocket, Throwable> onError;

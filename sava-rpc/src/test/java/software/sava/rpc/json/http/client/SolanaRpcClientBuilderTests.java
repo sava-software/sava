@@ -24,11 +24,11 @@ final class SolanaRpcClientBuilderTests {
   private static final URI ENDPOINT = URI.create("https://rpc.example.invalid");
 
   @Test
-  void unconfiguredClientDefaultsToMainNetAndConfirmed() {
+  void unconfiguredClientDefaultsToMainNetAndFinalized() {
     try (final var httpClient = HttpClient.newHttpClient()) {
       final var client = SolanaRpcClient.build().httpClient(httpClient).createClient();
       assertEquals(SolanaNetwork.MAIN_NET.getEndpoint(), client.endpoint());
-      assertEquals(Commitment.CONFIRMED, client.defaultCommitment());
+      assertEquals(Commitment.FINALIZED, client.defaultCommitment());
       assertEquals(SolanaJsonRpcClient.DEFAULT_REQUEST_TIMEOUT, client.defaultRequestTimeout());
       assertSame(httpClient, client.httpClient());
     }

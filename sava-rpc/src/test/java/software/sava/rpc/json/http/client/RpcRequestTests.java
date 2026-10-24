@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
+import software.sava.rpc.json.http.request.Commitment;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -70,10 +71,13 @@ abstract class RpcRequestTests implements HttpHandler {
     final var serverAddress = httpServer.getAddress();
     final var endpoint = URI.create(String.format("http://[%s]:%d", serverAddress.getHostString(), serverAddress.getPort()));
 
+    // Pinned explicitly: these tests assert request shapes at a known commitment, independent of
+    // the builder's default, which ClientDefaultsRpcRequestTests and SolanaRpcClientBuilderTests pin.
     rpcClient = SolanaRpcClient.build()
         .httpClient(HTTP_CLIENT)
         .endpoint(endpoint)
         .testResponse((response, body) -> !Arrays.equals(body, NO_RESPONSE))
+        .defaultCommitment(Commitment.CONFIRMED)
         .createClient();
 
     httpServer.createContext("/", this);
