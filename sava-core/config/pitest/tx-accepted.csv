@@ -4,10 +4,10 @@ software.sava.core.tx.BaseTransaction,feePayerSignatureOffset,MathMutator,SURVIV
 software.sava.core.tx.BaseTransaction,setBlockHash,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # both arms write the same bytes # line 289
 software.sava.core.tx.BaseTransaction,signedIdOffset,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 69
 software.sava.core.tx.BaseTransaction,toString,ConditionalsBoundaryMutator,SURVIVED # signature offset codomain excludes 0 # line 377
-software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 310
-software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 501
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 312
-software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 503
+software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 317
+software.sava.core.tx.Transaction,createTx,ConditionalsBoundaryMutator,SURVIVED # displacement boundary # line 508
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # displacement boundary # line 319
+software.sava.core.tx.Transaction,createTx,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # result identical routing # line 510
 software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,ConditionalsBoundaryMutator,SURVIVED # short circuit already returned # line 126
 software.sava.core.tx.TransactionRecord,priorityFeeLamportsToComputeUnitPrice,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # redundant guard operand # line 124
 software.sava.core.tx.TransactionRecord,setComputeBudgetValues,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # prepend path is a no-op when nothing is prepended # line 266
