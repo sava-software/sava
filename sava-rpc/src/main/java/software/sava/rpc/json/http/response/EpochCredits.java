@@ -13,6 +13,14 @@ import java.util.List;
 /// marker, `AG_MIGRATION_EPOCH_CREDIT` = `(Epoch::MAX, u64::MAX, u64::MAX)` in
 /// `agave:votor-messages/src/migration.rs`, therefore reads as three `-1L` and is kept in the
 /// history rather than dropped; the signed reader this replaced threw on it.
+///
+/// The marker also divides two units. Rows before it count TowerBFT vote credits. Rows after it
+/// count cumulative reward lamports, the vote account's share of each block's vote reward
+/// (`increment_credits` in `agave:runtime/src/block_component_processor/vote_reward.rs`), which
+/// agave's own CLI labels "lamports earned". The first row after the marker restarts from the
+/// final TowerBFT total, so the migration epoch appears twice with `credits` continuous across
+/// the marker. Per-row `credits - previousCredits` stays meaningful; a difference across the
+/// marker, a comparison of pre- and post-marker deltas, or a map keyed by `epoch` is not.
 public record EpochCredits(long epoch, long credits, long previousCredits) {
 
   static List<EpochCredits> parse(final JsonIterator ji) {

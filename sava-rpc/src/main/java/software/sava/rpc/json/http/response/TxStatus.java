@@ -9,6 +9,20 @@ import systems.comodal.jsoniter.ValueType;
 
 import java.util.*;
 
+/// One signature's status as `getSignatureStatuses` returns it; a signature the node does not
+/// know is the [#nil()] record.
+///
+/// @param confirmations      TowerBFT's count of blocks since the transaction's block was
+///                           confirmed, empty once the block is rooted. An agave node running
+///                           Alpenglow, which every public cluster has since October 2026, never
+///                           fills the lockout map this reads, so it is 0 until the block is
+///                           finalized and empty after: it says whether the transaction is
+///                           finalized and nothing else.
+/// @param confirmationStatus The cluster confirmation level, or `null` for a level this client
+///                           cannot parse. Under Alpenglow `confirmed` and `finalized` both move
+///                           when the node roots the block, so a status can go from `PROCESSED`
+///                           to `FINALIZED` with `CONFIRMED` at most transient; a caller polling
+///                           for `CONFIRMED` exactly can miss it, so accept either settled level.
 public record TxStatus(Context context,
                        long slot,
                        OptionalInt confirmations,

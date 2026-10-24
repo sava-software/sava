@@ -10,8 +10,12 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.Supplier;
 
-/// @param transactionIndex Index of the transaction within its block, empty when the responding node pre-dates
-///                         this field.
+/// @param transactionIndex   Index of the transaction within its block, empty when the responding node
+///                           pre-dates this field.
+/// @param confirmationStatus The cluster confirmation level, or `null` for a level this client cannot
+///                           parse. Under Alpenglow `confirmed` and `finalized` move together, so this is
+///                           `FINALIZED` for every signature past the node's newest root and `CONFIRMED`
+///                           at most transiently; see [TxStatus#confirmationStatus()].
 public record TxSig(long slot,
                     OptionalInt transactionIndex,
                     OptionalLong blockTime,

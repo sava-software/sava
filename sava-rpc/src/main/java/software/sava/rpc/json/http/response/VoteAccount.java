@@ -15,6 +15,16 @@ import java.util.function.Supplier;
 ///                                      `min(ceilDiv(bps, 100), 255)`.
 /// @param inflationRewardsCommissionBps Commission in basis points, empty when the responding node pre-dates
 ///                                      this field.
+/// @param lastVote                      The latest slot this account's vote is known to have landed in: under
+///                                      TowerBFT the last on-chain vote, under Alpenglow the latest
+///                                      finalization certificate the account signed that a block carried
+///                                      (agave updates the vote account from the certificates in blocks), so
+///                                      for a live validator it stays within slots of the head and drives the
+///                                      `current`/`delinquent` split.
+/// @param epochCredits                  The last five rows of the credit history; see [EpochCredits] for the
+///                                      Alpenglow migration marker and the lamport unit after it.
+/// @param rootSlot                      The account's root slot, under Alpenglow the latest finalized slot a
+///                                      certificate it signed covers, maintained the same way as `lastVote`.
 public record VoteAccount(PublicKey voteKey,
                           PublicKey nodeKey,
                           long activatedStake,
