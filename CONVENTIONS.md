@@ -51,6 +51,11 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - **A negative `long` is the top half of the range**, not an error. `-1L`
   serialises as `18446744073709551615`. `Long.toUnsignedString` /
   `new BigInteger(1, bytes)` appear throughout for this reason.
+- **`EpochCredits` straddles Alpenglow.** The migration marker row reads as three `-1L`;
+  rows before it count TowerBFT vote credits and rows after it count cumulative reward
+  lamports, with the migration epoch appearing twice. Sum per-row
+  `credits - previousCredits` and skip the marker; never difference across it, compare
+  pre- and post-marker deltas, or key the history by epoch.
 - **`0` is often a sentinel for "unset"**, not a real value.
   `getProgramAccounts(..., long minContextSlot, ...)` omits the field entirely
   when it is `0`; `dataSliceLength(offset, 0)` means "whole account". Use the
