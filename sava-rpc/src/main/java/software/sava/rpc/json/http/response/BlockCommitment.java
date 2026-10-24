@@ -5,6 +5,18 @@ import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
+/// TowerBFT's stake-weighted commitment for one slot: `commitment[i]` is the stake that voted on
+/// the slot with lockout depth `i`, `totalStake` the epoch's active stake.
+///
+/// @deprecated Dead on Alpenglow clusters, which every public cluster has been since October 2026:
+/// an agave node running Alpenglow never fills the per-block lockout array, so `getBlockCommitment`
+/// answers `commitment: null` for every slot after the Alpenglow genesis, parsed here as an empty
+/// array, and `totalStake` is 0 on a node started since the switch or a stale TowerBFT total on one
+/// that ran through it. No Alpenglow depth metric replaces it: a block is final once its
+/// finalization certificate exists, which `getSignatureStatuses` reports as `finalized`. Only a
+/// TowerBFT cluster, such as an agave test validator before 4.5 started without `--alpenglow`,
+/// still fills this.
+@Deprecated(forRemoval = true)
 public record BlockCommitment(long[] commitment, long totalStake) {
 
   public static BlockCommitment parse(final JsonIterator ji) {

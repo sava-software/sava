@@ -142,6 +142,7 @@ final class ClusterInfoRpcRequestTests extends RpcRequestTests {
     assertNotNull(rpcClient.getLatestBlockHash(Commitment.FINALIZED).join());
   }
 
+  @SuppressWarnings("removal")
   @Test
   void getBlockCommitment() {
     registerRequest("""
@@ -151,6 +152,20 @@ final class ClusterInfoRpcRequestTests extends RpcRequestTests {
     final var commitment = rpcClient.getBlockCommitment(5).join();
     assertEquals(42, commitment.totalStake());
     assertEquals(10, commitment.commitment()[8]);
+  }
+
+  /// What every Alpenglow node answers for every slot after its genesis, captured from mainnet
+  /// on 2026-10-24: no lockout array and a zero total, parsed as an empty array rather than null.
+  @SuppressWarnings("removal")
+  @Test
+  void getBlockCommitmentOnAnAlpenglowNode() {
+    registerRequest("""
+        {"jsonrpc":"2.0","id":1,"method":"getBlockCommitment","params":[460873000]}""", """
+        {"jsonrpc":"2.0","result":{"commitment":null,"totalStake":0},"id":1}""");
+
+    final var commitment = rpcClient.getBlockCommitment(460873000).join();
+    assertEquals(0, commitment.commitment().length);
+    assertEquals(0, commitment.totalStake());
   }
 
   @Test

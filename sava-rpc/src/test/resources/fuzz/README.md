@@ -59,6 +59,11 @@ well-formed envelope its parser accepts in full:
   fields.
 - `vote_accounts` — `current`/`delinquent` with a nested `epochCredits`
   matrix.
+- `vote_accounts_alpenglow_marker` — the post-activation shape mainnet returned on
+  2026-10-24: the Alpenglow migration marker (three `18446744073709551615` values) inside
+  the five-entry window, the migration epoch on both sides of it with credits continuous
+  across it, and a staked delinquent account whose window keeps the marker. This is the
+  input that broke the signed reader before sava-rpc 25.11.2.
 - `sig_statuses` — a status list containing a `null` entry, the shape that
   trips list parsers that assume objects.
 - `latest_blockhash`, `supply`, `epoch_info`, `cluster_nodes` — the remaining

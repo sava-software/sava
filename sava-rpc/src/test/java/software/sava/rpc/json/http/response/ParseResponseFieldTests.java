@@ -440,6 +440,7 @@ final class ParseResponseFieldTests {
     assertTrue(schedule.warmup());
   }
 
+  @SuppressWarnings("removal")
   @Test
   void clusterNode() {
     final var nodes = ClusterNode.parse(ji("""
@@ -562,6 +563,7 @@ final class ParseResponseFieldTests {
         {"version":null}""")).skeleton());
   }
 
+  @SuppressWarnings("removal")
   @Test
   void block() {
     final var block = Block.parse(ji("""
@@ -596,6 +598,7 @@ final class ParseResponseFieldTests {
     assertEquals(0, sparse.rewards().getFirst().commission());
   }
 
+  @SuppressWarnings("removal")
   @Test
   void blockCommitment() {
     // 33 entries forces the 32-slot buffer to grow

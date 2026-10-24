@@ -9,6 +9,9 @@ import systems.comodal.jsoniter.JsonIterator;
 import java.util.List;
 import java.util.function.Supplier;
 
+/// One gossip peer as `getClusterNodes` lists it. The three UDP TPU accessors are deprecated:
+/// agave RPC servers since 4.0 report `null` for [#tpu()] and [#tpuForwards()], and
+/// [#tpuVote()] names a port only TowerBFT nodes use.
 public record ClusterNode(String gossip,
                           PublicKey publicKey,
                           String rpc,
@@ -27,6 +30,36 @@ public record ClusterNode(String gossip,
 
   public static List<ClusterNode> parse(final JsonIterator ji) {
     return ji.readList(j -> j.parseObject(Parser.FIELDS, new Parser()));
+  }
+
+  /// @deprecated The UDP TPU port. agave RPC servers since 4.0 report `null` here (`tpu: None` in
+  /// `agave:rpc/src/rpc.rs`), so only older servers fill it; use [#tpuQuic()].
+  @Deprecated(forRemoval = true)
+  @Override
+  public String tpu() {
+    return tpu;
+  }
+
+  /// @deprecated The UDP TPU forwards port. agave RPC servers since 4.0 report `null` here
+  /// (`tpu_forwards: None` in `agave:rpc/src/rpc.rs`), so only older servers fill it; use
+  /// [#tpuForwardsQuic()].
+  @Deprecated(forRemoval = true)
+  @Override
+  public String tpuForwards() {
+    return tpuForwards;
+  }
+
+  /// @deprecated The UDP port on which a TowerBFT node takes in vote transactions. Alpenglow
+  /// votes are not transactions and travel over their own gossip socket, so nothing on an
+  /// Alpenglow cluster, which every public cluster has been since October 2026, uses it; agave's
+  /// master branch drops the key from `getClusterNodes` and stops advertising the socket, while
+  /// 4.3 and 4.4 servers still send it. Reads `null` when the server omits the key or the peer
+  /// advertises no UDP vote socket. There is no replacement; a TowerBFT cluster, such as an agave
+  /// test validator before 4.5 started without `--alpenglow`, still reports it.
+  @Deprecated(forRemoval = true)
+  @Override
+  public String tpuVote() {
+    return tpuVote;
   }
 
   private static final class Parser implements FieldIndexPredicate, Supplier<ClusterNode> {
