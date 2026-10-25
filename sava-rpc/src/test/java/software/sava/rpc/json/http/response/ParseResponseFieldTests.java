@@ -597,31 +597,6 @@ final class ParseResponseFieldTests {
     assertEquals(0, sparse.rewards().getFirst().commission());
   }
 
-  @SuppressWarnings("removal")
-  @Test
-  void blockCommitment() {
-    // 33 entries overflow readLongArray(31)'s initial buffer; the result is trimmed to the entries read
-    final var values = new StringBuilder();
-    for (int i = 1; i <= 33; ++i) {
-      if (i > 1) {
-        values.append(',');
-      }
-      values.append(i);
-    }
-    final var commitment = BlockCommitment.parse(ji("""
-        {"commitment":[%s],"totalStake":999,"future":0}""".formatted(values)));
-    assertEquals(999, commitment.totalStake());
-    assertEquals(33, commitment.commitment().length);
-    for (int i = 0; i < 33; ++i) {
-      assertEquals(i + 1, commitment.commitment()[i]);
-    }
-
-    final var nullCommitment = BlockCommitment.parse(ji("""
-        {"commitment":null,"totalStake":1}"""));
-    assertEquals(0, nullCommitment.commitment().length);
-    assertEquals(1, nullCommitment.totalStake());
-  }
-
   @Test
   void txInstruction() {
     final var instructions = TxInstruction.parseInstructions(ji("""

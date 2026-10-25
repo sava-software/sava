@@ -142,33 +142,6 @@ final class ClusterInfoRpcRequestTests extends RpcRequestTests {
     assertNotNull(rpcClient.getLatestBlockHash(Commitment.FINALIZED).join());
   }
 
-  @SuppressWarnings("removal")
-  @Test
-  void getBlockCommitment() {
-    registerRequest("""
-        {"jsonrpc":"2.0","id":1,"method":"getBlockCommitment","params":[5]}""", """
-        {"jsonrpc":"2.0","result":{"commitment":[0,0,0,0,0,0,0,0,10,32],"totalStake":42},"id":1}""");
-
-    final var commitment = rpcClient.getBlockCommitment(5).join();
-    assertEquals(42, commitment.totalStake());
-    assertEquals(10, commitment.commitment()[8]);
-  }
-
-  /// What an agave node started since the Alpenglow switch answers for every slot after the
-  /// Alpenglow genesis, captured from mainnet on 2026-10-24: no lockout array and a zero total,
-  /// parsed as an empty array rather than null.
-  @SuppressWarnings("removal")
-  @Test
-  void getBlockCommitmentOnAnAlpenglowNode() {
-    registerRequest("""
-        {"jsonrpc":"2.0","id":1,"method":"getBlockCommitment","params":[460873000]}""", """
-        {"jsonrpc":"2.0","result":{"commitment":null,"totalStake":0},"id":1}""");
-
-    final var commitment = rpcClient.getBlockCommitment(460873000).join();
-    assertEquals(0, commitment.commitment().length);
-    assertEquals(0, commitment.totalStake());
-  }
-
   @Test
   void isBlockHashValid() {
     registerRequest("""

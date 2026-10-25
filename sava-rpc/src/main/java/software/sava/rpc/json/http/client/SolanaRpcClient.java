@@ -216,13 +216,6 @@ public interface SolanaRpcClient {
                                                         final PublicKey identity,
                                                         final long firstSlot);
 
-  /// @deprecated See [BlockCommitment]: an Alpenglow node answers with no commitment array and a
-  /// stake total that is 0 or a stale TowerBFT value, and no Alpenglow depth metric exists; read finality from
-  /// [#getSignatureStatuses(SequencedCollection)] (`finalized`) or at [Commitment#FINALIZED].
-  @Deprecated(forRemoval = true)
-  @SuppressWarnings("removal")
-  CompletableFuture<BlockCommitment> getBlockCommitment(final long slot);
-
   CompletableFuture<long[]> getBlocks(final long startSlot);
 
   CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot);

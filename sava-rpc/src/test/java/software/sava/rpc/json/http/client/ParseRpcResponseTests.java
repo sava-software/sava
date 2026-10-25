@@ -153,33 +153,6 @@ final class ParseRpcResponseTests {
     assertEquals(0, block.signatures().size());
   }
 
-  @SuppressWarnings("removal")
-  @Test
-  void getBlockCommitment() {
-    final var ji = JsonIterator.parse("""
-        {"jsonrpc":"2.0","result":{"commitment":null,"totalStake":405146599541901117},"id":1755829799753}
-        """
-    ).skipUntil("result");
-    final var bc = BlockCommitment.parse(ji);
-    assertEquals(0, bc.commitment().length);
-    assertEquals(405146599541901117L, bc.totalStake());
-  }
-
-  @SuppressWarnings("removal")
-  @Test
-  void getBlockCommitmentWithArray() {
-    final var ji = JsonIterator.parse("""
-        {"jsonrpc":"2.0","result":{"commitment":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,404893464137748549],"totalStake":405146599541901117},"id":1755830529944}
-        """
-    ).skipUntil("result");
-    final var bc = BlockCommitment.parse(ji);
-    assertArrayEquals(
-        new long[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 404893464137748549L},
-        bc.commitment()
-    );
-    assertEquals(405146599541901117L, bc.totalStake());
-  }
-
   @Test
   void getBlockProduction() {
     final var ji = readJsonFile("getBlockProduction.json");

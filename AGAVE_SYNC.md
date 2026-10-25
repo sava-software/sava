@@ -164,9 +164,9 @@ Agave canonical sources:
 Coverage note (2026-10): the Java client implements the full active agave method set except
 the two Alpenglow-only methods, `getAgGenesisCert` (agave 4.2.0) and `getRankMap` (agave 4.5, in
 no release the public clusters ran as of 2026-10-24), both left out under the owner's policy in
-the Alpenglow section; agave's deprecated methods are intentionally not implemented, and
-`getBlockCommitment` is implemented but deprecated for removal here because Alpenglow nodes
-return no data for it (see Alpenglow).
+the Alpenglow section, and `getBlockCommitment`, removed in 25.13.0 because Alpenglow nodes
+return no data for it (see Alpenglow); agave's deprecated methods are intentionally not
+implemented.
 
 Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
 - `RoundTripRpcRequestTests.java` — one test per RPC method against a mock HTTP server,
@@ -912,9 +912,13 @@ What activation changed for this library, on every public cluster:
   after the Alpenglow genesis, so the answer is `{"commitment":null,"totalStake":0}` on a node
   started after the switch (live mainnet, 2026-10-24) and `null` with a stale TowerBFT total on
   one that ran through the migration (code reading: only a restart resets
-  `BlockCommitmentCache`). sava parses that to an empty array. agave, its Rust client, Kit and
-  solana.com have not deprecated the method; sava deprecated `getBlockCommitment` and
-  `BlockCommitment` for removal on 2026-10-24 because no Alpenglow depth metric exists.
+  `BlockCommitmentCache`). agave, its Rust client, Kit and solana.com have not deprecated the
+  method; sava removed `getBlockCommitment` and `BlockCommitment` in 25.13.0 (deprecated for
+  removal and then dropped in the same release, on the owner's call) because no Alpenglow
+  depth metric exists: finality is read from `getSignatureStatuses` or at
+  `Commitment.FINALIZED`. For a TowerBFT test validator the array was `[u64; 32]`, index `n − 1`
+  the stake with confirmation count `n` and index 31 the rooted stake
+  (`agave:runtime/src/commitment.rs`).
 - **TowerBFT RPC cleanup upstream.** agave master commit `1513b7a5bb` (after the v4.5.0-alpha.2
   tag, in no release and absent from the 4.5.0 changelog as of 2026-10-24) removes `tpu_vote`
   from `RpcContactInfo`, deprecates `RpcTransactionLogsFilter::AllWithVotes` ("Alpenglow has no
@@ -980,8 +984,7 @@ SIMD files in the solana-improvement-documents repo.
 ## Known gaps / candidate work
 
 - HTTP RPC: `getAgGenesisCert` and `getRankMap` not implemented (deliberate — see Alpenglow
-  above). `getBlockCommitment` stays implemented but is deprecated for removal: Alpenglow nodes
-  answer it with no data.
+  above); `getBlockCommitment` removed in 25.13.0 because Alpenglow nodes answer it with no data.
 - WebSocket: typed wrappers for `slotsUpdatesSubscribe`, `blockSubscribe`, and
   `voteSubscribe` are deliberately omitted — public RPC infrastructure does not support
   those subscriptions, and `voteSubscribe` is dead under Alpenglow (refused by default on

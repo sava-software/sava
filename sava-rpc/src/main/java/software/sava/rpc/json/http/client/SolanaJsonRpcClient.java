@@ -45,8 +45,6 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   private static final Function<HttpResponse<?>, Block> BLOCK = applyGenericResponseResult(Block::parse);
   private static final Function<HttpResponse<?>, BlockHeight> BLOCK_HEIGHT = applyGenericResponseResult(BlockHeight::parse);
   private static final Function<HttpResponse<?>, BlockProduction> BLOCK_PRODUCTION = applyGenericResponseValue(BlockProduction::parse);
-  @SuppressWarnings("removal")
-  private static final Function<HttpResponse<?>, BlockCommitment> BLOCK_COMMITMENT = applyGenericResponseResult(BlockCommitment::parse);
   private static final Function<HttpResponse<?>, List<ClusterNode>> CLUSTER_NODES = applyGenericResponseResult(ClusterNode::parse);
   private static final Function<HttpResponse<?>, EpochInfo> EPOCH_INFO = applyGenericResponseResult(EpochInfo::parse);
   private static final Function<HttpResponse<?>, EpochSchedule> EPOCH_SCHEDULE = applyGenericResponseResult(EpochSchedule::parse);
@@ -368,16 +366,6 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     return sendPostRequest(BLOCK_PRODUCTION, format("""
                 {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s","identity":"%s","range":{"firstSlot":%d}}]}""",
             id.incrementAndGet(), commitment.getValue(), identity, firstSlot
-        )
-    );
-  }
-
-  @Deprecated(forRemoval = true)
-  @SuppressWarnings("removal")
-  @Override
-  public CompletableFuture<BlockCommitment> getBlockCommitment(final long slot) {
-    return sendPostRequest(BLOCK_COMMITMENT, format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getBlockCommitment","params":[%d]}""", id.incrementAndGet(), slot
         )
     );
   }
