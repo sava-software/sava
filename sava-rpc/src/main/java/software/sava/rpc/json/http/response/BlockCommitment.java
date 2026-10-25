@@ -5,8 +5,9 @@ import systems.comodal.jsoniter.JsonIterator;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
 
-/// TowerBFT's stake-weighted commitment for one slot: `commitment[i]` is the stake that voted on
-/// the slot with lockout depth `i`, `totalStake` the epoch's active stake.
+/// TowerBFT's stake-weighted commitment for one slot, indexed as agave's `BlockCommitmentArray`: for
+/// `i < 31`, `commitment[i]` is the stake whose vote on the slot has confirmation count `i + 1`, and
+/// `commitment[31]` the stake that has rooted it; `totalStake` is the epoch's active stake.
 ///
 /// @deprecated Dead on Alpenglow clusters, which every public cluster has been since October 2026:
 /// an agave node running Alpenglow never fills the per-block lockout array, so `getBlockCommitment`
