@@ -20,15 +20,6 @@ public interface Transaction {
   int SIGNATURE_LENGTH = 64;
   int BLOCK_HASH_LENGTH = 32;
   int MAX_ACCOUNTS = 64;
-  int BLOCK_QUEUE_SIZE = 151;
-  /// @deprecated TowerBFT's rooting depth, `MAX_LOCKOUT_HISTORY + 1`, which has no meaning on an
-  /// Alpenglow cluster: every public cluster has run Alpenglow since October 2026, where a block
-  /// is finalized by certificate and `confirmed` and `finalized` move together, so no block depth
-  /// stands between them. Nothing in this library reads it. A caller still targeting a TowerBFT
-  /// cluster, such as an agave test validator before 4.5 started without `--alpenglow`, keeps the
-  /// behaviour by inlining 32.
-  @Deprecated(forRemoval = true)
-  int BLOCKS_UNTIL_FINALIZED = 32;
 
   /// Returns the fee payer's signature, the transaction id, Base58 encoded.
   ///
