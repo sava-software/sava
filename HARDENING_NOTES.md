@@ -9,6 +9,72 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.7.1 — 2026-10-28
+
+All three plugin pins advance from 21.6.9 to the published
+`software.sava:sava-build:21.7.1`, crossing 21.7.0. `:sava-core:savaBuildIdentity`
+reported that coordinate, `local override: inactive`, and loaded JAR SHA-256
+`a9cc96023811d0b2eca612a79345838b38e569dd1fee7bd6a9583ede025b8a9f`. `gh attestation
+verify` verified its provenance from `.github/workflows/gradle_plugin_publish.yml` at
+`refs/tags/21.7.1`, source commit `af9894e666d6a6c0c0df4f692e60176e36219182`. The Solana
+BOM moves from 25.30.40 to 25.30.41, which changes only the http-servers (25.4.2 to
+25.4.3) and incident-client (25.5.1 to 25.5.2) entries; this build consumes neither.
+25.30.42, published during this adoption, only restores the catalog's http-servers-sava
+entry and drops its FusionAuth `java-http` constraint, neither reaching this build, so
+the pin stays at 25.30.41. 21.7.1's one change for a consumer, the attestation verifier
+accepting libraries signed by the GitHub Packages publish workflow, reaches
+`verifySavaAttestations` here, an opt-in task outside `check`; the one software.sava jar
+this build resolves, json-iterator, is published on Maven Central (the standalone jmh
+build takes sava-core from the composite, not a repository), so it changes no verdict of
+theirs.
+
+The installed `hardeningAgentTemplate` prints a block byte-identical to the one in
+`AGENTS.md`, so nothing there changed but the pin sentence. The plugin's
+`libs.versions.toml` is unchanged between the two tags (PIT 1.30.0, the PIT JUnit
+plugin 1.2.3 and ArcMutate base 1.7.2 remain), so no `BaselineRebase` is owed.
+
+21.7.0 turned `jlinkApplication.bindServices` off by default. `sava-vanity` now sets
+`bindServices = false` (the default, explicit so the image task stops printing what
+binding would have linked) and names one module in `addModules`, `jdk.charsets`: Ed25519
+(SunEC), `SecureRandom` and the password console are in `java.base` on Java 25 (the one
+bound provider the old image did load, `jdk.localedata`'s, grouped the `%,d` progress
+counts on non-English hosts), BouncyCastle is a direct `requires` whose descriptor is
+what links `java.logging`, `java.sql` and `java.naming`, and nothing records with JFR; a
+typed password is decoded by the console, and one passed in
+`SAVA_VANITY_ENCRYPT_PASSWORD` by the JVM's environment decoding (`sun.jnu.encoding`),
+in the host locale's charset. `genKeys.sh` refuses a non-UTF-8 host locale for local
+encrypted generation and `verifyKey.sh` for local verification, both before the launcher
+starts (`VerifyKeyLauncherTests` under `test` holds both guards, `testVerifyKeyRuntime`
+the verifier's against the built image), and the Docker paths launch under any host
+locale and decode inside the image under its own `LANG=C.UTF-8`, so `jdk.charsets` keeps
+the launcher run directly under a legacy multi-byte locale (Shift_JIS, GBK, EUC-KR) from
+decoding either password as UTF-8, the JVM's fallback when the locale's charset is not
+in the image; under C or POSIX the JVM decodes ASCII only, with or without the module.
+`jdk.localedata` stays out, so the `%,d` progress counts group as CLDR root on every
+host. On JDK 25.0.5.0.3 the bound image linked 49 modules in 133M (the binding notice's
+39 were counted over the ten-module image before `jdk.charsets` was named); the unbound
+image links 11 (`java.base`, `java.logging`, `java.naming`, `java.security.sasl`,
+`java.sql`, `java.transaction.xa`, `java.xml`, `jdk.charsets`, BouncyCastle, sava-core,
+sava-vanity) in 75M. The Docker image moved from sava-openjdk 27.0.2 (`jdk27`, before
+the eMudhra fix) to 27.0.4 (OpenJDK 27.0.1.0.3, the roots removed; sava-build's
+check-jdk-trust passed on that JDK on 2026-10-27), built locally as
+`sava-vanity:adoption-21.7.1`; its `--list-modules` names the same 11 modules at
+27.0.1.0.3. `testVerifyKeyRuntime` passed all six cases, the four local ones against the
+unbound image and the two Docker ones against that image, and the image's launcher
+generated a vanity key.
+
+Root `check` passed 2,035 tests (sava-core 919, sava-rpc 1,060 with two
+environment-gated skips, sava-vanity 56). The history-free root `qualityGate` ran all
+17 suites; 15 verified and `crypto` and `sysvar` each failed on one `RUN_ERROR`
+(`Hmac.hmacSHA512` line 12, `Rent.minimumBalance` line 59) at host load averages of
+31.9 and 15.7 on 10 CPUs while ten other repositories ran the same adoption. One retry of the
+two suites in a new invocation killed all 10 and 201 mutants with no invalid outcome,
+which the plugin accepts as closure. Every survivor matched its baseline. The gate
+advised a one-line drift in meta (`AccountMetaReadOnly.equals`, recorded line 54,
+observed 53), closed with `pitestMetaBaselineRetag`, which rewrote that row's line tag
+and nothing else, and two unmatched decimal `ORDER_IF` rows as a first prune preview,
+left to count; no other record changed.
+
 ## Released sava-build 21.6.9 — 2026-10-24
 
 All three plugin pins advance from 21.6.5 to the published

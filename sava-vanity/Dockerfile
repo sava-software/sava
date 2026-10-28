@@ -1,9 +1,13 @@
 ARG PROJECT="sava-vanity"
 ARG MAJOR_JAVA_VERSION="27"
 ARG SAVA_OPENJDK_IMAGE="jpe7s/sava-openjdk"
-ARG SAVA_OPENJDK_TAG="27.0.2-jdk27-debian-trixie"
+# 27.0.4 carries OpenJDK 27.0.1.0.3, the release that removes the roots of the eMudhra incident
+# (CVE-2026-91403); sava-build's check-jdk-trust passed on this image's JDK on 2026-10-27. Since
+# 27.0.3 the tags carry the JDK's full version; a JDK update moves the tag and the digest below
+# together, by hand (the digest wins when both are given).
+ARG SAVA_OPENJDK_TAG="27.0.4-jdk27.0.1.0.3-debian-trixie"
 # docker buildx imagetools inspect <image>:<tag> --format '{{.Manifest.Digest}}'
-ARG SAVA_OPENJDK_DIGEST="sha256:9bd0ee26845c6ea829a353918c3b1f10df6438f9dfa7a5539c3b46454cf9a788"
+ARG SAVA_OPENJDK_DIGEST="sha256:9da365dcf8d388489f25198af881cdf2009aa187424fea6cc2291c1e3ca190ad"
 # UID:GID for the unprivileged build and runtime users. Numeric on purpose: the
 # final image is FROM scratch (no /etc/passwd), so the runtime user can only be
 # referenced by id.
