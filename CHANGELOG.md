@@ -1,5 +1,22 @@
 # Changelog
 
+## [25.13.0](https://github.com/sava-software/sava/compare/25.12.0...25.13.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** Transaction.BLOCKS_UNTIL_FINALIZED and Transaction.BLOCK_QUEUE_SIZE are removed. Both were compile-time constants, so code compiled against an earlier release keeps its inlined value; code that recompiles inlines its own. 32 was TowerBFT's MAX_LOCKOUT_HISTORY plus one and means nothing on an Alpenglow cluster. 151 is MAX_PROCESSING_AGE plus one, the number of recent block hashes a transaction can still name; that window is unchanged by Alpenglow and by the 200 millisecond slots, so a caller that sized a cache by it keeps 151.
+* **rpc:** SolanaRpcClient.getBlockCommitment and the BlockCommitment record are removed. Read finality from getSignatureStatuses, whose confirmationStatus is finalized once a finalization certificate covers the block, or read state at Commitment.FINALIZED. A caller that still targets a TowerBFT test validator and needs the lockout array can send the request through its own JSON-RPC call; the response shape is agave's RpcBlockCommitment, a 32-entry array where index n minus 1 holds the stake with confirmation count n and index 31 the rooted stake, plus totalStake.
+* **rpc:** a SolanaRpcClient or SolanaRpcWebsocket built without an explicit commitment now reads, simulates, runs sendTransaction preflight and subscribes at finalized rather than confirmed, and the websocket unsubscribe overloads that take no commitment now look for the finalized registration, so a subscription made at an explicit CONFIRMED stays live and is replayed on reconnect unless it is cancelled with the overload that takes a commitment. On an Alpenglow cluster confirmed and finalized arrive together. On an agave test validator running TowerBFT, before 4.5.0-alpha.2 and started without the alpenglow flag, finalized lags confirmed by about 32 slots, so a blockhash fetched at confirmed or processed fails the default preflight, and any simulation that keeps it, with Blockhash not found until finalized catches up. A Surfpool surfnet runs no consensus and ignores the preflight commitment but reports finalized 30 slots behind confirmed. Callers that need the old behaviour pass CONFIRMED to defaultCommitment or commitment.
+
+### Features
+
+* **core:** deprecate BLOCKS_UNTIL_FINALIZED and document the Clock timestamps ([633787f](https://github.com/sava-software/sava/commit/633787f787d4ee8830cd8095c6de944b78ebfb04))
+* **core:** remove the TowerBFT finality depth and blockhash queue constants ([dc9234e](https://github.com/sava-software/sava/commit/dc9234e9fdb1df8eee3eee25eef1871b3dc1ba60))
+* **rpc:** default to the finalized commitment ([7600119](https://github.com/sava-software/sava/commit/760011990cc50260fc71e1d3633b7b5709806350))
+* **rpc:** deprecate getBlockCommitment and the UDP TPU ports, seed the migration marker ([c01e005](https://github.com/sava-software/sava/commit/c01e005851ba72b3e4d58cd27c01aa8d31714a42))
+* **rpc:** remove getBlockCommitment ([f6fd548](https://github.com/sava-software/sava/commit/f6fd54883852d7467a69f8187ff45ccbf7a3c2c9))
+
 ## [25.12.0](https://github.com/sava-software/sava/compare/25.11.2...25.12.0) (2026-10-08)
 
 
