@@ -69,6 +69,22 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 
 ## Argument-order and flag traps
 
+- `getSignatureStatuses` and `getSigStatusList` use the processed status cache, not the
+  client's default commitment. Their new explicit-commitment/minimum-slot overloads need
+  Agave 4.4; 4.3 silently ignores those options. `getTransaction`'s minimum-slot overload
+  checks node freshness, not the transaction's slot, and retains the client's default
+  commitment. An omitted `BigInteger` minimum is `null`; zero is a literal zero.
+- WebSocket slice overloads take **offset, then length**; length zero requests empty
+  account data and normalizes the offset to zero, matching Agave's subscription identity.
+  This differs from the older HTTP slice helpers' zero-means-whole sentinel. Slice
+  options do not create a separate account/program registration at the same commitment;
+  use distinct keyed program registrations for multiple program slices. Agave before
+  4.4 ignores WebSocket slicing and still sends whole account data.
+- `getLeaderSchedule(..., keyByVoteAccount)` changes the returned map's keys, not the
+  identity filter: that filter still names a validator identity. Agave 4.4 reports a
+  missing identity as `LeaderScheduleIdentityNotFound`; 4.3 returned an empty map and
+  silently ignored `keyByVoteAccount`.
+
 - `ProgramAccountsRequest.Builder.dataSliceLength(offset, length)` takes the
   **offset first** despite the name. Calling it backwards returns the wrong
   window rather than failing.

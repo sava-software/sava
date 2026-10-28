@@ -15,6 +15,7 @@ public sealed interface RpcCustomError permits
     RpcCustomError.EpochRewardsPeriodActive,
     RpcCustomError.FilterTransactionNotFound,
     RpcCustomError.KeyExcludedFromSecondaryIndex,
+    RpcCustomError.LeaderScheduleIdentityNotFound,
     RpcCustomError.LongTermStorageSlotSkipped,
     RpcCustomError.LongTermStorageUnreachable,
     RpcCustomError.MinContextSlotNotReached,
@@ -50,6 +51,7 @@ public sealed interface RpcCustomError permits
       case -32019 -> LongTermStorageUnreachable.INSTANCE;
       case -32020 -> FilterTransactionNotFound.INSTANCE;
       case -32021 -> NoSlotHistory.INSTANCE;
+      case -32022 -> LeaderScheduleIdentityNotFound.INSTANCE;
       default -> Unknown.INSTANCE;
     };
   }
@@ -157,6 +159,12 @@ public sealed interface RpcCustomError permits
 
   record TransactionHistoryNotAvailable() implements RpcCustomError {
     static final RpcCustomError.TransactionHistoryNotAvailable INSTANCE = new RpcCustomError.TransactionHistoryNotAvailable();
+  }
+
+  /// Agave 4.4: the requested validator identity is absent from an available leader schedule.
+  /// The server includes the identity in the error message, not in a structured data field.
+  record LeaderScheduleIdentityNotFound() implements RpcCustomError {
+    static final LeaderScheduleIdentityNotFound INSTANCE = new LeaderScheduleIdentityNotFound();
   }
 
   record ScanError() implements RpcCustomError {

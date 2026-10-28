@@ -168,6 +168,45 @@ the Alpenglow section, and `getBlockCommitment`, removed in 25.13.0 because Alpe
 return no data for it (see Alpenglow); agave's deprecated methods are intentionally not
 implemented.
 
+### Agave 4.4 RPC readiness (2026-10-28)
+
+Compared mainnet's `v4.3.2` (`a203300045`) with devnet's `v4.4.0-beta.1`
+(`3ad9da2c39`) and the available `v4.4.0-rc.1` (`b6149a719f`). Live `getVersion`
+reads reported mainnet/testnet 4.3.2 and devnet 4.4.0-beta.1. These are dated
+endpoint observations, not a rollout guarantee or client-side version detection.
+
+The additive client support covers all RPC option/error changes found in that release delta:
+
+| Surface | Agave change | sava behavior |
+| --- | --- | --- |
+| `getSignatureStatuses` | `commitment`, `minContextSlot` (`f46e7976fd`, #15091) | Map and list overloads; old calls still omit both and use processed. Minimum-only conveniences explicitly select processed. |
+| `getTransaction` | `minContextSlot` (same commit) | Optional `BigInteger` minimum, preserving null omission, literal zero and unsigned slot range; existing calls unchanged. |
+| `getLeaderSchedule` | `keyByVoteAccount` (`8fe3f1201a`, #13796) | New overloads select vote-account map keys; identity filtering still uses validator identity. |
+| RPC errors | `-32022 LeaderScheduleIdentityNotFound` (`983722f7d0`, #12197) | Typed error for an identity absent from an available schedule; the server message retains the identity. |
+| `accountSubscribe`, `programSubscribe` | Honor `dataSlice` (`a0920ee835`, #15241) | Explicit offset/length overloads, including keyed program subscriptions; empty slices normalize offset to zero to match server deduplication. Account `space` remains the full size. |
+
+Older nodes silently ignore the new options. In live probes, a `getSignatureStatuses`
+minimum of `18446744073709551615` produced `-32016 MinContextSlotNotReached` on devnet
+and ordinary results on mainnet/testnet. Devnet's leader-schedule probe returned the
+same slot count under distinct identity/vote keys and `-32022` for an absent identity.
+The program-subscription probe returned 8 bytes of a 40-byte account on devnet and
+all 40 bytes on mainnet for the same slice request.
+Account-subscription probes likewise returned 8 bytes and zero bytes on devnet for
+lengths 8 and 0, while mainnet returned the full 40 bytes for both.
+
+There are no additional HTTP method, config, response, or WebSocket wire changes in
+`v4.4.0-beta.1..v4.4.0-rc.1`. The response/account/transaction schema comparison and
+the pinned transaction/instruction error enums need no new models for 4.4. Existing
+published interfaces gain default methods so external implementations keep compiling;
+unsupported new calls fail explicitly rather than silently losing requested options.
+
+The separate 4.5 alpha review found `getRankMap` (still deliberately omitted under
+the owner policy below) and `simulateTransaction.innerInstructionsEncoding`. The
+latter is not deployed on the checked public endpoints; supporting compiled inner
+instructions requires a distinct response path from the current resolved-instruction
+parser. Neither is part of the 4.4 rollout. Existing mainnet omissions such as
+`getAgGenesisCert` remain deliberate.
+
 Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
 - `RoundTripRpcRequestTests.java` — one test per RPC method against a mock HTTP server,
   asserting the exact request JSON and response parsing. **Add a test here for every new
@@ -1065,6 +1104,7 @@ completes.**
 | Repo | Commit | Date | Verified scope |
 |---|---|---|---|
 | agave | `e9a538e726` | 2026-07-14 | Token-2022 extensions (`account-decoder/src/parse_token_extension.rs`, `account-decoder-client-types/src/token.rs`), HTTP RPC method set (`rpc/src/rpc.rs`), pubsub methods (`rpc/src/rpc_pubsub.rs`), request/response shapes (`rpc-client-types/src/{config,response}.rs`), custom error codes (`rpc-client-api/src/custom_error.rs`), reserved accounts (`reserved-account-keys/src/lib.rs`), sysvar layouts (`account-decoder/src/parse_sysvar.rs`), `transaction-status-client-types/src/lib.rs` enums |
+| agave, 4.4 RPC delta only | `b6149a719f` (`v4.4.0-rc.1`) | 2026-10-28 | `v4.3.2..v4.4.0-beta.1..v4.4.0-rc.1`: `rpc/src/{rpc,rpc_pubsub,rpc_subscriptions}.rs`, `rpc-client-types/src/{config,response,request}.rs`, `rpc-client-api/src/custom_error.rs`, account/transaction decoder response schemas and pinned error enum versions. New status/transaction context options, vote-key schedules, missing-identity error and WebSocket slices implemented; live observations and separate 4.5 alpha boundary above. Other surfaces retain their earlier sync rows. |
 | solana-sdk | `4fb3a9a3` | 2026-07-14 | `transaction-error/`, `instruction-error/` (all variants), `sdk-ids/` (address constants) |
 | solana-sdk, error enums only | `983858e1` | 2026-09-20 | `transaction-error/` and `instruction-error/` variant sets, via the committed error-variants fixture (crates 4.0.0 and 3.0.0, published from `9d02e6dc` and `5bcc7778`, source unchanged since). `sdk-ids/` and every other solana-sdk surface were not rechecked and keep the row above. |
 | solana-sdk, address ordering only | `3da2b8b9` | 2026-10-06 | `address/src/lib.rs`: `Address` (re-exported as `Pubkey`) derives `Ord`/`PartialOrd` over `[u8; 32]`, with no manual impl in `address/` or `pubkey/`; `PublicKey.compareTo` mirrors that order. Nothing else in solana-sdk was checked in this pass, PDA derivation in the same crate included. |

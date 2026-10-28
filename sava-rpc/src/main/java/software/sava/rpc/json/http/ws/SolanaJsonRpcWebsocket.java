@@ -1376,10 +1376,28 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                   final PublicKey key,
                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
+    return accountSubscribe(commitment, key, "", onSub, consumer);
+  }
+
+  @Override
+  public boolean accountSubscribe(final Commitment commitment,
+                                  final PublicKey key,
+                                  final int dataSliceOffset,
+                                  final int dataSliceLength,
+                                  final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                  final Consumer<AccountInfo<byte[]>> consumer) {
+    return accountSubscribe(commitment, key, dataSliceJson(dataSliceOffset, dataSliceLength), onSub, consumer);
+  }
+
+  private boolean accountSubscribe(final Commitment commitment,
+                                   final PublicKey key,
+                                   final String dataSliceJson,
+                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                   final Consumer<AccountInfo<byte[]>> consumer) {
     final var sub = this.accountSubs.get(key.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
       final var params = String.format("""
-          "%s",{"encoding":"base64","commitment":"%s"}""", key, commitment.getValue()
+          "%s",{"encoding":"base64","commitment":"%s"%s}""", key, commitment.getValue(), dataSliceJson
       );
       return queueSubscription(commitment, Channel.account, key, params, this.accountSubs, onSub, consumer);
     } else {
@@ -1538,6 +1556,26 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                   final List<Filter> filters,
                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
+    return programSubscribe(commitment, program, filters, "", onSub, consumer);
+  }
+
+  @Override
+  public boolean programSubscribe(final Commitment commitment,
+                                  final PublicKey program,
+                                  final List<Filter> filters,
+                                  final int dataSliceOffset,
+                                  final int dataSliceLength,
+                                  final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                  final Consumer<AccountInfo<byte[]>> consumer) {
+    return programSubscribe(commitment, program, filters, dataSliceJson(dataSliceOffset, dataSliceLength), onSub, consumer);
+  }
+
+  private boolean programSubscribe(final Commitment commitment,
+                                   final PublicKey program,
+                                   final List<Filter> filters,
+                                   final String dataSliceJson,
+                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                   final Consumer<AccountInfo<byte[]>> consumer) {
     final var sub = this.programSubs.get(program.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
       final var filtersJson = filters == null || filters.isEmpty() ? "" : filters.stream()
@@ -1545,8 +1583,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           .collect(joining(",", ",\"filters\":[", "]"));
 
       final var params = String.format("""
-              "%s",{"commitment":"%s","encoding":"base64"%s}""",
-          program, commitment.getValue(), filtersJson
+              "%s",{"commitment":"%s","encoding":"base64"%s%s}""",
+          program, commitment.getValue(), filtersJson, dataSliceJson
       );
       return queueSubscription(commitment, Channel.program, program, params, this.programSubs, onSub, consumer);
     } else {
@@ -1571,6 +1609,28 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                        final List<Filter> filters,
                                        final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                        final Consumer<AccountInfo<byte[]>> consumer) {
+    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, "", onSub, consumer);
+  }
+
+  @Override
+  public boolean keyedProgramSubscribe(final Commitment commitment,
+                                       final String subscriptionKey,
+                                       final PublicKey program,
+                                       final List<Filter> filters,
+                                       final int dataSliceOffset,
+                                       final int dataSliceLength,
+                                       final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                       final Consumer<AccountInfo<byte[]>> consumer) {
+    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceJson(dataSliceOffset, dataSliceLength), onSub, consumer);
+  }
+
+  private boolean keyedProgramSubscribe(final Commitment commitment,
+                                        final String subscriptionKey,
+                                        final PublicKey program,
+                                        final List<Filter> filters,
+                                        final String dataSliceJson,
+                                        final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                        final Consumer<AccountInfo<byte[]>> consumer) {
     validateSubscriptionKey(subscriptionKey);
     final var programAddress = program.toBase58();
     final var filtersJson = filters == null || filters.isEmpty() ? "" : filters.stream()
@@ -1578,8 +1638,8 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         .collect(joining(",", ",\"filters\":[", "]"));
 
     final var params = String.format("""
-            "%s",{"commitment":"%s","encoding":"base64"%s}""",
-        programAddress, commitment.getValue(), filtersJson
+            "%s",{"commitment":"%s","encoding":"base64"%s%s}""",
+        programAddress, commitment.getValue(), filtersJson, dataSliceJson
     );
     return queueSubscription(
         commitment,
@@ -1597,6 +1657,15 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public boolean keyedProgramUnsubscribe(final Commitment commitment, final String subscriptionKey) {
     validateSubscriptionKey(subscriptionKey);
     return queueUnsubscribe(subscriptionKey, commitment, this.keyedProgramSubs);
+  }
+
+  private static String dataSliceJson(final int offset, final int length) {
+    if (offset < 0 || length < 0) {
+      throw new IllegalArgumentException("Data slice offset and length must be non-negative");
+    }
+    // Agave coalesces empty slices at every offset onto the same server subscription.
+    // Match its canonical request so the duplicate-grant check recognizes equivalence.
+    return String.format(",\"dataSlice\":{\"offset\":%d,\"length\":%d}", length == 0 ? 0 : offset, length);
   }
 
   private static void validateSubscriptionKey(final String subscriptionKey) {

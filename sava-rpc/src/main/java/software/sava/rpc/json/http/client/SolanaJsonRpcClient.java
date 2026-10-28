@@ -678,6 +678,22 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   }
 
   @Override
+  public CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment,
+                                                                     final Long slot,
+                                                                     final PublicKey identity,
+                                                                     final boolean keyByVoteAccount) {
+    final var builder = new StringBuilder(192);
+    builder.append(format("""
+        {"jsonrpc":"2.0","id":%d,"method":"getLeaderSchedule","params":[%s,{"commitment":"%s\"""",
+        id.incrementAndGet(), slot == null ? "null" : Long.toUnsignedString(slot), commitment.getValue()));
+    if (identity != null) {
+      builder.append(",\"identity\":\"").append(identity.toBase58()).append('"');
+    }
+    builder.append(",\"keyByVoteAccount\":").append(keyByVoteAccount).append("}]}");
+    return sendPostRequest(LEADER_SCHEDULE, builder.toString());
+  }
+
+  @Override
   public CompletableFuture<Long> getMaxRetransmitSlot() {
     return sendPostRequest(LONG_VAL, format("""
             {"jsonrpc":"2.0","id":%d,"method":"getMaxRetransmitSlot"}""", id.incrementAndGet()
@@ -1212,11 +1228,23 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   }
 
   private String sigStatusBody(final SequencedCollection<String> signatures, final boolean searchTransactionHistory) {
+    return sigStatusBody(null, signatures, searchTransactionHistory, null);
+  }
+
+  private String sigStatusBody(final Commitment commitment,
+                              final SequencedCollection<String> signatures,
+                              final boolean searchTransactionHistory,
+                              final BigInteger minContextSlot) {
     final var joined = String.join("\",\"", signatures);
-    return format("""
-            {"jsonrpc":"2.0","id":%d,"method":"getSignatureStatuses","params":[["%s"],{"searchTransactionHistory":%b}]}""",
-        id.incrementAndGet(), joined, searchTransactionHistory
-    );
+    final var builder = new StringBuilder(joined.length() + 192);
+    builder.append(format("""
+        {"jsonrpc":"2.0","id":%d,"method":"getSignatureStatuses","params":[["%s"],{"searchTransactionHistory":%b""",
+        id.incrementAndGet(), joined, searchTransactionHistory));
+    if (commitment != null) {
+      builder.append(",\"commitment\":\"").append(commitment.getValue()).append('"');
+    }
+    appendMinContextSlot(builder, minContextSlot);
+    return builder.append("}]}").toString();
   }
 
   @Override
@@ -1232,6 +1260,25 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<TxStatus>> getSigStatusList(final SequencedCollection<String> signatures,
                                                             final boolean searchTransactionHistory) {
     return sendPostRequest(SIG_STATUS_LIST, sigStatusBody(signatures, searchTransactionHistory));
+  }
+
+  @Override
+  public CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final Commitment commitment,
+                                                                       final SequencedCollection<String> signatures,
+                                                                       final boolean searchTransactionHistory,
+                                                                       final BigInteger minContextSlot) {
+    return sendPostRequest(
+        applyGenericResponseValue((ji, context) -> TxStatus.parse(signatures, ji, context)),
+        sigStatusBody(commitment, signatures, searchTransactionHistory, minContextSlot)
+    );
+  }
+
+  @Override
+  public CompletableFuture<List<TxStatus>> getSigStatusList(final Commitment commitment,
+                                                           final SequencedCollection<String> signatures,
+                                                           final boolean searchTransactionHistory,
+                                                           final BigInteger minContextSlot) {
+    return sendPostRequest(SIG_STATUS_LIST, sigStatusBody(commitment, signatures, searchTransactionHistory, minContextSlot));
   }
 
   @Override
@@ -1419,11 +1466,19 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature) {
-    return sendPostRequest(TRANSACTION, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s","maxSupportedTransactionVersion":%d,"encoding":"base64"}]}""",
-            id.incrementAndGet(), txSignature, commitment.getValue(), MAX_SUPPORTED_TRANSACTION_VERSION
-        )
-    );
+    return getTransaction(commitment, txSignature, null);
+  }
+
+  @Override
+  public CompletableFuture<Tx> getTransaction(final Commitment commitment,
+                                              final String txSignature,
+                                              final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(256);
+    builder.append(format("""
+        {"jsonrpc":"2.0","id":%d,"method":"getTransaction","params":["%s",{"commitment":"%s","maxSupportedTransactionVersion":%d,"encoding":"base64\"""",
+        id.incrementAndGet(), txSignature, commitment.getValue(), MAX_SUPPORTED_TRANSACTION_VERSION));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequest(TRANSACTION, builder.append("}]}").toString());
   }
 
   @Override

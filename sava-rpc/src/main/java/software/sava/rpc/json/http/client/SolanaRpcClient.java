@@ -293,6 +293,9 @@ public interface SolanaRpcClient {
   CompletableFuture<List<AccountLamports>> getLargestAccounts(final Commitment commitment,
                                                               final LargestAccountsFilter filter);
 
+  /// Returns the schedule keyed by validator identity. On Agave 4.4, identity-filtered
+  /// overloads fail with [RpcCustomError.LeaderScheduleIdentityNotFound] when the identity
+  /// is absent from an available schedule; earlier nodes returned an empty map.
   CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule();
 
   CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment);
@@ -310,6 +313,35 @@ public interface SolanaRpcClient {
   CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final PublicKey identity);
 
   CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment, final PublicKey identity);
+
+  /// Returns the current epoch's schedule, optionally keyed by vote account instead of
+  /// validator identity. See [#getLeaderSchedule(Commitment,Long,PublicKey,boolean)].
+  default CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final boolean keyByVoteAccount) {
+    return getLeaderSchedule(defaultCommitment(), null, null, keyByVoteAccount);
+  }
+
+  default CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment,
+                                                                     final boolean keyByVoteAccount) {
+    return getLeaderSchedule(commitment, null, null, keyByVoteAccount);
+  }
+
+  /// Agave 4.4 can key the result by vote account; older nodes silently ignore
+  /// `keyByVoteAccount`. The identity filter always names a validator identity, even when
+  /// the returned keys are vote accounts. On 4.4 an identity absent from an available
+  /// schedule fails with [RpcCustomError.LeaderScheduleIdentityNotFound].
+  ///
+  /// @param slot `null` for the current epoch, otherwise an unsigned slot in a long's bits
+  /// @param identity `null` for all validators
+  /// @return the schedule, or an empty map when the epoch's schedule is unavailable;
+  ///         implementations that do not support this overload return a future failed
+  ///         with [UnsupportedOperationException]
+  default CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment,
+                                                                     final Long slot,
+                                                                     final PublicKey identity,
+                                                                     final boolean keyByVoteAccount) {
+    return CompletableFuture.failedFuture(new UnsupportedOperationException(
+        "Vote-account leader schedules are not supported by this implementation."));
+  }
 
   CompletableFuture<Long> getMaxRetransmitSlot();
 
@@ -772,15 +804,49 @@ public interface SolanaRpcClient {
                                                          final String untilTxSig,
                                                          final BigInteger minContextSlot);
 
+  /// Uses the server's processed status cache, independently of [#defaultCommitment()].
   /// Unknown signatures map to a nil [TxStatus]; see
   /// [#getSignatureStatuses(SequencedCollection, boolean)].
   default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures) {
     return getSignatureStatuses(signatures, false);
   }
 
+  /// Uses the server's processed status cache, independently of [#defaultCommitment()].
   /// An unknown signature maps to a [TxStatus] whose [TxStatus#nil()] is `true`, never to `null`.
   CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures,
                                                                 final boolean searchTransactionHistory);
+
+  /// Uses processed commitment, independently of [#defaultCommitment()], like the original
+  /// status lookup. See [#getSignatureStatuses(Commitment,SequencedCollection,boolean,BigInteger)].
+  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final SequencedCollection<String> signatures,
+                                                                        final boolean searchTransactionHistory,
+                                                                        final BigInteger minContextSlot) {
+    return getSignatureStatuses(PROCESSED, signatures, searchTransactionHistory, minContextSlot);
+  }
+
+  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final Commitment commitment,
+                                                                        final SequencedCollection<String> signatures,
+                                                                        final boolean searchTransactionHistory) {
+    return getSignatureStatuses(commitment, signatures, searchTransactionHistory, null);
+  }
+
+  /// Selects the bank whose recent status cache is searched and optionally requires that
+  /// bank to have reached `minContextSlot`. These options require Agave 4.4; older nodes
+  /// silently ignore both. A node behind the minimum fails with
+  /// [RpcCustomError.MinContextSlotNotReached]. Historical lookup can still return a
+  /// finalized status from storage. Unknown signatures retain the original nil sentinel.
+  ///
+  /// @param commitment `null` to omit it and use the server's historical processed default
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally
+  /// @return the statuses; implementations that do not support this overload return a
+  ///         future failed with [UnsupportedOperationException]
+  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final Commitment commitment,
+                                                                        final SequencedCollection<String> signatures,
+                                                                        final boolean searchTransactionHistory,
+                                                                        final BigInteger minContextSlot) {
+    return CompletableFuture.failedFuture(new UnsupportedOperationException(
+        "Signature status context options are not supported by this implementation."));
+  }
 
   default CompletableFuture<List<TxStatus>> getSigStatusList(final SequencedCollection<String> signatures) {
     return getSigStatusList(signatures, false);
@@ -788,6 +854,32 @@ public interface SolanaRpcClient {
 
   CompletableFuture<List<TxStatus>> getSigStatusList(final SequencedCollection<String> signatures,
                                                      final boolean searchTransactionHistory);
+
+  /// List counterpart of [#getSignatureStatuses(SequencedCollection,boolean,BigInteger)],
+  /// preserving request order and using processed commitment.
+  default CompletableFuture<List<TxStatus>> getSigStatusList(final SequencedCollection<String> signatures,
+                                                            final boolean searchTransactionHistory,
+                                                            final BigInteger minContextSlot) {
+    return getSigStatusList(PROCESSED, signatures, searchTransactionHistory, minContextSlot);
+  }
+
+  default CompletableFuture<List<TxStatus>> getSigStatusList(final Commitment commitment,
+                                                            final SequencedCollection<String> signatures,
+                                                            final boolean searchTransactionHistory) {
+    return getSigStatusList(commitment, signatures, searchTransactionHistory, null);
+  }
+
+  /// List counterpart of [#getSignatureStatuses(Commitment,SequencedCollection,boolean,BigInteger)],
+  /// with the same server-version requirement, minimum-slot check and nil statuses.
+  /// Implementations that do not support this overload return a future failed with
+  /// [UnsupportedOperationException].
+  default CompletableFuture<List<TxStatus>> getSigStatusList(final Commitment commitment,
+                                                            final SequencedCollection<String> signatures,
+                                                            final boolean searchTransactionHistory,
+                                                            final BigInteger minContextSlot) {
+    return CompletableFuture.failedFuture(new UnsupportedOperationException(
+        "Signature status context options are not supported by this implementation."));
+  }
 
   CompletableFuture<Long> getSlot();
 
@@ -851,6 +943,25 @@ public interface SolanaRpcClient {
   CompletableFuture<Tx> getTransaction(final String txSignature);
 
   CompletableFuture<Tx> getTransaction(final Commitment commitment, final String txSignature);
+
+  default CompletableFuture<Tx> getTransaction(final String txSignature, final BigInteger minContextSlot) {
+    return getTransaction(defaultCommitment(), txSignature, minContextSlot);
+  }
+
+  /// Requires the node to have reached `minContextSlot` at the requested commitment before
+  /// looking up the transaction. Agave 4.4 enforces this with
+  /// [RpcCustomError.MinContextSlotNotReached]; older nodes silently ignore the minimum.
+  /// This is a node freshness check, not a filter on the transaction's slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally
+  /// @return the transaction, or `null` when not found; implementations that do not support
+  ///         this overload return a future failed with [UnsupportedOperationException]
+  default CompletableFuture<Tx> getTransaction(final Commitment commitment,
+                                               final String txSignature,
+                                               final BigInteger minContextSlot) {
+    return CompletableFuture.failedFuture(new UnsupportedOperationException(
+        "Transaction minimum context slots are not supported by this implementation."));
+  }
 
   CompletableFuture<Long> getTransactionCount();
 
