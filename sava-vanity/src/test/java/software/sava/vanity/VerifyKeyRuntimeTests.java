@@ -287,6 +287,32 @@ final class VerifyKeyRuntimeTests {
     }
   }
 
+  /// The launchers themselves refuse the locale before anything else runs, so the wrappers are not
+  /// the only guard: a direct run of the image under C or POSIX exits 2 with the UTF-8 line, for the
+  /// verifier and the generator alike, whether the password is in the environment or would have to
+  /// be prompted for (there is no console here, so a launcher that looked for one first would exit
+  /// 1 instead), with the password neither used nor echoed.
+  @Test
+  void launchersRefuseNonUtf8NativeEncodingBeforeAnythingElse() throws Exception {
+    final var verifier = List.of(JAVA.toString(), "-m", MODULE, unicodeFixture().toString(), ADDRESS);
+    final var generator = List.of(JAVA.toString(), "-Dsoftware.sava.vanity.encrypt=true",
+        "-m", "software.sava.vanity/software.sava.vanity.Entrypoint");
+    for (final var locale : new String[]{"C", "POSIX"}) {
+      for (final var password : new String[]{"", UNICODE_PASSWORD}) {
+        for (final var command : List.of(verifier, generator)) {
+          final var label = locale + ' ' + (password.isEmpty() ? "console" : "environment") + ' ' + command.getLast();
+          final var result = Subprocess.run(command, directory,
+              with(environment, Map.of("LC_ALL", locale, PASSWORD_ENV, password)), timeout, true);
+          assertTrue(result.status() == 2 && result.outputContains("UTF-8")
+                  && !result.outputContains("PASS:") && !result.outputContains(PROMPT.strip())
+                  && !result.outputContains("Enter encryption password:"),
+              label + ": the launcher did not refuse the locale first, exit " + result.status());
+          assertFalse(result.outputContains(UNICODE_PASSWORD), label + ": locale rejection exposed the synthetic password");
+        }
+      }
+    }
+  }
+
   @Test
   void launcherRejectsInvalidHeapSettingsWithTheDocumentedStatus() throws Exception {
     final var cases = new LinkedHashMap<List<String>, Integer>();

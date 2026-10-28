@@ -22,6 +22,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -51,15 +52,23 @@ final class VerifyKeyTests {
     return run(args, passwordSource, null);
   }
 
+  /// Checks with the given seams on a UTF-8 host, whatever the JVM running the tests reports.
+  private static VerifyKey.Checks utf8Checks(final BiFunction<Properties, char[], Signer> loadSigner,
+                                             final VerifyKey.SignatureVerifier bouncyCastle,
+                                             final VerifyKey.SignatureVerifier jdk,
+                                             final long maxHeap) {
+    return new VerifyKey.Checks(loadSigner, bouncyCastle, jdk, maxHeap, "UTF-8");
+  }
+
   private static Result run(final String[] args, final Supplier<char[]> passwordSource, final VerifyKey.Checks checks) {
     final var out = new ByteArrayOutputStream();
     final var err = new ByteArrayOutputStream();
     final int status;
     try (final var stdout = new PrintStream(out, true, StandardCharsets.UTF_8);
          final var stderr = new PrintStream(err, true, StandardCharsets.UTF_8)) {
-      status = checks == null
-          ? VerifyKey.run(args, passwordSource, new TestRandom(), stdout, stderr)
-          : VerifyKey.run(args, passwordSource, new TestRandom(), stdout, stderr, checks);
+      // the host under test is always UTF-8 here, whatever the JVM running the tests reports
+      status = VerifyKey.run(args, passwordSource, new TestRandom(), stdout, stderr,
+          checks == null ? VerifyKey.checks("UTF-8") : checks);
     }
     return new Result(status, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
   }
@@ -201,6 +210,20 @@ final class VerifyKeyTests {
     }), 1, "FAIL: Use an interactive terminal or set SAVA_VANITY_ENCRYPT_PASSWORD (wrapper: --passwordEnv=ENV_VAR_NAME).");
   }
 
+  /// The host locale is refused before the arguments, the file and the password, the scripts'
+  /// ordering: a missing key file and no password still answer the locale, and a UTF-8 host with
+  /// the same arguments goes on to the file check.
+  @Test
+  void aHostLocaleThatCannotCarryThePasswordIsRefusedBeforeAnythingElse(@TempDir final Path dir) {
+    final var missing = new String[]{dir.resolve("missing.properties").toString(), ADDRESS};
+    final var gbk = new VerifyKey.Checks(Signer::fromProperties, (_, _, _) -> fail("must not verify"),
+        (_, _, _) -> fail("must not verify"), 512L << 20, "GBK");
+    assertFailure(run(missing, () -> fail("must not read a password"), gbk), 2, HostEncoding.refusal("GBK"));
+    final var utf8 = new VerifyKey.Checks(Signer::fromProperties, (_, _, _) -> fail("must not verify"),
+        (_, _, _) -> fail("must not verify"), 512L << 20, "utf8");
+    assertFailure(run(missing, () -> fail("must not read a password"), utf8), 1, "FAIL: The key file must exist and be a regular file.");
+  }
+
   @Test
   void implicitEmptyPasswordEnvironmentFallsBackToPrompt() {
     for (final var environment : new String[]{null, ""}) {
@@ -235,7 +258,7 @@ final class VerifyKeyTests {
           "FAIL: Could not decrypt and validate the saved key. Check the password and encrypted properties file.");
       final var entered = original.toCharArray();
       final var converted = new AtomicReference<char[]>();
-      final var checks = new VerifyKey.Checks((props, password) -> {
+      final var checks = utf8Checks((props, password) -> {
         converted.set(password);
         assertArrayEquals(historical.toCharArray(), password);
         return Signer.fromProperties(props, password);
@@ -262,7 +285,7 @@ final class VerifyKeyTests {
     for (final boolean rejectBc : new boolean[]{true, false}) {
       final var bcCalls = new AtomicInteger();
       final var jdkCalls = new AtomicInteger();
-      final var checks = new VerifyKey.Checks(Signer::fromProperties, (key, msg, sig) -> {
+      final var checks = utf8Checks(Signer::fromProperties, (key, msg, sig) -> {
         bcCalls.incrementAndGet();
         return !rejectBc;
       }, (key, msg, sig) -> {
@@ -282,7 +305,7 @@ final class VerifyKeyTests {
     for (final boolean faultyBc : new boolean[]{true, false}) {
       final VerifyKey.SignatureVerifier bc = faultyBc ? (_, _, _) -> true : (key, message, signature) -> key.verifySignature(message, signature);
       final VerifyKey.SignatureVerifier jdk = faultyBc ? VerifyKey::verifyWithJdk : (_, _, _) -> true;
-      final var checks = new VerifyKey.Checks(Signer::fromProperties, bc, jdk, 512L << 20);
+      final var checks = utf8Checks(Signer::fromProperties, bc, jdk, 512L << 20);
       assertFailure(run(new String[]{file.toString(), ADDRESS}, () -> PASSWORD.toCharArray(), checks), 1,
           "FAIL: An Ed25519 verifier accepted the signature for a changed message.");
     }
@@ -292,7 +315,7 @@ final class VerifyKeyTests {
   void aSignatureFromAnotherPrivateKeyFailsTheSigningCheck(@TempDir final Path dir) throws Exception {
     final var file = fixture(dir);
     final var wrong = Signer.createFromPrivateKey(new byte[32]);
-    final var checks = new VerifyKey.Checks((props, password) -> {
+    final var checks = utf8Checks((props, password) -> {
       final var genuine = Signer.fromProperties(props, password);
       // Deliberately mismatched factory overload: the declared identity matches but signing cannot.
       return Signer.createFromKeyPair(genuine.publicKey(), wrong.privateKey());
@@ -305,7 +328,7 @@ final class VerifyKeyTests {
   void derivationMemoryBudgetIsCheckedBeforePasswordOrAllocation(@TempDir final Path dir) throws Exception {
     final var file = Files.writeString(dir.resolve("large.properties"),
         "kdf= Argon2id \nmemoryKB=524288\nparallelism=1\niterations=1\n");
-    final var checks = new VerifyKey.Checks((_, _) -> fail("must not allocate"),
+    final var checks = utf8Checks((_, _) -> fail("must not allocate"),
         (_, _, _) -> fail("must not verify"), (_, _, _) -> fail("must not verify"), 512L << 20);
     assertFailure(run(new String[]{file.toString(), ADDRESS}, () -> fail("preflight before prompt"), checks), 1,
         "FAIL: Insufficient heap for key derivation. Increase --maxHeap (or Java -Xmx) for this file's KDF settings.");
@@ -318,7 +341,7 @@ final class VerifyKeyTests {
   void allocationFailureHasSafeDiagnosticAndClearsPassword(@TempDir final Path dir) throws Exception {
     final var file = fixture(dir);
     final var password = PASSWORD.toCharArray();
-    final var checks = new VerifyKey.Checks((_, _) -> { throw new OutOfMemoryError("must not print exception detail"); },
+    final var checks = utf8Checks((_, _) -> { throw new OutOfMemoryError("must not print exception detail"); },
         (key, message, signature) -> key.verifySignature(message, signature), VerifyKey::verifyWithJdk, 512L << 20);
     assertFailure(run(new String[]{file.toString(), ADDRESS}, () -> password, checks), 1,
         "FAIL: Insufficient heap for key derivation. Increase --maxHeap (or Java -Xmx) for this file's KDF settings.");

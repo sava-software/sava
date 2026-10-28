@@ -85,19 +85,13 @@ jlinkApplication {
   compress = "zip-6"
   vm = "server"
   // No bound provider this tool needs is loaded at run time (jdk.localedata's was, for the %,d
-  // grouping on non-English hosts; the addModules comment records dropping it). The plugin's
-  // default since 21.7.0, explicit so the image task stops printing what binding would have
-  // linked; HARDENING_NOTES.md (21.7.1) records which modules that is and why none is needed.
+  // progress count, the only locale-sensitive output, whose grouping separator now follows CLDR
+  // root, 1,000, on every host). The plugin's default since 21.7.0, explicit so the image task
+  // stops printing what binding would have linked; HARDENING_NOTES.md (21.7.1) records which
+  // modules that is and why none is needed, and its 2026-10-28 section why jdk.charsets, named for
+  // a while, is not either: the launchers refuse a host whose native encoding is not UTF-8 before
+  // anything else runs (HostEncoding), the shell wrappers refuse before starting a JVM, and the
+  // Docker image runs under its own C.UTF-8, so java.base's charsets are the only ones a password
+  // is ever decoded in.
   bindServices = false
-  addModules = listOf(
-    // Passwords are decoded in the host locale's charset, the console's and the environment
-    // variable's alike. The shell wrappers hold local encrypted runs to UTF-8 and Docker runs
-    // decode under the image's C.UTF-8; this module keeps a launcher run directly under a legacy
-    // multi-byte locale (Shift_JIS, GBK, EUC-KR) from decoding them as UTF-8, the JVM's fallback
-    // when the locale's charset is not in the image; under C or POSIX the JVM decodes ASCII only,
-    // with or without it (HARDENING_NOTES.md says which tests hold what). About 2.7M.
-    "jdk.charsets"
-    // jdk.localedata stays out: the only locale-sensitive output is the %,d progress count, whose
-    // grouping separator follows CLDR root (1,000) on every host.
-  )
 }

@@ -37,6 +37,19 @@ final class EntrypointTests {
   }
 
   @Test
+  void encryptionIsRequestedUnlessUnsetOrFalse() {
+    assertFalse(Entrypoint.encryptionRequested(MODULE));
+    property("encrypt", "false");
+    assertFalse(Entrypoint.encryptionRequested(MODULE));
+    property("encrypt", "FALSE");
+    assertFalse(Entrypoint.encryptionRequested(MODULE));
+    property("encrypt", "true");
+    assertTrue(Entrypoint.encryptionRequested(MODULE));
+    property("encrypt", "");
+    assertTrue(Entrypoint.encryptionRequested(MODULE), "any value but false asks for a password, as before");
+  }
+
+  @Test
   void intPropFallsBackWhenUnsetOrBlank() {
     assertEquals(7, Entrypoint.intProp(MODULE, "absent", 7));
     property("blank", "");

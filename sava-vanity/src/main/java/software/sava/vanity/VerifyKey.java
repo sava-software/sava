@@ -36,7 +36,16 @@ public final class VerifyKey {
   record Checks(BiFunction<Properties, char[], Signer> loadSigner,
                 SignatureVerifier bouncyCastle,
                 SignatureVerifier jdk,
-                long maxHeap) {
+                long maxHeap,
+                String nativeEncoding) {
+  }
+
+  /// The checks a real run uses, with the host's native encoding as given.
+  static Checks checks(final String nativeEncoding) {
+    return new Checks(
+        Signer::fromProperties, (key, message, signature) -> key.verifySignature(message, signature), VerifyKey::verifyWithJdk,
+        Runtime.getRuntime().maxMemory(), nativeEncoding
+    );
   }
 
   public static void main(final String[] args) {
@@ -60,17 +69,15 @@ public final class VerifyKey {
     return environment == null || environment.isEmpty() ? prompt.get() : environment.toCharArray();
   }
 
-  /// Returns 0 on success, 1 on a failed check, or 2 for invalid arguments.
+  /// Returns 0 on success, 1 on a failed check, or 2 for invalid arguments or a host locale that
+  /// cannot carry the password.
   /// Exception messages from key parsing/decryption are deliberately not printed.
   static int run(final String[] args,
                  final Supplier<char[]> passwordSource,
                  final SecureRandom random,
                  final PrintStream out,
                  final PrintStream err) {
-    return run(args, passwordSource, random, out, err, new Checks(
-        Signer::fromProperties, (key, message, signature) -> key.verifySignature(message, signature), VerifyKey::verifyWithJdk,
-        Runtime.getRuntime().maxMemory()
-    ));
+    return run(args, passwordSource, random, out, err, checks(System.getProperty(HostEncoding.PROPERTY)));
   }
 
   static int run(final String[] args,
@@ -79,6 +86,14 @@ public final class VerifyKey {
                  final PrintStream out,
                  final PrintStream err,
                  final Checks checks) {
+    // Refused before the arguments, the file and the KDF preflight: the host is a precondition of
+    // any run that reads a password, so the same condition has one status wherever the run starts.
+    // The wrapper answers a usage error first; the launcher deliberately answers the host first.
+    final var refusal = HostEncoding.refusal(checks.nativeEncoding());
+    if (refusal != null) {
+      err.println(refusal);
+      return HostEncoding.STATUS;
+    }
     if (args.length != 2 && (args.length != 3 || !args[2].equals("--legacy-docker-password"))) {
       err.println("Usage: VerifyKey <encrypted.properties> <expected-public-address> [--legacy-docker-password]");
       return 2;

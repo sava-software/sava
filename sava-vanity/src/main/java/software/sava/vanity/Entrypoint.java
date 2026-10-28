@@ -76,9 +76,13 @@ public final class Entrypoint {
 
   private static final String PASSWORD_ENV_VAR = "SAVA_VANITY_ENCRYPT_PASSWORD";
 
-  private static char[] readPassword(final String moduleName) {
+  static boolean encryptionRequested(final String moduleName) {
     final var val = System.getProperty(moduleName + ".encrypt");
-    if (val == null || val.equalsIgnoreCase("false")) {
+    return val != null && !val.equalsIgnoreCase("false");
+  }
+
+  private static char[] readPassword(final String moduleName) {
+    if (!encryptionRequested(moduleName)) {
       return null;
     }
     // Allow the password to be supplied securely via an environment variable so that
@@ -124,6 +128,15 @@ public final class Entrypoint {
   static void main() throws InterruptedException {
     final var moduleName = Entrypoint.class.getModule().getName();
 
+    if (encryptionRequested(moduleName)) {
+      // Before anything else runs: the host is a precondition of a run that reads a password (the
+      // wrapper checks its own arguments first; the launcher deliberately answers the host first).
+      final var refusal = HostEncoding.refusal();
+      if (refusal != null) {
+        System.err.println(refusal);
+        System.exit(HostEncoding.STATUS);
+      }
+    }
     final char[] password = readPassword(moduleName);
     try {
       run(moduleName, password);

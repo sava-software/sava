@@ -9,7 +9,39 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## sava-vanity: the UTF-8 rule moves into the launchers — 2026-10-28
+
+Both launchers now refuse a host whose native encoding is not UTF-8 before anything else
+runs, with the scripts' message and status 2: `VerifyKey.run` checks it ahead of its
+arguments, the key file and the KDF preflight, and the generator checks it once encryption
+is requested, before its search starts (the wrappers parse their arguments before probing
+the locale; the launchers answer the host first, as a precondition of any run that reads a
+password); unencrypted generation reads no password and is untouched. `HostEncoding` reads `native.encoding`, the charset the OS reports before the
+JVM's own fallback to UTF-8 for one the image lacks, and matches the scripts' spelling of
+UTF-8. What that charset decides differs by platform: a typed password is decoded by the
+console in the charset derived from it on both; one in `SAVA_VANITY_ENCRYPT_PASSWORD` is
+decoded when the JVM builds its environment map, in that charset on Linux and in UTF-8 on
+macOS, which pins `sun.jnu.encoding`. The refusal is the same either way, since the console
+path is wrong under any non-UTF-8 locale. The scripts keep their own guards, which probe
+`locale charmap` and fail before a JVM starts; they are stricter (on macOS with no locale
+variable set, `locale charmap` says US-ASCII while the JDK takes UTF-8 from the system
+preferences) and stay as the pre-JVM rule. `jdk.charsets`, which the 21.7.1 adoption below
+had named so that a direct run under a legacy multi-byte locale would decode correctly,
+leaves the image: it never helped C or POSIX, and the rule now lives in the launchers. The
+image is 10 modules in 75,656 KB on JDK 25.0.5.0.3. Held by `HostEncodingTests`
+(the match, the line, the property read), `VerifyKeyTests` (the refusal precedes a missing
+key file and reads no password), `EntrypointTests` (when encryption is requested) and
+`VerifyKeyRuntimeTests`, which runs both launchers of the built image directly under
+`LC_ALL=C` and `POSIX`, with the password in the environment and with none (the console
+path), and requires exit 2, the UTF-8 line, no prompt and no echo; the suite passed all 7
+cases, the new one among them, against the rebuilt local image and a Docker image rebuilt
+from this tree as `sava-vanity:guard`. sava-vanity owns no mutation suite, so the range
+reaches none.
+
 ## Released sava-build 21.7.1 — 2026-10-28
+
+*Superseded in part on 2026-10-28, the section above: `jdk.charsets` left the image and the
+UTF-8 rule moved into the launchers.*
 
 All three plugin pins advance from 21.6.9 to the published
 `software.sava:sava-build:21.7.1`, crossing 21.7.0. `:sava-core:savaBuildIdentity`
