@@ -939,7 +939,8 @@ public interface SolanaRpcClient {
   /// This is a node freshness check, not a filter on the transaction's slot.
   ///
   /// @param minContextSlot `null` to omit the minimum; zero is sent literally
-  /// @return the transaction, or `null` when not found
+  /// @return the transaction; a signature the node does not know yields a non-null `Tx` whose
+  ///         `data()` is `null`, like every other `getTransaction` overload
   CompletableFuture<Tx> getTransaction(final Commitment commitment,
                                        final String txSignature,
                                        final BigInteger minContextSlot);

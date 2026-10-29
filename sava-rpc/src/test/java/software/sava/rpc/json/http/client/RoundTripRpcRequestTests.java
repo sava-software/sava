@@ -981,6 +981,26 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(1, skeleton.numSignatures());
   }
 
+  /// A signature the node does not know answers `"result":null`, which parses to a hollow `Tx`
+  /// rather than to `null`: published behaviour, documented in CONVENTIONS.md, pinned here.
+  @Test
+  void getTransactionUnknownSignatureYieldsAHollowTx() {
+    final var txSignature = "49aroTSh9ehQ4q5WXXwLWorGcJXmpUkf8ty5nWfjXc6HoB1Grq45nRNxi5ngtRhN7zb9fGnVKM8FvKF9gg5hy8ca";
+    registerRequest("""
+        {"jsonrpc":"2.0","id":913,"method":"getTransaction","params":["%s",{"commitment":"confirmed","maxSupportedTransactionVersion":1,"encoding":"base64"}]}""".formatted(txSignature), """
+        {"jsonrpc":"2.0","result":null,"id":1}"""
+    );
+
+    final var tx = rpcClient.getTransaction(txSignature).join();
+
+    assertNotNull(tx, "a missing transaction is a hollow record, not null");
+    assertNull(tx.data());
+    assertNull(tx.meta());
+    assertEquals(0L, tx.slot());
+    assertTrue(tx.blockTime().isEmpty());
+    assertTrue(tx.transactionIndex().isEmpty());
+  }
+
   /// Recorded on 2026-08-24 against a local Agave 4.2.1 test validator with the `enable_tx_v1`
   /// feature gate active: the first SIMD-0385 transaction sava landed. The node reports
   /// `"version":1` as a number and serves the message-first wire bytes (`0x81` prefix, signatures
