@@ -8,8 +8,6 @@ import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.AccountInfo;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
@@ -250,26 +248,5 @@ final class DataSliceSubscriptionTests {
       assertFalse(ws.programUnsubscribe(KEY));
       assertFalse(ws.keyedProgramUnsubscribe("key"));
     }
-  }
-
-  @Test
-  void olderImplementationsKeepTheAdditiveDefaults() {
-    final var ws = (SolanaRpcWebsocket) Proxy.newProxyInstance(
-        SolanaRpcWebsocket.class.getClassLoader(), new Class<?>[]{SolanaRpcWebsocket.class},
-        (proxy, method, args) -> {
-          if (method.isDefault()) {
-            return InvocationHandler.invokeDefault(proxy, method, args);
-          } else if (method.getName().equals("defaultCommitment")) {
-            return Commitment.CONFIRMED;
-          }
-          throw new AssertionError("Unexpected abstract call: " + method);
-        }
-    );
-    assertThrows(UnsupportedOperationException.class, () -> ws.accountSubscribe(KEY, 0, 0, _ -> {
-    }));
-    assertThrows(UnsupportedOperationException.class, () -> ws.programSubscribe(KEY, null, 0, 0, _ -> {
-    }));
-    assertThrows(UnsupportedOperationException.class, () -> ws.keyedProgramSubscribe("key", KEY, null, 0, 0, _ -> {
-    }));
   }
 }

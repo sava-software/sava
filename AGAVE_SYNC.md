@@ -196,9 +196,9 @@ lengths 8 and 0, while mainnet returned the full 40 bytes for both.
 
 There are no additional HTTP method, config, response, or WebSocket wire changes in
 `v4.4.0-beta.1..v4.4.0-rc.1`. The response/account/transaction schema comparison and
-the pinned transaction/instruction error enums need no new models for 4.4. Existing
-published interfaces gain default methods so external implementations keep compiling;
-unsupported new calls fail explicitly rather than silently losing requested options.
+the pinned transaction/instruction error enums need no new models for 4.4. The new
+interface methods are abstract: `SolanaRpcClient` and `SolanaRpcWebsocket` are implemented
+by sava, not by its users.
 
 The separate 4.5 alpha review found `getRankMap` (still deliberately omitted under
 the owner policy below) and `simulateTransaction.innerInstructionsEncoding`. The

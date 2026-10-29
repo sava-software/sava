@@ -332,16 +332,11 @@ public interface SolanaRpcClient {
   ///
   /// @param slot `null` for the current epoch, otherwise an unsigned slot in a long's bits
   /// @param identity `null` for all validators
-  /// @return the schedule, or an empty map when the epoch's schedule is unavailable;
-  ///         implementations that do not support this overload return a future failed
-  ///         with [UnsupportedOperationException]
-  default CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment,
-                                                                     final Long slot,
-                                                                     final PublicKey identity,
-                                                                     final boolean keyByVoteAccount) {
-    return CompletableFuture.failedFuture(new UnsupportedOperationException(
-        "Vote-account leader schedules are not supported by this implementation."));
-  }
+  /// @return the schedule, or an empty map when the epoch's schedule is unavailable
+  CompletableFuture<Map<PublicKey, long[]>> getLeaderSchedule(final Commitment commitment,
+                                                             final Long slot,
+                                                             final PublicKey identity,
+                                                             final boolean keyByVoteAccount);
 
   CompletableFuture<Long> getMaxRetransmitSlot();
 
@@ -838,15 +833,10 @@ public interface SolanaRpcClient {
   ///
   /// @param commitment `null` to omit it and use the server's historical processed default
   /// @param minContextSlot `null` to omit the minimum; zero is sent literally
-  /// @return the statuses; implementations that do not support this overload return a
-  ///         future failed with [UnsupportedOperationException]
-  default CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final Commitment commitment,
-                                                                        final SequencedCollection<String> signatures,
-                                                                        final boolean searchTransactionHistory,
-                                                                        final BigInteger minContextSlot) {
-    return CompletableFuture.failedFuture(new UnsupportedOperationException(
-        "Signature status context options are not supported by this implementation."));
-  }
+  CompletableFuture<Map<String, TxStatus>> getSignatureStatuses(final Commitment commitment,
+                                                                final SequencedCollection<String> signatures,
+                                                                final boolean searchTransactionHistory,
+                                                                final BigInteger minContextSlot);
 
   default CompletableFuture<List<TxStatus>> getSigStatusList(final SequencedCollection<String> signatures) {
     return getSigStatusList(signatures, false);
@@ -871,15 +861,10 @@ public interface SolanaRpcClient {
 
   /// List counterpart of [#getSignatureStatuses(Commitment,SequencedCollection,boolean,BigInteger)],
   /// with the same server-version requirement, minimum-slot check and nil statuses.
-  /// Implementations that do not support this overload return a future failed with
-  /// [UnsupportedOperationException].
-  default CompletableFuture<List<TxStatus>> getSigStatusList(final Commitment commitment,
-                                                            final SequencedCollection<String> signatures,
-                                                            final boolean searchTransactionHistory,
-                                                            final BigInteger minContextSlot) {
-    return CompletableFuture.failedFuture(new UnsupportedOperationException(
-        "Signature status context options are not supported by this implementation."));
-  }
+  CompletableFuture<List<TxStatus>> getSigStatusList(final Commitment commitment,
+                                                    final SequencedCollection<String> signatures,
+                                                    final boolean searchTransactionHistory,
+                                                    final BigInteger minContextSlot);
 
   CompletableFuture<Long> getSlot();
 
@@ -954,14 +939,10 @@ public interface SolanaRpcClient {
   /// This is a node freshness check, not a filter on the transaction's slot.
   ///
   /// @param minContextSlot `null` to omit the minimum; zero is sent literally
-  /// @return the transaction, or `null` when not found; implementations that do not support
-  ///         this overload return a future failed with [UnsupportedOperationException]
-  default CompletableFuture<Tx> getTransaction(final Commitment commitment,
-                                               final String txSignature,
-                                               final BigInteger minContextSlot) {
-    return CompletableFuture.failedFuture(new UnsupportedOperationException(
-        "Transaction minimum context slots are not supported by this implementation."));
-  }
+  /// @return the transaction, or `null` when not found
+  CompletableFuture<Tx> getTransaction(final Commitment commitment,
+                                       final String txSignature,
+                                       final BigInteger minContextSlot);
 
   CompletableFuture<Long> getTransactionCount();
 

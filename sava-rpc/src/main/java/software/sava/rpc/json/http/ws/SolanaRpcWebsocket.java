@@ -126,7 +126,6 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// @param dataSliceLength number of bytes to return; zero returns empty data
   /// @param dataSliceOffset byte offset into the account data, after the length argument
   /// @throws IllegalArgumentException if offset or length is negative
-  /// @throws UnsupportedOperationException if this implementation does not support slices
   default boolean accountSubscribe(final PublicKey key,
                                    final int dataSliceLength,
                                    final int dataSliceOffset,
@@ -150,14 +149,12 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return accountSubscribe(commitment, key, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
-  default boolean accountSubscribe(final Commitment commitment,
-                                   final PublicKey key,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
-                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
-                                   final Consumer<AccountInfo<byte[]>> consumer) {
-    throw new UnsupportedOperationException("Sliced account subscriptions are not supported by this implementation.");
-  }
+  boolean accountSubscribe(final Commitment commitment,
+                           final PublicKey key,
+                           final int dataSliceLength,
+                           final int dataSliceOffset,
+                           final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                           final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean accountUnsubscribe(final PublicKey key);
 
@@ -316,7 +313,6 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// @param dataSliceLength number of bytes to return; zero returns empty data
   /// @param dataSliceOffset byte offset into the account data, after the length argument
   /// @throws IllegalArgumentException if offset or length is negative
-  /// @throws UnsupportedOperationException if this implementation does not support slices
   default boolean programSubscribe(final PublicKey program,
                                    final List<Filter> filters,
                                    final int dataSliceLength,
@@ -343,15 +339,13 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return programSubscribe(commitment, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
-  default boolean programSubscribe(final Commitment commitment,
-                                   final PublicKey program,
-                                   final List<Filter> filters,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
-                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
-                                   final Consumer<AccountInfo<byte[]>> consumer) {
-    throw new UnsupportedOperationException("Sliced program subscriptions are not supported by this implementation.");
-  }
+  boolean programSubscribe(final Commitment commitment,
+                           final PublicKey program,
+                           final List<Filter> filters,
+                           final int dataSliceLength,
+                           final int dataSliceOffset,
+                           final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                           final Consumer<AccountInfo<byte[]>> consumer);
 
   boolean programUnsubscribe(final PublicKey program);
 
@@ -408,7 +402,6 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// @param dataSliceLength number of bytes to return; zero returns empty data
   /// @param dataSliceOffset byte offset into the account data, after the length argument
   /// @throws IllegalArgumentException if offset or length is negative
-  /// @throws UnsupportedOperationException if this implementation does not support slices
   default boolean keyedProgramSubscribe(final String subscriptionKey,
                                         final PublicKey program,
                                         final List<Filter> filters,
@@ -438,16 +431,14 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
-  default boolean keyedProgramSubscribe(final Commitment commitment,
-                                        final String subscriptionKey,
-                                        final PublicKey program,
-                                        final List<Filter> filters,
-                                        final int dataSliceLength,
-                                        final int dataSliceOffset,
-                                        final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
-                                        final Consumer<AccountInfo<byte[]>> consumer) {
-    throw new UnsupportedOperationException("Sliced program subscriptions are not supported by this implementation.");
-  }
+  boolean keyedProgramSubscribe(final Commitment commitment,
+                                final String subscriptionKey,
+                                final PublicKey program,
+                                final List<Filter> filters,
+                                final int dataSliceLength,
+                                final int dataSliceOffset,
+                                final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                final Consumer<AccountInfo<byte[]>> consumer);
 
   /// Removes the keyed program registration at the default commitment.
   ///
