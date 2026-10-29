@@ -943,7 +943,7 @@ previously accepted rows), and `InstructionRecord.toString`'s
   the shared HARDENING.md.
 - **JUnit 6.1.3: `@Execution` and `@TestInstance` are both `@Inherited`** —
   verified in the resolved jar's bytecode, 2026-08-13. `RpcRequestTests`'
-  base-level annotations therefore reach its nine concrete subclasses, and
+  base-level annotations therefore reach every concrete subclass, and
   parallel execution is not enabled in any module, so the abstract-base
   wandering-count cause in the shared casebook does not apply to this repo.
   Re-verify on a JUnit major bump before restructuring any tests over it.

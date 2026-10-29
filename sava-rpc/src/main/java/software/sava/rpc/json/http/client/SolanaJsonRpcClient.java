@@ -28,7 +28,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.*;
 import java.util.stream.Collectors;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNullElse;
 import static software.sava.rpc.json.PublicKeyEncoding.parseBase58Encoded;
 import static software.sava.rpc.json.http.response.AccountInfo.BYTES_IDENTITY;
@@ -1782,5 +1781,11 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
             id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue(), joinedAccounts
         )
     );
+  }
+
+  /// Request bodies are JSON, whose numbers are ASCII digits, so they are formatted in the root
+  /// locale rather than the JVM default, which may write another script's digits.
+  private static String format(final String template, final Object... args) {
+    return String.format(Locale.ROOT, template, args);
   }
 }

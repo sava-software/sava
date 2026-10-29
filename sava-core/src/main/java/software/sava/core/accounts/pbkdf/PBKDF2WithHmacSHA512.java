@@ -49,7 +49,7 @@ record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
 
   @Override
   public String toJson() {
-    return String.format(
+    return String.format(java.util.Locale.ROOT,
         """
             {
               "kdf": "PBKDF2WithHmacSHA512",
@@ -61,7 +61,7 @@ record PBKDF2WithHmacSHA512(int iterations) implements KeyDerivation {
 
   @Override
   public String toPropertiesString() {
-    return String.format(
+    return String.format(java.util.Locale.ROOT,
         """
             kdf=PBKDF2WithHmacSHA512
             iterations=%d

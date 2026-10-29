@@ -68,7 +68,7 @@ record Argon2id(int memoryKB,
 
   @Override
   public String toJson() {
-    return String.format(
+    return String.format(java.util.Locale.ROOT,
         """
             {
               "kdf": "Argon2id",
@@ -84,7 +84,7 @@ record Argon2id(int memoryKB,
 
   @Override
   public String toPropertiesString() {
-    return String.format(
+    return String.format(java.util.Locale.ROOT,
         """
             kdf=Argon2id
             iterations=%d

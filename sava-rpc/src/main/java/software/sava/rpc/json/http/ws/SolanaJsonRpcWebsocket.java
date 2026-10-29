@@ -1084,7 +1084,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private static String createSubscriptionMsg(final long msgId,
                                               final Channel channel,
                                               final String params) {
-    return String.format("""
+    return String.format(Locale.ROOT, """
         {"jsonrpc":"2.0","id":%d,"method":"%s","params":[%s]}""", msgId, channel.subscribe(), params
     );
   }
@@ -1396,7 +1396,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                    final Consumer<AccountInfo<byte[]>> consumer) {
     final var sub = this.accountSubs.get(key.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
-      final var params = String.format("""
+      final var params = String.format(Locale.ROOT, """
           "%s",{"encoding":"base64","commitment":"%s"%s}""", key, commitment.getValue(), dataSliceJson
       );
       return queueSubscription(commitment, Channel.account, key, params, this.accountSubs, onSub, consumer);
@@ -1427,7 +1427,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                final Consumer<TxLogs> consumer) {
     final var sub = this.txLogSubs.get(key.toBase58());
     if (sub == null || !sub.containsKey(commitment)) {
-      final var params = String.format("""
+      final var params = String.format(Locale.ROOT, """
           {"mentions":["%s"]},{"commitment":"%s"}""", key, commitment.getValue()
       );
       return queueSubscription(commitment, Channel.logs, key.toBase58(), params, this.txLogSubs, onSub, consumer);
@@ -1474,7 +1474,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     validateJsonToken(b58TxSig, "b58TxSig");
     final var sub = this.signatureSubs.get(b58TxSig);
     if (sub == null || !sub.containsKey(commitment)) {
-      final var params = String.format("""
+      final var params = String.format(Locale.ROOT, """
           "%s",{"commitment":"%s","enableReceivedNotification":%b}""", b58TxSig, commitment.getValue(), enableReceivedNotification
       );
       return queueSubscription(commitment, Channel.signature, b58TxSig, params, this.signatureSubs, onSub, consumer);
@@ -1582,7 +1582,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           .map(Filter::toJson)
           .collect(joining(",", ",\"filters\":[", "]"));
 
-      final var params = String.format("""
+      final var params = String.format(Locale.ROOT, """
               "%s",{"commitment":"%s","encoding":"base64"%s%s}""",
           program, commitment.getValue(), filtersJson, dataSliceJson
       );
@@ -1637,7 +1637,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         .map(Filter::toJson)
         .collect(joining(",", ",\"filters\":[", "]"));
 
-    final var params = String.format("""
+    final var params = String.format(Locale.ROOT, """
             "%s",{"commitment":"%s","encoding":"base64"%s%s}""",
         programAddress, commitment.getValue(), filtersJson, dataSliceJson
     );
@@ -1665,7 +1665,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
     // Agave coalesces empty slices at every offset onto the same server subscription.
     // Match its canonical request so the duplicate-grant check recognizes equivalence.
-    return String.format(",\"dataSlice\":{\"offset\":%d,\"length\":%d}", length == 0 ? 0 : offset, length);
+    return String.format(Locale.ROOT, ",\"dataSlice\":{\"offset\":%d,\"length\":%d}", length == 0 ? 0 : offset, length);
   }
 
   private static void validateSubscriptionKey(final String subscriptionKey) {
@@ -1684,7 +1684,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         return false;
       }
       final long msgId = this.msgId.incrementAndGet();
-      final var msg = String.format("""
+      final var msg = String.format(Locale.ROOT, """
           {"jsonrpc":"2.0","id":%d,"method":"%s"}""", msgId, Channel.slot.subscribe()
       );
       final var slotSub = Subscription.createSubscription(null, Channel.slot, Channel.slot.name(), msgId, msg, onSub, consumer);
@@ -1726,7 +1726,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         return false;
       }
       final long msgId = this.msgId.incrementAndGet();
-      final var msg = String.format("""
+      final var msg = String.format(Locale.ROOT, """
           {"jsonrpc":"2.0","id":%d,"method":"%s"}""", msgId, Channel.root.subscribe()
       );
       final var rootSub = Subscription.createSubscription(null, Channel.root, Channel.root.name(), msgId, msg, onSub, consumer);
@@ -1823,7 +1823,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           ? registered
           : this.genericSubs.computeIfAbsent(notificationMethod, _ -> new ConcurrentHashMap<>());
       final long msgId = this.msgId.incrementAndGet();
-      final var msg = String.format("""
+      final var msg = String.format(Locale.ROOT, """
           {"jsonrpc":"2.0","id":%d,"method":"%s","params":[%s]}""", msgId, subscribeMethod, paramsJson
       );
       final var sub = new GenericSubscription<>(unSubscribeMethod, notificationMethod, parser, key, msgId, msg, onSub, consumer);
@@ -1899,7 +1899,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   };
 
   private static String createUnSubMsg(final long msgId, final String unSubscribeMethod, final BigInteger subId) {
-    return String.format("""
+    return String.format(Locale.ROOT, """
             {"jsonrpc":"2.0","id":%d,"method":"%s","params":[%d]}""",
         msgId, unSubscribeMethod, subId
     );
