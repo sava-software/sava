@@ -217,13 +217,14 @@ final class Agave44RpcRequestTests extends RpcRequestTests {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getLeaderSchedule","params":[null,\
         {"commitment":"confirmed","identity":"%s","keyByVoteAccount":true}]}""".formatted(IDENTITY), """
-        {"jsonrpc":"2.0","id":42,"error":{"code":-32022,"message":"Leader schedule identity not found"}}""");
+        {"jsonrpc":"2.0","id":42,"error":{"code":-32022,\
+        "message":"Node %s was not in the leader schedule for specified epoch"}}""".formatted(IDENTITY));
 
     final var error = joinExpectingRpcException(() ->
         rpcClient.getLeaderSchedule(Commitment.CONFIRMED, null, IDENTITY, true).join());
     assertEquals(-32022, error.code());
     assertEquals(OptionalLong.of(42), error.requestId());
-    assertEquals("Leader schedule identity not found", error.getMessage());
+    assertEquals("Node " + IDENTITY + " was not in the leader schedule for specified epoch", error.getMessage());
     assertInstanceOf(RpcCustomError.LeaderScheduleIdentityNotFound.class, error.customError());
   }
 

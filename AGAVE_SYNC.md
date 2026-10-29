@@ -272,7 +272,7 @@ and `SolanaRpcWebsocketTests.java` (subscription lifecycle and framing).
 Java: `sava-rpc/src/main/java/software/sava/rpc/json/http/response/`
 - `TransactionError.java` — sealed interface, one record/singleton per variant.
 - `IxError.java` — InstructionError variants (incl. `Custom(u32)`).
-- `RpcCustomError.java` — JSON-RPC custom error codes `-32001..-32021`.
+- `RpcCustomError.java` — JSON-RPC custom error codes `-32001..-32022`.
 
 Canonical sources:
 - `TransactionError`/`InstructionError` enums are NOT in agave — they live in the
@@ -281,8 +281,8 @@ Canonical sources:
   BigTable storage. New variants are appended to the Rust enums; JSON serialization uses the
   variant name (unit variants as strings, data variants as single-key objects).
 - Custom codes: `agave:rpc-client-api/src/custom_error.rs` — `JSON_RPC_SERVER_ERROR_*`
-  constants and the `RpcCustomError` → JSON conversion. In sync through `-32021` as of
-  2026-07.
+  constants and the `RpcCustomError` → JSON conversion. In sync through `-32022` as of
+  2026-10.
 
 Tests: `client/ParseTransactionErrorTests.java`, `client/ParseCustomRpcErrorTests.java`.
 
@@ -1151,7 +1151,7 @@ git -C <solana-sdk-clone> diff 4fb3a9a3..HEAD -- \
 5. For RPC methods: compare `rpc.rs` registrations against `SolanaJsonRpcClient.java`
    literals; add interface method, request builder, response record + parser, and a
    `RoundTripRpcRequestTests` case.
-6. For errors: check `agave:rpc-client-api/src/custom_error.rs` for codes past `-32021`.
+6. For errors: check `agave:rpc-client-api/src/custom_error.rs` for codes past `-32022`.
    For `TransactionError` and `InstructionError` the mirror is gated by the committed
    fixture under `sava-rpc/src/test/solana/error-variants/`: review the two crate pins in
    its `Cargo.toml` against the newest published `solana-transaction-error` and
