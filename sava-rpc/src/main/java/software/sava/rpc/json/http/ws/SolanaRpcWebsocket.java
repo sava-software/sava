@@ -359,8 +359,6 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   ///
   /// @param subscriptionKey unique among keyed program subscriptions at this commitment
   /// @throws IllegalArgumentException if `subscriptionKey` is null or empty
-  /// @throws UnsupportedOperationException if this implementation does not provide keyed
-  ///                                       program subscriptions
   default boolean keyedProgramSubscribe(final String subscriptionKey,
                                          final PublicKey program,
                                          final List<Filter> filters,
@@ -384,14 +382,12 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, onSub, consumer);
   }
 
-  default boolean keyedProgramSubscribe(final Commitment commitment,
-                                         final String subscriptionKey,
-                                         final PublicKey program,
-                                         final List<Filter> filters,
-                                         final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
-                                         final Consumer<AccountInfo<byte[]>> consumer) {
-    throw new UnsupportedOperationException("Keyed program subscriptions are not supported by this implementation.");
-  }
+  boolean keyedProgramSubscribe(final Commitment commitment,
+                                 final String subscriptionKey,
+                                 final PublicKey program,
+                                 final List<Filter> filters,
+                                 final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                 final Consumer<AccountInfo<byte[]>> consumer);
 
   /// Returns the requested slice of account data. Agave before 4.4 ignores this option.
   /// A zero length requests empty data; the account metadata, including `space`, remains whole.
@@ -443,15 +439,11 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// Removes the keyed program registration at the default commitment.
   ///
   /// @throws IllegalArgumentException if `subscriptionKey` is null or empty
-  /// @throws UnsupportedOperationException if this implementation does not provide keyed
-  ///                                       program subscriptions
   default boolean keyedProgramUnsubscribe(final String subscriptionKey) {
     return keyedProgramUnsubscribe(defaultCommitment(), subscriptionKey);
   }
 
-  default boolean keyedProgramUnsubscribe(final Commitment commitment, final String subscriptionKey) {
-    throw new UnsupportedOperationException("Keyed program subscriptions are not supported by this implementation.");
-  }
+  boolean keyedProgramUnsubscribe(final Commitment commitment, final String subscriptionKey);
 
   default boolean slotSubscribe(final Consumer<ProcessedSlot> consumer) {
     return slotSubscribe(null, consumer);
@@ -550,11 +542,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     /// milliseconds; independent of [#reConnectDelay(long)].
     ///
     /// @throws IllegalArgumentException if connectTimeout is not positive.
-    /// @throws UnsupportedOperationException if this implementation cannot configure an
-    ///                                       independent handshake timeout
-    default Builder connectTimeout(final long connectTimeout) {
-      throw unsupportedTiming("connectTimeout");
-    }
+    Builder connectTimeout(final long connectTimeout);
 
     Builder reConnectDelay(final long reConnectDelay);
 
@@ -574,11 +562,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     /// [#pingDelay()] with no cap, so raising the ping delay raises this too.
     ///
     /// @throws IllegalArgumentException if keepAliveDelay is not positive.
-    /// @throws UnsupportedOperationException if this implementation cannot configure an
-    ///                                       independent keep-alive delay
-    default Builder keepAliveDelay(final long keepAliveDelay) {
-      throw unsupportedTiming("keepAliveDelay");
-    }
+    Builder keepAliveDelay(final long keepAliveDelay);
 
     /// How long a failed subscription send waits before it is retried, in milliseconds.
     /// Defaults to [#reConnectDelay()] floored at [#subscriptionAndPingCheckDelay()] and at 1.
@@ -592,11 +576,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     /// to one window).
     ///
     /// @throws IllegalArgumentException if subscriptionResendDelay is not positive.
-    /// @throws UnsupportedOperationException if this implementation cannot configure an
-    ///                                       independent subscription re-send delay
-    default Builder subscriptionResendDelay(final long subscriptionResendDelay) {
-      throw unsupportedTiming("subscriptionResendDelay");
-    }
+    Builder subscriptionResendDelay(final long subscriptionResendDelay);
 
     /// The commitment every subscribe and unsubscribe overload without a commitment uses. Defaults
     /// to [Commitment#FINALIZED]; see [Commitment].
@@ -608,11 +588,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     WebSocket.Builder webSocketBuilder();
 
-    /// Defaults to [#reConnectDelay()], the handshake timeout of a builder without an independent
-    /// setting.
-    default long connectTimeout() {
-      return reConnectDelay();
-    }
+    long connectTimeout();
 
     long reConnectDelay();
 
@@ -620,20 +596,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
     long subscriptionAndPingCheckDelay();
 
-    /// Defaults to the built-in builder's derived value, a multiple of [#pingDelay()].
-    default long keepAliveDelay() {
-      return Timings.keepAliveFor(pingDelay());
-    }
+    long keepAliveDelay();
 
-    /// Defaults to the built-in builder's derived value; see [#subscriptionResendDelay(long)].
-    default long subscriptionResendDelay() {
-      return Timings.resendDelayFor(reConnectDelay(), subscriptionAndPingCheckDelay());
-    }
-
-    private static UnsupportedOperationException unsupportedTiming(final String timing) {
-      return new UnsupportedOperationException(
-          timing + " is not configurable by this SolanaRpcWebsocket.Builder implementation.");
-    }
+    long subscriptionResendDelay();
 
     SolanaAccounts solanaAccounts();
 

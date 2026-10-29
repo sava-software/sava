@@ -2,16 +2,11 @@ package software.sava.rpc.json.http.ws;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
-import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.math.BigInteger;
-import java.net.URI;
-import java.net.http.WebSocket;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,32 +30,6 @@ final class WebsocketApiCompatibilityTests {
   }
 
   @Test
-  void aLegacyBuilderDerivesReadableValuesForTheNewTimingAccessors() {
-    final SolanaRpcWebsocket.Builder legacy = new LegacyBuilder();
-
-    assertEquals(41L, legacy.connectTimeout(),
-        "legacy builders used their reconnect delay as the handshake timeout");
-    assertEquals(86L, legacy.keepAliveDelay(),
-        "an unset keep-alive follows twice the legacy ping delay");
-    assertEquals(47L, legacy.subscriptionResendDelay(),
-        "the derived resend delay is floored at the legacy check cadence");
-  }
-
-  @Test
-  void aLegacyBuilderRejectsIndependentTimingConfigurationClearly() {
-    final SolanaRpcWebsocket.Builder legacy = new LegacyBuilder();
-
-    assertUnsupported("connectTimeout", () -> legacy.connectTimeout(101L));
-    assertUnsupported("keepAliveDelay", () -> legacy.keepAliveDelay(103L));
-    assertUnsupported("subscriptionResendDelay", () -> legacy.subscriptionResendDelay(107L));
-
-    assertEquals(41L, legacy.reConnectDelay(), "an unsupported setter must not alter an old knob");
-    assertEquals(43L, legacy.pingDelay(), "an unsupported setter must not alter an old knob");
-    assertEquals(47L, legacy.subscriptionAndPingCheckDelay(),
-        "an unsupported setter must not alter an old knob");
-  }
-
-  @Test
   void aLegacySubscriptionDerivesItsBuiltInNotificationMethod() {
     final Subscription<String> account = new LegacySubscription(Channel.account);
     final Subscription<String> channelLess = new LegacySubscription(null);
@@ -80,178 +49,6 @@ final class WebsocketApiCompatibilityTests {
     assertEquals(-61L, timings.subscriptionAndPingCheckDelay());
     assertEquals(0L, timings.keepAliveDelay());
     assertEquals(1L, timings.subscriptionResendDelay());
-  }
-
-  private static void assertUnsupported(final String setting, final Runnable operation) {
-    final var failure = assertThrows(UnsupportedOperationException.class, operation::run);
-    assertTrue(String.valueOf(failure.getMessage()).contains(setting), failure.getMessage());
-  }
-
-  /// Implements exactly the Builder methods present before independent handshake, keep-alive,
-  /// and subscription-retry timings were added.
-  private static final class LegacyBuilder implements SolanaRpcWebsocket.Builder {
-
-    private URI uri;
-    private WebSocket.Builder webSocketBuilder;
-    private int maxMessageLength = 37;
-    private long reConnectDelay = 41;
-    private long pingDelay = 43;
-    private long checkDelay = 47;
-    private Commitment commitment = Commitment.FINALIZED;
-    private SolanaAccounts solanaAccounts = SolanaAccounts.MAIN_NET;
-    private Consumer<SolanaRpcWebsocket> onOpen;
-    private SolanaRpcWebsocket.OnClose onClose;
-    private BiConsumer<SolanaRpcWebsocket, Throwable> onError;
-    private BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError;
-    private BiConsumer<SolanaRpcWebsocket, Throwable> onPingError;
-
-    @Override
-    public SolanaRpcWebsocket create() {
-      return null;
-    }
-
-    @Override
-    public LegacyBuilder uri(final URI uri) {
-      this.uri = uri;
-      return this;
-    }
-
-    @Override
-    public LegacyBuilder webSocketBuilder(final WebSocket.Builder webSocketBuilder) {
-      this.webSocketBuilder = webSocketBuilder;
-      return this;
-    }
-
-    @Override
-    public LegacyBuilder maxMessageLength(final int maxMessageLength) {
-      this.maxMessageLength = maxMessageLength;
-      return this;
-    }
-
-    @Override
-    public int maxMessageLength() {
-      return maxMessageLength;
-    }
-
-    @Override
-    public LegacyBuilder reConnectDelay(final long reConnectDelay) {
-      this.reConnectDelay = reConnectDelay;
-      return this;
-    }
-
-    @Override
-    public LegacyBuilder pingDelay(final long pingDelay) {
-      this.pingDelay = pingDelay;
-      return this;
-    }
-
-    @Override
-    public LegacyBuilder subscriptionAndPingCheckDelay(final long subscriptionAndPingCheckDelay) {
-      this.checkDelay = subscriptionAndPingCheckDelay;
-      return this;
-    }
-
-    @Override
-    public LegacyBuilder commitment(final Commitment commitment) {
-      this.commitment = commitment;
-      return this;
-    }
-
-    @Override
-    public LegacyBuilder solanaAccounts(final SolanaAccounts solanaAccounts) {
-      this.solanaAccounts = solanaAccounts;
-      return this;
-    }
-
-    @Override
-    public URI wsUri() {
-      return uri;
-    }
-
-    @Override
-    public WebSocket.Builder webSocketBuilder() {
-      return webSocketBuilder;
-    }
-
-    @Override
-    public long reConnectDelay() {
-      return reConnectDelay;
-    }
-
-    @Override
-    public long pingDelay() {
-      return pingDelay;
-    }
-
-    @Override
-    public long subscriptionAndPingCheckDelay() {
-      return checkDelay;
-    }
-
-    @Override
-    public SolanaAccounts solanaAccounts() {
-      return solanaAccounts;
-    }
-
-    @Override
-    public Commitment commitment() {
-      return commitment;
-    }
-
-    @Override
-    public Consumer<SolanaRpcWebsocket> onOpen() {
-      return onOpen;
-    }
-
-    @Override
-    public LegacyBuilder onOpen(final Consumer<SolanaRpcWebsocket> onOpen) {
-      this.onOpen = onOpen;
-      return this;
-    }
-
-    @Override
-    public SolanaRpcWebsocket.OnClose onClose() {
-      return onClose;
-    }
-
-    @Override
-    public LegacyBuilder onClose(final SolanaRpcWebsocket.OnClose onClose) {
-      this.onClose = onClose;
-      return this;
-    }
-
-    @Override
-    public BiConsumer<SolanaRpcWebsocket, Throwable> onError() {
-      return onError;
-    }
-
-    @Override
-    public LegacyBuilder onError(final BiConsumer<SolanaRpcWebsocket, Throwable> onError) {
-      this.onError = onError;
-      return this;
-    }
-
-    @Override
-    public BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError() {
-      return onSendTextError;
-    }
-
-    @Override
-    public LegacyBuilder onSendTextError(final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError) {
-      this.onSendTextError = onSendTextError;
-      return this;
-    }
-
-    @Override
-    public BiConsumer<SolanaRpcWebsocket, Throwable> onPingError() {
-      return onPingError;
-    }
-
-    @Override
-    public LegacyBuilder onPingError(final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
-      this.onPingError = onPingError;
-      return this;
-    }
   }
 
   /// Implements exactly the Subscription methods present before notification-method identity was

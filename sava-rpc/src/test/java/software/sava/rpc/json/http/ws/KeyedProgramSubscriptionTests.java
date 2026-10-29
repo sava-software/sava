@@ -8,8 +8,6 @@ import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.AccountInfo;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -55,41 +53,6 @@ final class KeyedProgramSubscriptionTests {
                            final RecordingWebSocket socket,
                            final String json) {
     ws.onText(socket, CharBuffer.wrap(json), true);
-  }
-
-  /// Models a third-party implementation compiled before the keyed defaults existed: abstract
-  /// calls are handled by the proxy, while interface defaults execute their real bodies.
-  private static SolanaRpcWebsocket unsupportedImplementation() {
-    return (SolanaRpcWebsocket) Proxy.newProxyInstance(
-        SolanaRpcWebsocket.class.getClassLoader(),
-        new Class<?>[]{SolanaRpcWebsocket.class},
-        (proxy, method, args) -> {
-          if (method.isDefault()) {
-            return InvocationHandler.invokeDefault(proxy, method, args);
-          } else if (method.getName().equals("defaultCommitment")) {
-            return Commitment.CONFIRMED;
-          } else {
-            throw new AssertionError("Unexpected abstract call: " + method);
-          }
-        }
-    );
-  }
-
-  @Test
-  void implementationsWithoutTheAdditiveCapabilityFailClearly() {
-    final var ws = unsupportedImplementation();
-    final var subscribeFailure = assertThrows(UnsupportedOperationException.class, () ->
-        ws.keyedProgramSubscribe("oracle-mappings", PROGRAM, List.of(), _ -> {
-        })
-    );
-    assertEquals("Keyed program subscriptions are not supported by this implementation.",
-        subscribeFailure.getMessage());
-
-    final var unsubscribeFailure = assertThrows(UnsupportedOperationException.class, () ->
-        ws.keyedProgramUnsubscribe("oracle-mappings")
-    );
-    assertEquals("Keyed program subscriptions are not supported by this implementation.",
-        unsubscribeFailure.getMessage());
   }
 
   @Test
