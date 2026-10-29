@@ -1,0 +1,22 @@
+# Signing keys that ../verification-metadata.xml trusts only for exact versions.
+# The verificationPolicy check (part of check) fails when a rule for one of these keys has
+# no version, and when a key that is not listed here has one. One key per line:
+# <fingerprint> <why it stays version-scoped>
+
+# Publisher keys not independently authenticated: no publisher-published fingerprint,
+# GitHub-registered key or verified identity was found. A tool bump moves the version.
+18CD85CBC5C1DB1684C5E59FA8E3B39F19E1CCE7 PIT signer, publisher identity unauthenticated
+AC1A3DD4471FE0F6EA28300F1BA25353622A192B ArcMutate signer, publisher identity unauthenticated
+
+# Keys that signed old releases in the graph and must not vouch for new ones: their
+# owners release with other keys now, so a new version under them is a reason to stop.
+0CDE80149711EB46DFF17AE421A24B3F8B0F594A expired key
+808D78B17A5A2D7C3668E31FBFFC9B54721244AD expired key
+44FBDBBC1A00FE414F1C1873586654072EAD6677 DSA-1024 key
+517B94F8D0A46317A28D8AB30DA8A5EC02D11EAD DSA-1024 key
+F254B35617DC255D9344BCFA873A8E86B4372146 DSA-1024 key
+2E3A1AFFE42B5F53AF19F780BCF4173966770193 expired key
+12D16069219C90212A974D119AE296FD02E9F65B release-manager key of an old release
+41A1A08C62FCA78B79D3081164A16FAAEC16A4BE release-manager key of an old release
+694621A7227D8D5289699830ABE9F3126BB741C1 release-manager key of an old release
+D6F1BC78607808EC8E9F69437A8860944FAD5F62 release-manager key of an old release

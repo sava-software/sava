@@ -10,7 +10,8 @@
 // pluginManagement (including its -PsavaBuildLocalRepo toggle) for the whole composite.
 // A '-PsavaBuildLocalRepo=<abs path>' passed on this build's command line therefore still
 // reaches the root build; prefer an absolute value, since a relative one resolves against
-// each build's own settings dir.
+// each build's own settings dir, and pass '--dependency-verification lenient' with it: the
+// test publication is unsigned.
 rootProject.name = "sava-soak"
 
 includeBuild("..")

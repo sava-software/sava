@@ -20,15 +20,21 @@ or on the CLI, never in `settings.gradle.kts`:
 
 ```sh
 (cd ../sava-build; ./gradlew publishSavaBuildTestPublicationToSavaTestRepoRepository)
-./gradlew check -PsavaBuildLocalRepo=../sava-build/build/sava-test-repo
+./gradlew check -PsavaBuildLocalRepo=../sava-build/build/sava-test-repo --dependency-verification lenient
 ```
 
 While set, every `software.sava.build*` plugin id resolves to the `0.0.0-test` module
 from that repo and the pinned versions are ignored (a warning is logged, with the age of
-the last publish). **The publish is not automatic** — re-run it after every sava-build
-edit, or the build silently keeps the previously published jar. When done, drop the
-property and bump the pinned versions in `settings.gradle.kts` to the released
-sava-build.
+the last publish). The `0.0.0-test` artifacts are unsigned local build output, so strict
+dependency verification refuses them; `--dependency-verification lenient` reports them
+instead of failing. Pass it with the property and for nothing else (with the property in
+`~/.gradle/gradle.properties`, on every command), never set
+`org.gradle.dependency.verification` in a user-wide `gradle.properties`, and never commit
+trust for `0.0.0-test` (`verificationPolicy` rejects a `component` pin of it). **The publish
+is not automatic** — re-run it after every sava-build edit, or the build silently keeps the
+previously published jar. When done, drop the
+property and the flag and bump the pinned versions in `settings.gradle.kts` to the
+released sava-build.
 
 sava parses account and transaction data **client side**. Do not reach for the RPC
 `jsonParsed` encoding to avoid writing a parser — it gives up the typed layouts this
@@ -339,7 +345,10 @@ ordinary published repository; `-PsavaBuildLocalRepo` is needed only while
 evaluating an unpublished candidate. The sequence for the next bump is: move all
 three pins, run `:sava-core:savaBuildIdentity` and confirm the resolved coordinates
 and SHA-256, run `:sava-core:hardeningAgentTemplate`, and replace the block above if
-it changed.
+it changed. A bump that changes the plugin's dependencies or its tool versions (PIT,
+ArcMutate, Jazzer) also needs the dependency verification policy updated: re-run the root
+build with `resolveVerificationTools`, and the `-p jmh` and `-p soak` builds, as
+`gradle/verification/README.md` shows. CI runs only the root `check`.
 
 Machine-specific context (local clone paths, environment notes) belongs in
 `AGENTS.local.md`, which is git-ignored. Keep this file portable.
@@ -359,3 +368,6 @@ Machine-specific context (local clone paths, environment notes) belongs in
   behind each rule — read an entry before arguing with its rule.
 - **`<module>/config/pitest/README.md`** — the accepted-mutant baselines and the
   written reason for every one of them.
+- **`gradle/verification/README.md`** — the dependency verification policy every build
+  shares: what it trusts and why, and how to update it after a dependency, plugin, tool
+  or wrapper change.

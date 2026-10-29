@@ -1,0 +1,34 @@
+// Maintenance-only: resolve the hardening tools that only mutation and fuzz tasks resolve,
+// without running a campaign. Each project resolves its own 'pitest' and 'jazzer'
+// configurations, so the task works in any module layout and under parallel execution.
+// Run from the checkout root; see README.md beside this file. The task reads configurations
+// in doLast, so it declares itself incompatible with the configuration cache and a run that
+// includes it goes without the cache.
+allprojects {
+    def hardened = false
+    pluginManager.withPlugin('software.sava.build.feature.hardening') { hardened = true }
+    tasks.register('resolveVerificationTools') {
+        group = 'verification'
+        description = 'Resolves this project\'s PIT/ArcMutate and Jazzer artifacts without running them.'
+        notCompatibleWithConfigurationCache('resolves configurations in doLast')
+        def tools = configurations.matching { it.name in ['pitest', 'jazzer'] }
+        doLast {
+            // A project with the hardening plugin must have both: a renamed configuration
+            // would otherwise leave its tools unresolved without a word.
+            def missing = ['pitest', 'jazzer'] - tools*.name
+            if (hardened && missing) {
+                throw new GradleException("${path} applies the hardening plugin but has no ${missing} configuration")
+            }
+            tools.each { configuration ->
+                def artifacts = configuration.resolvedConfiguration.resolvedArtifacts
+                artifacts.each { artifact ->
+                    // Force artifact resolution as well as graph resolution.
+                    if (!artifact.file.isFile()) {
+                        throw new GradleException("Missing tool artifact: ${artifact.moduleVersion.id}")
+                    }
+                }
+                logger.lifecycle("Resolved ${configuration}: ${artifacts.size()} artifacts")
+            }
+        }
+    }
+}

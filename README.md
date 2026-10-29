@@ -32,3 +32,7 @@ savaGithubPackagesPassword=GITHUB_TOKEN
 ```shell
 ./gradlew check
 ```
+
+Gradle verifies every dependency's signature or checksum against one committed policy. See
+[dependency verification](gradle/verification/README.md) for what it trusts and how to
+update it after a dependency, plugin, tool or wrapper change.
