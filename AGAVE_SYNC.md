@@ -183,7 +183,7 @@ The additive client support covers all RPC option/error changes found in that re
 | `getTransaction` | `minContextSlot` (same commit) | Optional `BigInteger` minimum, preserving null omission, literal zero and unsigned slot range; existing calls unchanged. |
 | `getLeaderSchedule` | `keyByVoteAccount` (`8fe3f1201a`, #13796) | New overloads select vote-account map keys; identity filtering still uses validator identity. |
 | RPC errors | `-32022 LeaderScheduleIdentityNotFound` (`983722f7d0`, #12197) | Typed error for an identity absent from an available schedule; the server message retains the identity. |
-| `accountSubscribe`, `programSubscribe` | Honor `dataSlice` (`a0920ee835`, #15241) | Explicit offset/length overloads, including keyed program subscriptions; empty slices normalize offset to zero to match server deduplication. Account `space` remains the full size. |
+| `accountSubscribe`, `programSubscribe` | Honor `dataSlice` (`a0920ee835`, #15241) | Explicit length/offset overloads, in `SolanaRpcClient`'s slice order, including keyed program subscriptions; empty slices normalize offset to zero to match server deduplication. Account `space` remains the full size. |
 
 Older nodes silently ignore the new options. In live probes, a `getSignatureStatuses`
 minimum of `18446744073709551615` produced `-32016 MinContextSlotNotReached` on devnet

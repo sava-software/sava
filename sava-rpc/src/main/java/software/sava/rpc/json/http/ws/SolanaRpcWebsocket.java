@@ -123,37 +123,37 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// Offset and length do not change registration identity: the account at the same
   /// commitment still occupies one registration.
   ///
-  /// @param dataSliceOffset byte offset into the account data, before the length argument
   /// @param dataSliceLength number of bytes to return; zero returns empty data
+  /// @param dataSliceOffset byte offset into the account data, after the length argument
   /// @throws IllegalArgumentException if offset or length is negative
   /// @throws UnsupportedOperationException if this implementation does not support slices
   default boolean accountSubscribe(final PublicKey key,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(defaultCommitment(), key, dataSliceOffset, dataSliceLength, null, consumer);
+    return accountSubscribe(defaultCommitment(), key, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
   default boolean accountSubscribe(final PublicKey key,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(defaultCommitment(), key, dataSliceOffset, dataSliceLength, onSub, consumer);
+    return accountSubscribe(defaultCommitment(), key, dataSliceLength, dataSliceOffset, onSub, consumer);
   }
 
   default boolean accountSubscribe(final Commitment commitment,
                                    final PublicKey key,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(commitment, key, dataSliceOffset, dataSliceLength, null, consumer);
+    return accountSubscribe(commitment, key, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
   default boolean accountSubscribe(final Commitment commitment,
                                    final PublicKey key,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
     throw new UnsupportedOperationException("Sliced account subscriptions are not supported by this implementation.");
@@ -313,41 +313,41 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// Offset and length do not change registration identity: the program at the same
   /// commitment still occupies one registration.
   ///
-  /// @param dataSliceOffset byte offset into the account data, before the length argument
   /// @param dataSliceLength number of bytes to return; zero returns empty data
+  /// @param dataSliceOffset byte offset into the account data, after the length argument
   /// @throws IllegalArgumentException if offset or length is negative
   /// @throws UnsupportedOperationException if this implementation does not support slices
   default boolean programSubscribe(final PublicKey program,
                                    final List<Filter> filters,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(defaultCommitment(), program, filters, dataSliceOffset, dataSliceLength, null, consumer);
+    return programSubscribe(defaultCommitment(), program, filters, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
   default boolean programSubscribe(final PublicKey program,
                                    final List<Filter> filters,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(defaultCommitment(), program, filters, dataSliceOffset, dataSliceLength, onSub, consumer);
+    return programSubscribe(defaultCommitment(), program, filters, dataSliceLength, dataSliceOffset, onSub, consumer);
   }
 
   default boolean programSubscribe(final Commitment commitment,
                                    final PublicKey program,
                                    final List<Filter> filters,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(commitment, program, filters, dataSliceOffset, dataSliceLength, null, consumer);
+    return programSubscribe(commitment, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
   default boolean programSubscribe(final Commitment commitment,
                                    final PublicKey program,
                                    final List<Filter> filters,
-                                   final int dataSliceOffset,
                                    final int dataSliceLength,
+                                   final int dataSliceOffset,
                                    final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
     throw new UnsupportedOperationException("Sliced program subscriptions are not supported by this implementation.");
@@ -405,45 +405,45 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// Offset and length do not change registration identity: the caller key at the same
   /// commitment still occupies one registration. Use distinct caller keys for distinct slices.
   ///
-  /// @param dataSliceOffset byte offset into the account data, before the length argument
   /// @param dataSliceLength number of bytes to return; zero returns empty data
+  /// @param dataSliceOffset byte offset into the account data, after the length argument
   /// @throws IllegalArgumentException if offset or length is negative
   /// @throws UnsupportedOperationException if this implementation does not support slices
   default boolean keyedProgramSubscribe(final String subscriptionKey,
                                         final PublicKey program,
                                         final List<Filter> filters,
-                                        final int dataSliceOffset,
                                         final int dataSliceLength,
+                                        final int dataSliceOffset,
                                         final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, dataSliceOffset, dataSliceLength, null, consumer);
+    return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
   default boolean keyedProgramSubscribe(final String subscriptionKey,
                                         final PublicKey program,
                                         final List<Filter> filters,
-                                        final int dataSliceOffset,
                                         final int dataSliceLength,
+                                        final int dataSliceOffset,
                                         final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                         final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, dataSliceOffset, dataSliceLength, onSub, consumer);
+    return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, dataSliceLength, dataSliceOffset, onSub, consumer);
   }
 
   default boolean keyedProgramSubscribe(final Commitment commitment,
                                         final String subscriptionKey,
                                         final PublicKey program,
                                         final List<Filter> filters,
-                                        final int dataSliceOffset,
                                         final int dataSliceLength,
+                                        final int dataSliceOffset,
                                         final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceOffset, dataSliceLength, null, consumer);
+    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
   }
 
   default boolean keyedProgramSubscribe(final Commitment commitment,
                                         final String subscriptionKey,
                                         final PublicKey program,
                                         final List<Filter> filters,
-                                        final int dataSliceOffset,
                                         final int dataSliceLength,
+                                        final int dataSliceOffset,
                                         final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                         final Consumer<AccountInfo<byte[]>> consumer) {
     throw new UnsupportedOperationException("Sliced program subscriptions are not supported by this implementation.");

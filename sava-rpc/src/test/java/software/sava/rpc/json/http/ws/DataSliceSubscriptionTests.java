@@ -63,12 +63,12 @@ final class DataSliceSubscriptionTests {
   @Test
   void sliceRequestsPreserveOffsetLengthAndZero() {
     try (final var ws = websocket(new TestClock())) {
-      assertTrue(ws.accountSubscribe(KEY, 3, 4, null, _ -> {
+      assertTrue(ws.accountSubscribe(KEY, 4, 3, null, _ -> {
       }));
       assertTrue(ws.programSubscribe(Commitment.FINALIZED, KEY,
-          List.of(Filter.createDataSizeFilter(165)), 14, 8, _ -> {
+          List.of(Filter.createDataSizeFilter(165)), 8, 14, _ -> {
           }));
-      assertTrue(ws.keyedProgramSubscribe("empty", KEY, null, Integer.MAX_VALUE, 0, null, _ -> {
+      assertTrue(ws.keyedProgramSubscribe("empty", KEY, null, 0, Integer.MAX_VALUE, null, _ -> {
       }));
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
@@ -80,6 +80,32 @@ final class DataSliceSubscriptionTests {
     }
   }
 
+  /// The delegating overloads the test above does not reach. Every pair is asymmetric, so a
+  /// delegation that swapped its two int arguments would send a different window.
+  @Test
+  void delegatingSliceOverloadsPassLengthThenOffset() {
+    final var otherProgram = PublicKey.fromBase58Encoded("4Qkev8aNZcqFNSRhQzwyLMFSsi94jHqE8WNVTJzTP99F");
+    try (final var ws = websocket(new TestClock())) {
+      assertTrue(ws.accountSubscribe(Commitment.PROCESSED, KEY, 5, 1, _ -> {
+      }));
+      assertTrue(ws.programSubscribe(KEY, List.of(), 6, 2, _ -> {
+      }));
+      assertTrue(ws.programSubscribe(otherProgram, List.of(), 7, 3, null, _ -> {
+      }));
+      assertTrue(ws.keyedProgramSubscribe(Commitment.FINALIZED, "key", KEY, List.of(), 8, 4, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      assertEquals(List.of(
+          request(2, "accountSubscribe", "{\"encoding\":\"base64\",\"commitment\":\"processed\",\"dataSlice\":{\"offset\":1,\"length\":5}}"),
+          request(3, "programSubscribe", "{\"commitment\":\"confirmed\",\"encoding\":\"base64\",\"dataSlice\":{\"offset\":2,\"length\":6}}"),
+          "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"programSubscribe\",\"params\":[\"" + otherProgram
+              + "\",{\"commitment\":\"confirmed\",\"encoding\":\"base64\",\"dataSlice\":{\"offset\":3,\"length\":7}}]}",
+          request(5, "programSubscribe", "{\"commitment\":\"finalized\",\"encoding\":\"base64\",\"dataSlice\":{\"offset\":4,\"length\":8}}")
+      ).stream().sorted().toList(), socket.sentText.stream().sorted().toList());
+    }
+  }
+
   @Test
   void emptySlicesAtDifferentOffsetsCoalesceWithoutReplacingTheConnection() {
     try (final var ws = websocket(new TestClock())) {
@@ -87,8 +113,8 @@ final class DataSliceSubscriptionTests {
       final var first = new ArrayList<AccountInfo<byte[]>>();
       final var second = new ArrayList<AccountInfo<byte[]>>();
       ws.exceptionSubscribe(errors::add);
-      assertTrue(ws.keyedProgramSubscribe("first", KEY, List.of(), 1, 0, first::add));
-      assertTrue(ws.keyedProgramSubscribe("second", KEY, List.of(), 9, 0, second::add));
+      assertTrue(ws.keyedProgramSubscribe("first", KEY, List.of(), 0, 1, first::add));
+      assertTrue(ws.keyedProgramSubscribe("second", KEY, List.of(), 0, 9, second::add));
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
       ws.onText(socket, CharBuffer.wrap("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":71}"), true);
@@ -115,37 +141,37 @@ final class DataSliceSubscriptionTests {
   @Test
   void slicesShareTheExistingRegistrationIdentityAndCancellation() {
     try (final var ws = websocket(new TestClock())) {
-      assertTrue(ws.accountSubscribe(KEY, 1, 2, _ -> {
+      assertTrue(ws.accountSubscribe(KEY, 2, 1, _ -> {
       }));
-      assertFalse(ws.accountSubscribe(KEY, 7, 9, _ -> {
+      assertFalse(ws.accountSubscribe(KEY, 9, 7, _ -> {
       }));
-      assertFalse(ws.accountSubscribe(KEY, 7, 9, _ -> {
+      assertFalse(ws.accountSubscribe(KEY, 9, 7, _ -> {
       }, _ -> {
       }), "the callback convenience overload must report the occupied account slot");
       assertFalse(ws.accountSubscribe(KEY, _ -> {
       }));
       assertTrue(ws.accountUnsubscribe(KEY));
-      assertTrue(ws.accountSubscribe(Commitment.PROCESSED, KEY, 4, 5, _ -> {
+      assertTrue(ws.accountSubscribe(Commitment.PROCESSED, KEY, 5, 4, _ -> {
       }));
-      assertFalse(ws.accountSubscribe(Commitment.PROCESSED, KEY, 7, 9, _ -> {
+      assertFalse(ws.accountSubscribe(Commitment.PROCESSED, KEY, 9, 7, _ -> {
       }), "the commitment convenience overload must report the occupied account slot");
       assertTrue(ws.accountUnsubscribe(Commitment.PROCESSED, KEY));
 
-      assertTrue(ws.programSubscribe(KEY, List.of(), 2, 3, _ -> {
+      assertTrue(ws.programSubscribe(KEY, List.of(), 3, 2, _ -> {
       }));
-      assertFalse(ws.programSubscribe(KEY, List.of(), 8, 9, _ -> {
+      assertFalse(ws.programSubscribe(KEY, List.of(), 9, 8, _ -> {
       }), "the default-commitment convenience overload must report the occupied program slot");
-      assertFalse(ws.programSubscribe(Commitment.CONFIRMED, KEY, List.of(), 8, 9, _ -> {
+      assertFalse(ws.programSubscribe(Commitment.CONFIRMED, KEY, List.of(), 9, 8, _ -> {
       }), "the commitment convenience overload must report the occupied program slot");
-      assertFalse(ws.programSubscribe(KEY, null, 8, 9, null, _ -> {
+      assertFalse(ws.programSubscribe(KEY, null, 9, 8, null, _ -> {
       }));
       assertFalse(ws.programSubscribe(KEY, _ -> {
       }));
       assertTrue(ws.programUnsubscribe(KEY));
 
-      assertTrue(ws.keyedProgramSubscribe("first", KEY, List.of(), 0, 1, _ -> {
+      assertTrue(ws.keyedProgramSubscribe("first", KEY, List.of(), 1, 0, _ -> {
       }));
-      assertTrue(ws.keyedProgramSubscribe(Commitment.FINALIZED, "first", KEY, List.of(), 3, 4, _ -> {
+      assertTrue(ws.keyedProgramSubscribe(Commitment.FINALIZED, "first", KEY, List.of(), 4, 3, _ -> {
       }));
       assertTrue(ws.keyedProgramSubscribe("second", KEY, List.of(), 1, 1, _ -> {
       }));
@@ -170,9 +196,9 @@ final class DataSliceSubscriptionTests {
       final var accounts = new ArrayList<AccountInfo<byte[]>>();
       final var programs = new ArrayList<AccountInfo<byte[]>>();
       final var handles = new ArrayList<Subscription<AccountInfo<byte[]>>>();
-      assertTrue(ws.accountSubscribe(KEY, 3, 4, handles::add, accounts::add));
-      assertTrue(ws.keyedProgramSubscribe("empty", KEY, List.of(), 9, 0, handles::add, programs::add));
-      assertTrue(ws.programSubscribe(KEY, List.of(), 2, 1, handles::add, _ -> {
+      assertTrue(ws.accountSubscribe(KEY, 4, 3, handles::add, accounts::add));
+      assertTrue(ws.keyedProgramSubscribe("empty", KEY, List.of(), 0, 9, handles::add, programs::add));
+      assertTrue(ws.programSubscribe(KEY, List.of(), 1, 2, handles::add, _ -> {
       }));
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);

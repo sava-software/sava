@@ -1382,11 +1382,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   @Override
   public boolean accountSubscribe(final Commitment commitment,
                                   final PublicKey key,
-                                  final int dataSliceOffset,
                                   final int dataSliceLength,
+                                  final int dataSliceOffset,
                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(commitment, key, dataSliceJson(dataSliceOffset, dataSliceLength), onSub, consumer);
+    return accountSubscribe(commitment, key, dataSliceJson(dataSliceLength, dataSliceOffset), onSub, consumer);
   }
 
   private boolean accountSubscribe(final Commitment commitment,
@@ -1563,11 +1563,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   public boolean programSubscribe(final Commitment commitment,
                                   final PublicKey program,
                                   final List<Filter> filters,
-                                  final int dataSliceOffset,
                                   final int dataSliceLength,
+                                  final int dataSliceOffset,
                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(commitment, program, filters, dataSliceJson(dataSliceOffset, dataSliceLength), onSub, consumer);
+    return programSubscribe(commitment, program, filters, dataSliceJson(dataSliceLength, dataSliceOffset), onSub, consumer);
   }
 
   private boolean programSubscribe(final Commitment commitment,
@@ -1617,11 +1617,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                                        final String subscriptionKey,
                                        final PublicKey program,
                                        final List<Filter> filters,
-                                       final int dataSliceOffset,
                                        final int dataSliceLength,
+                                       final int dataSliceOffset,
                                        final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                        final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceJson(dataSliceOffset, dataSliceLength), onSub, consumer);
+    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceJson(dataSliceLength, dataSliceOffset), onSub, consumer);
   }
 
   private boolean keyedProgramSubscribe(final Commitment commitment,
@@ -1659,7 +1659,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return queueUnsubscribe(subscriptionKey, commitment, this.keyedProgramSubs);
   }
 
-  private static String dataSliceJson(final int offset, final int length) {
+  private static String dataSliceJson(final int length, final int offset) {
     if (offset < 0 || length < 0) {
       throw new IllegalArgumentException("Data slice offset and length must be non-negative");
     }
