@@ -4,5 +4,5 @@ software.sava.rpc.json.http.client.JsonHttpClient,newPostRequest,VoidMethodCallM
 software.sava.rpc.json.http.client.JsonHttpClient,readInputStream,RemoveConditionalMutator_EQUAL_ELSE,SURVIVED # dead pattern arm # line 268
 software.sava.rpc.json.http.client.JsonRpcValueResponseParser$Parser,parse,ConditionalsBoundaryMutator,SURVIVED # impossible zero mark # line 46
 software.sava.rpc.json.http.client.JsonRpcValueResponseParser$Parser,test,RemoveConditionalMutator_EQUAL_IF,SURVIVED # eager deferred convergence # line 53
-software.sava.rpc.json.http.client.ProgramAccountsRequestRecord,toJson,MathMutator,SURVIVED # capacity hint only # line 32
-software.sava.rpc.json.http.client.ProgramAccountsRequestRecord,toJson,RemoveConditionalMutator_EQUAL_IF,SURVIVED # capacity hint only # line 31
+software.sava.rpc.json.http.client.ProgramAccountsRequestRecord,toJson,MathMutator,SURVIVED # capacity hint only # line 46
+software.sava.rpc.json.http.client.ProgramAccountsRequestRecord,toJson,RemoveConditionalMutator_EQUAL_IF,SURVIVED # capacity hint only # line 45
