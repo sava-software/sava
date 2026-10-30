@@ -66,7 +66,9 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   `epoch` as a unique key.
 - **`0` is often a sentinel for "unset"**, not a real value.
   `getProgramAccounts(..., long minContextSlot, ...)` omits the field entirely
-  when it is `0`; `dataSliceLength(offset, 0)` means "whole account". Use the
+  when it is `0`; the deprecated `length, offset` slice overloads and
+  `dataSliceLength(offset, 0)` read a zero length as "whole account", whereas a `DataSlice`
+  is literal: a zero length is empty data, and `null` is the whole account. Use the
   `BigInteger` overloads when you need to express a literal zero.
 
 ## Argument-order and flag traps
@@ -76,21 +78,27 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   Agave 4.4; 4.3 silently ignores those options. `getTransaction`'s minimum-slot overload
   checks node freshness, not the transaction's slot, and retains the client's default
   commitment. An omitted `BigInteger` minimum is `null`; zero is a literal zero.
-- WebSocket slice overloads take **length, then offset**, like `SolanaRpcClient`'s slice
-  overloads (`ProgramAccountsRequest.Builder.dataSliceLength`, below, takes the offset
-  first). Length zero requests empty account data and normalizes the offset to zero,
-  matching Agave's subscription identity, whereas the HTTP helpers read zero as the whole
-  account. Slice options do not create a separate account/program registration at the
-  same commitment; use distinct keyed program registrations for multiple program slices.
-  Agave before 4.4 ignores WebSocket slicing and still sends whole account data.
+- Account data windows are a `DataSlice(offset, length)`, offset first like Agave's
+  `dataSlice` object, on both clients. The HTTP overloads take it where the deprecated
+  `length, offset` ints sat; the WebSocket overloads take it right after the commitment, so a
+  `null` onSub argument stays unambiguous. `null` is the whole account and `DataSlice.EMPTY`
+  metadata only; empty slices canonicalize to offset zero, matching Agave's subscription
+  identity. On the HTTP client a bare `null` literal is now ambiguous where a released
+  overload and its twin differ only in that position: a null minimum slot right after the
+  commitment in `getAccountInfo`, `getMultipleAccounts` and `getAccounts`, and
+  `getProgramAccounts` with a null minimum slot or null commitment next to null filters. Cast
+  the null, `(BigInteger) null` or `(DataSlice) null`, or call the overload without that
+  parameter. Slice options do not create a separate account/program registration
+  at the same commitment; use distinct keyed program registrations for multiple program
+  slices. Agave before 4.4 ignores WebSocket slicing and still sends whole account data.
 - `getLeaderSchedule(..., keyByVoteAccount)` changes the returned map's keys, not the
   identity filter: that filter still names a validator identity. Agave 4.4 reports a
   missing identity as `LeaderScheduleIdentityNotFound`; 4.3 returned an empty map and
   silently ignored `keyByVoteAccount`.
 
-- `ProgramAccountsRequest.Builder.dataSliceLength(offset, length)` takes the
-  **offset first** despite the name. Calling it backwards returns the wrong
-  window rather than failing.
+- `ProgramAccountsRequest.Builder.dataSliceLength(offset, length)`, deprecated, takes the
+  **offset first** despite the name, and calling it backwards returns the wrong window
+  rather than failing; `dataSlice(DataSlice)` replaces it.
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it
   also changes the `maxRetries` default (0 when skipping, 1 otherwise) and the
   preflight commitment. Use the three-argument overload to pin retries.

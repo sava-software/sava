@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.ws;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.core.accounts.token.TokenAccount;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.*;
@@ -1381,12 +1382,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public boolean accountSubscribe(final Commitment commitment,
+                                  final DataSlice dataSlice,
                                   final PublicKey key,
-                                  final int dataSliceLength,
-                                  final int dataSliceOffset,
                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(commitment, key, dataSliceJson(dataSliceLength, dataSliceOffset), onSub, consumer);
+    return accountSubscribe(commitment, key, dataSliceJson(dataSlice), onSub, consumer);
   }
 
   private boolean accountSubscribe(final Commitment commitment,
@@ -1561,13 +1561,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public boolean programSubscribe(final Commitment commitment,
+                                  final DataSlice dataSlice,
                                   final PublicKey program,
                                   final List<Filter> filters,
-                                  final int dataSliceLength,
-                                  final int dataSliceOffset,
                                   final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                   final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(commitment, program, filters, dataSliceJson(dataSliceLength, dataSliceOffset), onSub, consumer);
+    return programSubscribe(commitment, program, filters, dataSliceJson(dataSlice), onSub, consumer);
   }
 
   private boolean programSubscribe(final Commitment commitment,
@@ -1614,14 +1613,13 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
 
   @Override
   public boolean keyedProgramSubscribe(final Commitment commitment,
+                                       final DataSlice dataSlice,
                                        final String subscriptionKey,
                                        final PublicKey program,
                                        final List<Filter> filters,
-                                       final int dataSliceLength,
-                                       final int dataSliceOffset,
                                        final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                        final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceJson(dataSliceLength, dataSliceOffset), onSub, consumer);
+    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceJson(dataSlice), onSub, consumer);
   }
 
   private boolean keyedProgramSubscribe(final Commitment commitment,
@@ -1659,13 +1657,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return queueUnsubscribe(subscriptionKey, commitment, this.keyedProgramSubs);
   }
 
-  private static String dataSliceJson(final int length, final int offset) {
-    if (offset < 0 || length < 0) {
-      throw new IllegalArgumentException("Data slice offset and length must be non-negative");
-    }
-    // Agave coalesces empty slices at every offset onto the same server subscription.
-    // Match its canonical request so the duplicate-grant check recognizes equivalence.
-    return String.format(Locale.ROOT, ",\"dataSlice\":{\"offset\":%d,\"length\":%d}", length == 0 ? 0 : offset, length);
+  /// Renders nothing for null, the whole account, like the overloads without a slice.
+  private static String dataSliceJson(final DataSlice dataSlice) {
+    return dataSlice == null ? "" : ",\"dataSlice\":" + dataSlice.toJson();
   }
 
   private static void validateSubscriptionKey(final String subscriptionKey) {

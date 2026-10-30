@@ -5,6 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.parallel.Isolated;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 
@@ -44,7 +45,7 @@ final class LocaleIndependentFrameTests {
     final var formatLocale = Locale.getDefault(Locale.Category.FORMAT);
     Locale.setDefault(Locale.Category.FORMAT, NON_ASCII_DIGITS);
     try (final var ws = websocket()) {
-      assertTrue(ws.accountSubscribe(KEY, 40, 12, _ -> {
+      assertTrue(ws.accountSubscribe(new DataSlice(12, 40), KEY, _ -> {
       }));
       assertTrue(ws.programSubscribe(KEY, List.of(Filter.createDataSizeFilter(165), Filter.createMemCompFilter(32, KEY)), _ -> {
       }));

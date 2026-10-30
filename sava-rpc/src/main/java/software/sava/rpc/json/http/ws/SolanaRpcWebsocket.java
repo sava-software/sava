@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.ws;
 
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.SolanaNetwork;
 import software.sava.rpc.json.http.request.Commitment;
@@ -119,40 +120,34 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   /// Returns the requested slice of account data. Agave before 4.4 ignores this option.
   /// A zero length requests empty data; the account metadata, including `space`, remains whole.
-  /// Empty slices send offset zero, matching Agave's subscription deduplication.
-  /// Offset and length do not change registration identity: the account at the same
+  /// The slice does not change registration identity: the account at the same
   /// commitment still occupies one registration.
   ///
-  /// @param dataSliceLength number of bytes to return; zero returns empty data
-  /// @param dataSliceOffset byte offset into the account data, after the length argument
-  /// @throws IllegalArgumentException if offset or length is negative
-  default boolean accountSubscribe(final PublicKey key,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
+  /// @param dataSlice the window of account data to return, [DataSlice#EMPTY] for metadata only;
+  ///                  `null` returns whole accounts like the overloads without a slice
+  default boolean accountSubscribe(final DataSlice dataSlice,
+                                   final PublicKey key,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(defaultCommitment(), key, dataSliceLength, dataSliceOffset, null, consumer);
+    return accountSubscribe(defaultCommitment(), dataSlice, key, null, consumer);
   }
 
-  default boolean accountSubscribe(final PublicKey key,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
+  default boolean accountSubscribe(final DataSlice dataSlice,
+                                   final PublicKey key,
                                    final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(defaultCommitment(), key, dataSliceLength, dataSliceOffset, onSub, consumer);
+    return accountSubscribe(defaultCommitment(), dataSlice, key, onSub, consumer);
   }
 
   default boolean accountSubscribe(final Commitment commitment,
+                                   final DataSlice dataSlice,
                                    final PublicKey key,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return accountSubscribe(commitment, key, dataSliceLength, dataSliceOffset, null, consumer);
+    return accountSubscribe(commitment, dataSlice, key, null, consumer);
   }
 
   boolean accountSubscribe(final Commitment commitment,
+                           final DataSlice dataSlice,
                            final PublicKey key,
-                           final int dataSliceLength,
-                           final int dataSliceOffset,
                            final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                            final Consumer<AccountInfo<byte[]>> consumer);
 
@@ -306,44 +301,38 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   /// Returns the requested slice of account data. Agave before 4.4 ignores this option.
   /// A zero length requests empty data; the account metadata, including `space`, remains whole.
-  /// Empty slices send offset zero, matching Agave's subscription deduplication.
-  /// Offset and length do not change registration identity: the program at the same
+  /// The slice does not change registration identity: the program at the same
   /// commitment still occupies one registration.
   ///
-  /// @param dataSliceLength number of bytes to return; zero returns empty data
-  /// @param dataSliceOffset byte offset into the account data, after the length argument
-  /// @throws IllegalArgumentException if offset or length is negative
-  default boolean programSubscribe(final PublicKey program,
+  /// @param dataSlice the window of account data to return, [DataSlice#EMPTY] for metadata only;
+  ///                  `null` returns whole accounts like the overloads without a slice
+  default boolean programSubscribe(final DataSlice dataSlice,
+                                   final PublicKey program,
                                    final List<Filter> filters,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(defaultCommitment(), program, filters, dataSliceLength, dataSliceOffset, null, consumer);
+    return programSubscribe(defaultCommitment(), dataSlice, program, filters, null, consumer);
   }
 
-  default boolean programSubscribe(final PublicKey program,
+  default boolean programSubscribe(final DataSlice dataSlice,
+                                   final PublicKey program,
                                    final List<Filter> filters,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
                                    final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(defaultCommitment(), program, filters, dataSliceLength, dataSliceOffset, onSub, consumer);
+    return programSubscribe(defaultCommitment(), dataSlice, program, filters, onSub, consumer);
   }
 
   default boolean programSubscribe(final Commitment commitment,
+                                   final DataSlice dataSlice,
                                    final PublicKey program,
                                    final List<Filter> filters,
-                                   final int dataSliceLength,
-                                   final int dataSliceOffset,
                                    final Consumer<AccountInfo<byte[]>> consumer) {
-    return programSubscribe(commitment, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
+    return programSubscribe(commitment, dataSlice, program, filters, null, consumer);
   }
 
   boolean programSubscribe(final Commitment commitment,
+                           final DataSlice dataSlice,
                            final PublicKey program,
                            final List<Filter> filters,
-                           final int dataSliceLength,
-                           final int dataSliceOffset,
                            final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                            final Consumer<AccountInfo<byte[]>> consumer);
 
@@ -391,48 +380,42 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   /// Returns the requested slice of account data. Agave before 4.4 ignores this option.
   /// A zero length requests empty data; the account metadata, including `space`, remains whole.
-  /// Empty slices send offset zero, matching Agave's subscription deduplication.
-  /// Offset and length do not change registration identity: the caller key at the same
+  /// The slice does not change registration identity: the caller key at the same
   /// commitment still occupies one registration. Use distinct caller keys for distinct slices.
   ///
-  /// @param dataSliceLength number of bytes to return; zero returns empty data
-  /// @param dataSliceOffset byte offset into the account data, after the length argument
-  /// @throws IllegalArgumentException if offset or length is negative
-  default boolean keyedProgramSubscribe(final String subscriptionKey,
-                                        final PublicKey program,
-                                        final List<Filter> filters,
-                                        final int dataSliceLength,
-                                        final int dataSliceOffset,
-                                        final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
-  }
-
-  default boolean keyedProgramSubscribe(final String subscriptionKey,
-                                        final PublicKey program,
-                                        final List<Filter> filters,
-                                        final int dataSliceLength,
-                                        final int dataSliceOffset,
-                                        final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
-                                        final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, dataSliceLength, dataSliceOffset, onSub, consumer);
-  }
-
-  default boolean keyedProgramSubscribe(final Commitment commitment,
+  /// @param dataSlice the window of account data to return, [DataSlice#EMPTY] for metadata only;
+  ///                  `null` returns whole accounts like the overloads without a slice
+  default boolean keyedProgramSubscribe(final DataSlice dataSlice,
                                         final String subscriptionKey,
                                         final PublicKey program,
                                         final List<Filter> filters,
-                                        final int dataSliceLength,
-                                        final int dataSliceOffset,
                                         final Consumer<AccountInfo<byte[]>> consumer) {
-    return keyedProgramSubscribe(commitment, subscriptionKey, program, filters, dataSliceLength, dataSliceOffset, null, consumer);
+    return keyedProgramSubscribe(defaultCommitment(), dataSlice, subscriptionKey, program, filters, null, consumer);
+  }
+
+  default boolean keyedProgramSubscribe(final DataSlice dataSlice,
+                                        final String subscriptionKey,
+                                        final PublicKey program,
+                                        final List<Filter> filters,
+                                        final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
+                                        final Consumer<AccountInfo<byte[]>> consumer) {
+    return keyedProgramSubscribe(defaultCommitment(), dataSlice, subscriptionKey, program, filters, onSub, consumer);
+  }
+
+  default boolean keyedProgramSubscribe(final Commitment commitment,
+                                        final DataSlice dataSlice,
+                                        final String subscriptionKey,
+                                        final PublicKey program,
+                                        final List<Filter> filters,
+                                        final Consumer<AccountInfo<byte[]>> consumer) {
+    return keyedProgramSubscribe(commitment, dataSlice, subscriptionKey, program, filters, null, consumer);
   }
 
   boolean keyedProgramSubscribe(final Commitment commitment,
+                                final DataSlice dataSlice,
                                 final String subscriptionKey,
                                 final PublicKey program,
                                 final List<Filter> filters,
-                                final int dataSliceLength,
-                                final int dataSliceOffset,
                                 final Consumer<Subscription<AccountInfo<byte[]>>> onSub,
                                 final Consumer<AccountInfo<byte[]>> consumer);
 
