@@ -41,8 +41,12 @@ provenance of sava's own artifacts.
 `verificationPolicy`, part of `check` and defined in
 `gradle/plugins/src/main/kotlin/sava.verification-policy.gradle.kts`, enforces these rules
 and the symlinks, so a regeneration cannot change them unseen. It also refuses a committed
-`gradle.properties` that relaxes the verification mode. It reads only committed files, so a
-mode passed on the command line or set in `~/.gradle/gradle.properties` is beyond its reach.
+`gradle.properties` that relaxes the verification mode. The root `gradle.properties` carries
+`org.gradle.dependency.verification=strict`, the policy's declaration: nothing for Gradle, which
+defaults to strict with the file and verifies nothing without it, and the line sava-build's
+guard requires from 21.8.0, so that a deleted or uncommitted policy fails `check`. It reads only
+committed files, so a mode passed on the command line or set in `~/.gradle/gradle.properties`
+is beyond its reach.
 
 ## Updating after a dependency, plugin or tool change
 
