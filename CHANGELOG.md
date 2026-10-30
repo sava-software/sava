@@ -1,5 +1,30 @@
 # Changelog
 
+## [25.13.1](https://github.com/sava-software/sava/compare/25.13.0...25.13.1) (2026-10-30)
+
+
+### Features
+
+* **core:** add DataSlice, the typed account-data window ([ef11e2a](https://github.com/sava-software/sava/commit/ef11e2aac874d935bedea1796867f98cdbd79d72))
+* **rpc:** support Agave 4.4 RPC options and subscription slices ([388333e](https://github.com/sava-software/sava/commit/388333e97b1d6a8b72e408ee80e75a63c8ebe1f5))
+* **rpc:** take account data slices as a DataSlice on the HTTP client ([9d162b9](https://github.com/sava-software/sava/commit/9d162b9444d523a6afbfce2009a6147f4113628c))
+
+
+### Bug Fixes
+
+* **vanity:** refuse a non-UTF-8 host locale in the launchers before anything else runs ([06e6b8a](https://github.com/sava-software/sava/commit/06e6b8a66dcd0bff9bfde3c171b21541b59bae52))
+* write JSON-RPC and key-file numbers in ASCII digits under any default locale ([569ad99](https://github.com/sava-software/sava/commit/569ad9978cf43b020592836380ab097d73f36cb0))
+
+
+### Code Refactoring
+
+* **rpc:** declare the keyed subscription and Builder timing methods abstract ([cc948a3](https://github.com/sava-software/sava/commit/cc948a3056ee473b640ffe364afb1177cd3628fe))
+
+### Notes
+
+* **rpc:** `RpcCustomError` gains `LeaderScheduleIdentityNotFound` for Agave 4.4's code -32022; an exhaustive switch over it needs the new case or a default.
+* **rpc:** `SolanaRpcWebsocket` and its `Builder` declare their keyed-subscription and timing methods abstract; only an implementation outside sava would notice, callers are unaffected.
+
 ## [25.13.0](https://github.com/sava-software/sava/compare/25.12.0...25.13.0) (2026-10-28)
 
 
