@@ -38,29 +38,33 @@ provenance of sava's own artifacts.
 - **Nothing else.** Key servers are disabled, so keys come only from the committed keyring,
   and there are no ignored keys or trusted-artifact exemptions.
 
-`verificationPolicy`, part of `check` and defined in
-`gradle/plugins/src/main/kotlin/sava.verification-policy.gradle.kts`, enforces these rules
-and the symlinks, so a regeneration cannot change them unseen. It also refuses a committed
-`gradle.properties` that relaxes the verification mode. The root `gradle.properties` carries
-`org.gradle.dependency.verification=strict`, the policy's declaration: nothing for Gradle, which
-defaults to strict with the file and verifies nothing without it, and the line sava-build's
-guard requires from 21.8.0, so that a deleted or uncommitted policy fails `check`. It reads only
-committed files, so a mode passed on the command line or set in `~/.gradle/gradle.properties`
-is beyond its reach.
+`verificationPolicy`, the task sava-build's settings plugin registers on the root project
+with every project's `check` and `qualityGate` depending on it, enforces these rules and the
+symlinks, so a regeneration cannot change them unseen. It also refuses a committed
+`gradle.properties` that relaxes the verification mode, in the root or in a standalone build,
+and a keyring, version-scoped list or standalone-build links left behind without the policy
+file. The root `gradle.properties` carries `org.gradle.dependency.verification=strict`, the
+policy's declaration: nothing for Gradle, which defaults to strict with the file and verifies
+nothing without it, and the line the guard requires, so that a deleted or uncommitted policy
+fails `check`. It reads only committed files, so a mode passed on the command line or set in
+`~/.gradle/gradle.properties` is beyond its reach. sava-build's README ("The guard") lists
+every rule; this repository carried its own copy of the task until sava-build 21.8.0 shipped
+the guard.
 
 ## Updating after a dependency, plugin or tool change
 
 1. Run the change through all three builds; CI runs only the root one.
 
    ```sh
-   ./gradlew --no-configuration-cache --init-script gradle/verification/resolve-tools.init.gradle \
-     check resolveVerificationTools
+   ./gradlew --no-configuration-cache check resolveVerificationTools
    ./gradlew -p jmh jmhJar
    ./gradlew -p soak classes jar soakModulePath
    ```
 
-   `resolveVerificationTools` resolves the PIT, ArcMutate and Jazzer artifacts that `check`
-   never touches, without running a mutation or fuzz campaign. ArcMutate is on that classpath
+   `resolveVerificationTools`, registered by sava-build's hardening feature in each hardened
+   project, resolves the PIT, ArcMutate and Jazzer artifacts that `check` never touches,
+   without running a mutation or fuzz campaign. Without the configuration cache: a reused
+   entry resolves nothing, and so verifies nothing. ArcMutate is on that classpath
    only where `arcmutate-licence.txt` is present, so run this step on a licensed machine: on
    another, the ArcMutate rule goes unexercised and a licensed `pitest<Suite>` gate is the
    first to refuse a bump.
@@ -86,7 +90,7 @@ is beyond its reach.
 
    ```sh
    ./gradlew --no-configuration-cache --write-verification-metadata pgp,sha256 --export-keys \
-     --init-script gradle/verification/resolve-tools.init.gradle build resolveVerificationTools
+     build resolveVerificationTools
    ```
 
    The result is a candidate. On a tool bump it widens the version-scoped key to every

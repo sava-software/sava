@@ -9,6 +9,51 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.8.0 — 2026-10-30
+
+All three plugin pins advance from 21.7.1 to the published
+`software.sava:sava-build:21.8.0`. `:sava-core:savaBuildIdentity` reported that coordinate,
+`local override: inactive`, and loaded JAR SHA-256
+`9471012e64a06f2302a3ef1fbff62c8aefbc93afda8a8e936e28e57db15e7f3f`, the digest the
+`0.0.0-test` publication of source commit `aa5dc42a` also had, so the released jar is
+byte-identical to the one the two dry runs of 2026-10-30 rehearsed; the two commits between
+that source and the release, bc1c419 and the release commit, touch sava-build's own build
+scripts, changelog and version, and the matching digest shows they left the plugin's bytes
+alone. `gh attestation verify` verified its
+SLSA v1 provenance from `.github/workflows/gradle_plugin_publish.yml` at `refs/tags/21.8.0`,
+source commit `5f22032c908bfd4f79cdffb6881fe0d045ab7de7`, for the jar and its sources and
+javadoc jars. The plugin's `libs.versions.toml` is unchanged between the two tags (PIT
+1.30.0, the PIT JUnit plugin 1.2.3 and ArcMutate base 1.7.2 remain), so no `BaselineRebase`
+is owed, and the installed `hardeningAgentTemplate` prints a block byte-identical to the one
+in `AGENTS.md`.
+
+What 21.8.0 changes for this repository. The settings plugin registers `verificationPolicy`
+on the root project with every project's `check` and `qualityGate` depending on it, so the
+interim repo-local copy, `gradle/plugins/src/main/kotlin/sava.verification-policy.gradle.kts`
+applied from sava-core, is deleted; its rules are the plugin's, which also fails `check` when
+a keyring, the version-scoped list or a standalone build's links survive a deleted or
+uncommitted policy, and requires the `org.gradle.dependency.verification=strict` declaration
+the root `gradle.properties` has carried since 13af88a1. The hardening feature registers
+`resolveVerificationTools` in each hardened project, so
+`gradle/verification/resolve-tools.init.gradle` is deleted and the README's commands drop the
+init script. The baseline writers pair same-key sibling rows by one least-cost objective with
+exact line matches competing with the rest, the fix for the rotation recorded under 48dd43c9:
+the dry run replayed that retag on 93453046 with the unreleased jar and reproduced the
+hand-corrected `ws-accepted.csv` byte for byte, refreshing 47 tags where the old writer
+refreshed 46 because the exact match at line 2169 was never refreshed before.
+
+Root `check` with `resolveVerificationTools`, strict and without the configuration cache,
+passed on the adopted tree: 2,080 tests (sava-core 928, sava-rpc 1,091 with two
+environment-gated skips, sava-vanity 61); the plugin's `:verificationPolicy` ran in place of
+the deleted repo-local task and refused nothing, and each hardened project resolved its 16
+PIT and 2 Jazzer artifacts under the committed policy without a verification report.
+`-p jmh jmhJar` and `-p soak classes jar soakModulePath` passed under the same policy. No
+mutation suite is owed by this bump: it changes no PIT, ArcMutate or Jazzer version, no
+target, mutator or tool classpath, only the plugin binary, which invalidates kept reports
+(the next gate observes fresh either way) and the baseline writers' pairing, which the dry
+run exercised on this tree. A history-free root `qualityGate` was started alongside and
+stopped unfinished once the owner asked whether it was needed; it was not.
+
 ## sava-vanity: the UTF-8 rule moves into the launchers — 2026-10-28
 
 Both launchers now refuse a host whose native encoding is not UTF-8 before anything else

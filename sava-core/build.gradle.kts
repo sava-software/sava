@@ -1,7 +1,6 @@
 plugins {
   id("software.sava.build.feature.hardening")
   id("sava.docs-in-sync")
-  id("sava.verification-policy")
 }
 
 dependencies {
