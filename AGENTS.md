@@ -244,6 +244,14 @@ and stamps provenance only after the observation succeeds. All 17 suites were re
 nothing*, so certification now records zero legacy-unbound suites. `BaselineUpdate` is an
 ordinary report rewrite, not a toolchain operation.
 
+**Family labels after a retag.** A family label is triage metadata and the one baseline
+component no writer owns. `BaselineRetag` pairs same-key sibling rows by line distance and
+says so in its notice; it cannot know which physical mutant a label described. When its
+pairing rotates labels between same-key rows, the owner corrects the labels by hand and
+names the key and both lines in the commit message; row keys, `# line` tags and provenance
+stamps are still never hand-edited. The 2026-10-07 rotations and 48dd43c9 are the
+precedents.
+
 **Ruled out here, with the measurement.** `EXPERIMENTAL_BIG_INTEGER` fired zero times in
 every candidate suite (this code constructs and compares Big values but does no Big
 arithmetic) and is left off; `EXPERIMENTAL_NAKED_RECEIVER` is enabled on exactly the
