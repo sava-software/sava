@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.client;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.token.TokenAccount;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.PublicKeyEncoding;
@@ -135,7 +136,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                               final PublicKey account,
                                                               final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccountInfo(commitment, null, 0, 0, account, factory);
+    return getAccountInfo(commitment, null, null, account, factory);
   }
 
   @Override
@@ -145,10 +146,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   }
 
   @Override
-  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final int length,
-                                                               final int offset,
+  public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final DataSlice dataSlice,
                                                                final PublicKey account) {
-    return getAccountInfo(defaultCommitment, length, offset, account, BYTES_IDENTITY);
+    return getAccountInfo(defaultCommitment, dataSlice, account, BYTES_IDENTITY);
   }
 
   @Override
@@ -160,27 +160,24 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
-                                                               final int length,
-                                                               final int offset,
+                                                               final DataSlice dataSlice,
                                                                final PublicKey account) {
-    return getAccountInfo(commitment, length, offset, account, BYTES_IDENTITY);
+    return getAccountInfo(commitment, dataSlice, account, BYTES_IDENTITY);
   }
 
   @Override
   public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final BigInteger minContextSlot,
-                                                               final int length,
-                                                               final int offset,
+                                                               final DataSlice dataSlice,
                                                                final PublicKey account) {
-    return getAccountInfo(defaultCommitment, minContextSlot, length, offset, account, BYTES_IDENTITY);
+    return getAccountInfo(defaultCommitment, minContextSlot, dataSlice, account, BYTES_IDENTITY);
   }
 
   @Override
   public CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
                                                                final BigInteger minContextSlot,
-                                                               final int length,
-                                                               final int offset,
+                                                               final DataSlice dataSlice,
                                                                final PublicKey account) {
-    return getAccountInfo(commitment, minContextSlot, length, offset, account, BYTES_IDENTITY);
+    return getAccountInfo(commitment, minContextSlot, dataSlice, account, BYTES_IDENTITY);
   }
 
   @Override
@@ -191,11 +188,10 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   }
 
   @Override
-  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final int length,
-                                                              final int offset,
+  public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final DataSlice dataSlice,
                                                               final PublicKey account,
                                                               final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccountInfo(defaultCommitment, length, offset, account, factory);
+    return getAccountInfo(defaultCommitment, dataSlice, account, factory);
   }
 
   @Override
@@ -203,23 +199,21 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                               final BigInteger minContextSlot,
                                                               final PublicKey account,
                                                               final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccountInfo(commitment, minContextSlot, 0, 0, account, factory);
+    return getAccountInfo(commitment, minContextSlot, null, account, factory);
   }
 
   @Override
   public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
-                                                              final int length,
-                                                              final int offset,
+                                                              final DataSlice dataSlice,
                                                               final PublicKey account,
                                                               final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccountInfo(commitment, null, length, offset, account, factory);
+    return getAccountInfo(commitment, null, dataSlice, account, factory);
   }
 
   @Override
   public <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                               final BigInteger minContextSlot,
-                                                              final int length,
-                                                              final int offset,
+                                                              final DataSlice dataSlice,
                                                               final PublicKey account,
                                                               final BiFunction<PublicKey, byte[], T> factory) {
     final var builder = new StringBuilder(256);
@@ -240,7 +234,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
     appendMinContextSlot(builder, minContextSlot);
 
-    appendDataSlice(builder, length, offset);
+    appendDataSlice(builder, dataSlice);
 
     builder.append("}]}");
 
@@ -727,14 +721,13 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                          final SequencedCollection<PublicKey> keys,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
-    return getMultipleAccounts(commitment, null, 0, 0, keys, factory);
+    return getMultipleAccounts(commitment, null, null, keys, factory);
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
-                                                                          final int offset,
+  public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final DataSlice dataSlice,
                                                                           final SequencedCollection<PublicKey> keys) {
-    return getMultipleAccounts(defaultCommitment, length, offset, keys, BYTES_IDENTITY);
+    return getMultipleAccounts(defaultCommitment, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
@@ -745,10 +738,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
-                                                                          final int length,
-                                                                          final int offset,
+                                                                          final DataSlice dataSlice,
                                                                           final SequencedCollection<PublicKey> keys) {
-    return getMultipleAccounts(defaultCommitment, minContextSlot, length, offset, keys, BYTES_IDENTITY);
+    return getMultipleAccounts(defaultCommitment, minContextSlot, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
@@ -760,27 +752,24 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
-                                                                          final int length,
-                                                                          final int offset,
+                                                                          final DataSlice dataSlice,
                                                                           final SequencedCollection<PublicKey> keys) {
-    return getMultipleAccounts(commitment, length, offset, keys, BYTES_IDENTITY);
+    return getMultipleAccounts(commitment, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
   public CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                           final BigInteger minContextSlot,
-                                                                          final int length,
-                                                                          final int offset,
+                                                                          final DataSlice dataSlice,
                                                                           final SequencedCollection<PublicKey> keys) {
-    return getMultipleAccounts(commitment, minContextSlot, length, offset, keys, BYTES_IDENTITY);
+    return getMultipleAccounts(commitment, minContextSlot, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
-                                                                         final int offset,
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final DataSlice dataSlice,
                                                                          final SequencedCollection<PublicKey> keys,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
-    return getMultipleAccounts(defaultCommitment, length, offset, keys, factory);
+    return getMultipleAccounts(defaultCommitment, dataSlice, keys, factory);
   }
 
   @Override
@@ -792,47 +781,43 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
-                                                                         final int length,
-                                                                         final int offset,
+                                                                         final DataSlice dataSlice,
                                                                          final SequencedCollection<PublicKey> keys,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
-    return getMultipleAccounts(defaultCommitment, minContextSlot, length, offset, keys, factory);
+    return getMultipleAccounts(defaultCommitment, minContextSlot, dataSlice, keys, factory);
   }
 
   @Override
   public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
-                                                                         final int length,
-                                                                         final int offset,
+                                                                         final DataSlice dataSlice,
                                                                          final SequencedCollection<PublicKey> keys,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
-    return getMultipleAccounts(commitment, null, length, offset, keys, factory);
-  }
-
-  @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
-                                                                         final BigInteger minContextSlot,
-                                                                         final SequencedCollection<PublicKey> keys,
-                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getMultipleAccounts(commitment, minContextSlot, 0, 0, keys, factory);
+    return getMultipleAccounts(commitment, null, dataSlice, keys, factory);
   }
 
   @Override
   public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                          final BigInteger minContextSlot,
-                                                                         final int length,
-                                                                         final int offset,
+                                                                         final SequencedCollection<PublicKey> keys,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getMultipleAccounts(commitment, minContextSlot, null, keys, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
+                                                                         final BigInteger minContextSlot,
+                                                                         final DataSlice dataSlice,
                                                                          final SequencedCollection<PublicKey> keys,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
     return getAppliedAccounts(
-        commitment, minContextSlot, length, offset, keys,
+        commitment, minContextSlot, dataSlice, keys,
         (ji, context) -> AccountInfo.parseAccountsFromKeys(keys, ji, context, factory)
     );
   }
 
   private <R> CompletableFuture<R> getAppliedAccounts(final Commitment commitment,
                                                       final BigInteger minContextSlot,
-                                                      final int length,
-                                                      final int offset,
+                                                      final DataSlice dataSlice,
                                                       final SequencedCollection<PublicKey> keys,
                                                       final BiFunction<JsonIterator, Context, R> adapter) {
     if (keys.isEmpty()) {
@@ -866,7 +851,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
     appendMinContextSlot(builder, minContextSlot);
 
-    appendDataSlice(builder, length, offset);
+    appendDataSlice(builder, dataSlice);
 
     builder.append("}]}");
 
@@ -883,14 +868,13 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                                  final SequencedCollection<PublicKey> keys,
                                                                  final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccounts(commitment, null, 0, 0, keys, factory);
+    return getAccounts(commitment, null, null, keys, factory);
   }
 
   @Override
-  public CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final int length,
-                                                                  final int offset,
+  public CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys) {
-    return getAccounts(defaultCommitment, length, offset, keys, BYTES_IDENTITY);
+    return getAccounts(defaultCommitment, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
@@ -901,10 +885,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
-                                                                  final int length,
-                                                                  final int offset,
+                                                                  final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys) {
-    return getAccounts(defaultCommitment, minContextSlot, length, offset, keys, BYTES_IDENTITY);
+    return getAccounts(defaultCommitment, minContextSlot, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
@@ -916,27 +899,24 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
-                                                                  final int length,
-                                                                  final int offset,
+                                                                  final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys) {
-    return getAccounts(commitment, length, offset, keys, BYTES_IDENTITY);
+    return getAccounts(commitment, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
   public CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
-                                                                  final int length,
-                                                                  final int offset,
+                                                                  final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys) {
-    return getAccounts(commitment, minContextSlot, length, offset, keys, BYTES_IDENTITY);
+    return getAccounts(commitment, minContextSlot, dataSlice, keys, BYTES_IDENTITY);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final int length,
-                                                                 final int offset,
+  public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final DataSlice dataSlice,
                                                                  final SequencedCollection<PublicKey> keys,
                                                                  final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccounts(defaultCommitment, length, offset, keys, factory);
+    return getAccounts(defaultCommitment, dataSlice, keys, factory);
   }
 
   @Override
@@ -948,39 +928,36 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
-                                                                 final int length,
-                                                                 final int offset,
+                                                                 final DataSlice dataSlice,
                                                                  final SequencedCollection<PublicKey> keys,
                                                                  final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccounts(defaultCommitment, minContextSlot, length, offset, keys, factory);
+    return getAccounts(defaultCommitment, minContextSlot, dataSlice, keys, factory);
   }
 
   @Override
   public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
-                                                                 final int length,
-                                                                 final int offset,
+                                                                 final DataSlice dataSlice,
                                                                  final SequencedCollection<PublicKey> keys,
                                                                  final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccounts(commitment, null, length, offset, keys, factory);
-  }
-
-  @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
-                                                                 final BigInteger minContextSlot,
-                                                                 final SequencedCollection<PublicKey> keys,
-                                                                 final BiFunction<PublicKey, byte[], T> factory) {
-    return getAccounts(commitment, minContextSlot, 0, 0, keys, factory);
+    return getAccounts(commitment, null, dataSlice, keys, factory);
   }
 
   @Override
   public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                                  final BigInteger minContextSlot,
-                                                                 final int length,
-                                                                 final int offset,
+                                                                 final SequencedCollection<PublicKey> keys,
+                                                                 final BiFunction<PublicKey, byte[], T> factory) {
+    return getAccounts(commitment, minContextSlot, null, keys, factory);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
+                                                                 final BigInteger minContextSlot,
+                                                                 final DataSlice dataSlice,
                                                                  final SequencedCollection<PublicKey> keys,
                                                                  final BiFunction<PublicKey, byte[], T> factory) {
     return getAppliedAccounts(
-        commitment, minContextSlot, length, offset, keys,
+        commitment, minContextSlot, dataSlice, keys,
         (ji, context) -> AccountInfo.parseAccountsFromKeysWithNulls(keys, ji, context, factory)
     );
   }
@@ -1006,7 +983,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                         final Commitment commitment,
                                                                         final Collection<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getProgramAccounts(requestTimeout, programId, commitment, 0, filters, 0, 0, factory);
+    return getProgramAccounts(requestTimeout, programId, commitment, 0, filters, null, factory);
   }
 
   @Override
@@ -1016,7 +993,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                         final long minContextSlot,
                                                                         final Collection<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, 0, 0, factory);
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, null, factory);
   }
 
   @Override
@@ -1024,10 +1001,9 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                         final PublicKey programId,
                                                                         final Commitment commitment,
                                                                         final Collection<Filter> filters,
-                                                                        final int length,
-                                                                        final int offset,
+                                                                        final DataSlice dataSlice,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getProgramAccounts(requestTimeout, programId, commitment, null, filters, length, offset, factory);
+    return getProgramAccounts(requestTimeout, programId, commitment, null, filters, dataSlice, factory);
   }
 
   @Override
@@ -1036,8 +1012,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                         final Commitment commitment,
                                                                         final long minContextSlot,
                                                                         final Collection<Filter> filters,
-                                                                        final int length,
-                                                                        final int offset,
+                                                                        final DataSlice dataSlice,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
     return getProgramAccounts(
         requestTimeout,
@@ -1045,8 +1020,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
         commitment,
         minContextSlot == 0 ? null : new BigInteger(Long.toUnsignedString(minContextSlot)),
         filters,
-        length,
-        offset,
+        dataSlice,
         factory
     );
   }
@@ -1058,7 +1032,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                         final BigInteger minContextSlot,
                                                                         final Collection<Filter> filters,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, 0, 0, factory);
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, null, factory);
   }
 
   @Override
@@ -1067,8 +1041,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                                         final Commitment commitment,
                                                                         final BigInteger minContextSlot,
                                                                         final Collection<Filter> filters,
-                                                                        final int length,
-                                                                        final int offset,
+                                                                        final DataSlice dataSlice,
                                                                         final BiFunction<PublicKey, byte[], T> factory) {
     final var request = new ProgramAccountsRequestRecord<>(
         requestTimeout,
@@ -1076,7 +1049,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
         commitment,
         minContextSlot,
         filters,
-        length, offset,
+        dataSlice,
         RpcEncoding.base64,
         factory,
         null

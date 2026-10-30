@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.client;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.Signer;
 import software.sava.core.accounts.token.TokenAccount;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.http.request.BlockTxDetails;
@@ -103,8 +104,22 @@ public interface SolanaRpcClient {
                                                         final PublicKey account);
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
-  CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final int length,
-                                                        final int offset,
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final int length,
+                                                                final int offset,
+                                                                final PublicKey account) {
+    return length == 0
+        ? getAccountInfo(account)
+        : getAccountInfo(new DataSlice(offset, length), account);
+  }
+
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
+  CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final DataSlice dataSlice,
                                                         final PublicKey account);
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
@@ -113,22 +128,68 @@ public interface SolanaRpcClient {
                                                         final PublicKey account);
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
+                                                                final int length,
+                                                                final int offset,
+                                                                final PublicKey account) {
+    return length == 0
+        ? getAccountInfo(commitment, account)
+        : getAccountInfo(commitment, new DataSlice(offset, length), account);
+  }
+
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
-                                                        final int length,
-                                                        final int offset,
+                                                        final DataSlice dataSlice,
                                                         final PublicKey account);
+
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final BigInteger minContextSlot,
+                                                                final int length,
+                                                                final int offset,
+                                                                final PublicKey account) {
+    return length == 0
+        ? getAccountInfo(minContextSlot, account)
+        : getAccountInfo(minContextSlot, new DataSlice(offset, length), account);
+  }
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final BigInteger minContextSlot,
-                                                        final int length,
-                                                        final int offset,
+                                                        final DataSlice dataSlice,
                                                         final PublicKey account);
+
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
+                                                                final BigInteger minContextSlot,
+                                                                final int length,
+                                                                final int offset,
+                                                                final PublicKey account) {
+    return length == 0
+        ? getAccountInfo(commitment, minContextSlot, account)
+        : getAccountInfo(commitment, minContextSlot, new DataSlice(offset, length), account);
+  }
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   CompletableFuture<AccountInfo<byte[]>> getAccountInfo(final Commitment commitment,
                                                         final BigInteger minContextSlot,
-                                                        final int length,
-                                                        final int offset,
+                                                        final DataSlice dataSlice,
                                                         final PublicKey account);
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
@@ -137,8 +198,23 @@ public interface SolanaRpcClient {
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
-  <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final int length,
-                                                       final int offset,
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final int length,
+                                                               final int offset,
+                                                               final PublicKey account,
+                                                               final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getAccountInfo(account, factory)
+        : getAccountInfo(new DataSlice(offset, length), account, factory);
+  }
+
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
+  <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final DataSlice dataSlice,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
@@ -149,17 +225,50 @@ public interface SolanaRpcClient {
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
+                                                               final int length,
+                                                               final int offset,
+                                                               final PublicKey account,
+                                                               final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getAccountInfo(commitment, account, factory)
+        : getAccountInfo(commitment, new DataSlice(offset, length), account, factory);
+  }
+
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
-                                                       final int length,
-                                                       final int offset,
+                                                       final DataSlice dataSlice,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
   /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
+                                                               final BigInteger minContextSlot,
+                                                               final int length,
+                                                               final int offset,
+                                                               final PublicKey account,
+                                                               final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getAccountInfo(commitment, minContextSlot, account, factory)
+        : getAccountInfo(commitment, minContextSlot, new DataSlice(offset, length), account, factory);
+  }
+
+  /// Missing account: a hollow record, not `null`; see [#getAccountInfo(PublicKey, BiFunction)].
   <T> CompletableFuture<AccountInfo<T>> getAccountInfo(final Commitment commitment,
                                                        final BigInteger minContextSlot,
-                                                       final int length,
-                                                       final int offset,
+                                                       final DataSlice dataSlice,
                                                        final PublicKey account,
                                                        final BiFunction<PublicKey, byte[], T> factory);
 
@@ -371,8 +480,22 @@ public interface SolanaRpcClient {
   }
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
-  CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
-                                                                   final int offset,
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final int length,
+                                                                           final int offset,
+                                                                           final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getMultipleAccounts(keys)
+        : getMultipleAccounts(new DataSlice(offset, length), keys);
+  }
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final DataSlice dataSlice,
                                                                    final SequencedCollection<PublicKey> keys);
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
@@ -380,9 +503,24 @@ public interface SolanaRpcClient {
                                                                    final SequencedCollection<PublicKey> keys);
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
+                                                                           final int length,
+                                                                           final int offset,
+                                                                           final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getMultipleAccounts(minContextSlot, keys)
+        : getMultipleAccounts(minContextSlot, new DataSlice(offset, length), keys);
+  }
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final BigInteger minContextSlot,
-                                                                   final int length,
-                                                                   final int offset,
+                                                                   final DataSlice dataSlice,
                                                                    final SequencedCollection<PublicKey> keys);
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
@@ -391,21 +529,67 @@ public interface SolanaRpcClient {
                                                                    final SequencedCollection<PublicKey> keys);
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
+                                                                           final int length,
+                                                                           final int offset,
+                                                                           final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getMultipleAccounts(commitment, keys)
+        : getMultipleAccounts(commitment, new DataSlice(offset, length), keys);
+  }
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
-                                                                   final int length,
-                                                                   final int offset,
+                                                                   final DataSlice dataSlice,
                                                                    final SequencedCollection<PublicKey> keys);
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
+                                                                           final BigInteger minContextSlot,
+                                                                           final int length,
+                                                                           final int offset,
+                                                                           final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getMultipleAccounts(commitment, minContextSlot, keys)
+        : getMultipleAccounts(commitment, minContextSlot, new DataSlice(offset, length), keys);
+  }
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getMultipleAccounts(final Commitment commitment,
                                                                    final BigInteger minContextSlot,
-                                                                   final int length,
-                                                                   final int offset,
+                                                                   final DataSlice dataSlice,
                                                                    final SequencedCollection<PublicKey> keys);
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
-  <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
-                                                                  final int offset,
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final int length,
+                                                                          final int offset,
+                                                                          final SequencedCollection<PublicKey> keys,
+                                                                          final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getMultipleAccounts(keys, factory)
+        : getMultipleAccounts(new DataSlice(offset, length), keys, factory);
+  }
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
@@ -415,16 +599,48 @@ public interface SolanaRpcClient {
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
+                                                                          final int length,
+                                                                          final int offset,
+                                                                          final SequencedCollection<PublicKey> keys,
+                                                                          final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getMultipleAccounts(minContextSlot, keys, factory)
+        : getMultipleAccounts(minContextSlot, new DataSlice(offset, length), keys, factory);
+  }
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final BigInteger minContextSlot,
-                                                                  final int length,
-                                                                  final int offset,
+                                                                  final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
+                                                                          final int length,
+                                                                          final int offset,
+                                                                          final SequencedCollection<PublicKey> keys,
+                                                                          final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getMultipleAccounts(commitment, keys, factory)
+        : getMultipleAccounts(commitment, new DataSlice(offset, length), keys, factory);
+  }
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
-                                                                  final int length,
-                                                                  final int offset,
+                                                                  final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
@@ -435,10 +651,27 @@ public interface SolanaRpcClient {
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
   /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
+                                                                          final BigInteger minContextSlot,
+                                                                          final int length,
+                                                                          final int offset,
+                                                                          final SequencedCollection<PublicKey> keys,
+                                                                          final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getMultipleAccounts(commitment, minContextSlot, keys, factory)
+        : getMultipleAccounts(commitment, minContextSlot, new DataSlice(offset, length), keys, factory);
+  }
+
+  /// Absent accounts are omitted; see [#getMultipleAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getMultipleAccounts(final Commitment commitment,
                                                                   final BigInteger minContextSlot,
-                                                                  final int length,
-                                                                  final int offset,
+                                                                  final DataSlice dataSlice,
                                                                   final SequencedCollection<PublicKey> keys,
                                                                   final BiFunction<PublicKey, byte[], T> factory);
 
@@ -467,8 +700,22 @@ public interface SolanaRpcClient {
   }
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
-  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final int length,
-                                                           final int offset,
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final int length,
+                                                                   final int offset,
+                                                                   final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getAccounts(keys)
+        : getAccounts(new DataSlice(offset, length), keys);
+  }
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final DataSlice dataSlice,
                                                            final SequencedCollection<PublicKey> keys);
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
@@ -476,9 +723,24 @@ public interface SolanaRpcClient {
                                                            final SequencedCollection<PublicKey> keys);
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
+                                                                   final int length,
+                                                                   final int offset,
+                                                                   final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getAccounts(minContextSlot, keys)
+        : getAccounts(minContextSlot, new DataSlice(offset, length), keys);
+  }
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final BigInteger minContextSlot,
-                                                           final int length,
-                                                           final int offset,
+                                                           final DataSlice dataSlice,
                                                            final SequencedCollection<PublicKey> keys);
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
@@ -487,21 +749,67 @@ public interface SolanaRpcClient {
                                                            final SequencedCollection<PublicKey> keys);
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
+                                                                   final int length,
+                                                                   final int offset,
+                                                                   final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getAccounts(commitment, keys)
+        : getAccounts(commitment, new DataSlice(offset, length), keys);
+  }
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
-                                                           final int length,
-                                                           final int offset,
+                                                           final DataSlice dataSlice,
                                                            final SequencedCollection<PublicKey> keys);
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
+                                                                   final BigInteger minContextSlot,
+                                                                   final int length,
+                                                                   final int offset,
+                                                                   final SequencedCollection<PublicKey> keys) {
+    return length == 0
+        ? getAccounts(commitment, minContextSlot, keys)
+        : getAccounts(commitment, minContextSlot, new DataSlice(offset, length), keys);
+  }
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   CompletableFuture<List<AccountInfo<byte[]>>> getAccounts(final Commitment commitment,
                                                            final BigInteger minContextSlot,
-                                                           final int length,
-                                                           final int offset,
+                                                           final DataSlice dataSlice,
                                                            final SequencedCollection<PublicKey> keys);
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
-  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final int length,
-                                                          final int offset,
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final int length,
+                                                                  final int offset,
+                                                                  final SequencedCollection<PublicKey> keys,
+                                                                  final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getAccounts(keys, factory)
+        : getAccounts(new DataSlice(offset, length), keys, factory);
+  }
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final DataSlice dataSlice,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
@@ -511,16 +819,48 @@ public interface SolanaRpcClient {
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
+                                                                  final int length,
+                                                                  final int offset,
+                                                                  final SequencedCollection<PublicKey> keys,
+                                                                  final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getAccounts(minContextSlot, keys, factory)
+        : getAccounts(minContextSlot, new DataSlice(offset, length), keys, factory);
+  }
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final BigInteger minContextSlot,
-                                                          final int length,
-                                                          final int offset,
+                                                          final DataSlice dataSlice,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
+                                                                  final int length,
+                                                                  final int offset,
+                                                                  final SequencedCollection<PublicKey> keys,
+                                                                  final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getAccounts(commitment, keys, factory)
+        : getAccounts(commitment, new DataSlice(offset, length), keys, factory);
+  }
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
-                                                          final int length,
-                                                          final int offset,
+                                                          final DataSlice dataSlice,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
@@ -531,10 +871,27 @@ public interface SolanaRpcClient {
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
   /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
+  ///
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
+                                                                  final BigInteger minContextSlot,
+                                                                  final int length,
+                                                                  final int offset,
+                                                                  final SequencedCollection<PublicKey> keys,
+                                                                  final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getAccounts(commitment, minContextSlot, keys, factory)
+        : getAccounts(commitment, minContextSlot, new DataSlice(offset, length), keys, factory);
+  }
+
+  /// One entry per key, null where absent; see [#getAccounts(SequencedCollection, BiFunction)].
   <T> CompletableFuture<List<AccountInfo<T>>> getAccounts(final Commitment commitment,
                                                           final BigInteger minContextSlot,
-                                                          final int length,
-                                                          final int offset,
+                                                          final DataSlice dataSlice,
                                                           final SequencedCollection<PublicKey> keys,
                                                           final BiFunction<PublicKey, byte[], T> factory);
 
@@ -595,21 +952,54 @@ public interface SolanaRpcClient {
                                                                  final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                         final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final Collection<Filter> filters,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getProgramAccounts(requestTimeout, programId, commitment, filters, factory)
+        : getProgramAccounts(requestTimeout, programId, commitment, filters, new DataSlice(offset, length), factory);
+  }
+
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final Collection<Filter> filters,
-                                                                 final int length,
-                                                                 final int offset,
+                                                                 final DataSlice dataSlice,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
+
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                         final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final long minContextSlot,
+                                                                         final Collection<Filter> filters,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, factory)
+        : getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, new DataSlice(offset, length), factory);
+  }
 
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final long minContextSlot,
                                                                  final Collection<Filter> filters,
-                                                                 final int length,
-                                                                 final int offset,
+                                                                 final DataSlice dataSlice,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
@@ -620,6 +1010,11 @@ public interface SolanaRpcClient {
     return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, BYTES_IDENTITY);
   }
 
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
                                                                           final PublicKey programId,
                                                                           final Commitment commitment,
@@ -632,11 +1027,33 @@ public interface SolanaRpcClient {
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
                                                                           final PublicKey programId,
                                                                           final Commitment commitment,
+                                                                          final Collection<Filter> filters,
+                                                                          final DataSlice dataSlice) {
+    return getProgramAccounts(requestTimeout, programId, commitment, filters, dataSlice, BYTES_IDENTITY);
+  }
+
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
+                                                                          final PublicKey programId,
+                                                                          final Commitment commitment,
                                                                           final long minContextSlot,
                                                                           final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final Duration requestTimeout,
+                                                                          final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final long minContextSlot,
+                                                                          final Collection<Filter> filters,
+                                                                          final DataSlice dataSlice) {
+    return getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, dataSlice, BYTES_IDENTITY);
   }
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
@@ -646,6 +1063,11 @@ public interface SolanaRpcClient {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, factory);
   }
 
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final Collection<Filter> filters,
                                                                          final int length,
@@ -655,6 +1077,18 @@ public interface SolanaRpcClient {
   }
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final Collection<Filter> filters,
+                                                                         final DataSlice dataSlice,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), filters, dataSlice, factory);
+  }
+
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final long minContextSlot,
                                                                          final Collection<Filter> filters,
                                                                          final int length,
@@ -663,12 +1097,25 @@ public interface SolanaRpcClient {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, length, offset, factory);
   }
 
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final long minContextSlot,
+                                                                         final Collection<Filter> filters,
+                                                                         final DataSlice dataSlice,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, dataSlice, factory);
+  }
+
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final long minContextSlot,
                                                                           final Collection<Filter> filters) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, BYTES_IDENTITY);
   }
 
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final Collection<Filter> filters,
                                                                           final int length,
@@ -677,11 +1124,29 @@ public interface SolanaRpcClient {
   }
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final Collection<Filter> filters,
+                                                                          final DataSlice dataSlice) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), filters, dataSlice, BYTES_IDENTITY);
+  }
+
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final long minContextSlot,
                                                                           final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final long minContextSlot,
+                                                                          final Collection<Filter> filters,
+                                                                          final DataSlice dataSlice) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, defaultCommitment(), minContextSlot, filters, dataSlice, BYTES_IDENTITY);
   }
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
@@ -692,6 +1157,11 @@ public interface SolanaRpcClient {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, factory);
   }
 
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final Commitment commitment,
                                                                          final Collection<Filter> filters,
@@ -703,12 +1173,34 @@ public interface SolanaRpcClient {
 
   default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
                                                                          final Commitment commitment,
+                                                                         final Collection<Filter> filters,
+                                                                         final DataSlice dataSlice,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, filters, dataSlice, factory);
+  }
+
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final Commitment commitment,
                                                                          final long minContextSlot,
                                                                          final Collection<Filter> filters,
                                                                          final int length,
                                                                          final int offset,
                                                                          final BiFunction<PublicKey, byte[], T> factory) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, length, offset, factory);
+  }
+
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final long minContextSlot,
+                                                                         final Collection<Filter> filters,
+                                                                         final DataSlice dataSlice,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, dataSlice, factory);
   }
 
 
@@ -719,6 +1211,11 @@ public interface SolanaRpcClient {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, BYTES_IDENTITY);
   }
 
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final Commitment commitment,
                                                                           final Collection<Filter> filters,
@@ -729,11 +1226,31 @@ public interface SolanaRpcClient {
 
   default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
                                                                           final Commitment commitment,
+                                                                          final Collection<Filter> filters,
+                                                                          final DataSlice dataSlice) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, filters, dataSlice, BYTES_IDENTITY);
+  }
+
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final Commitment commitment,
                                                                           final long minContextSlot,
                                                                           final Collection<Filter> filters,
                                                                           final int length,
                                                                           final int offset) {
     return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, length, offset, BYTES_IDENTITY);
+  }
+
+  default CompletableFuture<List<AccountInfo<byte[]>>> getProgramAccounts(final PublicKey programId,
+                                                                          final Commitment commitment,
+                                                                          final long minContextSlot,
+                                                                          final Collection<Filter> filters,
+                                                                          final DataSlice dataSlice) {
+    return getProgramAccounts(PROGRAM_ACCOUNTS_TIMEOUT, programId, commitment, minContextSlot, filters, dataSlice, BYTES_IDENTITY);
   }
 
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
@@ -743,13 +1260,30 @@ public interface SolanaRpcClient {
                                                                  final Collection<Filter> filters,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
+  /// @deprecated pass a [DataSlice] in place of `length, offset`: `new DataSlice(offset, length)`.
+  /// A `0` length meant the whole account, which is the overload without a slice, and skips the
+  /// offset; otherwise a negative value now throws [IllegalArgumentException] instead of reaching
+  /// the node.
+  @Deprecated(forRemoval = true)
+  default <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
+                                                                         final PublicKey programId,
+                                                                         final Commitment commitment,
+                                                                         final BigInteger minContextSlot,
+                                                                         final Collection<Filter> filters,
+                                                                         final int length,
+                                                                         final int offset,
+                                                                         final BiFunction<PublicKey, byte[], T> factory) {
+    return length == 0
+        ? getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, factory)
+        : getProgramAccounts(requestTimeout, programId, commitment, minContextSlot, filters, new DataSlice(offset, length), factory);
+  }
+
   <T> CompletableFuture<List<AccountInfo<T>>> getProgramAccounts(final Duration requestTimeout,
                                                                  final PublicKey programId,
                                                                  final Commitment commitment,
                                                                  final BigInteger minContextSlot,
                                                                  final Collection<Filter> filters,
-                                                                 final int length,
-                                                                 final int offset,
+                                                                 final DataSlice dataSlice,
                                                                  final BiFunction<PublicKey, byte[], T> factory);
 
   /// @throws IllegalStateException if [ProgramAccountsRequest#encoding()] is `base64_zstd` and

@@ -26,7 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /// `ProgramAccountsRequestRecord.toJson` — whose output is asserted in detail by
 /// `ProgramAccountsRequestTests` — so what these cover is the delegation itself:
 /// which arguments each overload defaults and which it forwards. Getting that
-/// wrong sends a valid request that asks the wrong question.
+/// wrong sends a valid request that asks the wrong question. The deprecated `length, offset`
+/// overloads stay pinned here until their removal; `DataSliceRpcRequestTests` covers the
+/// `DataSlice` twins.
+@SuppressWarnings("removal")
 final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
 
   private static final PublicKey PROGRAM_ID =
@@ -132,7 +135,7 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void requestTimeoutWithDataSlice() {
-    expect("\"commitment\":\"finalized\",\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+    expect("\"commitment\":\"finalized\",\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(
         TIMEOUT, PROGRAM_ID, Commitment.FINALIZED, FILTERS, 32, 8, (_, data) -> data).join());
   }
@@ -140,7 +143,7 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
   @Test
   void requestTimeoutWithEverything() {
     expect("\"commitment\":\"processed\",\"minContextSlot\":77,"
-        + "\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+        + "\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(
         TIMEOUT, PROGRAM_ID, Commitment.PROCESSED, 77L, FILTERS, 32, 8, (_, data) -> data).join());
   }
@@ -211,8 +214,7 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
         Commitment.FINALIZED,
         null,
         List.of(),
-        0,
-        0,
+        null,
         RpcEncoding.base64_zstd,
         (_, data) -> data,
         null
@@ -247,14 +249,14 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void timeoutCommitmentFiltersDataSlice() {
-    expect("\"commitment\":\"finalized\",\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+    expect("\"commitment\":\"finalized\",\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(TIMEOUT, PROGRAM_ID, Commitment.FINALIZED, FILTERS, 32, 8).join());
   }
 
   @Test
   void timeoutCommitmentMinContextSlotFiltersDataSlice() {
     expect("\"commitment\":\"finalized\",\"minContextSlot\":77,"
-        + "\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+        + "\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(TIMEOUT, PROGRAM_ID, Commitment.FINALIZED, 77L, FILTERS, 32, 8).join());
   }
 
@@ -266,14 +268,14 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void programIdFiltersDataSliceFactory() {
-    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(PROGRAM_ID, FILTERS, 32, 8, (_, data) -> data).join());
   }
 
   @Test
   void programIdMinContextSlotFiltersDataSliceFactory() {
     expect("\"commitment\":\"confirmed\",\"minContextSlot\":77,"
-        + "\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+        + "\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(PROGRAM_ID, 77L, FILTERS, 32, 8, (_, data) -> data).join());
   }
 
@@ -285,14 +287,14 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void programIdFiltersDataSlice() {
-    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(PROGRAM_ID, FILTERS, 32, 8).join());
   }
 
   @Test
   void programIdMinContextSlotFiltersDataSlice() {
     expect("\"commitment\":\"confirmed\",\"minContextSlot\":77,"
-        + "\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+        + "\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(PROGRAM_ID, 77L, FILTERS, 32, 8).join());
   }
 
@@ -305,7 +307,7 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void programIdCommitmentFiltersDataSliceFactory() {
-    expect("\"commitment\":\"processed\",\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+    expect("\"commitment\":\"processed\",\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(
         PROGRAM_ID, Commitment.PROCESSED, FILTERS, 32, 8, (_, data) -> data).join());
   }
@@ -313,7 +315,7 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
   @Test
   void programIdCommitmentMinContextSlotFiltersDataSliceFactory() {
     expect("\"commitment\":\"processed\",\"minContextSlot\":77,"
-        + "\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+        + "\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(
         PROGRAM_ID, Commitment.PROCESSED, 77L, FILTERS, 32, 8, (_, data) -> data).join());
   }
@@ -326,14 +328,14 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void programIdCommitmentFiltersDataSlice() {
-    expect("\"commitment\":\"processed\",\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+    expect("\"commitment\":\"processed\",\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(PROGRAM_ID, Commitment.PROCESSED, FILTERS, 32, 8).join());
   }
 
   @Test
   void programIdCommitmentMinContextSlotFiltersDataSlice() {
     expect("\"commitment\":\"processed\",\"minContextSlot\":77,"
-        + "\"dataSlice\":{\"length\":32,\"offset\":8},\"filters\":[{\"dataSize\":165}]");
+        + "\"dataSlice\":{\"offset\":8,\"length\":32},\"filters\":[{\"dataSize\":165}]");
     assertParsed(rpcClient.getProgramAccounts(PROGRAM_ID, Commitment.PROCESSED, 77L, FILTERS, 32, 8).join());
   }
 

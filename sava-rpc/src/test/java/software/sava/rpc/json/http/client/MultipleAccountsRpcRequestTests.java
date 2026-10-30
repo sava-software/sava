@@ -21,6 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 /// `getAccounts` parses with `parseAccountsFromKeysWithNulls`, which keeps the
 /// slot so results stay positionally aligned with the keys passed in. A caller
 /// zipping results back to keys must use `getAccounts`.
+///
+/// The deprecated `length, offset` overloads stay pinned here until their removal;
+/// `DataSliceRpcRequestTests` covers the `DataSlice` twins.
+@SuppressWarnings("removal")
 final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
 
   private static final PublicKey KEY_A =
@@ -67,7 +71,7 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void multipleAccountsWithDataSlice() {
-    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8}");
+    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertCompacted(rpcClient.getMultipleAccounts(32, 8, KEYS).join());
   }
 
@@ -80,7 +84,7 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
   @Test
   void multipleAccountsWithMinContextSlotAndDataSlice() {
     expect("getMultipleAccounts",
-        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"length\":32,\"offset\":8}");
+        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertCompacted(rpcClient.getMultipleAccounts(BigInteger.valueOf(99), 32, 8, KEYS).join());
   }
 
@@ -92,21 +96,21 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void multipleAccountsWithCommitmentAndDataSlice() {
-    expect("getMultipleAccounts", "\"commitment\":\"processed\",\"dataSlice\":{\"length\":16,\"offset\":4}");
+    expect("getMultipleAccounts", "\"commitment\":\"processed\",\"dataSlice\":{\"offset\":4,\"length\":16}");
     assertCompacted(rpcClient.getMultipleAccounts(Commitment.PROCESSED, 16, 4, KEYS).join());
   }
 
   @Test
   void multipleAccountsWithEverything() {
     expect("getMultipleAccounts",
-        "\"commitment\":\"finalized\",\"minContextSlot\":7,\"dataSlice\":{\"length\":16,\"offset\":4}");
+        "\"commitment\":\"finalized\",\"minContextSlot\":7,\"dataSlice\":{\"offset\":4,\"length\":16}");
     assertCompacted(rpcClient.getMultipleAccounts(
         Commitment.FINALIZED, BigInteger.valueOf(7), 16, 4, KEYS).join());
   }
 
   @Test
   void accountsWithDataSlice() {
-    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8}");
+    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertPositional(rpcClient.getAccounts(32, 8, KEYS).join());
   }
 
@@ -119,7 +123,7 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
   @Test
   void accountsWithMinContextSlotAndDataSlice() {
     expect("getMultipleAccounts",
-        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"length\":32,\"offset\":8}");
+        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertPositional(rpcClient.getAccounts(BigInteger.valueOf(99), 32, 8, KEYS).join());
   }
 
@@ -131,14 +135,14 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void accountsWithCommitmentAndDataSlice() {
-    expect("getMultipleAccounts", "\"commitment\":\"processed\",\"dataSlice\":{\"length\":16,\"offset\":4}");
+    expect("getMultipleAccounts", "\"commitment\":\"processed\",\"dataSlice\":{\"offset\":4,\"length\":16}");
     assertPositional(rpcClient.getAccounts(Commitment.PROCESSED, 16, 4, KEYS).join());
   }
 
   @Test
   void accountsWithEverything() {
     expect("getMultipleAccounts",
-        "\"commitment\":\"finalized\",\"minContextSlot\":7,\"dataSlice\":{\"length\":16,\"offset\":4}");
+        "\"commitment\":\"finalized\",\"minContextSlot\":7,\"dataSlice\":{\"offset\":4,\"length\":16}");
     assertPositional(rpcClient.getAccounts(
         Commitment.FINALIZED, BigInteger.valueOf(7), 16, 4, KEYS).join());
   }
@@ -162,7 +166,7 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
 
   @Test
   void multipleAccountsWithDataSliceAndFactory() {
-    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8}");
+    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertCompacted(rpcClient.getMultipleAccounts(32, 8, KEYS, (_, data) -> data).join());
   }
 
@@ -176,14 +180,14 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
   @Test
   void multipleAccountsWithMinContextSlotDataSliceAndFactory() {
     expect("getMultipleAccounts",
-        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"length\":32,\"offset\":8}");
+        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertCompacted(rpcClient.getMultipleAccounts(
         BigInteger.valueOf(99), 32, 8, KEYS, (_, data) -> data).join());
   }
 
   @Test
   void accountsWithDataSliceAndFactory() {
-    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8}");
+    expect("getMultipleAccounts", "\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertPositional(rpcClient.getAccounts(32, 8, KEYS, (_, data) -> data).join());
   }
 
@@ -196,7 +200,7 @@ final class MultipleAccountsRpcRequestTests extends RpcRequestTests {
   @Test
   void accountsWithMinContextSlotDataSliceAndFactory() {
     expect("getMultipleAccounts",
-        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"length\":32,\"offset\":8}");
+        "\"commitment\":\"confirmed\",\"minContextSlot\":99,\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertPositional(rpcClient.getAccounts(
         BigInteger.valueOf(99), 32, 8, KEYS, (_, data) -> data).join());
   }

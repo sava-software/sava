@@ -44,9 +44,10 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
   }
 
   @Test
+  @SuppressWarnings("removal")
   void getAccountInfo() {
     registerRequest("""
-        {"jsonrpc":"2.0","id":101,"method":"getAccountInfo","params":["7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r",{"encoding":"base64","commitment":"confirmed","minContextSlot":1000,"dataSlice":{"length":32,"offset":88}}]}""", """
+        {"jsonrpc":"2.0","id":101,"method":"getAccountInfo","params":["7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r",{"encoding":"base64","commitment":"confirmed","minContextSlot":1000,"dataSlice":{"offset":88,"length":32}}]}""", """
         {"jsonrpc":"2.0","id":1742866771486,"result":{"context":{"slot":328984397,"apiVersion":"2.1.9"},"value":{"lamports":7182720,"data":["CR5z0XpVJtRI5Ymupa/nwizWHFtmqGpCerJiMJUU5Vw=","base64"],"owner":"LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo","executable":false,"rentEpoch":18446744073709551615,"space":904}}}"""
     );
 
@@ -125,9 +126,10 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
   }
 
   @Test
+  @SuppressWarnings("removal")
   void getMultipleAccounts() {
     registerRequest("""
-        {"jsonrpc":"2.0","id":201,"method":"getMultipleAccounts","params":[["7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r","5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6"],{"encoding":"base64","commitment":"confirmed","minContextSlot":1000,"dataSlice":{"length":32,"offset":88}}]}""", """
+        {"jsonrpc":"2.0","id":201,"method":"getMultipleAccounts","params":[["7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r","5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6"],{"encoding":"base64","commitment":"confirmed","minContextSlot":1000,"dataSlice":{"offset":88,"length":32}}]}""", """
         {"jsonrpc":"2.0","id":1742865650193,"result":{"context":{"slot":328981577,"apiVersion":"2.1.9"},"value":[{"lamports":7182720,"data":["CR5z0XpVJtRI5Ymupa/nwizWHFtmqGpCerJiMJUU5Vw=","base64"],"owner":"LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo","executable":false,"rentEpoch":18446744073709551615,"space":904},{"lamports":161492326,"data":["BpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAE=","base64"],"owner":"LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo","executable":false,"rentEpoch":18446744073709551615,"space":904}]}}"""
     );
 
@@ -1504,6 +1506,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
   }
 
   @Test
+  @SuppressWarnings("removal")
   void getProgramAccounts() {
     final var programId = PublicKey.fromBase58Encoded("GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc");
     final var filters = List.of(
@@ -1512,7 +1515,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     );
 
     registerRequest("""
-        {"jsonrpc":"2.0","id":1001,"method":"getProgramAccounts","params":["GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc",{"withContext":true,"encoding":"base64","commitment":"finalized","minContextSlot":1000,"dataSlice":{"length":32,"offset":88},"filters":[{"memcmp":{"offset":8,"bytes":"So11111111111111111111111111111111111111112"}},{"dataSize":8200}]}]}""", """
+        {"jsonrpc":"2.0","id":1001,"method":"getProgramAccounts","params":["GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc",{"withContext":true,"encoding":"base64","commitment":"finalized","minContextSlot":1000,"dataSlice":{"offset":88,"length":32},"filters":[{"memcmp":{"offset":8,"bytes":"So11111111111111111111111111111111111111112"}},{"dataSize":8200}]}]}""", """
         {"jsonrpc":"2.0","id":1755900035918,"result":{"context":{"slot":361843021,"apiVersion":"2.2.7"},"value":[{"pubkey":"5EhqyiKivRyyhK4wHALghpXUEPSAbV6DRFuNzfpTHbv","account":{"lamports":57962880,"data":["CR5z0XpVJtRI5Ymupa/nwizWHFtmqGpCerJiMJUU5Vw=","base64"],"owner":"GLAMbTqav9N9witRjswJ8enwp9vv5G8bsSJ2kPJ4rcyc","executable":false,"rentEpoch":18446744073709551615,"space":8200}}]}}"""
     );
 

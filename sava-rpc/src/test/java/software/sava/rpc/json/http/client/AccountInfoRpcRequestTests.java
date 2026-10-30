@@ -10,7 +10,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /// The `getAccountInfo` convenience overloads. Each is a one-line delegation into
 /// the same request builder, so the outgoing JSON — which optional sections appear
-/// and in what order — is the assertion that distinguishes them.
+/// and in what order — is the assertion that distinguishes them. The deprecated
+/// `length, offset` overloads stay pinned here until their removal; `DataSliceRpcRequestTests`
+/// covers the `DataSlice` twins.
+@SuppressWarnings("removal")
 final class AccountInfoRpcRequestTests extends RpcRequestTests {
 
   private static final PublicKey ACCOUNT =
@@ -34,7 +37,7 @@ final class AccountInfoRpcRequestTests extends RpcRequestTests {
 
   @Test
   void withDataSlice() {
-    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8}");
+    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertEquals(42, rpcClient.getAccountInfo(32, 8, ACCOUNT).join().lamports());
   }
 
@@ -47,21 +50,21 @@ final class AccountInfoRpcRequestTests extends RpcRequestTests {
 
   @Test
   void withCommitmentAndDataSlice() {
-    expect("\"commitment\":\"processed\",\"dataSlice\":{\"length\":16,\"offset\":4}");
+    expect("\"commitment\":\"processed\",\"dataSlice\":{\"offset\":4,\"length\":16}");
     assertEquals(42, rpcClient.getAccountInfo(
         Commitment.PROCESSED, 16, 4, ACCOUNT).join().lamports());
   }
 
   @Test
   void withMinContextSlotAndDataSlice() {
-    expect("\"commitment\":\"confirmed\",\"minContextSlot\":5,\"dataSlice\":{\"length\":16,\"offset\":4}");
+    expect("\"commitment\":\"confirmed\",\"minContextSlot\":5,\"dataSlice\":{\"offset\":4,\"length\":16}");
     assertEquals(42, rpcClient.getAccountInfo(
         BigInteger.valueOf(5), 16, 4, ACCOUNT).join().lamports());
   }
 
   @Test
   void withEverything() {
-    expect("\"commitment\":\"finalized\",\"minContextSlot\":9,\"dataSlice\":{\"length\":16,\"offset\":4}");
+    expect("\"commitment\":\"finalized\",\"minContextSlot\":9,\"dataSlice\":{\"offset\":4,\"length\":16}");
     assertEquals(42, rpcClient.getAccountInfo(
         Commitment.FINALIZED, BigInteger.valueOf(9), 16, 4, ACCOUNT).join().lamports());
   }
@@ -106,7 +109,7 @@ final class AccountInfoRpcRequestTests extends RpcRequestTests {
 
   @Test
   void dataSliceWithFactory() {
-    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"length\":32,\"offset\":8}");
+    expect("\"commitment\":\"confirmed\",\"dataSlice\":{\"offset\":8,\"length\":32}");
     assertEquals(42, rpcClient.getAccountInfo(32, 8, ACCOUNT, (_, data) -> data).join().lamports());
   }
 }

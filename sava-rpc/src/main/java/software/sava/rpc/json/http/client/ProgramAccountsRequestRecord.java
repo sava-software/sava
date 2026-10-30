@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.client;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.RpcEncoding;
@@ -19,12 +20,25 @@ record ProgramAccountsRequestRecord<T>(Duration requestTimeout,
                                        Commitment commitment,
                                        BigInteger minContextSlot,
                                        Collection<Filter> filters,
-                                       int dataSliceLength,
-                                       int dataSliceOffset,
+                                       DataSlice dataSlice,
                                        RpcEncoding encoding,
                                        BiFunction<PublicKey, byte[], T> factory,
                                        ZstdDecompressor zstdDecompressor)
     implements ProgramAccountsRequest<T> {
+
+  @Deprecated(forRemoval = true)
+  @SuppressWarnings("removal")
+  @Override
+  public int dataSliceLength() {
+    return dataSlice == null ? 0 : dataSlice.length();
+  }
+
+  @Deprecated(forRemoval = true)
+  @SuppressWarnings("removal")
+  @Override
+  public int dataSliceOffset() {
+    return dataSlice == null ? 0 : dataSlice.offset();
+  }
 
   @Override
   public String toJson(final long requestId, final Commitment defaultCommitment) {
@@ -49,7 +63,7 @@ record ProgramAccountsRequestRecord<T>(Duration requestTimeout,
     builder.append('"');
 
     BaseSolanaJsonRpcClient.appendMinContextSlot(builder, minContextSlot);
-    BaseSolanaJsonRpcClient.appendDataSlice(builder, dataSliceLength, dataSliceOffset);
+    BaseSolanaJsonRpcClient.appendDataSlice(builder, dataSlice);
     BaseSolanaJsonRpcClient.appendFilters(builder, filters);
     builder.append("}]}");
 

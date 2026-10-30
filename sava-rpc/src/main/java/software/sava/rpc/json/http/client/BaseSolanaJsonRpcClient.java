@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.client;
 
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.Context;
@@ -56,17 +57,22 @@ public abstract class BaseSolanaJsonRpcClient extends JsonRpcHttpClient {
     }
   }
 
-  /// @param length data slice length, 0 to fetch complete account data.
-  protected static void appendDataSlice(final StringBuilder builder, final int length, final int offset) {
-    if (length != 0) {
+  /// Appends nothing if dataSlice is null: the whole account.
+  protected static void appendDataSlice(final StringBuilder builder, final DataSlice dataSlice) {
+    if (dataSlice != null) {
       builder.append("""
-          ,"dataSlice":{"length":""");
-      builder.append(length);
-      builder.append("""
-          ,"offset":""");
-      builder.append(offset);
-      builder.append('}');
+          ,"dataSlice":""");
+      builder.append(dataSlice.toJson());
     }
+  }
+
+  /// @param length data slice length, 0 to fetch complete account data.
+  /// @deprecated pass a [DataSlice], `null` for the whole account. A `0` length still appends
+  /// nothing; otherwise a negative value now throws [IllegalArgumentException] instead of
+  /// reaching the node.
+  @Deprecated(forRemoval = true)
+  protected static void appendDataSlice(final StringBuilder builder, final int length, final int offset) {
+    appendDataSlice(builder, length == 0 ? null : new DataSlice(offset, length));
   }
 
   /// Appends nothing if filters is null or empty.

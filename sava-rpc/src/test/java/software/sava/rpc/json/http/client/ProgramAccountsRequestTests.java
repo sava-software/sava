@@ -2,6 +2,7 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.rpc.DataSlice;
 import software.sava.core.rpc.Filter;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.request.RpcEncoding;
@@ -9,14 +10,18 @@ import software.sava.rpc.json.http.response.ZstdDecompressor;
 
 import java.math.BigInteger;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
+import java.util.function.BiFunction;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /// getProgramAccounts is the one request this client builds by hand rather than
 /// from a format string, and it is the one where a malformed body is expensive: a
 /// dropped filter turns a targeted query into a full program scan, and a wrong
-/// dataSlice silently returns the wrong bytes.
+/// dataSlice silently returns the wrong bytes. The deprecated `dataSliceLength` builder method
+/// and accessors stay pinned here until their removal.
+@SuppressWarnings("removal")
 final class ProgramAccountsRequestTests {
 
   private static final PublicKey PROGRAM_ID =
@@ -78,7 +83,7 @@ final class ProgramAccountsRequestTests {
   @Test
   void dataSliceLengthTakesOffsetFirst() {
     final var body = json(builder().encoding(RpcEncoding.base64).dataSliceLength(8, 32).createRequest());
-    assertTrue(body.contains("\"dataSlice\":{\"length\":32,\"offset\":8}"), body);
+    assertTrue(body.contains("\"dataSlice\":{\"offset\":8,\"length\":32}"), body);
   }
 
   /// A zero length means "whole account", so the slice must be dropped rather
@@ -89,7 +94,7 @@ final class ProgramAccountsRequestTests {
     assertFalse(whole.contains("dataSlice"), whole);
 
     final var sliced = json(builder().encoding(RpcEncoding.base64).dataSliceLength(8, 32).createRequest());
-    assertTrue(sliced.contains("\"dataSlice\":{\"length\":32,\"offset\":8}"), sliced);
+    assertTrue(sliced.contains("\"dataSlice\":{\"offset\":8,\"length\":32}"), sliced);
   }
 
   @Test
@@ -155,7 +160,7 @@ final class ProgramAccountsRequestTests {
     assertTrue(body.contains("\"encoding\":\"base64+zstd\""), body);
     assertTrue(body.contains("\"commitment\":\"processed\""), body);
     assertTrue(body.contains("\"minContextSlot\":1"), body);
-    assertTrue(body.contains("\"dataSlice\":{\"length\":16,\"offset\":4}"), body);
+    assertTrue(body.contains("\"dataSlice\":{\"offset\":4,\"length\":16}"), body);
     assertTrue(body.contains("\"dataSize\":165"), body);
   }
 
@@ -191,6 +196,101 @@ final class ProgramAccountsRequestTests {
     assertEquals(RpcEncoding.base64, request.encoding());
     assertSame(zstdDecompressor, request.zstdDecompressor());
     assertEquals(Duration.ofSeconds(45), request.requestTimeout());
+  }
+
+  @Test
+  void dataSliceIsSerializedOffsetFirstAndReadBack() {
+    final var request = builder().encoding(RpcEncoding.base64).dataSlice(new DataSlice(8, 32)).createRequest();
+    assertTrue(json(request).contains("\"dataSlice\":{\"offset\":8,\"length\":32}"), json(request));
+    assertEquals(new DataSlice(8, 32), request.dataSlice());
+    assertEquals(32, request.dataSliceLength());
+    assertEquals(8, request.dataSliceOffset());
+  }
+
+  /// A `DataSlice` is literal: the empty slice is sent as a zero-length window, and only a
+  /// null slice omits the member.
+  @Test
+  void emptyDataSliceIsSentLiterallyAndNullIsOmitted() {
+    final var empty = builder().encoding(RpcEncoding.base64).dataSlice(DataSlice.EMPTY).createRequest();
+    assertTrue(json(empty).contains("\"dataSlice\":{\"offset\":0,\"length\":0}"), json(empty));
+    assertEquals(DataSlice.EMPTY, empty.dataSlice());
+    // the legacy int view cannot tell a zero-length window from no slice
+    assertEquals(0, empty.dataSliceLength());
+    assertEquals(0, empty.dataSliceOffset());
+
+    final var whole = builder().encoding(RpcEncoding.base64).dataSlice(new DataSlice(8, 32)).dataSlice(null).createRequest();
+    assertFalse(json(whole).contains("dataSlice"), json(whole));
+    assertNull(whole.dataSlice());
+    assertEquals(0, whole.dataSliceLength());
+    assertEquals(0, whole.dataSliceOffset());
+  }
+
+  @Test
+  void legacyDataSliceLengthMapsOntoTheSlice() {
+    assertEquals(new DataSlice(8, 32),
+        builder().encoding(RpcEncoding.base64).dataSliceLength(8, 32).createRequest().dataSlice());
+    final var whole = builder().encoding(RpcEncoding.base64).dataSliceLength(64, 0).createRequest();
+    assertNull(whole.dataSlice(), "a zero legacy length is the whole account");
+    assertFalse(json(whole).contains("dataSlice"), json(whole));
+    // 25.13.0 echoed 64 here: the offset of a zero-length legacy slice never reached the node and is no longer stored
+    assertEquals(0, whole.dataSliceOffset());
+    assertEquals(0, whole.dataSliceLength());
+    assertThrows(IllegalArgumentException.class, () -> builder().dataSliceLength(-1, 4));
+    assertThrows(IllegalArgumentException.class, () -> builder().dataSliceLength(0, -4));
+  }
+
+  /// An implementation written against 25.13.0 knows only the int accessors; the interface
+  /// derives its slice from them with the legacy zero sentinel.
+  private record LegacyImplementer(int dataSliceLength, int dataSliceOffset) implements ProgramAccountsRequest<byte[]> {
+
+    @Override
+    public String toJson(final long requestId, final Commitment commitment) {
+      return "";
+    }
+
+    @Override
+    public Duration requestTimeout() {
+      return null;
+    }
+
+    @Override
+    public PublicKey programId() {
+      return PROGRAM_ID;
+    }
+
+    @Override
+    public Commitment commitment() {
+      return null;
+    }
+
+    @Override
+    public BigInteger minContextSlot() {
+      return null;
+    }
+
+    @Override
+    public Collection<Filter> filters() {
+      return null;
+    }
+
+    @Override
+    public RpcEncoding encoding() {
+      return RpcEncoding.base64;
+    }
+
+    @Override
+    public BiFunction<PublicKey, byte[], byte[]> factory() {
+      return (_, data) -> data;
+    }
+  }
+
+  @Test
+  void dataSliceDerivesFromTheLegacyAccessorsForOlderImplementations() {
+    assertNull(new LegacyImplementer(0, 0).dataSlice());
+    assertNull(new LegacyImplementer(0, 64).dataSlice(), "a zero legacy length is the whole account whatever the offset");
+    assertEquals(new DataSlice(8, 32), new LegacyImplementer(32, 8).dataSlice());
+    assertEquals(new DataSlice(0, 1), new LegacyImplementer(1, 0).dataSlice());
+    assertThrows(IllegalArgumentException.class, () -> new LegacyImplementer(32, -1).dataSlice());
   }
 
   @Test
