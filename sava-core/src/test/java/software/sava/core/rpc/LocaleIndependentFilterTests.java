@@ -23,14 +23,17 @@ final class LocaleIndependentFilterTests {
     final var formatLocale = Locale.getDefault(Locale.Category.FORMAT);
     final String dataSize;
     final String memCmp;
+    final String dataSlice;
     Locale.setDefault(Locale.Category.FORMAT, NON_ASCII_DIGITS);
     try {
       dataSize = Filter.createDataSizeFilter(165).toJson();
       memCmp = Filter.createMemCompFilter(32, key).toJson();
+      dataSlice = new DataSlice(8, 32).toJson();
     } finally {
       Locale.setDefault(Locale.Category.FORMAT, formatLocale);
     }
     assertEquals("{\"dataSize\":165}", dataSize);
     assertEquals("{\"memcmp\":{\"offset\":32,\"bytes\":\"" + key.toBase58() + "\"}}", memCmp);
+    assertEquals("{\"offset\":8,\"length\":32}", dataSlice);
   }
 }
