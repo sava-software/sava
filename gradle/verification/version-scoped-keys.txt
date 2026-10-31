@@ -1,6 +1,7 @@
 # Signing keys that ../verification-metadata.xml trusts only for exact versions.
 # The verificationPolicy check (part of check) fails when a rule for one of these keys has
-# no version, and when a key that is not listed here has one. One key per line:
+# no version or is a regex, when a key that is not listed here has one, and when a listed
+# key is used by no rule any more. One key per line:
 # <fingerprint> <why it stays version-scoped>
 #
 # Not listed, by decision: seven keys are trusted for their groups or modules with no version
@@ -19,8 +20,9 @@
 18CD85CBC5C1DB1684C5E59FA8E3B39F19E1CCE7 PIT signer, publisher identity unauthenticated
 AC1A3DD4471FE0F6EA28300F1BA25353622A192B ArcMutate signer, publisher identity unauthenticated
 
-# Keys that signed old releases in the graph and must not vouch for new ones: their
-# owners release with other keys now, so a new version under them is a reason to stop.
+# Keys that signed old releases in the graph and must not vouch for new ones: expired keys,
+# DSA-1024 keys (about 80 bits of security, whoever still signs with them), revoked keys and
+# retired release managers' keys; a new version under any of them is a reason to stop.
 1BD97A6A154E7810EE0BC832E2F38302C8075E3D Gradle Inc. publishing key, revoked 2026-08-08 as superseded (gradle.org/keys); signed gradle-kotlin-dsl-plugins 6.7.6 and foojay-resolver 1.0.0 while active
 0CDE80149711EB46DFF17AE421A24B3F8B0F594A expired key
 808D78B17A5A2D7C3668E31FBFFC9B54721244AD expired key
