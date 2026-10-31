@@ -30,7 +30,10 @@ dependency verification refuses them; `--dependency-verification lenient` report
 instead of failing. Pass it with the property and for nothing else (with the property in
 `~/.gradle/gradle.properties`, on every command), never set
 `org.gradle.dependency.verification` in a user-wide `gradle.properties`, and never commit
-trust for `0.0.0-test` (`verificationPolicy` rejects a `component` pin of it). **The publish
+trust for `0.0.0-test` (`verificationPolicy` rejects a `component` pin of it). An `includeBuild`
+of a sibling repository takes the same flag and gets no trust of its own: the root policy
+governs the whole composite, the sibling's own build logic included, and CI never resolves
+that graph. **The publish
 is not automatic** — re-run it after every sava-build edit, or the build silently keeps the
 previously published jar. When done, drop the
 property and the flag and bump the pinned versions in `settings.gradle.kts` to the
