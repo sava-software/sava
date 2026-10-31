@@ -31,9 +31,9 @@ instead of failing. Pass it with the property and for nothing else (with the pro
 `~/.gradle/gradle.properties`, on every command), never set
 `org.gradle.dependency.verification` in a user-wide `gradle.properties`, and never commit
 trust for `0.0.0-test` (`verificationPolicy` rejects a `component` pin of it). An `includeBuild`
-of a sibling repository takes the same flag and gets no trust of its own: the root policy
-governs the whole composite, the sibling's own build logic included, and CI never resolves
-that graph. **The publish
+of a sibling repository is verified under this policy too, its own build logic included, and
+gets no trust of its own, since CI never resolves that graph; a refusal there is answered with
+the same flag on that run, never with a rule. **The publish
 is not automatic** — re-run it after every sava-build edit, or the build silently keeps the
 previously published jar. When done, drop the
 property and the flag and bump the pinned versions in `settings.gradle.kts` to the
