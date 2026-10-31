@@ -2,9 +2,20 @@
 # The verificationPolicy check (part of check) fails when a rule for one of these keys has
 # no version, and when a key that is not listed here has one. One key per line:
 # <fingerprint> <why it stays version-scoped>
+#
+# Not listed, by decision: seven keys are trusted for their groups or modules with no version
+# on the corroboration of gradle/gradle's own policy alone, no publisher source having been
+# found for them (audited 2026-10-31): Aleksey Shipilev's 019082BC00E0324E2AEF4CF00D3B328562A119A7
+# (jmh), the javaparser key 6DE9B8077FBB2F8A019F4904BD17A565509DEE20, Eamonn McManus's
+# C7BE5BCC9FEC15518CFDA882B0F3710FA64900E7 (gson), the Airlift bot's
+# 64EE0DF33CBEB345471E1233824B40F0D3D8E241, the Spock robot's
+# 76E94E8FF0AB5AF3B6F8366972FEFD1572EB75E1, AssertJ's BE685132AFD2740D9095F9040CC0B712FEE75827
+# and the Kotlin libraries release subkey E7DC75FC24FB3C8DFE8086AD3D5839A2262CBBFB (kotlinx).
 
-# Publisher keys not independently authenticated: no publisher-published fingerprint,
-# GitHub-registered key or verified identity was found. A tool bump moves the version.
+# Signers listed as unauthenticated: no publisher source was found for them (what counts as
+# one, and what a release under such a key means, is sava-build's README, "Verifying sava
+# artifacts"). A bump under one moves the version after the release is checked, unless the
+# key's line gives a reason to stop.
 18CD85CBC5C1DB1684C5E59FA8E3B39F19E1CCE7 PIT signer, publisher identity unauthenticated
 AC1A3DD4471FE0F6EA28300F1BA25353622A192B ArcMutate signer, publisher identity unauthenticated
 

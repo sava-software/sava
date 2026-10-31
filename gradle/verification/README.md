@@ -26,13 +26,16 @@ provenance of sava's own artifacts.
   release signed by the same key passes without an edit. Most of these keys also appear in
   gradle/gradle's own policy. The Sava release key `01870AD9C9DFBB1F3502D06FB89447F3AD5E2ABF`
   is the one sava-build's README documents, and the Jetty, OpenTelemetry, Apache parent and
-  Jazzer keys match their publishers' key lists. Gradle's own publishing key also covers the
-  Gradle sources IntelliJ downloads for editing build scripts.
+  Jazzer keys match their publishers' key lists; seven keys (jmh, javaparser, gson, airlift,
+  spock, assertj and kotlinx) rest on gradle/gradle's corroboration alone, and the
+  version-scoped list's header names them. Gradle's
+  own publishing key also covers the Gradle sources IntelliJ downloads for editing build
+  scripts. What counts as a publisher source, and when gradle/gradle's corroboration stands in
+  for one, is sava-build's README ("The policy and what it trusts").
 - **Keys listed in [`version-scoped-keys.txt`](version-scoped-keys.txt)**, trusted only for
-  the exact versions in the policy. These are the PIT and ArcMutate signers, whose publisher
-  identity could not be authenticated (no publisher-published fingerprint, GitHub-registered
-  key or verified key-server identity), and keys that signed old releases and must not vouch
-  for new ones: expired keys, DSA-1024 keys and retired release managers' keys.
+  the exact versions in the policy. These are the PIT and ArcMutate signers, for whose
+  publisher no source was found, and keys that signed old releases and must not vouch for new
+  ones: expired keys, DSA-1024 keys and retired release managers' keys.
 - **SHA-256 checksums** for artifacts that are not signed, such as the jmh plugin and the
   kotlin-dsl marker from the Gradle Plugin Portal and the antlr libraries PIT depends on.
 - **Nothing else.** Key servers are disabled, so keys come only from the committed keyring,
@@ -72,16 +75,19 @@ the guard.
 2. A "Dependency verification failed" report names each refused artifact and the reason.
    - **A PIT or ArcMutate bump**: check the release, then change the `version` on that key's
      rule.
-   - **A new release signed by any other key in `version-scoped-keys.txt`** (an expired,
-     DSA-1024 or retired release manager's key): stop and find out why an old key signed a
-     new release. Do not extend its version. An existing old release that a dependency
-     change brings into the graph under one of these keys can be added as another exact
-     version once checked.
+   - **A new release signed by a key that must not vouch** (an expired, DSA-1024 or retired
+     release manager's key): stop and find out why an old key signed a new release. Do not
+     extend its version. An existing old release that a dependency change brings into the
+     graph under one of these keys can be added as another exact version once checked. A
+     library signer the list holds as unauthenticated, should one ever join the two tool
+     signers, follows the tool bump above instead.
    - **A new signing key**: confirm the fingerprint from the publisher (its KEYS file, README
-     or site), never from a key server alone, then add a `trusted-key` scoped to the
-     publisher's group or module, by its 40-hex fingerprint (Gradle refuses a shorter id), and
-     add the public key to the keyring: step 3 downloads a missing key while writing and
-     `--export-keys` writes it there.
+     or site, or a maintainer's GitHub-registered key), never from a key server alone, then
+     add a `trusted-key` scoped to the publisher's group or module, by its 40-hex fingerprint
+     (Gradle refuses a shorter id), and add the public key to the keyring: step 3 downloads a
+     missing key while writing and `--export-keys` writes it there. With no publisher source,
+     sava-build's README (step 2 of "Adopting and updating") says when gradle/gradle's
+     corroboration keeps the key version-free and when it goes on the list instead.
    - **An unsigned artifact**: review it, then pin its SHA-256 in a `component` entry.
 
 3. Gradle can draft these entries. Run it on a clean tree from the checkout root (from
