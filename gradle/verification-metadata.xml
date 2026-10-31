@@ -17,8 +17,8 @@
             <trusting group="org.pitest" name="pitest-junit5-plugin" version="1.2.3"/>
          </trusted-key>
          <trusted-key id="1BD97A6A154E7810EE0BC832E2F38302C8075E3D">
-            <trusting group="org.gradle.kotlin" name="gradle-kotlin-dsl-plugins"/>
-            <trusting group="org.gradle.toolchains" name="foojay-resolver"/>
+            <trusting group="org.gradle.kotlin" name="gradle-kotlin-dsl-plugins" version="6.7.6"/>
+            <trusting group="org.gradle.toolchains" name="foojay-resolver" version="1.0.0"/>
          </trusted-key>
          <trusted-key id="1D217F8475EEE9F19AB8DD6B793FD5751A0F0780" group="com.squareup.okio"/>
          <trusted-key id="28118C070CB22A0175A2E8D43D12CA2AC19F3181">
