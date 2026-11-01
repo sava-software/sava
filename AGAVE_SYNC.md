@@ -277,8 +277,11 @@ match. `get_spl_token_owner_filter` and `get_spl_token_mint_filter` (`agave:rpc/
 count it as the token-account requisite for the by-owner and by-mint secondary indexes, alongside
 a 165-byte `dataSize` and the Token-2022 account-type memcmp. `programSubscribe`
 (`agave:rpc/src/rpc_pubsub.rs`) runs the same `verify_filters` and `optimize_filters`, and
-`MAX_GET_PROGRAM_ACCOUNT_FILTERS` = 4 (`agave:rpc-client-types/src/request.rs`) bounds both. Read
-at agave `2e935dae83`.
+`MAX_GET_PROGRAM_ACCOUNT_FILTERS` = 4 (`agave:rpc-client-types/src/request.rs`) bounds both. Of the
+two, only `getProgramAccounts` consults the secondary indexes: a program subscription takes the
+accounts the bank modified since its parent (`get_program_accounts_modified_since_parent`,
+`agave:rpc/src/rpc_subscriptions.rs`) and applies the filters to that set, so no index is
+consulted. Read at agave `2e935dae83`.
 
 Observed 2026-11-01 on `https://api.devnet.solana.com` (node `ams261`, solana-core 4.4.0-beta.1,
 feature set 3993424257). `getProgramAccounts` with

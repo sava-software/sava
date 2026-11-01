@@ -57,7 +57,11 @@ is `0`: `null` there means "not served", not "none". `rewards()` is `null` in `a
 the request's `rewards` is `false` and a list otherwise; in `full` mode the node answers
 `"rewards":null` when rewards are not requested, which reads as an empty list, so there it is
 never `null`. `TxAccountKey.source()` is `null` when the node omits or nulls the member, or serves
-a value this release does not recognize.
+a value this release does not recognize. The record's canonical constructor is the five-component
+one, so a deconstruction pattern written against the released two-component shape,
+`case BlockTx(var meta, var data)`, stops compiling; the kept two-argument constructor leaves
+construction sites compiling and already compiled consumers running. That source break is
+accepted, not an oversight.
 
 ## Unsigned longs and sentinel zeros
 
