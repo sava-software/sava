@@ -73,9 +73,39 @@ public interface SolanaRpcClient {
 
   CompletableFuture<FeeForMessage> getFeeForMessage(final Commitment commitment, final String base64Msg);
 
+  /// Prices the message against the client's default commitment; see
+  /// [#getFeeForMessage(Commitment,String,BigInteger)].
+  default CompletableFuture<FeeForMessage> getFeeForMessage(final String base64Msg, final BigInteger minContextSlot) {
+    return getFeeForMessage(defaultCommitment(), base64Msg, minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before the fee is
+  /// read from it: the node decodes the message first, then checks the minimum (agave master also
+  /// sanitizes the message before the check; the released 4.3 and 4.4 nodes check it before
+  /// sanitizing). A node behind the minimum fails with [RpcCustomError.MinContextSlotNotReached]
+  /// carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<FeeForMessage> getFeeForMessage(final Commitment commitment,
+                                                    final String base64Msg,
+                                                    final BigInteger minContextSlot);
+
   CompletableFuture<LatestBlockHash> getLatestBlockHash();
 
   CompletableFuture<LatestBlockHash> getLatestBlockHash(final Commitment commitment);
+
+  /// Reads the blockhash at the client's default commitment; see
+  /// [#getLatestBlockHash(Commitment,BigInteger)].
+  default CompletableFuture<LatestBlockHash> getLatestBlockHash(final BigInteger minContextSlot) {
+    return getLatestBlockHash(defaultCommitment(), minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before its latest
+  /// blockhash is read; a node behind the minimum fails with
+  /// [RpcCustomError.MinContextSlotNotReached] carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<LatestBlockHash> getLatestBlockHash(final Commitment commitment, final BigInteger minContextSlot);
 
   CompletableFuture<NodeHealth> getHealth(final Duration requestTimeout);
 
@@ -276,6 +306,21 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Lamports> getBalance(final Commitment commitment, final PublicKey account);
 
+  /// Reads the balance at the client's default commitment; see
+  /// [#getBalance(Commitment,PublicKey,BigInteger)].
+  default CompletableFuture<Lamports> getBalance(final PublicKey account, final BigInteger minContextSlot) {
+    return getBalance(defaultCommitment(), account, minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before the balance
+  /// is read from it; a node behind the minimum fails with [RpcCustomError.MinContextSlotNotReached]
+  /// carrying its slot. Every public cluster enforces this, it predates Agave 4.4.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<Lamports> getBalance(final Commitment commitment,
+                                         final PublicKey account,
+                                         final BigInteger minContextSlot);
+
   CompletableFuture<Block> getBlock(final long slot);
 
   CompletableFuture<Block> getBlock(final long slot, final BlockTxDetails blockTxDetails);
@@ -307,6 +352,19 @@ public interface SolanaRpcClient {
 
   CompletableFuture<BlockHeight> getBlockHeight(final Commitment commitment);
 
+  /// Reads the height at the client's default commitment; see
+  /// [#getBlockHeight(Commitment,BigInteger)].
+  default CompletableFuture<BlockHeight> getBlockHeight(final BigInteger minContextSlot) {
+    return getBlockHeight(defaultCommitment(), minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before its height
+  /// is read; a node behind the minimum fails with [RpcCustomError.MinContextSlotNotReached]
+  /// carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<BlockHeight> getBlockHeight(final Commitment commitment, final BigInteger minContextSlot);
+
   CompletableFuture<BlockProduction> getBlockProduction();
 
   CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment);
@@ -333,9 +391,63 @@ public interface SolanaRpcClient {
 
   CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot, final long endSlot);
 
+  /// Lists the blocks from `startSlot` at the client's default commitment; see
+  /// [#getBlocks(Commitment,long,long,BigInteger)].
+  default CompletableFuture<long[]> getBlocks(final long startSlot, final BigInteger minContextSlot) {
+    return getBlocks(defaultCommitment(), startSlot, minContextSlot);
+  }
+
+  /// Lists the blocks from `startSlot` to the node's latest slot at `commitment`; see
+  /// [#getBlocks(Commitment,long,long,BigInteger)].
+  CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot, final BigInteger minContextSlot);
+
+  /// Lists the blocks from `startSlot` to `endSlot` at the client's default commitment; see
+  /// [#getBlocks(Commitment,long,long,BigInteger)].
+  default CompletableFuture<long[]> getBlocks(final long startSlot,
+                                              final long endSlot,
+                                              final BigInteger minContextSlot) {
+    return getBlocks(defaultCommitment(), startSlot, endSlot, minContextSlot);
+  }
+
+  /// Requires the node's view at `commitment` to have reached `minContextSlot`: under
+  /// [Commitment#FINALIZED] that view is the highest super-majority root, under
+  /// [Commitment#CONFIRMED] the confirmed bank's slot. A node behind the minimum fails with
+  /// [RpcCustomError.MinContextSlotNotReached] carrying that slot. The method rejects
+  /// [Commitment#PROCESSED] whatever the minimum. The end slot is still clamped to 500,000 slots
+  /// after `startSlot`.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<long[]> getBlocks(final Commitment commitment,
+                                      final long startSlot,
+                                      final long endSlot,
+                                      final BigInteger minContextSlot);
+
   CompletableFuture<long[]> getBlocksWithLimit(final long startSlot, final long limit);
 
   CompletableFuture<long[]> getBlocksWithLimit(final Commitment commitment, final long startSlot, final long limit);
+
+  /// Lists up to `limit` blocks from `startSlot` at the client's default commitment; see
+  /// [#getBlocksWithLimit(Commitment,long,long,BigInteger)].
+  default CompletableFuture<long[]> getBlocksWithLimit(final long startSlot,
+                                                       final long limit,
+                                                       final BigInteger minContextSlot) {
+    return getBlocksWithLimit(defaultCommitment(), startSlot, limit, minContextSlot);
+  }
+
+  /// Requires the node's view at `commitment` to have reached `minContextSlot`: under
+  /// [Commitment#FINALIZED] the highest super-majority root, under [Commitment#CONFIRMED] the
+  /// confirmed bank, checked once the finalized blocks have been read from the blockstore, whether
+  /// or not confirmed blocks are then appended. On a node with BigTable configured, a `startSlot`
+  /// older than its blockstore is answered from BigTable without that check under
+  /// [Commitment#CONFIRMED] on every agave version, and under [Commitment#FINALIZED] on the released
+  /// 4.3 and 4.4 nodes, which agave master has since moved the finalized check ahead of. The method
+  /// rejects [Commitment#PROCESSED] whatever the minimum, and the limit is still clamped to 500,000.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<long[]> getBlocksWithLimit(final Commitment commitment,
+                                               final long startSlot,
+                                               final long limit,
+                                               final BigInteger minContextSlot);
 
   CompletableFuture<Instant> getBlockTime(final long slot);
 
@@ -344,6 +456,19 @@ public interface SolanaRpcClient {
   CompletableFuture<EpochInfo> getEpochInfo();
 
   CompletableFuture<EpochInfo> getEpochInfo(final Commitment commitment);
+
+  /// Reads the epoch at the client's default commitment; see
+  /// [#getEpochInfo(Commitment,BigInteger)].
+  default CompletableFuture<EpochInfo> getEpochInfo(final BigInteger minContextSlot) {
+    return getEpochInfo(defaultCommitment(), minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before its epoch
+  /// is read; a node behind the minimum fails with [RpcCustomError.MinContextSlotNotReached]
+  /// carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<EpochInfo> getEpochInfo(final Commitment commitment, final BigInteger minContextSlot);
 
   CompletableFuture<EpochSchedule> getEpochSchedule();
 
@@ -1404,15 +1529,53 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Long> getSlot(final Commitment commitment);
 
+  /// Reads the slot at the client's default commitment; see [#getSlot(Commitment,BigInteger)].
+  default CompletableFuture<Long> getSlot(final BigInteger minContextSlot) {
+    return getSlot(defaultCommitment(), minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot`, so the returned
+  /// slot is never below it; a node behind the minimum fails with
+  /// [RpcCustomError.MinContextSlotNotReached] carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<Long> getSlot(final Commitment commitment, final BigInteger minContextSlot);
+
   CompletableFuture<PublicKey> getSlotLeader();
 
   CompletableFuture<PublicKey> getSlotLeader(final Commitment commitment);
+
+  /// Reads the leader at the client's default commitment; see
+  /// [#getSlotLeader(Commitment,BigInteger)].
+  default CompletableFuture<PublicKey> getSlotLeader(final BigInteger minContextSlot) {
+    return getSlotLeader(defaultCommitment(), minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before its leader
+  /// is read; a node behind the minimum fails with [RpcCustomError.MinContextSlotNotReached]
+  /// carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<PublicKey> getSlotLeader(final Commitment commitment, final BigInteger minContextSlot);
 
   CompletableFuture<List<PublicKey>> getSlotLeaders(final long from, final int limit);
 
   CompletableFuture<Lamports> getStakeMinimumDelegation();
 
   CompletableFuture<Lamports> getStakeMinimumDelegation(final Commitment commitment);
+
+  /// Reads the minimum at the client's default commitment; see
+  /// [#getStakeMinimumDelegation(Commitment,BigInteger)].
+  default CompletableFuture<Lamports> getStakeMinimumDelegation(final BigInteger minContextSlot) {
+    return getStakeMinimumDelegation(defaultCommitment(), minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot`; the value itself
+  /// is a cluster constant, so the minimum only pins the response context. A node behind the
+  /// minimum fails with [RpcCustomError.MinContextSlotNotReached] carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<Lamports> getStakeMinimumDelegation(final Commitment commitment, final BigInteger minContextSlot);
 
   CompletableFuture<Supply> getSupply();
 
@@ -1483,6 +1646,19 @@ public interface SolanaRpcClient {
 
   CompletableFuture<Long> getTransactionCount(final Commitment commitment);
 
+  /// Reads the count at the client's default commitment; see
+  /// [#getTransactionCount(Commitment,BigInteger)].
+  default CompletableFuture<Long> getTransactionCount(final BigInteger minContextSlot) {
+    return getTransactionCount(defaultCommitment(), minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before its count is
+  /// read; a node behind the minimum fails with [RpcCustomError.MinContextSlotNotReached] carrying
+  /// its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<Long> getTransactionCount(final Commitment commitment, final BigInteger minContextSlot);
+
   CompletableFuture<Version> getVersion();
 
   CompletableFuture<VoteAccounts> getVoteAccounts();
@@ -1501,6 +1677,22 @@ public interface SolanaRpcClient {
   CompletableFuture<ContextBoolVal> isBlockHashValid(final String b58BlockHash);
 
   CompletableFuture<ContextBoolVal> isBlockHashValid(final Commitment commitment, final String b58BlockHash);
+
+  /// Checks the blockhash at the client's default commitment; see
+  /// [#isBlockHashValid(Commitment,String,BigInteger)].
+  default CompletableFuture<ContextBoolVal> isBlockHashValid(final String b58BlockHash,
+                                                             final BigInteger minContextSlot) {
+    return isBlockHashValid(defaultCommitment(), b58BlockHash, minContextSlot);
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before the
+  /// blockhash is looked up in it; a node behind the minimum fails with
+  /// [RpcCustomError.MinContextSlotNotReached] carrying its slot.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<ContextBoolVal> isBlockHashValid(final Commitment commitment,
+                                                     final String b58BlockHash,
+                                                     final BigInteger minContextSlot);
 
   CompletableFuture<Long> minimumLedgerSlot();
 
@@ -1550,6 +1742,27 @@ public interface SolanaRpcClient {
                                             final String base64SignedTx,
                                             final int maxRetries);
 
+  /// Submits with preflight at the client's default commitment; see
+  /// [#sendTransaction(Commitment,String,int,BigInteger)].
+  default CompletableFuture<String> sendTransaction(final String base64SignedTx,
+                                                    final int maxRetries,
+                                                    final BigInteger minContextSlot) {
+    return sendTransaction(defaultCommitment(), base64SignedTx, maxRetries, minContextSlot);
+  }
+
+  /// Requires the bank the node preflights against, selected by `preflightCommitment`, to have
+  /// reached `minContextSlot`. The node checks it after decoding the transaction and before
+  /// verifying signatures or simulating (agave master also sanitizes the transaction before the
+  /// check; the released 4.3 and 4.4 nodes check it before sanitizing), and a node behind the
+  /// minimum fails with [RpcCustomError.MinContextSlotNotReached] carrying its slot instead of
+  /// forwarding anything.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
+                                            final String base64SignedTx,
+                                            final int maxRetries,
+                                            final BigInteger minContextSlot);
+
   /// Submits without preflight, with `maxRetries` of `0` and preflight commitment
   /// [Commitment#PROCESSED].
   ///
@@ -1571,6 +1784,25 @@ public interface SolanaRpcClient {
   CompletableFuture<String> sendTransactionSkipPreflight(final Commitment preflightCommitment,
                                                          final String base64SignedTx,
                                                          final int maxRetries);
+
+  /// Submits without preflight at [Commitment#PROCESSED]; see
+  /// [#sendTransactionSkipPreflight(Commitment,String,int,BigInteger)].
+  default CompletableFuture<String> sendTransactionSkipPreflight(final String base64SignedTx,
+                                                                 final int maxRetries,
+                                                                 final BigInteger minContextSlot) {
+    return sendTransactionSkipPreflight(PROCESSED, base64SignedTx, maxRetries, minContextSlot);
+  }
+
+  /// Skipping preflight does not skip the minimum: the node still resolves the transaction and its
+  /// blockhash against its processed bank, which must have reached `minContextSlot`, else the call
+  /// fails with [RpcCustomError.MinContextSlotNotReached] before anything is forwarded. Agave
+  /// ignores `preflightCommitment` when preflight is skipped; it is still sent, as before.
+  ///
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<String> sendTransactionSkipPreflight(final Commitment preflightCommitment,
+                                                         final String base64SignedTx,
+                                                         final int maxRetries,
+                                                         final BigInteger minContextSlot);
 
   /// Routes to [#sendTransactionSkipPreflight(String)] or [#sendTransaction(String)], so
   /// `skipPreFlight` also picks the `maxRetries` default (`0` when skipping, `1` otherwise) and
@@ -1668,4 +1900,37 @@ public interface SolanaRpcClient {
                                                       final boolean replaceRecentBlockhash,
                                                       final boolean innerInstructions,
                                                       final SequencedCollection<PublicKey> accounts);
+
+  /// Serializes `transaction` and simulates it; see
+  /// [#simulateTransaction(Commitment,String,boolean,boolean,SequencedCollection,BigInteger)].
+  default CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
+                                                              final Transaction transaction,
+                                                              final boolean replaceRecentBlockhash,
+                                                              final boolean innerInstructions,
+                                                              final SequencedCollection<PublicKey> accounts,
+                                                              final BigInteger minContextSlot) {
+    return simulateTransaction(
+        commitment,
+        transaction.base64EncodeToString(),
+        replaceRecentBlockhash,
+        innerInstructions,
+        accounts,
+        minContextSlot
+    );
+  }
+
+  /// Requires the bank selected by `commitment` to have reached `minContextSlot` before the
+  /// transaction is simulated against it; the node checks it after decoding the transaction (agave
+  /// master also sanitizes it before the check; the released 4.3 and 4.4 nodes check it before
+  /// sanitizing), and a node behind the minimum fails with
+  /// [RpcCustomError.MinContextSlotNotReached] carrying its slot.
+  ///
+  /// @param accounts       the post-simulation account states to return, `null` or empty for none
+  /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
+  CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
+                                                      final String base64EncodedTx,
+                                                      final boolean replaceRecentBlockhash,
+                                                      final boolean innerInstructions,
+                                                      final SequencedCollection<PublicKey> accounts,
+                                                      final BigInteger minContextSlot);
 }

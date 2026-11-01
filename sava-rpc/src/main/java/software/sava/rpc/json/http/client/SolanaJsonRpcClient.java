@@ -251,11 +251,30 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<Lamports> getBalance(final Commitment commitment, final PublicKey account) {
-    return sendPostRequest(CONTEXT_LONG_VAL, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBalance","params":["%s",{"commitment":"%s"}]}""",
-            id.incrementAndGet(), account, commitment.getValue()
-        )
-    );
+    return getBalance(commitment, account, null);
+  }
+
+  @Override
+  public CompletableFuture<Lamports> getBalance(final Commitment commitment,
+                                                final PublicKey account,
+                                                final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(160);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getBalance","params":["%s",{"commitment":"%s\"""",
+        id.incrementAndGet(), account, commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequest(CONTEXT_LONG_VAL, builder.append("}]}").toString());
+  }
+
+  /// The body of a request whose only parameter is agave's `RpcContextConfig`: the commitment and an
+  /// optional minimum context slot, which is omitted when null.
+  private String contextConfigBody(final String method, final Commitment commitment, final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(128);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"%s","params":[{"commitment":"%s\"""",
+        id.incrementAndGet(), method, commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    return builder.append("}]}").toString();
   }
 
   @Override
@@ -298,11 +317,12 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<BlockHeight> getBlockHeight(final Commitment commitment) {
-    return sendPostRequest(BLOCK_HEIGHT, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlockHeight","params":[{"commitment":"%s"}]}""",
-            id.incrementAndGet(), commitment.getValue()
-        )
-    );
+    return getBlockHeight(commitment, null);
+  }
+
+  @Override
+  public CompletableFuture<BlockHeight> getBlockHeight(final Commitment commitment, final BigInteger minContextSlot) {
+    return sendPostRequest(BLOCK_HEIGHT, contextConfigBody("getBlockHeight", commitment, minContextSlot));
   }
 
   @Override
@@ -370,11 +390,19 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot) {
-    return sendPostRequest(LONG_ARRAY, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,{"commitment":"%s"}]}""",
-            id.incrementAndGet(), startSlot, commitment.getValue()
-        )
-    );
+    return getBlocks(commitment, startSlot, null);
+  }
+
+  @Override
+  public CompletableFuture<long[]> getBlocks(final Commitment commitment,
+                                             final long startSlot,
+                                             final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(128);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,{"commitment":"%s\"""",
+        id.incrementAndGet(), startSlot, commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequest(LONG_ARRAY, builder.append("}]}").toString());
   }
 
   @Override
@@ -384,11 +412,20 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot, final long endSlot) {
-    return sendPostRequest(LONG_ARRAY, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,%d,{"commitment":"%s"}]}""",
-            id.incrementAndGet(), startSlot, Math.min(endSlot, startSlot + 500_000), commitment.getValue()
-        )
-    );
+    return getBlocks(commitment, startSlot, endSlot, null);
+  }
+
+  @Override
+  public CompletableFuture<long[]> getBlocks(final Commitment commitment,
+                                             final long startSlot,
+                                             final long endSlot,
+                                             final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(128);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getBlocks","params":[%d,%d,{"commitment":"%s\"""",
+        id.incrementAndGet(), startSlot, Math.min(endSlot, startSlot + 500_000), commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequest(LONG_ARRAY, builder.append("}]}").toString());
   }
 
   @Override
@@ -400,11 +437,20 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<long[]> getBlocksWithLimit(final Commitment commitment,
                                                       final long startSlot,
                                                       final long limit) {
-    return sendPostRequest(LONG_ARRAY, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getBlocksWithLimit","params":[%d,%d,{"commitment":"%s"}]}""",
-            id.incrementAndGet(), startSlot, Math.min(limit, 500_000), commitment.getValue()
-        )
-    );
+    return getBlocksWithLimit(commitment, startSlot, limit, null);
+  }
+
+  @Override
+  public CompletableFuture<long[]> getBlocksWithLimit(final Commitment commitment,
+                                                      final long startSlot,
+                                                      final long limit,
+                                                      final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(128);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getBlocksWithLimit","params":[%d,%d,{"commitment":"%s\"""",
+        id.incrementAndGet(), startSlot, Math.min(limit, 500_000), commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequest(LONG_ARRAY, builder.append("}]}").toString());
   }
 
   @Override
@@ -430,11 +476,12 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<EpochInfo> getEpochInfo(final Commitment commitment) {
-    return sendPostRequest(EPOCH_INFO, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getEpochInfo","params":[{"commitment":"%s"}]}""",
-            id.incrementAndGet(), commitment.getValue()
-        )
-    );
+    return getEpochInfo(commitment, null);
+  }
+
+  @Override
+  public CompletableFuture<EpochInfo> getEpochInfo(final Commitment commitment, final BigInteger minContextSlot) {
+    return sendPostRequest(EPOCH_INFO, contextConfigBody("getEpochInfo", commitment, minContextSlot));
   }
 
   @Override
@@ -452,11 +499,19 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<FeeForMessage> getFeeForMessage(final Commitment commitment, final String base64Msg) {
-    return sendPostRequest(FEE_FOR_MESSAGE, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getFeeForMessage","params":["%s",{"commitment":"%s"}]}""",
-            id.incrementAndGet(), base64Msg, commitment.getValue()
-        )
-    );
+    return getFeeForMessage(commitment, base64Msg, null);
+  }
+
+  @Override
+  public CompletableFuture<FeeForMessage> getFeeForMessage(final Commitment commitment,
+                                                           final String base64Msg,
+                                                           final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(base64Msg.length() + 128);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getFeeForMessage","params":["%s",{"commitment":"%s\"""",
+        id.incrementAndGet(), base64Msg, commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequest(FEE_FOR_MESSAGE, builder.append("}]}").toString());
   }
 
   @Override
@@ -604,10 +659,15 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<LatestBlockHash> getLatestBlockHash(final Commitment commitment) {
-    return sendPostRequestNoWrap(latestBlockhashResponseParser, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getLatestBlockhash","params":[{"commitment":"%s"}]}""",
-            id.incrementAndGet(), commitment.getValue()
-        )
+    return getLatestBlockHash(commitment, null);
+  }
+
+  @Override
+  public CompletableFuture<LatestBlockHash> getLatestBlockHash(final Commitment commitment,
+                                                               final BigInteger minContextSlot) {
+    return sendPostRequestNoWrap(
+        latestBlockhashResponseParser,
+        contextConfigBody("getLatestBlockhash", commitment, minContextSlot)
     );
   }
 
@@ -1261,11 +1321,12 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<Long> getSlot(final Commitment commitment) {
-    return sendPostRequest(LONG_VAL, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getSlot","params":[{"commitment":"%s"}]}""",
-            id.incrementAndGet(), commitment.getValue()
-        )
-    );
+    return getSlot(commitment, null);
+  }
+
+  @Override
+  public CompletableFuture<Long> getSlot(final Commitment commitment, final BigInteger minContextSlot) {
+    return sendPostRequest(LONG_VAL, contextConfigBody("getSlot", commitment, minContextSlot));
   }
 
   @Override
@@ -1275,11 +1336,12 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<PublicKey> getSlotLeader(final Commitment commitment) {
-    return sendPostRequest(PUBLIC_KEY, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getSlotLeader","params":[{"commitment":"%s"}]}""",
-            id.incrementAndGet(), commitment.getValue()
-        )
-    );
+    return getSlotLeader(commitment, null);
+  }
+
+  @Override
+  public CompletableFuture<PublicKey> getSlotLeader(final Commitment commitment, final BigInteger minContextSlot) {
+    return sendPostRequest(PUBLIC_KEY, contextConfigBody("getSlotLeader", commitment, minContextSlot));
   }
 
   @Override
@@ -1298,11 +1360,13 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<Lamports> getStakeMinimumDelegation(final Commitment commitment) {
-    return sendPostRequest(CONTEXT_LONG_VAL, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getStakeMinimumDelegation","params":[{"commitment":"%s"}]}""",
-            id.incrementAndGet(), commitment.getValue()
-        )
-    );
+    return getStakeMinimumDelegation(commitment, null);
+  }
+
+  @Override
+  public CompletableFuture<Lamports> getStakeMinimumDelegation(final Commitment commitment,
+                                                               final BigInteger minContextSlot) {
+    return sendPostRequest(CONTEXT_LONG_VAL, contextConfigBody("getStakeMinimumDelegation", commitment, minContextSlot));
   }
 
   @Override
@@ -1461,11 +1525,12 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<Long> getTransactionCount(final Commitment commitment) {
-    return sendPostRequest(LONG_VAL, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTransactionCount","params":[{"commitment":"%s"}]}""",
-            id.incrementAndGet(), commitment.getValue()
-        )
-    );
+    return getTransactionCount(commitment, null);
+  }
+
+  @Override
+  public CompletableFuture<Long> getTransactionCount(final Commitment commitment, final BigInteger minContextSlot) {
+    return sendPostRequest(LONG_VAL, contextConfigBody("getTransactionCount", commitment, minContextSlot));
   }
 
   @Override
@@ -1550,11 +1615,19 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
 
   @Override
   public CompletableFuture<ContextBoolVal> isBlockHashValid(final Commitment commitment, final String b58BlockHash) {
-    return sendPostRequest(CONTEXT_BOOL_VAL, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"isBlockhashValid","params":["%s",{"commitment":"%s"}]}""",
-            id.incrementAndGet(), b58BlockHash, commitment.getValue()
-        )
-    );
+    return isBlockHashValid(commitment, b58BlockHash, null);
+  }
+
+  @Override
+  public CompletableFuture<ContextBoolVal> isBlockHashValid(final Commitment commitment,
+                                                            final String b58BlockHash,
+                                                            final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(160);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"isBlockhashValid","params":["%s",{"commitment":"%s\"""",
+        id.incrementAndGet(), b58BlockHash, commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequest(CONTEXT_BOOL_VAL, builder.append("}]}").toString());
   }
 
   @Override
@@ -1622,22 +1695,49 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
                                                    final String base64SignedTx,
                                                    final int maxRetries) {
-    return sendPostRequestNoWrap(sendTxResponseParser, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","preflightCommitment":"%s","maxRetries":%d}]}""",
-            id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries
-        )
-    );
+    return sendTransaction(preflightCommitment, base64SignedTx, maxRetries, null);
+  }
+
+  @Override
+  public CompletableFuture<String> sendTransaction(final Commitment preflightCommitment,
+                                                   final String base64SignedTx,
+                                                   final int maxRetries,
+                                                   final BigInteger minContextSlot) {
+    return sendTransaction(false, preflightCommitment, base64SignedTx, maxRetries, minContextSlot);
   }
 
   @Override
   public CompletableFuture<String> sendTransactionSkipPreflight(final Commitment preflightCommitment,
                                                                 final String base64SignedTx,
                                                                 final int maxRetries) {
-    return sendPostRequestNoWrap(sendTxResponseParser, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64","skipPreflight":true,"preflightCommitment":"%s","maxRetries":%d}]}""",
-            id.incrementAndGet(), base64SignedTx, preflightCommitment.getValue(), maxRetries
-        )
-    );
+    return sendTransactionSkipPreflight(preflightCommitment, base64SignedTx, maxRetries, null);
+  }
+
+  @Override
+  public CompletableFuture<String> sendTransactionSkipPreflight(final Commitment preflightCommitment,
+                                                                final String base64SignedTx,
+                                                                final int maxRetries,
+                                                                final BigInteger minContextSlot) {
+    return sendTransaction(true, preflightCommitment, base64SignedTx, maxRetries, minContextSlot);
+  }
+
+  private CompletableFuture<String> sendTransaction(final boolean skipPreflight,
+                                                    final Commitment preflightCommitment,
+                                                    final String base64SignedTx,
+                                                    final int maxRetries,
+                                                    final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(base64SignedTx.length() + 160);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"sendTransaction","params":["%s",{"encoding":"base64\"""",
+        id.incrementAndGet(), base64SignedTx));
+    if (skipPreflight) {
+      builder.append("""
+          ,"skipPreflight":true""");
+    }
+    builder.append(format("""
+        ,"preflightCommitment":"%s","maxRetries":%d""", preflightCommitment.getValue(), maxRetries));
+    appendMinContextSlot(builder, minContextSlot);
+    return sendPostRequestNoWrap(sendTxResponseParser, builder.append("}]}").toString());
   }
 
   private static String joinSimulationAccounts(final SequencedCollection<PublicKey> accounts) {
@@ -1733,11 +1833,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                              final String base64EncodedTx,
                                                              final boolean replaceRecentBlockhash,
                                                              final boolean innerInstructions) {
-    return sendPostRequest(applyGenericResponseValue((ji, context) -> TxSimulation.parse(List.of(), ji, context)), format("""
-                {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"innerInstructions":%b,"commitment":"%s"}]}""",
-            id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue()
-        )
-    );
+    return simulateTransaction(commitment, base64EncodedTx, replaceRecentBlockhash, innerInstructions, List.of(), null);
   }
 
   @Override
@@ -1746,14 +1842,31 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                                              final boolean replaceRecentBlockhash,
                                                              final boolean innerInstructions,
                                                              final SequencedCollection<PublicKey> accounts) {
-    if (accounts.isEmpty()) {
-      return simulateTransaction(commitment, base64EncodedTx, replaceRecentBlockhash, innerInstructions);
+    return simulateTransaction(commitment, base64EncodedTx, replaceRecentBlockhash, innerInstructions, accounts, null);
+  }
+
+  @Override
+  public CompletableFuture<TxSimulation> simulateTransaction(final Commitment commitment,
+                                                             final String base64EncodedTx,
+                                                             final boolean replaceRecentBlockhash,
+                                                             final boolean innerInstructions,
+                                                             final SequencedCollection<PublicKey> accounts,
+                                                             final BigInteger minContextSlot) {
+    final var builder = new StringBuilder(base64EncodedTx.length() + 256);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"innerInstructions":%b,"commitment":"%s\"""",
+        id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    final SequencedCollection<PublicKey> requested;
+    if (accounts == null || accounts.isEmpty()) {
+      requested = List.of();
+    } else {
+      requested = accounts;
+      builder.append(joinSimulationAccounts(accounts));
     }
-    final var joinedAccounts = joinSimulationAccounts(accounts);
-    return sendPostRequest(applyGenericResponseValue((ji, context) -> TxSimulation.parse(accounts, ji, context)), format("""
-                {"jsonrpc":"2.0","id":%d,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":%b,"innerInstructions":%b,"commitment":"%s"%s}]}""",
-            id.incrementAndGet(), base64EncodedTx, replaceRecentBlockhash, innerInstructions, commitment.getValue(), joinedAccounts
-        )
+    return sendPostRequest(
+        applyGenericResponseValue((ji, context) -> TxSimulation.parse(requested, ji, context)),
+        builder.append("}]}").toString()
     );
   }
 
