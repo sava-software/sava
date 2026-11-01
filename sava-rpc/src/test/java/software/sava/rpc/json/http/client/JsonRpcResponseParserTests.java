@@ -433,6 +433,18 @@ final class JsonRpcResponseParserTests {
     );
   }
 
+  /// An error object without a `data` member attaches nothing: the suppressed list is the
+  /// unreadable-data signal, so a readable error that deferred no data must carry none, or a
+  /// consumer reading that signal would take a plain error for one whose details were lost.
+  @Test
+  void anErrorWithoutDataAttachesNothing() {
+    final var plain = assertThrows(JsonRpcException.class,
+        () -> parseResult(200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32005,\"message\":\"m\"},\"id\":1}"));
+    assertEquals(-32005, plain.code());
+    assertEquals(RpcCustomError.parseError(-32005), plain.customError());
+    assertEquals(0, plain.getSuppressed().length, "nothing was deferred, so nothing is attached");
+  }
+
   /// Under a 2xx, a result member answers whatever sits beside it: an error member beside a
   /// result is never read, and an error object with a null message is still a readable error.
   @Test
