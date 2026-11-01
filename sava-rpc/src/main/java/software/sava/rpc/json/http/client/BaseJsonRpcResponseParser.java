@@ -1,5 +1,6 @@
 package software.sava.rpc.json.http.client;
 
+import software.sava.rpc.json.http.response.HttpResponseException;
 import software.sava.rpc.json.http.response.JsonRpcException;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
@@ -38,7 +39,10 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
       } else if (ji.reset(0).skipUntil("error") == null) {
         throw responseFailure(httpResponse, new String(body));
       } else {
-        final var retryAfter = httpResponse.headers().firstValueAsLong("retry-after");
+        // A decimal delay in seconds as before; the HTTP-date form the header also allows, which
+        // firstValueAsLong threw a NumberFormatException on in place of the server's error, is
+        // no hint.
+        final var retryAfter = HttpResponseException.retryAfterSeconds(httpResponse.headers());
         // Best effort and shared with the websocket (JsonRpcException.envelopeRequestId): an id
         // the reader cannot carry reads as absent and never costs the caller the error object.
         // Measured in review: a 20-digit id and a body truncated under a 503 both used to parse

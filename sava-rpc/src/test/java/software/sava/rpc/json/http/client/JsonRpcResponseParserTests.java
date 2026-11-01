@@ -436,4 +436,25 @@ final class JsonRpcResponseParserTests {
     assertEquals("down", status.body());
   }
 
+  /// A JSON-RPC error answered with a date-valued retry-after must arrive as the error the server
+  /// sent, with no hint, not as a number format failure out of the gate.
+  @Test
+  void aRetryAfterDateOnAnRpcErrorDoesNotMaskTheServersAnswer() {
+    final var rpc = assertThrows(JsonRpcException.class, () -> parseResult(
+        429, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":429,\"message\":\"Too many requests\"},\"id\":1}",
+        "retry-after", "Wed, 21 Oct 2026 07:28:00 GMT"));
+    assertTrue(rpc.retryAfterSeconds().isEmpty());
+    assertEquals(OptionalInt.of(429), rpc.httpStatus());
+    assertEquals(429, rpc.code());
+
+    final var negative = assertThrows(JsonRpcException.class, () -> parseResult(
+        429, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":429,\"message\":\"Too many requests\"},\"id\":1}",
+        "retry-after", "-5"));
+    assertTrue(negative.retryAfterSeconds().isEmpty(), "a negative delay, which the gate used to carry, is no hint");
+    final var zero = assertThrows(JsonRpcException.class, () -> parseResult(
+        429, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":429,\"message\":\"Too many requests\"},\"id\":1}",
+        "retry-after", "0"));
+    assertEquals(OptionalLong.of(0), zero.retryAfterSeconds());
+  }
+
 }
