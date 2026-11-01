@@ -8,20 +8,21 @@ import java.util.Objects;
 import java.util.OptionalLong;
 
 /// An HTTP response a sava-rpc client could not use: on either response controller a status
-/// outside 2xx, and on the JSON-RPC one a response, whatever its status, whose non-blank body
-/// does not start a JSON object (a gateway's error page, a captive portal, plain text) or whose
-/// object holds neither `result` nor `error`. The status, the body text and the `retry-after`
-/// hint, when the server gave one in seconds, are fields, so a caller tells a 401 from a 429
-/// from a 502 without reading the message. A JSON-RPC error object the server did answer with
-/// is a [JsonRpcException] instead, which carries the status it arrived under in
-/// [JsonRpcException#httpStatus()]; under a 2xx an object's `result` member answers even when an
-/// `error` member sits beside it. A body the JSON-RPC gate's parser cannot read reaches neither
-/// type and escapes as the parser's own exception, with no status: an empty or blank body, an
-/// object the scan cannot get through, and, once the gate has taken the error path, an `error`
-/// member that is not a readable error object, that is one that is not an object, as some
-/// gateways answer a 401 or a 429, or an object whose `code` is not an integer a long holds,
-/// whose `message` is not a string, or whose `data` does not fit its code. An `"error": null`
-/// reads as a [JsonRpcException] with code 0.
+/// outside 2xx, and on the JSON-RPC one a response, whatever its status, whose body does not
+/// start a JSON object (a gateway's error page, a captive portal, plain text, nothing at all)
+/// or whose object holds neither `result` nor `error`. The status, the body text and the
+/// `retry-after` hint, when the server gave one in seconds, are fields, so a caller tells a 401
+/// from a 429 from a 502 without reading the message. A JSON-RPC error object the server did
+/// answer with is a [JsonRpcException] instead, which carries the status it arrived under in
+/// [JsonRpcException#httpStatus()]; under a 2xx an object's `result` member answers even when
+/// an `error` member sits beside it. A body the JSON-RPC gate's parser cannot read is typed
+/// here too: an empty, blank or missing body, before the parser is opened; and, with the
+/// parser's or a decoder's failure attached as suppressed, an object the scan cannot get
+/// through and, once the gate has taken the error path, an `error` member that is not a
+/// readable error object, that is one that is not an object, as some gateways answer a 401 or a
+/// 429, or an object whose `code` is not an integer a long holds, whose `message` is neither a
+/// string nor null, or whose `data` does not fit its code. An `"error": null` reads as a
+/// [JsonRpcException] with code 0.
 ///
 /// Built as this failure was built before it had a type of its own: an `UncheckedIOException`
 /// over an `UnknownServiceException` carrying the message, so a catch of `UncheckedIOException`

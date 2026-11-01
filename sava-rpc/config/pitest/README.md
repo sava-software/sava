@@ -166,9 +166,10 @@ returns null anyway" acceptance against that capability.
   - Oracle: through the base `checkResponse`,
     `GenericJsonResponseParserTests.nullBodyUnderASuccessStatusReturnsNull` and
     `rejectionWithoutABodyReportsTheStatus` pin that a null body returns null or
-    throws before the parser runs. Owed for the JSON-RPC override in
-    `BaseJsonRpcResponseParser`, which parses the body inside its own `checkResponse`,
-    outside the catch, and which no test drives with a null body.
+    throws before the parser runs. Through the JSON-RPC override in
+    `BaseJsonRpcResponseParser`, which types a null or blank body before it opens the
+    parser, the missing-body case of
+    `JsonRpcResponseParserTests.everyUnreadableBodyIsTypedWithItsStatus` pins the same.
   - Invalidated if (derived): `checkResponse` stops ending a null-body exchange before
     the parse-failure catch, or `applyResponse` is reached by a path that skips
     `checkResponse`.
@@ -245,12 +246,14 @@ returns null anyway" acceptance against that capability.
 
 Kept apart from the arguments above; none of it is live evidence.
 
-- The parse-failure tails of `applyResponse` and
-  `BaseJsonRpcResponseParser.parseRpcException` log and rethrow. They were first read
-  as logging-only, then killed through the JUL backend (`TestLogs`) once a second read
-  noticed the rethrown exception is the JSON parser's own, so the logged status and
-  body are the *only* record of what the provider sent. `# dead null arm` is what
-  remains of that family.
+- The parse-failure tails of `applyResponse` and, until the gate typed every unreadable
+  body, `BaseJsonRpcResponseParser.parseRpcException` log and rethrow. They were first
+  read as logging-only, then killed through the JUL backend (`TestLogs`) once a second
+  read noticed the rethrown exception is the JSON parser's own, so the logged status and
+  body were the *only* record of what the provider sent. The gate's catch now throws an
+  `HttpResponseException` carrying the status, the body and the parser's failure as
+  suppressed, and keeps the log, which the envelope test still reads through `TestLogs`;
+  `applyResponse`'s tail is unchanged. `# dead null arm` is what remains of that family.
 - Two acceptances were withdrawn because the unreachability was the fixture's, not
   the code's: the `checkResponse` status-range boundaries (a stub constructs any
   status) and the `ReadHttpResponse` pass-through accessors (a stub returning the

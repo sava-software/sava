@@ -15,33 +15,42 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
 
   private static final System.Logger logger = System.getLogger(BaseJsonRpcResponseParser.class.getName());
 
-  private static RuntimeException parseRpcException(final byte[] body,
-                                                    final JsonIterator ji,
-                                                    final OptionalLong retryAfter,
-                                                    final OptionalLong requestId,
-                                                    final int httpStatus) {
-    try {
-      return JsonRpcException.parseException(ji, retryAfter, requestId, OptionalInt.of(httpStatus));
-    } catch (final RuntimeException ex) {
-      logger.log(ERROR, "Failed to parse JSON-RPC exception: " + new String(body), ex);
-      throw ex;
+  /// Whether `body` holds nothing but JSON whitespace, which the parser cannot start on.
+  private static boolean isBlank(final byte[] body) {
+    for (final byte b : body) {
+      if (b != ' ' && b != '\n' && b != '\r' && b != '\t') {
+        return false;
+      }
     }
+    return true;
   }
 
+  /// The gate. A 2xx object with a `result` member passes, its iterator positioned there; an
+  /// object with a readable `error` object, reached under any status when there is no result,
+  /// throws its [JsonRpcException] with the status it arrived under. Everything else is not a
+  /// usable JSON-RPC answer and throws the typed [HttpResponseException] with the status and
+  /// the body: a null or blank body, before the parser is opened; a non-2xx without an error
+  /// object, a body that does not start a JSON object and an object with neither member, from
+  /// the classification; and every body the parser cannot read, an object the scan cannot get
+  /// through or an `error` member that is not a readable error object, its `data` included,
+  /// with the parser's or a decoder's failure attached as suppressed and the body logged. Only
+  /// the reads sit inside the try, so a failure of any kind out of the parser is typed and the
+  /// deliberate throws are not caught.
   @Override
   protected final JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
+    if (body == null || isBlank(body)) {
+      throw responseFailure(httpResponse, body == null ? "" : new String(body));
+    }
     final var ji = JsonIterator.parse(body);
     final int responseCode = httpResponse.statusCode();
-    final boolean isJsonObject = ji.whatIsNext() == ValueType.OBJECT;
-    if (responseCode < 200 || responseCode >= 300 || !isJsonObject || ji.skipUntil("result") == null) {
-      if (!isJsonObject) {
-        throw responseFailure(httpResponse, new String(body));
-      } else if (ji.reset(0).skipUntil("error") == null) {
-        throw responseFailure(httpResponse, new String(body));
-      } else {
-        // A decimal delay in seconds as before; the HTTP-date form the header also allows, which
-        // firstValueAsLong threw a NumberFormatException on in place of the server's error, is
-        // no hint.
+    final JsonRpcException rpcException;
+    try {
+      final boolean isJsonObject = ji.whatIsNext() == ValueType.OBJECT;
+      if (responseCode >= 200 && responseCode < 300 && isJsonObject && ji.skipUntil("result") != null) {
+        return ji;
+      }
+      if (isJsonObject && ji.reset(0).skipUntil("error") != null) {
+        // A decimal delay in seconds; the HTTP-date form the header also allows is no hint.
         final var retryAfter = HttpResponseException.retryAfterSeconds(httpResponse.headers());
         // Best effort and shared with the websocket (JsonRpcException.envelopeRequestId): an id
         // the reader cannot carry reads as absent and never costs the caller the error object.
@@ -49,10 +58,24 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
         // to their JsonRpcException and would have thrown a raw JsonException instead.
         final var requestId = JsonRpcException.envelopeRequestId(ji, 0);
         ji.reset(0).skipUntil("error");
-        throw parseRpcException(body, ji, retryAfter, requestId, responseCode);
+        rpcException = JsonRpcException.parseException(ji, retryAfter, requestId, OptionalInt.of(responseCode));
+      } else {
+        rpcException = null;
       }
-    } else {
-      return ji;
+    } catch (final RuntimeException unreadable) {
+      // RuntimeException, not JsonException alone: an error object's data is decoded as it is
+      // parsed, and a decoder throws its own kind (an IllegalArgumentException for base64 that is
+      // not, an IllegalStateException for base64+zstd return data, which this parse reads with
+      // no decompressor).
+      final var bodyText = new String(body);
+      logger.log(ERROR, "Not a readable JSON-RPC response: " + bodyText, unreadable);
+      final var failure = responseFailure(httpResponse, bodyText);
+      failure.addSuppressed(unreadable);
+      throw failure;
     }
+    if (rpcException != null) {
+      throw rpcException;
+    }
+    throw responseFailure(httpResponse, new String(body));
   }
 }

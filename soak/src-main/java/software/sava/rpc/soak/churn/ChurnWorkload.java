@@ -476,8 +476,9 @@ public final class ChurnWorkload implements Workload, GaugeSampler.GaugeSource {
   /// The peer's RPC port sits under the same fault schedule as everything else, so a scheduled
   /// `HTTP_429` or `HTTP_503` can reach a probe (the [software.sava.rpc.soak.http.HttpWorkload]
   /// probe header exempts one, but the rule must not depend on that exemption holding). sava maps
-  /// a non-2xx status to an `UncheckedIOException` wrapping an `UnknownServiceException`, and a
-  /// JSON-RPC error envelope to a `JsonRpcException` — in both cases a status line and a body
+  /// a non-2xx status, and any answer its JSON-RPC gate cannot read as one, to an
+  /// `HttpResponseException`, an `UncheckedIOException` wrapping an `UnknownServiceException`, and
+  /// a JSON-RPC error envelope to a `JsonRpcException` — in both cases a status line and a body
   /// completed over the caller's client, which is precisely what W5-B1 asks, and the peer's chosen
   /// status is beside the point.
   ///

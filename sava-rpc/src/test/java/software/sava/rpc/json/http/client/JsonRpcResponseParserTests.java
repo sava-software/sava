@@ -10,6 +10,7 @@ import software.sava.rpc.json.http.response.HttpResponseException;
 import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.BiFunction;
@@ -171,6 +172,8 @@ final class JsonRpcResponseParserTests {
         () -> parseResult("{\"jsonrpc\":\"2.0\",\"id\":1}"));
     assertInstanceOf(UnknownServiceException.class, ex.getCause());
     assertTrue(ex.getMessage().contains("httpCode:200"), ex.getMessage());
+    assertEquals(0, ex.getSuppressed().length, "classified by the gate, not failed in the parser");
+    assertEquals("{\"jsonrpc\":\"2.0\",\"id\":1}", assertInstanceOf(HttpResponseException.class, ex).body());
   }
 
   /// The realistic hostile case: a proxy or load balancer answering with an HTML
@@ -187,6 +190,7 @@ final class JsonRpcResponseParserTests {
         "not json at all"}) {
       final var ex = assertThrows(UncheckedIOException.class, () -> parseResult(502, body), body);
       assertInstanceOf(UnknownServiceException.class, ex.getCause(), body);
+      assertEquals(0, ex.getSuppressed().length, "classified by the gate, not failed in the parser: " + body);
     }
   }
 
@@ -222,6 +226,8 @@ final class JsonRpcResponseParserTests {
           () -> parseResult(status, "{\"result\":\"ok\",\"id\":1}"), "status " + status);
       assertInstanceOf(UnknownServiceException.class, ex.getCause(), "status " + status);
       assertTrue(ex.getMessage().contains("httpCode:" + status), ex.getMessage());
+      assertEquals(0, ex.getSuppressed().length, "classified by the gate, not failed in the parser: " + status);
+      assertEquals("{\"result\":\"ok\",\"id\":1}", assertInstanceOf(HttpResponseException.class, ex).body());
     }
   }
 
@@ -313,25 +319,96 @@ final class JsonRpcResponseParserTests {
     assertEquals("17:ok", controller.apply(stub));
   }
 
-  /// An error envelope whose `error` value is not an object fails inside
-  /// `JsonRpcException.parseException`; that failure must escape as itself, not
-  /// be mistaken for a parsed protocol error or swallowed — and the body must
-  /// be logged, because the escaping exception is the JSON parser's own and
-  /// carries no record of what the provider sent.
+  /// An error envelope whose `error` value is not an object is not a parsed protocol error and
+  /// not a usable answer: it is typed with its status and body, the parser's own failure
+  /// attached as suppressed, and the body is still logged, so that a provider's shape is on
+  /// record whether or not the caller keeps the exception.
   @Test
-  void malformedErrorEnvelopeRethrowsTheParseFailure() {
-    final var thrown = new RuntimeException[1];
+  void malformedErrorEnvelopeIsTypedWithItsStatusAndLogged() {
+    final var thrown = new HttpResponseException[1];
     final var records = TestLogs.capture(BaseJsonRpcResponseParser.class, () -> {
-      final var ex = assertThrows(RuntimeException.class,
-          () -> parseResult("""
+      final var ex = assertThrows(HttpResponseException.class,
+          () -> parseResult(429, """
               {"jsonrpc":"2.0","error":"boom","id":1}"""));
-      assertFalse(ex instanceof JsonRpcException, "a malformed error is not a parsed protocol error");
-      assertFalse(ex instanceof UncheckedIOException, "the parse failure itself must escape");
+      assertEquals(429, ex.statusCode());
+      assertTrue(ex.body().contains("boom"), ex.body());
+      assertEquals(1, ex.getSuppressed().length, "the parser's own failure is attached");
+      assertInstanceOf(systems.comodal.jsoniter.JsonException.class, ex.getSuppressed()[0]);
       thrown[0] = ex;
     });
     assertTrue(records.stream().anyMatch(record ->
-            record.getThrown() == thrown[0] && record.getMessage().contains("boom")),
+            record.getThrown() == thrown[0].getSuppressed()[0] && record.getMessage().contains("boom")),
         "the malformed envelope must be logged with its body: " + records);
+  }
+
+  /// Every body the gate cannot read as a JSON-RPC answer is typed with its status, so that a
+  /// rate limiter's or a gateway's answer, whatever its shape, reaches the caller as a 429 or a
+  /// 503 and not as the JSON parser's complaint with no status: an empty, blank or missing body;
+  /// an object the scan cannot get through; an error member that is not a readable error
+  /// object, whether a string, an object whose code is not an integer a long holds, whose
+  /// message is neither a string nor null, or whose data does not fit its code; and an error
+  /// object whose data a decoder refuses, which throws its own kind rather than the parser's.
+  /// Every shape is checked, so a failure names each one still unreadable.
+  @Test
+  void everyUnreadableBodyIsTypedWithItsStatus() {
+    assertAll(
+        () -> {
+          final var missing = assertThrows(HttpResponseException.class,
+              () -> new JsonRpcResultResponseParser<>(JsonIterator::readString).apply(StubHttpResponse.of(502, (byte[]) null)));
+          assertEquals(502, missing.statusCode());
+          assertEquals("", missing.body());
+          assertEquals(0, missing.getSuppressed().length, "nothing was parsed");
+        },
+        () -> {
+          final var empty = assertThrows(HttpResponseException.class, () -> parseResult(429, "", "retry-after", "7"));
+          assertEquals(429, empty.statusCode());
+          assertEquals("", empty.body());
+          assertEquals(OptionalLong.of(7), empty.retryAfterSeconds());
+          assertEquals(0, empty.getSuppressed().length, "nothing was parsed");
+        },
+        () -> {
+          final var blank = assertThrows(HttpResponseException.class, () -> parseResult(503, " \n\t "));
+          assertEquals(503, blank.statusCode());
+          assertEquals(" \n\t ", blank.body(), "the body text is kept as it came");
+        },
+        () -> {
+          final var truncated = assertThrows(HttpResponseException.class, () -> parseResult(503, "{\"message\":\"upstream"));
+          assertEquals(503, truncated.statusCode());
+          assertEquals(1, truncated.getSuppressed().length, "the parser's failure is attached");
+        },
+        () -> {
+          final var stringError = assertThrows(HttpResponseException.class, () -> parseResult(429, "{\"error\":\"Too Many Requests\"}"));
+          assertEquals(429, stringError.statusCode());
+          assertEquals("{\"error\":\"Too Many Requests\"}", stringError.body());
+        },
+        () -> assertEquals(429, assertThrows(HttpResponseException.class,
+            () -> parseResult(429, "{\"error\":{\"code\":\"RATE_LIMITED\",\"message\":\"slow\"}}")).statusCode()),
+        () -> assertEquals(401, assertThrows(HttpResponseException.class,
+            () -> parseResult(401, "{\"error\":{\"code\":401,\"message\":5}}")).statusCode()),
+        () -> assertEquals(200, assertThrows(HttpResponseException.class,
+            () -> parseResult(200, "{\"error\":{\"code\":-32002,\"message\":\"x\",\"data\":\"unexpected\"},\"id\":1}")).statusCode()),
+        () -> {
+          // -32002 carries a simulation whose returnData is decoded as it is parsed; base64 that
+          // is not throws the decoder's IllegalArgumentException, not the parser's exception.
+          final var badReturnData = assertThrows(HttpResponseException.class, () -> parseResult(200, """
+              {"jsonrpc":"2.0","error":{"code":-32002,"message":"Transaction simulation failed","data":{"err":"x","logs":[],"unitsConsumed":1,"returnData":{"programId":"11111111111111111111111111111111","data":["!","base64"]}}},"id":1}"""));
+          assertEquals(200, badReturnData.statusCode());
+          assertEquals(1, badReturnData.getSuppressed().length);
+          assertInstanceOf(IllegalArgumentException.class, badReturnData.getSuppressed()[0], "the decoder's own failure is the one attached");
+        }
+    );
+  }
+
+  /// Under a 2xx, a result member answers whatever sits beside it: an error member beside a
+  /// result is never read, and an error object with a null message is still a readable error.
+  @Test
+  void aResultAnswersBesideAnErrorAndANullMessageIsReadable() {
+    assertEquals("ok", parseResult(200, "{\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"error\":\"boom\",\"id\":1}"));
+    assertEquals("ok", parseResult(200, "{\"jsonrpc\":\"2.0\",\"error\":\"boom\",\"result\":\"ok\",\"id\":1}"), "in either member order");
+    final var nullMessage = assertThrows(JsonRpcException.class,
+        () -> parseResult(429, "{\"error\":{\"code\":429,\"message\":null},\"id\":1}"));
+    assertEquals(429, nullMessage.code());
+    assertEquals(OptionalInt.of(429), nullMessage.httpStatus());
   }
 
   /// A response that is not a usable answer is typed: its status, its body and the server's
@@ -350,6 +427,21 @@ final class JsonRpcResponseParserTests {
     assertTrue(ex.getMessage().contains("slow down"), ex.getMessage());
     assertEquals(ex.getCause().toString(), ex.getMessage(), "the message is the cause's toString, as before");
     assertEquals("java.net.UnknownServiceException: HTTP request failed with [httpCode:429], [body=slow down]", ex.getMessage());
+    assertEquals(0, ex.getSuppressed().length, "classified by the gate, not failed in the parser");
+  }
+
+  /// A body of nothing but JSON whitespace, each kind alone and all together, is typed before
+  /// the parser is opened: the body text is kept as it came and no parser failure is attached,
+  /// which a check that let one kind through would betray.
+  @Test
+  void aBlankBodyOfEachJsonWhitespaceIsTypedBeforeTheParser() {
+    assertAll(List.of(" ", "\n", "\r", "\t", " \n\r\t ").stream().map(blank -> () -> {
+      final var ex = assertThrows(HttpResponseException.class, () -> parseResult(429, blank, "retry-after", "3"));
+      assertEquals(429, ex.statusCode());
+      assertEquals(blank, ex.body(), "the body text is kept as it came");
+      assertEquals(OptionalLong.of(3), ex.retryAfterSeconds());
+      assertEquals(0, ex.getSuppressed().length, "typed before the parser is opened: " + List.of(blank));
+    }));
   }
 
   /// The typed failure is still serializable, as the pair it replaces was; an absent or negative
@@ -394,6 +486,7 @@ final class JsonRpcResponseParserTests {
     assertEquals(200, ex.statusCode());
     assertEquals("<html>portal</html>", ex.body());
     assertTrue(ex.retryAfterSeconds().isEmpty());
+    assertEquals(0, ex.getSuppressed().length, "classified by the gate, not failed in the parser");
   }
 
   /// A JSON-RPC error object answered under a non-2xx status keeps that status: a provider's

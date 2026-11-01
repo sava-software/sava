@@ -1471,16 +1471,18 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     } else if (cause instanceof JsonRpcException) {
       return Outcome.RPC_ERROR;
     } else if (cause instanceof UncheckedIOException unchecked) {
-      // The client turns a non-2xx status into an UncheckedIOException wrapping an
-      // UnknownServiceException; anything else wrapped here came out of reading or inflating the
-      // body, which happens before the predicate and is therefore not a completion.
+      // The client turns a non-2xx status, and any answer its JSON-RPC gate cannot read as one,
+      // into an HttpResponseException, an UncheckedIOException wrapping an UnknownServiceException;
+      // anything else wrapped here came out of reading or inflating the body, which happens
+      // before the predicate and is therefore not a completion.
       return unchecked.getCause() instanceof UnknownServiceException
           ? Outcome.HTTP_ERROR : Outcome.TRANSPORT;
     } else if (cause instanceof IOException) {
       return Outcome.TRANSPORT;
     } else {
-      // A body that reached the parser and could not be read: the peer corrupts bodies on
-      // purpose and refusing one is correct behaviour, so this is never an association finding.
+      // A body past the gate whose result the parser could not read (the gate's own refusals are
+      // the typed HTTP_ERROR above): the peer corrupts bodies on purpose and refusing one is
+      // correct behaviour, so this is never an association finding.
       return Outcome.DECODE;
     }
   }
@@ -1792,7 +1794,8 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     /// different authors.
     DEADLINE(Counters.RPC_COMPLETED_DEADLINE, true, false),
     TRANSPORT(Counters.RPC_COMPLETED_TRANSPORT, true, false),
-    /// A body that reached the parser and could not be read.
+    /// A body past the gate whose result the parser could not read; a body the gate itself
+    /// refuses is typed with its status and counted as [#HTTP_ERROR].
     ///
     /// Kept apart from [#MISMATCH] deliberately. The peer truncates and corrupts bodies on
     /// purpose, and a parser that refuses such a body is behaving correctly - folding that into
