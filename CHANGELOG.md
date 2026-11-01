@@ -1,5 +1,24 @@
 # Changelog
 
+## [25.13.2](https://github.com/sava-software/sava/compare/25.13.1...25.13.2) (2026-11-01)
+
+
+### Features
+
+* **rpc:** build HttpResponseException from a status, a body and headers ([3a13549](https://github.com/sava-software/sava/commit/3a13549583b37fafd560091b4b55ad262c57cc8e))
+* **rpc:** keep a readable JSON-RPC error when its data does not parse ([6c3bf3a](https://github.com/sava-software/sava/commit/6c3bf3ac38d9fd96acba9e1946a7a20dfec88c8e))
+* **rpc:** type every body the JSON-RPC gate cannot read as an HTTP failure ([faaa6ed](https://github.com/sava-software/sava/commit/faaa6edde671009e53402218b865d6e66733f628))
+* **rpc:** type the HTTP failures of a JSON-RPC call ([ceadfe7](https://github.com/sava-software/sava/commit/ceadfe73af6c68fdaf1e13ed31e6488152bbbeed))
+
+
+### Bug Fixes
+
+* **rpc:** build the gate's debug line lazily, and name the untyped escapes exactly ([57df27d](https://github.com/sava-software/sava/commit/57df27d845f209b72d09a4764a775bdbe2ed21c7))
+* **rpc:** declare HttpResponseException's stream form, and read a typed body as UTF-8 ([37070cb](https://github.com/sava-software/sava/commit/37070cbffd1c0f7b5cb0a0c5b597869725b2344b))
+* **rpc:** log an unreadable JSON-RPC body at DEBUG ([0e93673](https://github.com/sava-software/sava/commit/0e93673d7870eca18b7d884b1bae788803aeabc2))
+* **rpc:** read a date-valued retry-after as no hint on the JSON-RPC gate ([a5dfbf2](https://github.com/sava-software/sava/commit/a5dfbf2ef8418ac9c6f54e289877c2bcd033d502))
+* **rpc:** read a null numSlotsBehind as absent ([38b057d](https://github.com/sava-software/sava/commit/38b057d8cbdcd2d0a561100c3864f14681ce903f))
+
 ## [25.13.1](https://github.com/sava-software/sava/compare/25.13.0...25.13.1) (2026-10-30)
 
 
