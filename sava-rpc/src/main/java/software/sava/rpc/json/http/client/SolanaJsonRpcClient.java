@@ -382,6 +382,31 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   }
 
   @Override
+  public CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment,
+                                                               final PublicKey identity,
+                                                               final long firstSlot,
+                                                               final long lastSlot) {
+    final var builder = new StringBuilder(192);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"getBlockProduction","params":[{"commitment":"%s\"""",
+        id.incrementAndGet(), commitment.getValue()));
+    if (identity != null) {
+      builder.append("""
+          ,"identity":\"""");
+      builder.append(identity.toBase58());
+      builder.append('"');
+    }
+    builder.append("""
+        ,"range":{"firstSlot":""");
+    builder.append(Long.toUnsignedString(firstSlot));
+    builder.append("""
+        ,"lastSlot":""");
+    builder.append(Long.toUnsignedString(lastSlot));
+    builder.append("}}]}");
+    return sendPostRequest(BLOCK_PRODUCTION, builder.toString());
+  }
+
+  @Override
   public CompletableFuture<long[]> getBlocks(final long startSlot) {
     return getBlocks(defaultCommitment, startSlot);
   }

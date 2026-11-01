@@ -383,6 +383,40 @@ public interface SolanaRpcClient {
                                                         final PublicKey identity,
                                                         final long firstSlot);
 
+  /// Counts every leader's slots over `firstSlot..lastSlot` inclusive at the client's default
+  /// commitment; see [#getBlockProduction(Commitment,PublicKey,long,long)].
+  default CompletableFuture<BlockProduction> getBlockProduction(final long firstSlot, final long lastSlot) {
+    return getBlockProduction(defaultCommitment(), null, firstSlot, lastSlot);
+  }
+
+  /// Counts every leader's slots over `firstSlot..lastSlot` inclusive; see
+  /// [#getBlockProduction(Commitment,PublicKey,long,long)].
+  default CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment,
+                                                                final long firstSlot,
+                                                                final long lastSlot) {
+    return getBlockProduction(commitment, null, firstSlot, lastSlot);
+  }
+
+  /// Counts one identity's slots over `firstSlot..lastSlot` inclusive at the client's default
+  /// commitment; see [#getBlockProduction(Commitment,PublicKey,long,long)].
+  default CompletableFuture<BlockProduction> getBlockProduction(final PublicKey identity,
+                                                                final long firstSlot,
+                                                                final long lastSlot) {
+    return getBlockProduction(defaultCommitment(), identity, firstSlot, lastSlot);
+  }
+
+  /// Bounds the counted range on both ends instead of ending it at the node's current slot. The node
+  /// rejects a `lastSlot` below `firstSlot`, a `firstSlot` older than its slot history or a
+  /// `lastSlot` beyond it with an invalid-params error (`-32602`) that names the limit.
+  ///
+  /// @param identity  `null` for every leader
+  /// @param firstSlot first slot of the range, inclusive; an unsigned slot in a long's bits
+  /// @param lastSlot  last slot of the range, inclusive; an unsigned slot in a long's bits
+  CompletableFuture<BlockProduction> getBlockProduction(final Commitment commitment,
+                                                        final PublicKey identity,
+                                                        final long firstSlot,
+                                                        final long lastSlot);
+
   CompletableFuture<long[]> getBlocks(final long startSlot);
 
   CompletableFuture<long[]> getBlocks(final Commitment commitment, final long startSlot);
