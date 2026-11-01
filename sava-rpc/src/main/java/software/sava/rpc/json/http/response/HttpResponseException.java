@@ -1,5 +1,6 @@
 package software.sava.rpc.json.http.response;
 
+import java.io.Serial;
 import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
 import java.net.http.HttpHeaders;
@@ -36,8 +37,11 @@ import java.util.OptionalLong;
 /// over an `UnknownServiceException` carrying the message, so a catch of `UncheckedIOException`
 /// still catches it, `getCause()` is still the `UnknownServiceException`, and `getMessage()` is
 /// still that cause's `toString()`; only the class name in this exception's own `toString()` is
-/// new. Serializable, as that pair was.
+/// new. Serializable, as that pair was, and with a declared `serialVersionUID`, as theirs are.
 public final class HttpResponseException extends UncheckedIOException {
+
+  @Serial
+  private static final long serialVersionUID = 1L;
 
   private static final long NO_RETRY_AFTER = -1;
 

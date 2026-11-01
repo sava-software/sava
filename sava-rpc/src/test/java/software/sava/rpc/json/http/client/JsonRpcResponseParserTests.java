@@ -521,10 +521,13 @@ final class JsonRpcResponseParserTests {
     }));
   }
 
-  /// The typed failure is still serializable, as the pair it replaces was; an absent or negative
-  /// retry-after is no hint, and zero is one.
+  /// The typed failure is still serializable, as the pair it replaces was, and like that pair it
+  /// declares its stream form rather than having one computed from its shape; an absent or
+  /// negative retry-after is no hint, and zero is one.
   @Test
   void theTypedFailureSerializes() throws Exception {
+    assertEquals(1L, java.io.ObjectStreamClass.lookup(HttpResponseException.class).getSerialVersionUID(),
+        "the stream form is declared, not computed from the class's shape");
     final var ex = assertThrows(HttpResponseException.class,
         () -> parseResult(503, "down", "retry-after", "5"));
     final var bytes = new java.io.ByteArrayOutputStream();

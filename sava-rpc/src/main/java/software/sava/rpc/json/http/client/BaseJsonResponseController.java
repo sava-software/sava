@@ -4,6 +4,7 @@ import software.sava.rpc.json.http.response.HttpResponseException;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 
 import static java.lang.System.Logger.Level.ERROR;
 
@@ -20,7 +21,7 @@ abstract class BaseJsonResponseController<R> {
   protected JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
     final int responseCode = httpResponse.statusCode();
     if (responseCode < 200 || responseCode >= 300) {
-      throw responseFailure(httpResponse, body == null ? "" : new String(body));
+      throw responseFailure(httpResponse, body == null ? "" : new String(body, StandardCharsets.UTF_8));
     } else if (body == null) {
       return null;
     } else {
@@ -40,7 +41,7 @@ abstract class BaseJsonResponseController<R> {
       return parseResponse(httpResponse, body, ji);
     } catch (final RuntimeException ex) {
       logger.log(ERROR,
-          String.format("Failed to parse [httpCode:%d], [body=%s]", httpResponse.statusCode(), body == null ? "" : new String(body)),
+          String.format("Failed to parse [httpCode:%d], [body=%s]", httpResponse.statusCode(), body == null ? "" : new String(body, StandardCharsets.UTF_8)),
           ex
       );
       throw ex;

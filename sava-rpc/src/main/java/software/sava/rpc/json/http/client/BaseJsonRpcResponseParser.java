@@ -6,6 +6,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
@@ -42,7 +43,7 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
   @Override
   protected final JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
     if (body == null || isBlank(body)) {
-      throw responseFailure(httpResponse, body == null ? "" : new String(body));
+      throw responseFailure(httpResponse, body == null ? "" : new String(body, StandardCharsets.UTF_8));
     }
     final var ji = JsonIterator.parse(body);
     final int responseCode = httpResponse.statusCode();
@@ -71,7 +72,7 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
       // IllegalStateException for base64+zstd return data, which this parse reads with no
       // decompressor) no longer arrives here: it can only come out of an error object's data,
       // and parseException attaches that failure to the JsonRpcException instead.
-      final var bodyText = new String(body);
+      final var bodyText = new String(body, StandardCharsets.UTF_8);
       // DEBUG, not ERROR: the exception thrown below carries the status, the body and this
       // failure, so whether the answer is worth an error line is the caller's call.
       logger.log(DEBUG, "Not a readable JSON-RPC response: " + bodyText, unreadable);
@@ -82,6 +83,6 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
     if (rpcException != null) {
       throw rpcException;
     }
-    throw responseFailure(httpResponse, new String(body));
+    throw responseFailure(httpResponse, new String(body, StandardCharsets.UTF_8));
   }
 }
