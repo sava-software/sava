@@ -5,6 +5,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 import static systems.comodal.jsoniter.JsonIterator.fieldEquals;
@@ -20,6 +21,7 @@ public final class JsonRpcException extends RuntimeException {
 
   private final OptionalLong retryAfterSeconds;
   private final OptionalLong requestId;
+  private final OptionalInt httpStatus;
   private final long code;
   private final RpcCustomError customError;
 
@@ -27,11 +29,13 @@ public final class JsonRpcException extends RuntimeException {
                            final String message,
                            final OptionalLong retryAfterSeconds,
                            final OptionalLong requestId,
+                           final OptionalInt httpStatus,
                            final RpcCustomError customError) {
     super(message);
     this.code = code;
     this.retryAfterSeconds = Objects.requireNonNullElse(retryAfterSeconds, OptionalLong.empty());
     this.requestId = Objects.requireNonNullElse(requestId, OptionalLong.empty());
+    this.httpStatus = Objects.requireNonNullElse(httpStatus, OptionalInt.empty());
     this.customError = customError;
   }
 
@@ -49,6 +53,17 @@ public final class JsonRpcException extends RuntimeException {
   public static JsonRpcException parseException(final JsonIterator ji,
                                                 final OptionalLong retryAfterSeconds,
                                                 final OptionalLong requestId) {
+    return parseException(ji, retryAfterSeconds, requestId, OptionalInt.empty());
+  }
+
+  /// Parses the `error` object `ji` is positioned at, as
+  /// [#parseException(JsonIterator, OptionalLong, OptionalLong)] does, and records `httpStatus`,
+  /// the status of the HTTP response that carried the error, which the HTTP client passes and
+  /// the websocket leaves empty.
+  public static JsonRpcException parseException(final JsonIterator ji,
+                                                final OptionalLong retryAfterSeconds,
+                                                final OptionalLong requestId,
+                                                final OptionalInt httpStatus) {
     final var parser = new Parser();
     ji.testObject(parser);
     if (parser.dataMark != null) {
@@ -61,7 +76,7 @@ public final class JsonRpcException extends RuntimeException {
       parser.customError = RpcCustomError.parseError(parser.code, ji.reset(parser.dataMark));
       ji.reset(endMark);
     }
-    return parser.create(retryAfterSeconds, requestId);
+    return parser.create(retryAfterSeconds, requestId, httpStatus);
   }
 
   /// The envelope's `id` — the request being answered — when it is a non-negative integer
@@ -102,6 +117,13 @@ public final class JsonRpcException extends RuntimeException {
     return retryAfterSeconds;
   }
 
+  /// The HTTP status of the response that carried this error, when it arrived over HTTP: a
+  /// provider's 401 or 429 answered with a JSON-RPC error body is told from a 200 that way.
+  /// Empty over the websocket, and for an error parsed without its response.
+  public OptionalInt httpStatus() {
+    return httpStatus;
+  }
+
   /// The `id` of the response envelope that carried this error, when it was a non-negative
   /// integer a long can hold — the only ids this client mints — so it names the request being
   /// answered. Over the websocket that is the `msgId` of the subscribe or unsubscribe the
@@ -127,12 +149,15 @@ public final class JsonRpcException extends RuntimeException {
     private Parser() {
     }
 
-    private JsonRpcException create(final OptionalLong retryAfterSeconds, final OptionalLong requestId) {
+    private JsonRpcException create(final OptionalLong retryAfterSeconds,
+                                    final OptionalLong requestId,
+                                    final OptionalInt httpStatus) {
       return new JsonRpcException(
           code,
           message,
           retryAfterSeconds,
           requestId,
+          httpStatus,
           customError == null ? RpcCustomError.parseError(code) : customError
       );
     }

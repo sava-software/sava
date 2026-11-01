@@ -5,10 +5,12 @@ import software.sava.rpc.json.http.response.JsonRpcException;
 import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 import software.sava.rpc.json.http.response.Context;
+import software.sava.rpc.json.http.response.HttpResponseException;
 
 import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
 import java.nio.charset.StandardCharsets;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -331,4 +333,107 @@ final class JsonRpcResponseParserTests {
             record.getThrown() == thrown[0] && record.getMessage().contains("boom")),
         "the malformed envelope must be logged with its body: " + records);
   }
+
+  /// A response that is not a usable answer is typed: its status, its body and the server's
+  /// retry-after hint in seconds are fields, so a caller tells a 429 from a 401 from a 502
+  /// without reading the message. It is still the UncheckedIOException over an
+  /// UnknownServiceException it always was, for every catch written against that.
+  @Test
+  void statusFailuresAreTypedWithStatusBodyAndRetryAfter() {
+    final var ex = assertThrows(HttpResponseException.class,
+        () -> parseResult(429, "slow down", "retry-after", "7"));
+    assertEquals(429, ex.statusCode());
+    assertEquals("slow down", ex.body());
+    assertEquals(OptionalLong.of(7), ex.retryAfterSeconds());
+    assertInstanceOf(UnknownServiceException.class, ex.getCause());
+    assertTrue(ex.getMessage().contains("httpCode:429"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("slow down"), ex.getMessage());
+    assertEquals(ex.getCause().toString(), ex.getMessage(), "the message is the cause's toString, as before");
+    assertEquals("java.net.UnknownServiceException: HTTP request failed with [httpCode:429], [body=slow down]", ex.getMessage());
+  }
+
+  /// The typed failure is still serializable, as the pair it replaces was; an absent or negative
+  /// retry-after is no hint, and zero is one.
+  @Test
+  void theTypedFailureSerializes() throws Exception {
+    final var ex = assertThrows(HttpResponseException.class,
+        () -> parseResult(503, "down", "retry-after", "5"));
+    final var bytes = new java.io.ByteArrayOutputStream();
+    try (final var out = new java.io.ObjectOutputStream(bytes)) {
+      out.writeObject(ex);
+    }
+    try (final var in = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray()))) {
+      final var copy = (HttpResponseException) in.readObject();
+      assertEquals(503, copy.statusCode());
+      assertEquals("down", copy.body());
+      assertEquals(OptionalLong.of(5), copy.retryAfterSeconds());
+      assertEquals(ex.getMessage(), copy.getMessage());
+    }
+    final var noHint = assertThrows(HttpResponseException.class, () -> parseResult(503, "down"));
+    assertTrue(noHint.retryAfterSeconds().isEmpty());
+    final var negative = assertThrows(HttpResponseException.class, () -> parseResult(503, "down", "retry-after", "-3"));
+    assertTrue(negative.retryAfterSeconds().isEmpty(), "a negative delay is no hint");
+    final var zero = assertThrows(HttpResponseException.class, () -> parseResult(503, "down", "retry-after", "0"));
+    assertEquals(OptionalLong.of(0), zero.retryAfterSeconds(), "zero is a hint to retry at once, not no hint");
+  }
+
+  /// The factory reads a null body as empty, as the generic controller's missing body is.
+  @Test
+  void aNullBodyReadsAsEmpty() {
+    final var ex = HttpResponseException.of(StubHttpResponse.of(500, (byte[]) null), null);
+    assertEquals("", ex.body());
+    assertEquals(500, ex.statusCode());
+    assertTrue(ex.getMessage().endsWith("[body=]"), ex.getMessage());
+  }
+
+  /// A success status whose body is not a JSON object fails with that status, so the caller
+  /// sees the 200 a captive portal or a gateway page arrived under.
+  @Test
+  void aNonObjectBodyUnderASuccessStatusIsTypedWithThatStatus() {
+    final var ex = assertThrows(HttpResponseException.class, () -> parseResult(200, "<html>portal</html>"));
+    assertEquals(200, ex.statusCode());
+    assertEquals("<html>portal</html>", ex.body());
+    assertTrue(ex.retryAfterSeconds().isEmpty());
+  }
+
+  /// A JSON-RPC error object answered under a non-2xx status keeps that status: a provider's
+  /// 401 or 429 that still speaks JSON-RPC is told from a 200 by the exception, not by a log.
+  @Test
+  void rpcErrorsCarryTheHttpStatusTheyArrivedUnder() {
+    final var unauthorized = assertThrows(JsonRpcException.class, () -> parseResult(
+        401, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32001,\"message\":\"bad key\"},\"id\":1}"));
+    assertEquals(OptionalInt.of(401), unauthorized.httpStatus());
+    assertEquals(-32001, unauthorized.code());
+
+    final var ok = assertThrows(JsonRpcException.class, () -> parseResult(
+        200, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"Invalid params\"},\"id\":1}"));
+    assertEquals(OptionalInt.of(200), ok.httpStatus());
+
+    final var limited = assertThrows(JsonRpcException.class, () -> parseResult(
+        429, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":429,\"message\":\"Too many requests\"},\"id\":1}",
+        "retry-after", "3"));
+    assertEquals(OptionalInt.of(429), limited.httpStatus());
+    assertEquals(OptionalLong.of(3), limited.retryAfterSeconds());
+  }
+
+  /// An error parsed without its response, as the websocket parses one, has no status.
+  @Test
+  void anErrorParsedWithoutAResponseHasNoHttpStatus() {
+    final var ji = JsonIterator.parse("{\"code\":-32602,\"message\":\"Invalid params\"}");
+    final var ex = JsonRpcException.parseException(ji, OptionalLong.empty());
+    assertTrue(ex.httpStatus().isEmpty());
+    assertEquals(-32602, ex.code());
+  }
+
+  /// The retry-after header may be an HTTP-date rather than seconds. On the typed status
+  /// failure that form reads as no hint; the status and the body still arrive.
+  @Test
+  void aRetryAfterDateOnAStatusFailureReadsAsNoHint() {
+    final var status = assertThrows(HttpResponseException.class,
+        () -> parseResult(503, "down", "retry-after", "Wed, 21 Oct 2026 07:28:00 GMT"));
+    assertTrue(status.retryAfterSeconds().isEmpty());
+    assertEquals(503, status.statusCode());
+    assertEquals("down", status.body());
+  }
+
 }

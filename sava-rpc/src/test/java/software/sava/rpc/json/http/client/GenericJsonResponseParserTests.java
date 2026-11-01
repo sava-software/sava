@@ -3,6 +3,8 @@ package software.sava.rpc.json.http.client;
 import org.junit.jupiter.api.Test;
 import systems.comodal.jsoniter.JsonIterator;
 
+import software.sava.rpc.json.http.response.HttpResponseException;
+
 import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
 import java.net.http.HttpResponse;
@@ -105,4 +107,22 @@ final class GenericJsonResponseParserTests {
                 && record.getMessage().contains("poison")),
         "the parse failure must be logged with the status and the body: " + records);
   }
+
+  /// The generic controller's status failure is the same typed exception as the JSON-RPC
+  /// gate's, status and body as fields, and a missing body reads as an empty one.
+  @Test
+  void statusFailuresAreTypedHere() {
+    final var controller = controller((_, _) -> fail("the parser must not see a failed response"));
+    final var ex = assertThrows(HttpResponseException.class,
+        () -> controller.apply(StubHttpResponse.of(404, json("""
+            {"why":"gone"}"""), "retry-after", "2")));
+    assertEquals(404, ex.statusCode());
+    assertEquals("{\"why\":\"gone\"}", ex.body());
+    assertEquals(2, ex.retryAfterSeconds().orElseThrow());
+    final var bodiless = assertThrows(HttpResponseException.class,
+        () -> controller.apply(StubHttpResponse.of(503, (byte[]) null)));
+    assertEquals("", bodiless.body());
+    assertTrue(bodiless.retryAfterSeconds().isEmpty());
+  }
+
 }

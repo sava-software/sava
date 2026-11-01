@@ -5,6 +5,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 
 import java.net.http.HttpResponse;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 import static java.lang.System.Logger.Level.ERROR;
@@ -16,9 +17,10 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
   private static RuntimeException parseRpcException(final byte[] body,
                                                     final JsonIterator ji,
                                                     final OptionalLong retryAfter,
-                                                    final OptionalLong requestId) {
+                                                    final OptionalLong requestId,
+                                                    final int httpStatus) {
     try {
-      return JsonRpcException.parseException(ji, retryAfter, requestId);
+      return JsonRpcException.parseException(ji, retryAfter, requestId, OptionalInt.of(httpStatus));
     } catch (final RuntimeException ex) {
       logger.log(ERROR, "Failed to parse JSON-RPC exception: " + new String(body), ex);
       throw ex;
@@ -32,9 +34,9 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
     final boolean isJsonObject = ji.whatIsNext() == ValueType.OBJECT;
     if (responseCode < 200 || responseCode >= 300 || !isJsonObject || ji.skipUntil("result") == null) {
       if (!isJsonObject) {
-        throw throwUncheckedIOException(httpResponse, new String(body));
+        throw responseFailure(httpResponse, new String(body));
       } else if (ji.reset(0).skipUntil("error") == null) {
-        throw throwUncheckedIOException(httpResponse, new String(body));
+        throw responseFailure(httpResponse, new String(body));
       } else {
         final var retryAfter = httpResponse.headers().firstValueAsLong("retry-after");
         // Best effort and shared with the websocket (JsonRpcException.envelopeRequestId): an id
@@ -43,7 +45,7 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
         // to their JsonRpcException and would have thrown a raw JsonException instead.
         final var requestId = JsonRpcException.envelopeRequestId(ji, 0);
         ji.reset(0).skipUntil("error");
-        throw parseRpcException(body, ji, retryAfter, requestId);
+        throw parseRpcException(body, ji, retryAfter, requestId, responseCode);
       }
     } else {
       return ji;
