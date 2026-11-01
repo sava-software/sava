@@ -696,10 +696,13 @@ public final class SoakReport {
 
   /// Decoding failures against the corruption that was actually served.
   ///
-  /// `rpc.completed.decode` counts bodies that reached the parser and could not be read. The peer
-  /// corrupts bodies on purpose, so most of those are the harness working; the number worth
-  /// reading is what is left after the injected corruption is subtracted, because a run whose
-  /// well-formed bodies fail to inflate or parse is a regression in exactly the code W3-C watches.
+  /// `rpc.completed.decode` counts bodies that reached the parser and could not be read, whether
+  /// the JSON-RPC gate refused one with the parser's failure attached, under any status, or a
+  /// result parser threw past the gate; a refusal with nothing attached, by status or by shape,
+  /// is an HTTP error instead. The peer corrupts bodies on purpose, so most of those are the
+  /// harness working; the number worth reading is what is left after the injected corruption is
+  /// subtracted, because a run whose well-formed bodies fail to inflate or parse is a regression
+  /// in exactly the code W3-C watches.
   ///
   /// The subtraction is a reconciliation, not a join: `peer-http.tsv` rows are not matched to
   /// client outcomes by request id, and it is deliberately generous to the library - it subtracts

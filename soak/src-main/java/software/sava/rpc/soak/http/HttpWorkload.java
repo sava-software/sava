@@ -6,6 +6,7 @@ import software.sava.rpc.json.http.client.SolanaRpcClient;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.AccountInfo;
 import software.sava.rpc.json.http.response.Block;
+import software.sava.rpc.json.http.response.HttpResponseException;
 import software.sava.rpc.json.http.response.JsonRpcException;
 import software.sava.rpc.json.http.response.LatestBlockHash;
 import software.sava.rpc.json.http.response.TxStatus;
@@ -1131,7 +1132,9 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     if (ctx.live()) {
       return;
     }
-    final var cause = failure instanceof UncheckedIOException unchecked && unchecked.getCause() != null
+    final var unreadable = unreadableBody(failure);
+    final var cause = unreadable != null ? unreadable
+        : failure instanceof UncheckedIOException unchecked && unchecked.getCause() != null
         ? unchecked.getCause() : failure;
     final var name = cause.getClass().getName();
     if (name.contains("Zip") || name.contains("DataFormat")) {
@@ -1470,6 +1473,13 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
       return Outcome.TIMEOUT;
     } else if (cause instanceof JsonRpcException) {
       return Outcome.RPC_ERROR;
+    } else if (unreadableBody(cause) != null) {
+      // The JSON-RPC gate's own refusal of a body it could not read, under any status, typed with
+      // the parser's failure attached: the body and not the status was the problem, which is
+      // W3-C's question, so it is counted with the parse failures below rather than with the
+      // statuses. The peer's HTTP_429 and HTTP_503 faults serve well-formed error bodies, so an
+      // attached failure under one of them is the same regression as under a 200.
+      return Outcome.DECODE;
     } else if (cause instanceof UncheckedIOException unchecked) {
       // The client turns a non-2xx status, and any answer its JSON-RPC gate cannot read as one,
       // into an HttpResponseException, an UncheckedIOException wrapping an UnknownServiceException;
@@ -1480,16 +1490,29 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     } else if (cause instanceof IOException) {
       return Outcome.TRANSPORT;
     } else {
-      // A body past the gate whose result the parser could not read (the gate's own refusals are
-      // the typed HTTP_ERROR above): the peer corrupts bodies on purpose and refusing one is
-      // correct behaviour, so this is never an association finding.
+      // A body past the gate whose result the parser could not read: the peer corrupts bodies on
+      // purpose and refusing one is correct behaviour, so this is never an association finding.
       return Outcome.DECODE;
     }
+  }
+
+  /// The parser's or a decoder's failure the JSON-RPC gate attached when it refused a body it could
+  /// not read, under any status, or null when `cause` is anything else: a refusal with nothing
+  /// attached, by status or for the body's shape alone (no object, neither member), or not the
+  /// gate's at all. A shape refusal stays an HTTP error here because the one decoding regression
+  /// that would produce it, gzip announced and not applied, fails the gzip-magic check in
+  /// `testResponse` first, and anything else that serves a shapeless body is the peer's defect.
+  private static Throwable unreadableBody(final Throwable cause) {
+    return cause instanceof HttpResponseException refused && refused.getSuppressed().length > 0
+        ? refused.getSuppressed()[0] : null;
   }
 
   private static String describe(final Throwable cause) {
     if (cause instanceof JsonRpcException rpc) {
       return "JSON-RPC error " + rpc.code() + ": " + truncate(String.valueOf(rpc.getMessage()));
+    }
+    if (cause instanceof HttpResponseException refused && refused.getSuppressed().length > 0) {
+      return "unreadable body under HTTP " + refused.statusCode() + ", " + describe(refused.getSuppressed()[0]);
     }
     return cause.getClass().getSimpleName() + ": " + truncate(String.valueOf(cause.getMessage()));
   }
@@ -1794,8 +1817,10 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     /// different authors.
     DEADLINE(Counters.RPC_COMPLETED_DEADLINE, true, false),
     TRANSPORT(Counters.RPC_COMPLETED_TRANSPORT, true, false),
-    /// A body past the gate whose result the parser could not read; a body the gate itself
-    /// refuses is typed with its status and counted as [#HTTP_ERROR].
+    /// A body that reached the parser and could not be read: one the JSON-RPC gate itself refused
+    /// with the parser's failure attached, under any status, or one past the gate whose result the
+    /// parser could not read. A refusal with nothing attached, by status or for the body's shape
+    /// alone, is [#HTTP_ERROR].
     ///
     /// Kept apart from [#MISMATCH] deliberately. The peer truncates and corrupts bodies on
     /// purpose, and a parser that refuses such a body is behaving correctly - folding that into
