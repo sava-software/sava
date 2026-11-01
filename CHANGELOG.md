@@ -1,5 +1,31 @@
 # Changelog
 
+## [25.13.2](https://github.com/sava-software/sava/compare/25.13.1...25.13.2) (2026-11-01)
+
+
+### Features
+
+* **rpc:** build HttpResponseException from a status, a body and headers ([3a13549](https://github.com/sava-software/sava/commit/3a13549583b37fafd560091b4b55ad262c57cc8e))
+* **rpc:** keep a readable JSON-RPC error when its data does not parse ([6c3bf3a](https://github.com/sava-software/sava/commit/6c3bf3ac38d9fd96acba9e1946a7a20dfec88c8e))
+* **rpc:** type every body the JSON-RPC gate cannot read as an HTTP failure ([faaa6ed](https://github.com/sava-software/sava/commit/faaa6edde671009e53402218b865d6e66733f628))
+* **rpc:** type the HTTP failures of a JSON-RPC call ([ceadfe7](https://github.com/sava-software/sava/commit/ceadfe73af6c68fdaf1e13ed31e6488152bbbeed))
+
+
+### Bug Fixes
+
+* **rpc:** build the gate's debug line lazily, and name the untyped escapes exactly ([57df27d](https://github.com/sava-software/sava/commit/57df27d845f209b72d09a4764a775bdbe2ed21c7))
+* **rpc:** declare HttpResponseException's stream form, and read a typed body as UTF-8 ([37070cb](https://github.com/sava-software/sava/commit/37070cbffd1c0f7b5cb0a0c5b597869725b2344b))
+* **rpc:** log an unreadable JSON-RPC body at DEBUG ([0e93673](https://github.com/sava-software/sava/commit/0e93673d7870eca18b7d884b1bae788803aeabc2))
+* **rpc:** read a date-valued retry-after as no hint on the JSON-RPC gate ([a5dfbf2](https://github.com/sava-software/sava/commit/a5dfbf2ef8418ac9c6f54e289877c2bcd033d502))
+* **rpc:** read a null numSlotsBehind as absent ([38b057d](https://github.com/sava-software/sava/commit/38b057d8cbdcd2d0a561100c3864f14681ce903f))
+
+### Notes
+
+* **rpc:** the JSON-RPC gate types what it refuses. A response whose body is null, blank, truncated, not a JSON object, an object with neither `result` nor `error`, or an `error` member that is not a readable error object used to escape as json-iterator's `JsonException`, a `NullPointerException` or a decoder's `IllegalArgumentException` or `IllegalStateException`; each is now `HttpResponseException`, an `UncheckedIOException` whose cause is still an `UnknownServiceException` with the same `HTTP request failed with [httpCode:N], [body=...]` message, so a catch of `UncheckedIOException` sees them and a catch of `JsonException` no longer does. It carries `statusCode()`, `body()`, `retryAfterSeconds()` and, when the parser was opened on the body, the parser's or a decoder's failure as a suppressed throwable. The class name now shows in `toString()` where the plain pair showed before.
+* **rpc:** `JsonRpcException.httpStatus()` is the status the error object arrived under, empty over the websocket. A readable error object keeps its `JsonRpcException`, code and message when its `data` does not parse; the data failure rides as a suppressed throwable and `customError()` is the code-only form. Over the websocket such a rejection is now correlated and the in-flight send gate released, where it used to reach the "Unexpected json rpc error." catch.
+* **rpc:** a `NodeUnhealthy` error whose `numSlotsBehind` is `null`, which Agave sends whenever the node's health is unknown, parses as `NodeUnhealthy` with an empty `numSlotsBehind` instead of failing.
+* **rpc:** a date-valued `Retry-After` reads as no hint instead of throwing; the gate logs an unreadable body at DEBUG rather than ERROR, since the exception carries it; `HttpResponseException.of(int statusCode, String body, HttpHeaders headers)` builds the type for a consumer's tests; the class declares a `serialVersionUID`; body text is decoded as UTF-8 whatever the platform charset.
+
 ## [25.13.1](https://github.com/sava-software/sava/compare/25.13.0...25.13.1) (2026-10-30)
 
 
