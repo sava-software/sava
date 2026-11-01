@@ -216,6 +216,7 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
         List.of(),
         null,
         RpcEncoding.base64_zstd,
+        null,
         (_, data) -> data,
         null
     );

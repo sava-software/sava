@@ -55,6 +55,13 @@ public interface ProgramAccountsRequest<T> {
 
   RpcEncoding encoding();
 
+  /// Whether the node sorts the accounts by public key before returning them: `null`, the default,
+  /// omits the option and the node sorts; `false` asks it not to, which spares the server the sort
+  /// over a large scan and may return the accounts in any order; `true` is sent as written.
+  default Boolean sortResults() {
+    return null;
+  }
+
   BiFunction<PublicKey, byte[], T> factory();
 
   /// The decoder for [RpcEncoding#base64_zstd] account data, or `null` when none was supplied.
@@ -72,6 +79,7 @@ public interface ProgramAccountsRequest<T> {
     private Collection<Filter> filters;
     private DataSlice dataSlice;
     private RpcEncoding encoding;
+    private Boolean sortResults;
     private ZstdDecompressor zstdDecompressor;
 
     Builder() {
@@ -98,6 +106,7 @@ public interface ProgramAccountsRequest<T> {
           filters,
           dataSlice,
           encoding,
+          sortResults,
           factory,
           zstdDecompressor
       );
@@ -151,6 +160,13 @@ public interface ProgramAccountsRequest<T> {
     /// requires [#zstdDecompressor(ZstdDecompressor)].
     public Builder encoding(final RpcEncoding encoding) {
       this.encoding = encoding;
+      return this;
+    }
+
+    /// `false` asks the node not to sort the accounts by public key, sparing it the sort over a
+    /// large scan; agave sorts unless told otherwise. Unset, the option is omitted.
+    public Builder sortResults(final boolean sortResults) {
+      this.sortResults = sortResults;
       return this;
     }
 

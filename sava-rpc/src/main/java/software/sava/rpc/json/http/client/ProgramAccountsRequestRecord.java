@@ -22,6 +22,7 @@ record ProgramAccountsRequestRecord<T>(Duration requestTimeout,
                                        Collection<Filter> filters,
                                        DataSlice dataSlice,
                                        RpcEncoding encoding,
+                                       Boolean sortResults,
                                        BiFunction<PublicKey, byte[], T> factory,
                                        ZstdDecompressor zstdDecompressor)
     implements ProgramAccountsRequest<T> {
@@ -65,6 +66,11 @@ record ProgramAccountsRequestRecord<T>(Duration requestTimeout,
     BaseSolanaJsonRpcClient.appendMinContextSlot(builder, minContextSlot);
     BaseSolanaJsonRpcClient.appendDataSlice(builder, dataSlice);
     BaseSolanaJsonRpcClient.appendFilters(builder, filters);
+    if (sortResults != null) {
+      builder.append("""
+          ,"sortResults":""");
+      builder.append(sortResults.booleanValue());
+    }
     builder.append("}]}");
 
     return builder.toString();

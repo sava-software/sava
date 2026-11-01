@@ -1051,6 +1051,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
         filters,
         dataSlice,
         RpcEncoding.base64,
+        null,
         factory,
         null
     );
