@@ -546,12 +546,16 @@ final class ParseResponseFieldTests {
     assertNull(BlockTx.parse(ji("""
         {"transaction":"jsonParsed"}""")).data());
 
-    // The node's `version` member is not surfaced on BlockTx: it is read off the wire bytes through
-    // the skeleton, so a v1 body's `"version":1` is skipped like any other unknown field and the
-    // version comes from the message's own 0x81 prefix (see RoundTripRpcRequestTests for a real one).
+    // The node's `version` member is carried as served, while the skeleton still reads the version
+    // off the wire bytes (the message's own 0x81 prefix for v1; see RoundTripRpcRequestTests for a
+    // real one): this synthetic body labels legacy bytes as v1, and each side reports its own.
     final var versionedBody = BlockTx.parse(ji("""
         {"meta":null,"version":1,"transaction":["%s","base64"],"future":9}""".formatted(txBase64)));
     assertArrayEquals(txBytes, versionedBody.data());
+    assertEquals(1, versionedBody.version());
+    assertFalse(versionedBody.isLegacy());
+    assertNull(versionedBody.signatures());
+    assertNull(versionedBody.accountKeys());
     assertEquals(1, versionedBody.skeleton().numSignatures());
     assertTrue(versionedBody.skeleton().isLegacy());
 
@@ -561,6 +565,133 @@ final class ParseResponseFieldTests {
     assertNull(new BlockTx(null, null).skeleton());
     assertNull(BlockTx.parse(ji("""
         {"version":null}""")).skeleton());
+  }
+
+  @Test
+  void txAccountKey() {
+    // a leading unknown member, every flag set, and trailing decoys of the same JSON types
+    final var key = TxAccountKey.parse(ji("""
+        {"future":1,"pubkey":"%s","writable":true,"signer":true,"source":"lookupTable",
+        "zDecoyBool":false,"zDecoyStr":"transaction"}""".formatted(KEY_1)));
+    assertEquals(key(KEY_1), key.pubKey());
+    assertTrue(key.writable());
+    assertTrue(key.signer());
+    assertEquals(AccountKeySource.lookupTable, key.source());
+
+    final var readOnly = TxAccountKey.parse(ji("""
+        {"pubkey":"%s","writable":false,"signer":false,"source":"transaction"}""".formatted(KEY_2)));
+    assertEquals(key(KEY_2), readOnly.pubKey());
+    assertFalse(readOnly.writable());
+    assertFalse(readOnly.signer());
+    assertEquals(AccountKeySource.transaction, readOnly.source());
+
+    // the two flags are read independently
+    final var signerOnly = TxAccountKey.parse(ji("""
+        {"writable":false,"signer":true}"""));
+    assertFalse(signerOnly.writable());
+    assertTrue(signerOnly.signer());
+    assertNull(signerOnly.pubKey());
+    final var writableOnly = TxAccountKey.parse(ji("""
+        {"writable":true,"signer":false}"""));
+    assertTrue(writableOnly.writable());
+    assertFalse(writableOnly.signer());
+
+    // an absent, null or unknown source is null, never a guess; agave's camelCase is matched exactly
+    assertNull(TxAccountKey.parse(ji("{}")).source());
+    assertNull(TxAccountKey.parse(ji("""
+        {"source":null,"writable":true}""")).source());
+    assertNull(TxAccountKey.parse(ji("""
+        {"source":"future"}""")).source());
+    assertNull(TxAccountKey.parse(ji("""
+        {"source":"Transaction"}""")).source());
+
+    // a source that is not a string is skipped whole, and the members after it still parse
+    final var arraySource = TxAccountKey.parse(ji("""
+        {"source":["lookupTable"],"writable":true,"signer":false}"""));
+    assertNull(arraySource.source());
+    assertTrue(arraySource.writable());
+    final var objectSource = TxAccountKey.parse(ji("""
+        {"source":{"kind":"transaction"},"signer":true}"""));
+    assertNull(objectSource.source());
+    assertTrue(objectSource.signer());
+    final var numberSource = TxAccountKey.parse(ji("""
+        {"source":7,"writable":true}"""));
+    assertNull(numberSource.source());
+    assertTrue(numberSource.writable());
+
+    final var keys = TxAccountKey.parseKeys(ji("""
+        [{"pubkey":"%s","source":"transaction"},{"pubkey":"%s","source":"lookupTable"}]""".formatted(KEY_1, KEY_2)));
+    assertEquals(2, keys.size());
+    assertEquals(key(KEY_1), keys.getFirst().pubKey());
+    assertEquals(AccountKeySource.transaction, keys.getFirst().source());
+    assertEquals(key(KEY_2), keys.getLast().pubKey());
+    assertEquals(AccountKeySource.lookupTable, keys.getLast().source());
+  }
+
+  @Test
+  void blockTxAccounts() {
+    // the `accounts` shape: an object in place of the encoded pair, reduced meta, a numeric version,
+    // a leading unknown member and a trailing decoy object carrying the same member names
+    final var v0 = BlockTx.parse(ji("""
+        {"future":0,"meta":{"err":null,"fee":5000,"preBalances":[9,1],"postBalances":[4,1],
+        "preTokenBalances":[],"postTokenBalances":[],"status":{"Ok":null}},
+        "transaction":{"zFuture":1,"signatures":["sigA","sigB"],
+        "accountKeys":[{"pubkey":"%s","writable":true,"signer":true,"source":"transaction"},
+        {"pubkey":"%s","writable":false,"signer":false,"source":"lookupTable"}]},
+        "version":0,"zDecoyObj":{"signatures":["sigZ"],"accountKeys":[]}}""".formatted(KEY_1, KEY_2)));
+    assertEquals(0, v0.version());
+    assertFalse(v0.isLegacy());
+    assertNull(v0.data());
+    assertNull(v0.skeleton());
+    assertEquals(List.of("sigA", "sigB"), v0.signatures());
+    assertEquals(2, v0.accountKeys().size());
+    assertEquals(key(KEY_1), v0.accountKeys().getFirst().pubKey());
+    assertTrue(v0.accountKeys().getFirst().signer());
+    assertEquals(AccountKeySource.transaction, v0.accountKeys().getFirst().source());
+    assertEquals(key(KEY_2), v0.accountKeys().getLast().pubKey());
+    assertEquals(AccountKeySource.lookupTable, v0.accountKeys().getLast().source());
+    final var meta = v0.meta();
+    assertEquals(5000, meta.fee());
+    assertEquals(List.of(9L, 1L), meta.preBalances());
+    assertEquals(List.of(4L, 1L), meta.postBalances());
+    assertNull(meta.logMessages());
+    assertNull(meta.innerInstructions());
+    assertEquals(0, meta.computeUnitsConsumed());
+
+    // "legacy" is not a number, so the version stays negative; a served v1 number is kept
+    final var legacy = BlockTx.parse(ji("""
+        {"version":"legacy","transaction":{"signatures":["sigA"]}}"""));
+    assertTrue(legacy.isLegacy());
+    assertTrue(legacy.version() < 0);
+    assertEquals(List.of("sigA"), legacy.signatures());
+    assertNull(legacy.accountKeys());
+    assertNull(legacy.meta());
+    final var v1 = BlockTx.parse(ji("""
+        {"version":1,"transaction":{"accountKeys":[]}}"""));
+    assertEquals(1, v1.version());
+    assertFalse(v1.isLegacy());
+    assertEquals(List.of(), v1.accountKeys());
+    assertNull(v1.signatures());
+
+    // an empty object serves neither list, and a shape that is neither pair nor object is skipped
+    final var empty = BlockTx.parse(ji("""
+        {"transaction":{},"version":null}"""));
+    assertNull(empty.data());
+    assertNull(empty.signatures());
+    assertNull(empty.accountKeys());
+    assertTrue(empty.isLegacy());
+    final var number = BlockTx.parse(ji("""
+        {"transaction":7,"version":2}"""));
+    assertNull(number.data());
+    assertNull(number.signatures());
+    assertEquals(2, number.version());
+
+    // the released two-argument constructor is a `full` entry with no served version
+    final var released = new BlockTx(null, new byte[]{1});
+    assertTrue(released.isLegacy());
+    assertNull(released.signatures());
+    assertNull(released.accountKeys());
+    assertArrayEquals(new byte[]{1}, released.data());
   }
 
   @Test

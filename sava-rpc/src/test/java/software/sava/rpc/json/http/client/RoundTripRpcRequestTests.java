@@ -1070,8 +1070,8 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
   }
 
   /// The block that holds the seeded gate-on v1 transaction of [V1AgaveTestFixtures]: a vote, the v1
-  /// transfer, and a legacy control transfer from the same payer, in that order. `getBlock` only
-  /// sends `maxSupportedTransactionVersion` for `transactionDetails: full` — without it the node
+  /// transfer, and a legacy control transfer from the same payer, in that order. `getBlock` sends
+  /// `maxSupportedTransactionVersion` for `transactionDetails` `full` and `accounts` — without it the node
   /// refuses this block outright with -32015 — and the node labels each entry with its own
   /// version, so a block mixes legacy and v1 [software.sava.rpc.json.http.response.BlockTx]
   /// entries and each must be read by its own rules.

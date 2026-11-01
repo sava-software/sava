@@ -297,7 +297,7 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
                                            final long slot,
                                            final BlockTxDetails blockTxDetails,
                                            final boolean rewards) {
-    final var maxSupportedTransactionVersion = blockTxDetails == BlockTxDetails.full
+    final var maxSupportedTransactionVersion = blockTxDetails == BlockTxDetails.full || blockTxDetails == BlockTxDetails.accounts
         ? ",\"maxSupportedTransactionVersion\":" + MAX_SUPPORTED_TRANSACTION_VERSION
         : "";
     return sendPostRequest(BLOCK, format("""

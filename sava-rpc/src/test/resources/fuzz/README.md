@@ -55,6 +55,17 @@ well-formed envelope its parser accepts in full:
   token-account factory actually parses.
 - `transaction` — a `getTransaction` result: meta, balances, and the encoded
   transaction tuple.
+- `block_accounts` — selector byte `0x03` (`Block::parse`): a `getBlock` result
+  served with `transactionDetails` `accounts`, the header of the devnet
+  4.4.0-beta.1 block in `rpc_response_data/getBlock-accounts-devnet-4.4.0-beta.1.json`
+  over two hand-reduced entries. The first keeps a real v0 transaction's
+  signatures, version, fee and two of its annotated `accountKeys` (one
+  `transaction` and one `lookupTable` source); its balances are cut to those
+  two keys with the second substituted, and its token balances are emptied.
+  The second is synthetic —
+  `"meta":null` beside `"version":"legacy"` and a key without `source`, a
+  pairing agave never sends — so the seed also reaches the null-meta,
+  string-version and absent-source branches of `BlockTx` and `TxAccountKey`.
 - `tx_simulation` — logs, return data, and nullable account/inner-instruction
   fields.
 - `vote_accounts` — `current`/`delinquent` with a nested `epochCredits`
