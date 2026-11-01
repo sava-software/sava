@@ -11,7 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /// contract.
 final class SendTransactionRpcRequestTests extends RpcRequestTests {
 
-  private static final String TX = "AVXo5X7UNzpuOmYzkZ%2Bfqx==";
+  /// A well-formed signed transfer; the body assertions only need its string, but a node could
+  /// deserialize it.
+  private static final String TX = RoundTripRpcRequestTests.signedTransfer(9, 42L);
   private static final String SIGNATURE =
       "5VERd3ZfLb2qBqZzbGjWEnwqZQFbHnLWuGh4H1oGrzXmMPHkOfkq8kSjMWZ7Vw6qLkyoBSc3mCQNMcxbNxJgpp1U";
 

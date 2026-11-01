@@ -250,14 +250,16 @@ on every cluster with HTTP 429 `{"code": 429, "message": "Too many requests for 
 call"}`; devnet's `x-ratelimit-method-limit` headers put `getBlock` at 6, `getTokenAccountsByOwner`
 and `getProgramAccounts` at 10 and `getTokenLargestAccounts` at 0. An inverted block-production
 range got HTTP 403 `Your IP or provider is blocked from this endpoint` in place of agave's
-`-32602`. The delegate tests therefore send the delegate bodies and replay the owner answers. Two
-transaction literals that older tests reuse as opaque strings, the docs-style one in
-`RoundTripRpcRequestTests.sendTransaction` and the one its `simulateTransactionFee` attributes to
-mainnet, are not well-formed serialized transactions, so every node answers `-32602 failed to
-deserialize ... VersionedTransaction` (devnet, mainnet and testnet did on 2026-11-01); the new
-submission fixtures use a hand-built legacy transfer with an all-zero signature and a non-existent
-payer, which devnet and testnet rejected in preflight (`-32002 ... did not pass signature
-verification`) without forwarding it.
+`-32602`. The delegate tests therefore send the delegate bodies and replay the owner answers. The
+transaction literals that `RoundTripRpcRequestTests` and `SendTransactionRpcRequestTests` had
+reused as opaque strings were not valid serialized transactions: on 2026-11-01 devnet, mainnet and
+testnet answered two of them with `-32602 failed to deserialize ... VersionedTransaction`, the one
+the three simulate tests shared carried trailing bytes that agave 4.x ignores and simulated to
+`AccountLoadedTwice`, and one was not base64. Those tests now build a signed system transfer from
+a fixed seed (`RoundTripRpcRequestTests.signedTransfer`) and keep their recorded responses, and the
+new submission fixtures use a hand-built legacy transfer with an all-zero signature and a
+non-existent payer, which devnet and testnet rejected in preflight (`-32002 ... did not pass
+signature verification`) without forwarding it.
 
 ### `tokenAccountState` program-account filter (2026-11-01)
 

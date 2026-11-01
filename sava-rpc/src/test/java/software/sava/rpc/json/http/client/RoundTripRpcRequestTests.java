@@ -2,9 +2,13 @@ package software.sava.rpc.json.http.client;
 
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
+import software.sava.core.accounts.Signer;
+import software.sava.core.accounts.meta.AccountMeta;
 import software.sava.core.accounts.token.TokenAccount;
 import software.sava.core.encoding.Base58;
+import software.sava.core.encoding.ByteUtil;
 import software.sava.core.rpc.Filter;
+import software.sava.core.tx.Instruction;
 import software.sava.core.tx.Transaction;
 import software.sava.rpc.json.http.request.BlockTxDetails;
 import software.sava.rpc.json.http.request.Commitment;
@@ -24,6 +28,33 @@ import static org.junit.jupiter.api.Assertions.*;
 import static software.sava.rpc.json.http.client.ParseRpcResponseTests.readFileString;
 
 final class RoundTripRpcRequestTests extends RpcRequestTests {
+
+  /// A well-formed system transfer, signed deterministically from `seedFill`, for the tests that
+  /// submit or simulate a transaction string. The literals first committed beside them were not
+  /// valid serialized transactions: two failed agave's deserialization outright, one deserialized
+  /// only because agave reads a prefix and ignored its trailing bytes, and one was not base64. The
+  /// blockhash is derived from the seed and is never a recent one, so nothing built here can land.
+  static String signedTransfer(final int seedFill, final long lamports) {
+    final byte[] seed = new byte[32];
+    Arrays.fill(seed, (byte) seedFill);
+    final var signer = Signer.createFromPrivateKey(seed);
+    final byte[] data = new byte[12];
+    data[0] = 2; // the system program's transfer instruction
+    ByteUtil.putInt64LE(data, 4, lamports);
+    final var transaction = Transaction.createTx(
+        AccountMeta.createFeePayer(signer.publicKey()),
+        List.of(Instruction.createInstruction(
+            PublicKey.fromBase58Encoded("11111111111111111111111111111111"),
+            List.of(
+                AccountMeta.createFeePayer(signer.publicKey()),
+                AccountMeta.createWrite(PublicKey.fromBase58Encoded("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"))
+            ),
+            data))
+    );
+    final byte[] blockHash = new byte[32];
+    blockHash[0] = (byte) seedFill;
+    return transaction.signAndBase64Encode(blockHash, signer);
+  }
 
   @Test
   void getHealth() {
@@ -1382,7 +1413,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
 
   @Test
   void sendTransaction() {
-    final var base64SignedTx = "AVXo5X7UNzpuOmYzkZ+fqHDGiRLTSMlWlUCcZKzEV5CIKlrdvZa3/2GrJJfPrXgZqJbYDaGiOnP99tI/sRJfiwwBAAEDRQ/n5E5CLbMbHanUG3+iVvBAWZu0WFM6NoB5xfybQ7kNwwgfIhv6odn2qTUu/gOisDtaeCW1qlwW/gx3ccr/4wQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQICAAEMAgAAAADKmjsAAAAA";
+    final var base64SignedTx = signedTransfer(3, 1_000_000_000L);
 
     registerRequest("""
         {"jsonrpc":"2.0","id":981,"method":"sendTransaction","params":["%s",{"encoding":"base64","preflightCommitment":"confirmed","maxRetries":1}]}""".formatted(base64SignedTx), """
@@ -1403,7 +1434,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
 
   @Test
   void simulateTransaction() {
-    final var base64EncodedTx = "AdYOLBh+RlElnqIB2Mvrmg67nQczOFRSw7lyLTOTHpTdLD/MEWOGE5tCBSjBg47qs+cVCv7RTBZEXckWDVMzU8sBAAEDgU5+hbBLvnDvXKYX5R8YS764AMBmAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAgIAAQwCAAAAAOH1BQAAAAA=";
+    final var base64EncodedTx = signedTransfer(4, 100_000_000L);
 
     registerRequest("""
         {"jsonrpc":"2.0","id":991,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"innerInstructions":false,"commitment":"confirmed"}]}""".formatted(base64EncodedTx), """
@@ -1424,7 +1455,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
 
   @Test
   void simulateTransactionWithInnerInstructions() {
-    final var base64EncodedTx = "AdYOLBh+RlElnqIB2Mvrmg67nQczOFRSw7lyLTOTHpTdLD/MEWOGE5tCBSjBg47qs+cVCv7RTBZEXckWDVMzU8sBAAEDgU5+hbBLvnDvXKYX5R8YS764AMBmAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAgIAAQwCAAAAAOH1BQAAAAA=";
+    final var base64EncodedTx = signedTransfer(4, 100_000_000L);
 
     registerRequest("""
         {"jsonrpc":"2.0","id":992,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"innerInstructions":true,"commitment":"confirmed"}]}""".formatted(base64EncodedTx), """
@@ -1444,7 +1475,7 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
 
   @Test
   void simulateTransactionWithAccounts() {
-    final var base64EncodedTx = "AdYOLBh+RlElnqIB2Mvrmg67nQczOFRSw7lyLTOTHpTdLD/MEWOGE5tCBSjBg47qs+cVCv7RTBZEXckWDVMzU8sBAAEDgU5+hbBLvnDvXKYX5R8YS764AMBmAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAgIAAQwCAAAAAOH1BQAAAAA=";
+    final var base64EncodedTx = signedTransfer(4, 100_000_000L);
     final var account = PublicKey.fromBase58Encoded("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri");
 
     registerRequest("""
@@ -1470,11 +1501,14 @@ final class RoundTripRpcRequestTests extends RpcRequestTests {
     assertEquals(0, accountInfo.data().length);
   }
 
-  /// Recorded against mainnet on 2026-07-13 for a transfer from an account which does not exist,
-  /// so that the simulation fails after the fee has been calculated.
+  /// The response was recorded against mainnet on 2026-07-13: a funded payer's transfer that named
+  /// too few accounts, so the fee was charged and the instruction failed with `MissingAccount`. The
+  /// transaction that produced it was lost, because the literal first committed with the response
+  /// was not a valid serialized transaction, so the request now carries a well-formed transfer from
+  /// [#signedTransfer(int,long)] and the response is replayed as recorded, not reproduced.
   @Test
   void simulateTransactionFee() {
-    final var base64EncodedTx = "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQABAmoQJvXCV0OtQtVcSFYzSXjxKrsq5sRZWAyjJvJLYbCUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHRRSqRZDlaKAY9RCS5PmuqXWTvzSw+3fRICsCPPPnjkBAQIBAAwCAAAAAAAAAAAAAAA=";
+    final var base64EncodedTx = signedTransfer(5, 0L);
 
     registerRequest("""
         {"jsonrpc":"2.0","id":994,"method":"simulateTransaction","params":["%s",{"encoding":"base64","sigVerify":false,"replaceRecentBlockhash":true,"innerInstructions":false,"commitment":"confirmed"}]}""".formatted(base64EncodedTx), """
