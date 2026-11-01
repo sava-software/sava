@@ -25,18 +25,20 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
     return true;
   }
 
-  /// The gate. A 2xx object with a `result` member passes, its iterator positioned there; an
-  /// object with a readable `error` object, reached under any status when there is no result,
-  /// throws its [JsonRpcException] with the status it arrived under. Everything else is not a
-  /// usable JSON-RPC answer and throws the typed [HttpResponseException] with the status and
-  /// the body: a null or blank body, before the parser is opened; a non-2xx without an error
-  /// object, a body that does not start a JSON object and an object with neither member, from
-  /// the classification; and every body the parser cannot read, an object the scan cannot get
-  /// through or an `error` member that is not a readable error object, with the parser's
-  /// failure attached as suppressed and the body logged at DEBUG. A readable error object whose
-  /// `data` does not parse still throws its [JsonRpcException], which carries the data's failure
-  /// as suppressed. Only the reads sit inside the try, so a failure of any kind out of the parser
-  /// is typed and the deliberate throws are not caught.
+  /// The gate. A 2xx object with a `result` member passes, its iterator positioned there. An
+  /// object's `error` member, reached under a non-2xx status whatever else the object holds and
+  /// under a 2xx when there is no result, throws its [JsonRpcException] with the status it
+  /// arrived under when it is a readable error object or null, a null or empty one reading as
+  /// code 0. Everything else is not a usable JSON-RPC answer and throws the typed
+  /// [HttpResponseException] with the status and the body: a null or blank body, before the
+  /// parser is opened; a non-2xx without an error member, a body that does not start a JSON
+  /// object and an object with neither member, from the classification; and every body the
+  /// parser cannot read, an object the scan cannot get through or an `error` member that is
+  /// neither null nor a readable error object, with the parser's failure attached as suppressed
+  /// and the body logged at DEBUG. A readable error object whose `data` does not parse still
+  /// throws its [JsonRpcException], which carries the data's failure as suppressed. Only the
+  /// reads sit inside the try, so a failure of any kind out of the parser is typed and the
+  /// deliberate throws are not caught.
   @Override
   protected final JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
     if (body == null || isBlank(body)) {

@@ -445,6 +445,34 @@ final class JsonRpcResponseParserTests {
     assertEquals(OptionalInt.of(429), nullMessage.httpStatus());
   }
 
+  /// The error path is taken under a non-2xx status whatever else the object holds, and under a
+  /// 2xx when there is no result: a `result` beside an `error` answers only under a 2xx, and an
+  /// `error` member that is null or an empty object is a readable error with code 0, under any
+  /// status, not a body the gate could not read.
+  @Test
+  void anErrorMemberAnswersUnderANon2xxAndANullOrEmptyOneReadsAsCodeZero() {
+    assertAll(
+        () -> {
+          final var both = assertThrows(JsonRpcException.class, () -> parseResult(503,
+              "{\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"},\"id\":1}"));
+          assertEquals(-32603, both.code());
+          assertEquals(OptionalInt.of(503), both.httpStatus());
+        },
+        () -> {
+          final var nullError = assertThrows(JsonRpcException.class,
+              () -> parseResult(503, "{\"jsonrpc\":\"2.0\",\"error\":null,\"id\":1}"));
+          assertEquals(0, nullError.code());
+          assertEquals(OptionalInt.of(503), nullError.httpStatus());
+        },
+        () -> {
+          final var emptyError = assertThrows(JsonRpcException.class,
+              () -> parseResult(200, "{\"jsonrpc\":\"2.0\",\"error\":{},\"id\":1}"));
+          assertEquals(0, emptyError.code());
+          assertEquals(OptionalInt.of(200), emptyError.httpStatus());
+        }
+    );
+  }
+
   /// Agave answers a health check it cannot decide, from getHealth or from sendTransaction's
   /// preflight, with -32005 and `"numSlotsBehind":null`, since its `NodeUnhealthyErrorData`
   /// holds an `Option<Slot>`. That is a readable error: it arrives as the JsonRpcException it
