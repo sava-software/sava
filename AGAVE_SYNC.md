@@ -207,10 +207,98 @@ instructions requires a distinct response path from the current resolved-instruc
 parser. Neither is part of the 4.4 rollout. Existing mainnet omissions such as
 `getAgGenesisCert` remain deliberate.
 
+### Request options closed on 2026-11-01
+
+Read at agave `2e935dae83` (master, 2026-11-01) and probed on the three public clusters the
+same day: devnet `4.4.0-beta.1` (feature set 3993424257), mainnet `4.3.2` (3383571666) and
+testnet `4.4.0` (3722100051), as `getVersion` reported them. The devnet exchanges below, and
+mainnet's block-production range, are replayed verbatim by the named tests; the mainnet and testnet
+comparisons, the proxy refusals and headers, the literal failures, the `dataSize` control and the
+WebSocket timings are recorded here only. The raw bodies, headers and request logs stayed outside
+the repo.
+
+| Surface | Agave | sava |
+| --- | --- | --- |
+| `minContextSlot` on `getBalance`, `getBlockHeight`, `getEpochInfo`, `getSlot`, `getSlotLeader`, `getTransactionCount`, `getStakeMinimumDelegation`, `getLatestBlockhash`, `isBlockhashValid`, `getFeeForMessage`, `getBlocks`, `getBlocksWithLimit`, `getTokenAccountsByOwner`, `getTokenAccountsByDelegate`, `sendTransaction`, `simulateTransaction` | `RpcContextConfig`, `RpcAccountInfoConfig`, `RpcSendTransactionConfig`, `RpcSimulateTransactionConfig` (`rpc-client-types/src/config.rs`). `get_bank_with_config` (`rpc/src/rpc.rs`) answers a bank below the minimum with `-32016 MinContextSlotNotReached { contextSlot }`; `getBlocks`/`getBlocksWithLimit` compare the highest super-majority root under finalized and the confirmed bank otherwise; the submission paths decode and sanitize first, check the minimum, then verify signatures, so a skipped preflight still enforces it against the processed bank; `getFeeForMessage` decodes the message first. | Trailing `BigInteger minContextSlot` overloads with the `getTransaction` conventions (`null` omits, zero literal, unsigned); the token-account families take it where `getAccountInfo` does. With these, every request config agave carries the option on is covered except `RpcRankMapConfig` (`getRankMap`, omitted by policy). `MinContextSlotRpcRequestTests`, `TokenAccountsRpcRequestTests`. |
+| `getTokenAccountsByOwner`/`ByDelegate` decoding and `dataSlice` | `RpcAccountInfoConfig.data_slice`, applied by `encode_account`; both methods answer with one `RpcKeyedAccount` list. | A `BiFunction` decoder (raw bytes, `Token2022Account.read`, …) and a `DataSlice`, in `getAccountInfo`'s parameter order; the released overloads keep `TokenAccount.FACTORY`. `TokenAccountsRpcRequestTests`. |
+| `getProgramAccounts` `sortResults` | `RpcProgramAccountsConfig.sort_results`, `unwrap_or(true)`. | `ProgramAccountsRequest.Builder.sortResults(boolean)`, rendered after the filters; unset omits it. `ProgramAccountsSortRpcRequestTests`, fixture `getProgramAccounts-nativeLoader-unsorted-devnet.json`. |
+| `getBlockProduction` `range.lastSlot` | `RpcBlockProductionConfigRange { first_slot, last_slot }`; `lastSlot < firstSlot`, a `firstSlot` before the slot history or a `lastSlot` beyond it are `-32602` with the limit in the message. | `getBlockProduction(Commitment, PublicKey, long, long)` and conveniences. `BlockProductionRangeRpcRequestTests`. |
+| `getBlock` `transactionDetails: accounts` | `TransactionDetails::Accounts`, `build_json_accounts`; see the paragraph under "Response records and JSON parsing conventions". | `BlockTxDetails.accounts`, `BlockTx.version()/signatures()/accountKeys()`, `TxAccountKey`, `AccountKeySource`. `BlockAccountsRpcRequestTests`, fixture `getBlock-accounts-devnet-4.4.0-beta.1.json`. |
+| `tokenAccountState` filter | `RpcFilterType::TokenAccountState` (`rpc-client-types/src/filter.rs`); see its own subsection below. | `Filter.tokenAccountState()`. `TokenAccountStateFilterRpcRequestTests`, `TokenAccountStateFilterSubscriptionTests`. |
+| `logsSubscribe` with `all` | `RpcTransactionLogsFilter::All`; see the WebSocket section. | `SolanaRpcWebsocket.logsSubscribeAll`/`logsUnsubscribeAll`. `LogsSubscribeAllTests`, `LiveDevnetLogsAllShapeTests`. |
+
+Live, a satisfied minimum (zero, or a slot about a hundred below the node's) returned the ordinary
+result and `18446744073709551615` returned `-32016` whose `contextSlot` was the node's own slot:
+for every `RpcContextConfig` method and `simulateTransaction` on all three clusters, for
+`sendTransaction` on devnet and testnet (it was not sent to mainnet), and for
+`getTokenAccountsByOwner` on devnet and mainnet (testnet's probe block held no token balance, so
+it received no valid owner); `getTokenAccountsByDelegate` was never answered, so its minimum rests
+on the source read alone. The option predates 4.4, and mainnet enforced it on every method that
+answered: its 4.3.2 nodes for the `RpcContextConfig` methods and `simulateTransaction`, and a
+backend whose context reported 4.3.0-beta.2 for `getTokenAccountsByOwner`, unlike the
+signature-status and transaction minimums recorded in the 4.4 section. A two-sided
+block-production range and `sortResults: false` were accepted everywhere, and for the native
+loader's accounts the unsorted answer matched the sorted one on every cluster; every cluster's
+`getProgramAccounts` answers likewise came from backends whose context reported 4.3.0-beta.2
+(devnet, mainnet) or 4.4.0-beta.0 (testnet) behind the `getVersion` above. `getBlocks`
+in the two-element `[start, config]` form parsed as agave's untagged `RpcBlocksConfigWrapper`
+promises.
+
+The public endpoints also showed what their proxies refuse, which the tests note.
+`getTokenAccountsByDelegate` and `getTokenLargestAccounts` answered every call
+on every cluster with HTTP 429 `{"code": 429, "message": "Too many requests for a specific RPC
+call"}`; devnet's `x-ratelimit-method-limit` headers put `getBlock` at 6, `getTokenAccountsByOwner`
+and `getProgramAccounts` at 10 and `getTokenLargestAccounts` at 0. An inverted block-production
+range got HTTP 403 `Your IP or provider is blocked from this endpoint` in place of agave's
+`-32602`. The delegate tests therefore send the delegate bodies and replay the owner answers. Two
+transaction literals that older tests reuse as opaque strings, the docs-style one in
+`RoundTripRpcRequestTests.sendTransaction` and the one its `simulateTransactionFee` attributes to
+mainnet, are not well-formed serialized transactions, so every node answers `-32602 failed to
+deserialize ... VersionedTransaction` (devnet, mainnet and testnet did on 2026-11-01); the new
+submission fixtures use a hand-built legacy transfer with an all-zero signature and a non-existent
+payer, which devnet and testnet rejected in preflight (`-32002 ... did not pass signature
+verification`) without forwarding it.
+
+### `tokenAccountState` program-account filter (2026-11-01)
+
+Agave's `RpcFilterType` (`agave:rpc-client-types/src/filter.rs`) has three variants: `dataSize`,
+`memcmp`, and the unit variant `TokenAccountState`. `#[serde(rename_all = "camelCase")]` writes
+the last as the bare string `"tokenAccountState"` in the `filters` array, and `verify` accepts it
+unconditionally. It dates from solana-labs #24541 (2022). sava's sealed `Filter` covers all three
+through `Filter.tokenAccountState()`.
+
+The node applies `spl_generic_token::token_2022::Account::valid_account_data` to the data alone
+(`agave:rpc/src/filter.rs`; spl-generic-token 2.0.1 in agave's Cargo.lock). That accepts exactly
+165 bytes, or more than 165 bytes other than 355 (a multisig) with account-type byte `2` at
+offset 165. In both cases the state byte at offset 108 must be non-zero, so frozen accounts
+match. `get_spl_token_owner_filter` and `get_spl_token_mint_filter` (`agave:rpc/src/rpc.rs`)
+count it as the token-account requisite for the by-owner and by-mint secondary indexes, alongside
+a 165-byte `dataSize` and the Token-2022 account-type memcmp. `programSubscribe`
+(`agave:rpc/src/rpc_pubsub.rs`) runs the same `verify_filters` and `optimize_filters`, and
+`MAX_GET_PROGRAM_ACCOUNT_FILTERS` = 4 (`agave:rpc-client-types/src/request.rs`) bounds both. Read
+at agave `2e935dae83`.
+
+Observed 2026-11-01 on `https://api.devnet.solana.com` (node `ams261`, solana-core 4.4.0-beta.1,
+feature set 3993424257). `getProgramAccounts` with
+`[{"memcmp":{"offset":0,"bytes":<mint>}},"tokenAccountState"]` returned the single 165-byte
+holder of SPL Token mint `BKi5XZBUL49pwNDhNgeR9gJcrxfuRH48F2nCzDq4rCsz`, and the holders of
+Token-2022 mint `DbXcVKGeuhnmmi3BhkztB6zs2mEsNkwjnjH1tudQkws`: all but one of 175 bytes
+(ImmutableOwner and TransferHookAccount) and one of 171 (TransferHookAccount only, so not an
+associated token account). The same Token-2022 query with `{"dataSize":165}` instead returned
+none. The node never refused the filter. Fixture
+`rpc_response_data/getProgramAccounts-tokenAccountState-token2022-devnet-4.4.0-beta.1.json`; the
+SPL Token response is inline. Tests: `TokenAccountStateFilterRpcRequestTests` and
+`TokenAccountStateFilterSubscriptionTests`, plus `FilterTests` and `ProgramAccountsRequestTests`.
+
 Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/client/`
 - `RoundTripRpcRequestTests.java` — one test per RPC method against a mock HTTP server,
   asserting the exact request JSON and response parsing. **Add a test here for every new
   method.**
+- `MinContextSlotRpcRequestTests.java`, `TokenAccountsRpcRequestTests.java`,
+  `BlockProductionRangeRpcRequestTests.java`, `ProgramAccountsSortRpcRequestTests.java`,
+  `BlockAccountsRpcRequestTests.java`, `TokenAccountStateFilterRpcRequestTests.java` — the
+  verbatim public-cluster exchanges of 2026-11-01 behind "Request options closed on 2026-11-01",
+  one class per option.
 - `ParseRpcResponseTests.java`, `ParseTXTests.java` — parse captured responses.
 - Golden fixtures: `sava-rpc/src/test/resources/rpc_response_data/*.json(.zip)` — real
   agave responses (getBlock, getProgramAccounts, getVoteAccounts, …). These detect response
@@ -264,8 +352,37 @@ with `-32601 Method not found` unless started with `--rpc-pubsub-enable-vote-sub
 master `1513b7a5bb` (unreleased) drops that gate; wherever it is accepted under Alpenglow it
 never notifies (see Alpenglow and Known gaps).
 
+Logs filters: `logsSubscribe(PublicKey…)` sends `{"mentions":["<key>"]}`, and agave accepts
+exactly one address (`-32602 Invalid Request: Only 1 address supported`); `logsSubscribeAll`
+sends the bare string `"all"` (`agave:rpc-client-types/src/config.rs` `RpcTransactionLogsFilter`,
+camelCase) and registers under the key `all` beside the mentions keys. Agave's `All` kind drops
+vote transactions (`agave:rpc/src/rpc_subscriptions.rs` `get_transaction_logs`). `allWithVotes` is
+not exposed: master `1513b7a5bb` (#16260, 2026-10-22) deprecates it since 4.5.0 as an alias of
+`all` ("Alpenglow has no vote transactions"); servers before that commit keep vote transactions
+under it, which exist only on a TowerBFT cluster. Observed on public devnet 2026-11-01
+(solana-core 4.4.0-beta.1, feature set 3993424257): `["all",{"commitment":"confirmed"}]` was
+granted its subscription id about 57 ms after the request, notifications followed about 50 ms
+later in a burst from one slot, more arrived for the id in the few milliseconds after the
+`logsUnsubscribe` left, and its `true` answer came about 56 ms later. A late notification that
+arrives while the `logsUnsubscribe` is unanswered is not answered with a second frame at once:
+`sendUnSubscription` records the cancellation obligation behind the in-flight one and sends it
+once the first is acknowledged, after which agave refuses the duplicate id with `-32602` and the
+client settles it quietly (`-32602 Invalid subscription id.`, `rpc/src/rpc_pubsub.rs`). That is the
+existing cancellation discipline of the logs channel, not something the `all` filter adds; the
+signature channel drops a retired id's late notifications instead. A second devnet probe at 19:10Z
+the same day was granted the same subscription id (28179973) for the same params: agave's
+`SubscriptionControl::subscribe` (`rpc/src/rpc_subscription_tracker.rs`) keys live subscriptions by
+their params, so every connection asking with identical params joins one server subscription, which
+is the mechanism behind `SolanaJsonRpcWebsocket`'s id-reusing-server handling and its reconnect
+tests, and behind the slice canonicalization in the `dataSlice` row of the 4.4 table above.
+`LiveDevnetLogsAllShapeTests` replays the first exchange verbatim with the second probe's late
+notifications and refusal spliced in; `LogsSubscribeAllTests` covers overloads, routing and replay.
+
 Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/ws/SolanaJsonRpcWebsocketTests.java`
-and `SolanaRpcWebsocketTests.java` (subscription lifecycle and framing).
+and `SolanaRpcWebsocketTests.java` (subscription lifecycle and framing); `LogsSubscribeAllTests.java`
+and `LiveDevnetLogsAllShapeTests.java` (the `all` logs filter);
+`TokenAccountStateFilterSubscriptionTests.java` (the `tokenAccountState` filter on program
+subscriptions).
 
 ## Errors: TransactionError, InstructionError, RPC custom errors
 
@@ -299,15 +416,28 @@ Enum mirrors in this package: `RewardType` (including `DeactivatedStake`) and th
 confirmation status strings map to
 `agave:transaction-status-client-types/src/lib.rs` (`RewardType`, `TransactionConfirmationStatus`,
 `UiTransactionEncoding`). Like `InflationReward`, `TxReward` stores the effective commission
-value and flags when that value came from the canonical `commissionBps` field. Full `getBlock`
-requests and all `getTransaction` requests send
-`maxSupportedTransactionVersion: SolanaJsonRpcClient.MAX_SUPPORTED_TRANSACTION_VERSION` (currently
-`1`), matching this client's legacy/v0/v1 transaction model. The parameter is omitted for
-`transactionDetails` of `none` and `signatures`, because agave's
-`ConfirmedBlock::encode_with_options` never version-checks those arms. Note that the
-`== BlockTxDetails.full` condition is only sufficient while sava's `BlockTxDetails` has no
-`accounts` constant; agave's `TransactionDetails::Accounts` arm does version-check via
-`build_json_accounts`.
+value and flags when that value came from the canonical `commissionBps` field. `getBlock`
+requests with `transactionDetails` of `full` or `accounts`, and all `getTransaction` requests,
+send `maxSupportedTransactionVersion: SolanaJsonRpcClient.MAX_SUPPORTED_TRANSACTION_VERSION`
+(currently `1`), matching this client's legacy/v0/v1 transaction model. The parameter is omitted
+for `none` and `signatures`, because agave's `ConfirmedBlock::encode_with_options` never
+version-checks those arms, while its `TransactionDetails::Accounts` arm does through
+`build_json_accounts`: on 2026-11-01 the same devnet block answered without the parameter with
+`-32015 UnsupportedTransactionVersion` naming version 0, the version of the first versioned
+transaction in block order, not necessarily the block's highest.
+
+`getBlock` with `transactionDetails: accounts` (observed 2026-11-01 on devnet, Agave 4.4.0-beta.1,
+finalized slot 517568132): agave's `build_json_accounts` (`transaction-status/src/lib.rs`) replaces
+each transaction's payload with `UiAccountsList { signatures, accountKeys }`, where each
+`ParsedAccount` is `{pubkey, writable, signer, source}` and `source` is `transaction` for static
+keys and `lookupTable` for keys a v0 message loaded (`parse_accounts.rs`; v1 messages serve only
+`transaction`); `meta` is `build_simple_ui_transaction_status_meta`: `err`/`status`, `fee`,
+`preBalances`/`postBalances`, `preTokenBalances`/`postTokenBalances`, `rewards` only when
+requested, and no inner instructions, logs, loaded addresses, return data, compute units or cost
+units. Agave serializes the `transaction` object with `accountKeys` before `signatures`. sava:
+`BlockTxDetails.accounts`, `BlockTx.version()/signatures()/accountKeys()`, `TxAccountKey`,
+`AccountKeySource`; fixture `getBlock-accounts-devnet-4.4.0-beta.1.json`, replayed by
+`BlockAccountsRpcRequestTests`.
 
 ### Observed on Agave 4.2.1
 
@@ -1105,6 +1235,7 @@ completes.**
 |---|---|---|---|
 | agave | `e9a538e726` | 2026-07-14 | Token-2022 extensions (`account-decoder/src/parse_token_extension.rs`, `account-decoder-client-types/src/token.rs`), HTTP RPC method set (`rpc/src/rpc.rs`), pubsub methods (`rpc/src/rpc_pubsub.rs`), request/response shapes (`rpc-client-types/src/{config,response}.rs`), custom error codes (`rpc-client-api/src/custom_error.rs`), reserved accounts (`reserved-account-keys/src/lib.rs`), sysvar layouts (`account-decoder/src/parse_sysvar.rs`), `transaction-status-client-types/src/lib.rs` enums |
 | agave, 4.4 RPC delta only | `b6149a719f` (`v4.4.0-rc.1`) | 2026-10-28 | `v4.3.2..v4.4.0-beta.1..v4.4.0-rc.1`: `rpc/src/{rpc,rpc_pubsub,rpc_subscriptions}.rs`, `rpc-client-types/src/{config,response,request}.rs`, `rpc-client-api/src/custom_error.rs`, account/transaction decoder response schemas and pinned error enum versions. New status/transaction context options, vote-key schedules, missing-identity error and WebSocket slices implemented; live observations and separate 4.5 alpha boundary above. Other surfaces retain their earlier sync rows. |
+| agave, request options only | `2e935dae83` | 2026-11-01 | `rpc-client-types/src/{config,filter,request}.rs` (every `min_context_slot`, `sort_results`, `RpcBlockProductionConfigRange`, `RpcFilterType::TokenAccountState`, `RpcTransactionLogsFilter`), `rpc/src/{rpc,rpc_pubsub,filter}.rs` (the checks named under "Request options closed on 2026-11-01"), `transaction-status/src/{lib,parse_accounts}.rs` and `transaction-status-client-types/src/lib.rs` (`TransactionDetails::Accounts`, `UiAccountsList`, `ParsedAccount`). Other surfaces keep their rows. |
 | solana-sdk | `4fb3a9a3` | 2026-07-14 | `transaction-error/`, `instruction-error/` (all variants), `sdk-ids/` (address constants) |
 | solana-sdk, error enums only | `983858e1` | 2026-09-20 | `transaction-error/` and `instruction-error/` variant sets, via the committed error-variants fixture (crates 4.0.0 and 3.0.0, published from `9d02e6dc` and `5bcc7778`, source unchanged since). `sdk-ids/` and every other solana-sdk surface were not rechecked and keep the row above. |
 | solana-sdk, address ordering only | `3da2b8b9` | 2026-10-06 | `address/src/lib.rs`: `Address` (re-exported as `Pubkey`) derives `Ord`/`PartialOrd` over `[u8; 32]`, with no manual impl in `address/` or `pubkey/`; `PublicKey.compareTo` mirrors that order. Nothing else in solana-sdk was checked in this pass, PDA derivation in the same crate included. |

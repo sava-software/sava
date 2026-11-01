@@ -46,6 +46,19 @@ both `TransferFeeConfig` authorities, `PermanentDelegate.delegate`,
 are always false; the reverse mistake treats an unset authority as a real key and
 happily encodes a transaction naming the all-zero address.
 
+`BlockTx` is one record for two `getBlock` modes. With `BlockTxDetails.full`, `data()` and
+`skeleton()` are set and `signatures()` and `accountKeys()` are `null`; with
+`BlockTxDetails.accounts`, those two lists are set and `data()` and `skeleton()` are `null`.
+`version()` is the node's label in both modes (negative for `legacy` or absent, `isLegacy()`);
+for `full` entries the skeleton reads the version off the bytes independently. In `accounts`
+mode `TxMeta` is agave's reduced meta, so `logMessages()`, `innerInstructions()`,
+`loadedAddresses()`, `returnData()` and `costUnits()` are `null` and `computeUnitsConsumed()`
+is `0`: `null` there means "not served", not "none". `rewards()` is `null` in `accounts` mode when
+the request's `rewards` is `false` and a list otherwise; in `full` mode the node answers
+`"rewards":null` when rewards are not requested, which reads as an empty list, so there it is
+never `null`. `TxAccountKey.source()` is `null` when the node omits or nulls the member, or serves
+a value this release does not recognize.
+
 ## Unsigned longs and sentinel zeros
 
 Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
@@ -70,6 +83,9 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   `dataSliceLength(offset, 0)` read a zero length as "whole account", whereas a `DataSlice`
   is literal: a zero length is empty data, and `null` is the whole account. Use the
   `BigInteger` overloads when you need to express a literal zero.
+- `ProgramAccountsRequest.sortResults()` is `null` when unset and the option is then omitted,
+  which the node reads as sorted by public key; `false` is the only value that changes the
+  answer, and even then only its order.
 
 ## Argument-order and flag traps
 
@@ -78,6 +94,21 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   Agave 4.4; 4.3 silently ignores those options. `getTransaction`'s minimum-slot overload
   checks node freshness, not the transaction's slot, and retains the client's default
   commitment. An omitted `BigInteger` minimum is `null`; zero is a literal zero.
+- Every other method agave reads through `RpcContextConfig` (`getBalance`, `getBlockHeight`,
+  `getEpochInfo`, `getSlot`, `getSlotLeader`, `getTransactionCount`,
+  `getStakeMinimumDelegation`, `getLatestBlockHash`, `isBlockHashValid`, `getFeeForMessage`,
+  `getBlocks`, `getBlocksWithLimit`), both `sendTransaction` families and `simulateTransaction`
+  take the same trailing `BigInteger minContextSlot` with the same `null`, zero and unsigned
+  conventions; agave reads the option on all of them, the option predates 4.4, and every public
+  cluster enforced it where it was probed (AGAVE_SYNC.md lists what was sent where). The
+  token-account queries take it where `getAccountInfo` does, right after the commitment and
+  before the `DataSlice`. Skipping preflight does not skip the minimum; the node still checks
+  it against its processed bank before forwarding anything. On a node with BigTable configured,
+  `getBlocksWithLimit` with a start slot older than its blockstore is answered from BigTable
+  without the check under `CONFIRMED`, and under `FINALIZED` too on the released 4.3 and 4.4
+  nodes.
+  `getBlocks(Commitment, long, BigInteger)` and `getBlocks(Commitment, long, long)` differ only
+  in the third parameter's type, so an integer literal there is the end slot, never the minimum.
 - Account data windows are a `DataSlice(offset, length)`, offset first like Agave's
   `dataSlice` object, on both clients. The HTTP overloads take it where the deprecated
   `length, offset` ints sat; the WebSocket overloads take it right after the commitment, so a
@@ -86,7 +117,17 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   identity. On the HTTP client a bare `null` literal is now ambiguous where a released
   overload and its twin differ only in that position: a null minimum slot right after the
   commitment in `getAccountInfo`, `getMultipleAccounts` and `getAccounts`, and
-  `getProgramAccounts` with a null minimum slot or null commitment next to null filters. Cast
+  `getProgramAccounts` with a null minimum slot or null commitment next to null filters. The
+  token-account queries have the same ambiguity among their new overloads, with a `null` right
+  after the commitment, and a bare `null` in place of their commitment, which the released
+  three-argument overloads accepted, now sits between `Commitment`, `BigInteger` and
+  `DataSlice`. A bare `null` as the only argument of `getSlot`,
+  `getBlockHeight`, `getEpochInfo`, `getSlotLeader`, `getTransactionCount`,
+  `getStakeMinimumDelegation` or `getLatestBlockHash` sits between `Commitment` and
+  `BigInteger`; `getBalance`, `isBlockHashValid` and `getFeeForMessage` are ambiguous only when
+  both arguments are bare nulls, between the released `(Commitment, …)` and the new
+  `(…, BigInteger)`; on the WebSocket client `logsSubscribeAll(null, consumer)` sits between
+  `Commitment` and the `onSub` consumer. Cast
   the null, `(BigInteger) null` or `(DataSlice) null`, or call the overload without that
   parameter. Slice options do not create a separate account/program registration
   at the same commitment; use distinct keyed program registrations for multiple program
@@ -99,6 +140,13 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - `ProgramAccountsRequest.Builder.dataSliceLength(offset, length)`, deprecated, takes the
   **offset first** despite the name, and calling it backwards returns the wrong window
   rather than failing; `dataSlice(DataSlice)` replaces it.
+- `Filter.tokenAccountState().toJson()` is a bare JSON string, `"tokenAccountState"`, not an
+  object, so a test that counts braces cannot see it: assert whole bodies.
+  `TokenAccount.TOKEN_ACCOUNT_SIZE_FILTER` (`dataSize` 165) drops every Token-2022 account that
+  carries an extension; live it matched none of the holders the state filter returned for a
+  Token-2022 mint. Use `Filter.tokenAccountState()` for Token-2022 holder queries.
+- `Subscription.publicKey()` is `null` for every logs registration, mentions included: those
+  are keyed by string, the base58 key or `all`, which `key()` returns.
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it
   also changes the `maxRetries` default (0 when skipping, 1 otherwise) and the
   preflight commitment. Use the three-argument overload to pin retries.
@@ -158,6 +206,7 @@ unannotated, since the mapping is clear enough once you know to look:
 | `byIdentity` | `BlockProduction.leaderInfoMap()` |
 | `identity` | `Identity.identityKey()` |
 | `pubkey` | `ClusterNode.publicKey()` |
+| `err` | `error()` on `TxLogs`, `TxMeta` and `TxSimulation` |
 
 Read the record header before writing assertions — most accessor mistakes are
 just this.
