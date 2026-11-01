@@ -27,11 +27,11 @@ import java.util.OptionalLong;
 /// fit its code or a value a decoder refuses, is still the [JsonRpcException] the server
 /// answered with, its custom error the one the code alone names and the data's failure attached
 /// to it as suppressed. An `"error": null` or an empty error object reads as a
-/// [JsonRpcException] with code 0. Two failures escape untyped and without a status, because
-/// they happen outside the gate: a body the client cannot read, one labelled gzip that is not
-/// gzip among them, is an [UncheckedIOException] over the reading failure, thrown before any
-/// status is consulted; and a 2xx whose `result` the call's own parser cannot read is that
-/// parser's exception.
+/// [JsonRpcException] with code 0. Two failures escape untyped and without a status: a body
+/// the client cannot read, one labelled gzip that is not gzip among them, is an
+/// [UncheckedIOException] over the reading failure, thrown before any status is consulted;
+/// and a 2xx body that the controller's checks pass but the call's own parser cannot read is
+/// that parser's exception.
 ///
 /// Built as this failure was built before it had a type of its own: an `UncheckedIOException`
 /// over an `UnknownServiceException` carrying the message, so a catch of `UncheckedIOException`

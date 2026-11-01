@@ -1496,11 +1496,11 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     }
   }
 
-  /// The parser's or a decoder's failure the JSON-RPC gate attached when it refused a body it could
-  /// not read, under any status, or null when `cause` is anything else: a refusal with nothing
-  /// attached, by status or for the body's shape alone (no object, neither member), or not the
-  /// gate's at all. A shape refusal stays an HTTP error here because the one decoding regression
-  /// that would produce it, gzip announced and not applied, fails the gzip-magic check in
+  /// The parser's failure the JSON-RPC gate attached when it refused a body it could not read,
+  /// under any status, or null when `cause` is anything else: a refusal with nothing attached,
+  /// by status or for the body's shape alone (no object, neither member), or not the gate's at
+  /// all. A shape refusal stays an HTTP error here because the one decoding regression that
+  /// would produce it, gzip announced and not applied, fails the gzip-magic check in
   /// `testResponse` first, and anything else that serves a shapeless body is the peer's defect.
   private static Throwable unreadableBody(final Throwable cause) {
     return cause instanceof HttpResponseException refused && refused.getSuppressed().length > 0

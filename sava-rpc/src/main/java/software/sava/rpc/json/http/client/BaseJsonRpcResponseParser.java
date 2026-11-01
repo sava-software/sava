@@ -74,8 +74,9 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
       // and parseException attaches that failure to the JsonRpcException instead.
       final var bodyText = new String(body, StandardCharsets.UTF_8);
       // DEBUG, not ERROR: the exception thrown below carries the status, the body and this
-      // failure, so whether the answer is worth an error line is the caller's call.
-      logger.log(DEBUG, "Not a readable JSON-RPC response: " + bodyText, unreadable);
+      // failure, so whether the answer is worth an error line is the caller's call. The line is
+      // built only when DEBUG is on; the body text is built for the exception either way.
+      logger.log(DEBUG, () -> "Not a readable JSON-RPC response: " + bodyText, unreadable);
       final var failure = responseFailure(httpResponse, bodyText);
       failure.addSuppressed(unreadable);
       throw failure;
