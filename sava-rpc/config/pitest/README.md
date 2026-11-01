@@ -252,8 +252,10 @@ Kept apart from the arguments above; none of it is live evidence.
   read noticed the rethrown exception is the JSON parser's own, so the logged status and
   body were the *only* record of what the provider sent. The gate's catch now throws an
   `HttpResponseException` carrying the status, the body and the parser's failure as
-  suppressed, and keeps the log, which the envelope test still reads through `TestLogs`;
-  `applyResponse`'s tail is unchanged. `# dead null arm` is what remains of that family.
+  suppressed, and keeps the log at DEBUG (ERROR until 2026-11-01, which repeated what a
+  caller logs from the exception), which the envelope test still reads, level included,
+  through `TestLogs`; `applyResponse`'s tail is unchanged. `# dead null arm` is what
+  remains of that family.
 - Two acceptances were withdrawn because the unreachability was the fixture's, not
   the code's: the `checkResponse` status-range boundaries (a stub constructs any
   status) and the `ReadHttpResponse` pass-through accessors (a stub returning the

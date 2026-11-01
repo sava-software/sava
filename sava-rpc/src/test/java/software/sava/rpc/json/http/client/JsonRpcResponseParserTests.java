@@ -15,6 +15,7 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -321,8 +322,10 @@ final class JsonRpcResponseParserTests {
 
   /// An error envelope whose `error` value is not an object is not a parsed protocol error and
   /// not a usable answer: it is typed with its status and body, the parser's own failure
-  /// attached as suppressed, and the body is still logged, so that a provider's shape is on
-  /// record whether or not the caller keeps the exception.
+  /// attached as suppressed, and the body is still logged, so that a provider's shape can be
+  /// traced whether or not the caller keeps the exception. The log is at DEBUG, which the JUL
+  /// backend records as `FINE`: the exception carries everything the line does, and an ERROR
+  /// line would repeat what the caller logs from it.
   @Test
   void malformedErrorEnvelopeIsTypedWithItsStatusAndLogged() {
     final var thrown = new HttpResponseException[1];
@@ -337,8 +340,11 @@ final class JsonRpcResponseParserTests {
       thrown[0] = ex;
     });
     assertTrue(records.stream().anyMatch(record ->
-            record.getThrown() == thrown[0].getSuppressed()[0] && record.getMessage().contains("boom")),
-        "the malformed envelope must be logged with its body: " + records);
+            record.getThrown() == thrown[0].getSuppressed()[0]
+                && record.getMessage().contains("boom")
+                && Level.FINE.equals(record.getLevel())),
+        "the malformed envelope must be logged at DEBUG with its body: "
+            + records.stream().map(record -> record.getLevel() + " " + record.getMessage()).toList());
   }
 
   /// Every body the gate cannot read as a JSON-RPC answer is typed with its status, so that a

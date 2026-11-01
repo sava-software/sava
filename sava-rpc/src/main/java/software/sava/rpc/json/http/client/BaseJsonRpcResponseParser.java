@@ -9,7 +9,7 @@ import java.net.http.HttpResponse;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
-import static java.lang.System.Logger.Level.ERROR;
+import static java.lang.System.Logger.Level.DEBUG;
 
 abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R> {
 
@@ -33,9 +33,9 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
   /// object, a body that does not start a JSON object and an object with neither member, from
   /// the classification; and every body the parser cannot read, an object the scan cannot get
   /// through or an `error` member that is not a readable error object, its `data` included,
-  /// with the parser's or a decoder's failure attached as suppressed and the body logged. Only
-  /// the reads sit inside the try, so a failure of any kind out of the parser is typed and the
-  /// deliberate throws are not caught.
+  /// with the parser's or a decoder's failure attached as suppressed and the body logged at
+  /// DEBUG. Only the reads sit inside the try, so a failure of any kind out of the parser is
+  /// typed and the deliberate throws are not caught.
   @Override
   protected final JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
     if (body == null || isBlank(body)) {
@@ -68,7 +68,9 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
       // not, an IllegalStateException for base64+zstd return data, which this parse reads with
       // no decompressor).
       final var bodyText = new String(body);
-      logger.log(ERROR, "Not a readable JSON-RPC response: " + bodyText, unreadable);
+      // DEBUG, not ERROR: the exception thrown below carries the status, the body and this
+      // failure, so whether the answer is worth an error line is the caller's call.
+      logger.log(DEBUG, "Not a readable JSON-RPC response: " + bodyText, unreadable);
       final var failure = responseFailure(httpResponse, bodyText);
       failure.addSuppressed(unreadable);
       throw failure;
