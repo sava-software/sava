@@ -68,8 +68,6 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
     }
   };
   private static final Function<HttpResponse<?>, Map<PublicKey, long[]>> LEADER_SCHEDULE = applyGenericResponseResult(KEY_LONG_ARRAY_MAP_PARSER);
-  private static final Function<HttpResponse<?>, List<AccountInfo<TokenAccount>>> TOKEN_ACCOUNTS_PARSER =
-      applyGenericResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, TokenAccount.FACTORY));
   private static final Function<HttpResponse<?>, List<AccountLamports>> TOP_LAMPORT_ACCOUNTS = applyGenericResponseValue(AccountLamports::parseAccounts);
   private static final Function<HttpResponse<?>, List<InflationReward>> INFLATION_REWARDS = applyGenericResponseResult(InflationReward::parse);
   private static final Function<HttpResponse<?>, VoteAccounts> VOTE_ACCOUNTS = applyGenericResponseResult(VoteAccounts::parse);
@@ -1409,10 +1407,40 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
                                                                                                    final PublicKey delegate,
                                                                                                    final PublicKey tokenMint) {
-    return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByDelegate","params":["%s",{"mint":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-            id.incrementAndGet(), delegate.toBase58(), tokenMint.toBase58(), commitment.getValue()
-        )
+    return getTokenAccountsForTokenMintByDelegate(commitment, null, null, delegate, tokenMint, TokenAccount.FACTORY);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
+                                                                                          final BigInteger minContextSlot,
+                                                                                          final DataSlice dataSlice,
+                                                                                          final PublicKey delegate,
+                                                                                          final PublicKey tokenMint,
+                                                                                          final BiFunction<PublicKey, byte[], T> factory) {
+    return tokenAccounts("getTokenAccountsByDelegate", delegate, "mint", tokenMint, commitment, minContextSlot, dataSlice, factory);
+  }
+
+  /// `getTokenAccountsByOwner` and `getTokenAccountsByDelegate` share agave's `RpcAccountInfoConfig`,
+  /// so one body serves both: the first parameter is the owner or delegate, the second the mint or
+  /// token program filter, and the config carries the commitment, the optional minimum context slot
+  /// and the optional data slice, each omitted when null.
+  private <T> CompletableFuture<List<AccountInfo<T>>> tokenAccounts(final String method,
+                                                                    final PublicKey key,
+                                                                    final String filterName,
+                                                                    final PublicKey filterKey,
+                                                                    final Commitment commitment,
+                                                                    final BigInteger minContextSlot,
+                                                                    final DataSlice dataSlice,
+                                                                    final BiFunction<PublicKey, byte[], T> factory) {
+    final var builder = new StringBuilder(256);
+    builder.append(format("""
+            {"jsonrpc":"2.0","id":%d,"method":"%s","params":["%s",{"%s":"%s"},{"commitment":"%s","encoding":"base64\"""",
+        id.incrementAndGet(), method, key.toBase58(), filterName, filterKey.toBase58(), commitment.getValue()));
+    appendMinContextSlot(builder, minContextSlot);
+    appendDataSlice(builder, dataSlice);
+    return sendPostRequest(
+        applyGenericResponseValue((ji, context) -> AccountInfo.parseAccounts(ji, context, factory)),
+        builder.append("}]}").toString()
     );
   }
 
@@ -1426,11 +1454,17 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
                                                                                                  final PublicKey delegate,
                                                                                                  final PublicKey programId) {
-    return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByDelegate","params":["%s",{"programId":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-            id.incrementAndGet(), delegate.toBase58(), programId.toBase58(), commitment.getValue()
-        )
-    );
+    return getTokenAccountsForProgramByDelegate(commitment, null, null, delegate, programId, TokenAccount.FACTORY);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
+                                                                                        final BigInteger minContextSlot,
+                                                                                        final DataSlice dataSlice,
+                                                                                        final PublicKey delegate,
+                                                                                        final PublicKey programId,
+                                                                                        final BiFunction<PublicKey, byte[], T> factory) {
+    return tokenAccounts("getTokenAccountsByDelegate", delegate, "programId", programId, commitment, minContextSlot, dataSlice, factory);
   }
 
   @Override
@@ -1443,11 +1477,17 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
                                                                                                 final PublicKey owner,
                                                                                                 final PublicKey tokenMint) {
-    return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByOwner","params":["%s",{"mint":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-            id.incrementAndGet(), owner.toBase58(), tokenMint.toBase58(), commitment.getValue()
-        )
-    );
+    return getTokenAccountsForTokenMintByOwner(commitment, null, null, owner, tokenMint, TokenAccount.FACTORY);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
+                                                                                       final BigInteger minContextSlot,
+                                                                                       final DataSlice dataSlice,
+                                                                                       final PublicKey owner,
+                                                                                       final PublicKey tokenMint,
+                                                                                       final BiFunction<PublicKey, byte[], T> factory) {
+    return tokenAccounts("getTokenAccountsByOwner", owner, "mint", tokenMint, commitment, minContextSlot, dataSlice, factory);
   }
 
   @Override
@@ -1460,11 +1500,17 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
                                                                                               final PublicKey owner,
                                                                                               final PublicKey programId) {
-    return sendPostRequest(TOKEN_ACCOUNTS_PARSER, format("""
-                {"jsonrpc":"2.0","id":%d,"method":"getTokenAccountsByOwner","params":["%s",{"programId":"%s"},{"commitment":"%s","encoding":"base64"}]}""",
-            id.incrementAndGet(), owner.toBase58(), programId.toBase58(), commitment.getValue()
-        )
-    );
+    return getTokenAccountsForProgramByOwner(commitment, null, null, owner, programId, TokenAccount.FACTORY);
+  }
+
+  @Override
+  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
+                                                                                     final BigInteger minContextSlot,
+                                                                                     final DataSlice dataSlice,
+                                                                                     final PublicKey owner,
+                                                                                     final PublicKey programId,
+                                                                                     final BiFunction<PublicKey, byte[], T> factory) {
+    return tokenAccounts("getTokenAccountsByOwner", owner, "programId", programId, commitment, minContextSlot, dataSlice, factory);
   }
 
   @Override
