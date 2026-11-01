@@ -46,6 +46,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// does. Sized like [SolanaRpcWebsocketBuilder#DEFAULT_CONNECT_TIMEOUT].
   static final long CLOSE_GRACE_MILLIS = 8_000;
 
+  /// The [#txLogSubs] key of the `all` registrations. No `mentions` key can equal it: those are
+  /// base58 public keys, 32 bytes encoded in 32 to 44 characters of an alphabet without `l`.
+  private static final String LOGS_ALL_KEY = "all";
+
   private final URI endpoint;
   private final SolanaAccounts solanaAccounts;
   private final Commitment defaultCommitment;
@@ -1444,6 +1448,23 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   @Override
   public boolean logsUnsubscribe(final Commitment commitment, final PublicKey key) {
     return queueUnsubscribe(key.toBase58(), commitment, this.txLogSubs);
+  }
+
+  @Override
+  public boolean logsSubscribeAll(final Commitment commitment,
+                                  final Consumer<Subscription<TxLogs>> onSub,
+                                  final Consumer<TxLogs> consumer) {
+    // No unlocked pre-check like the mentions method's: the key is a constant, so there is no
+    // rendering to spare, and queueSubscription's lock-held check is the duplicate decision.
+    final var params = String.format(Locale.ROOT, """
+        "all",{"commitment":"%s"}""", commitment.getValue()
+    );
+    return queueSubscription(commitment, Channel.logs, LOGS_ALL_KEY, params, this.txLogSubs, onSub, consumer);
+  }
+
+  @Override
+  public boolean logsUnsubscribeAll(final Commitment commitment) {
+    return queueUnsubscribe(LOGS_ALL_KEY, commitment, this.txLogSubs);
   }
 
   @Override

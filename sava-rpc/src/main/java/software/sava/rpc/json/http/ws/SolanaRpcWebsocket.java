@@ -176,6 +176,43 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   boolean logsUnsubscribe(final Commitment commitment, final PublicKey key);
 
+  default boolean logsSubscribeAll(final Consumer<TxLogs> consumer) {
+    return logsSubscribeAll(defaultCommitment(), null, consumer);
+  }
+
+  default boolean logsSubscribeAll(final Commitment commitment, final Consumer<TxLogs> consumer) {
+    return logsSubscribeAll(commitment, null, consumer);
+  }
+
+  default boolean logsSubscribeAll(final Consumer<Subscription<TxLogs>> onSub, final Consumer<TxLogs> consumer) {
+    return logsSubscribeAll(defaultCommitment(), onSub, consumer);
+  }
+
+  /// Subscribes to the logs of every transaction the node processes, through agave's `all`
+  /// filter, which leaves out vote transactions. Each notification carries one transaction's
+  /// signature, error and log messages as a [TxLogs]. The stream is node-wide and large on
+  /// public mainnet: it is meant for local validators and indexers, while
+  /// [#logsSubscribe(Commitment,PublicKey,Consumer,Consumer)] follows a single account or
+  /// program.
+  ///
+  /// One registration per commitment, independent of the `mentions` registrations: both may be
+  /// live at the same commitment, and each receives only its own subscription's notifications.
+  /// The registration handed to `onSub` has the [Subscription#key()] `all` and a null
+  /// [Subscription#publicKey()]. Agave's `allWithVotes` filter is not offered: agave 4.5
+  /// deprecates it as an alias of `all`, since Alpenglow has no vote transactions.
+  ///
+  /// @return `false` once closed, or while the `all` registration at this commitment exists
+  boolean logsSubscribeAll(final Commitment commitment,
+                           final Consumer<Subscription<TxLogs>> onSub,
+                           final Consumer<TxLogs> consumer);
+
+  default boolean logsUnsubscribeAll() {
+    return logsUnsubscribeAll(defaultCommitment());
+  }
+
+  /// Removes the `all` registration at `commitment`; `mentions` registrations are untouched.
+  boolean logsUnsubscribeAll(final Commitment commitment);
+
   boolean signatureSubscribe(final String b58TxSig, final Consumer<TxResult> consumer);
 
   boolean signatureSubscribe(final String b58TxSig,
