@@ -1475,10 +1475,10 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
       return Outcome.RPC_ERROR;
     } else if (unreadableBody(cause) != null) {
       // The JSON-RPC gate's own refusal of a body it could not read, under any status, typed with
-      // the parser's failure attached: the body and not the status was the problem, which is
-      // W3-C's question, so it is counted with the parse failures below rather than with the
-      // statuses. The peer's HTTP_429 and HTTP_503 faults serve well-formed error bodies, so an
-      // attached failure under one of them is the same regression as under a 200.
+      // the parser's failure as its parseFailure(): the body and not the status was the problem,
+      // which is W3-C's question, so it is counted with the parse failures below rather than with
+      // the statuses. The peer's HTTP_429 and HTTP_503 faults serve well-formed error bodies, so a
+      // parse failure under one of them is the same regression as under a 200.
       return Outcome.DECODE;
     } else if (cause instanceof UncheckedIOException unchecked) {
       // The client turns a non-2xx status, and any answer its JSON-RPC gate cannot read as one,
@@ -1496,23 +1496,25 @@ public final class HttpWorkload implements Workload, GaugeSampler.GaugeSource {
     }
   }
 
-  /// The parser's failure the JSON-RPC gate attached when it refused a body it could not read,
-  /// under any status, or null when `cause` is anything else: a refusal with nothing attached,
-  /// by status or for the body's shape alone (no object, neither member), or not the gate's at
-  /// all. A shape refusal stays an HTTP error here because the one decoding regression that
-  /// would produce it, gzip announced and not applied, fails the gzip-magic check in
-  /// `testResponse` first, and anything else that serves a shapeless body is the peer's defect.
+  /// The parser's failure the JSON-RPC gate recorded when it refused a body it could not read,
+  /// under any status ([HttpResponseException#parseFailure()]), or null when `cause` is
+  /// anything else: a refusal with no parse failure, by status or for the body's shape alone
+  /// (no object, neither member), or not the gate's at all. A shape refusal stays an HTTP error
+  /// here because the one decoding regression that would produce it, gzip announced and not
+  /// applied, fails the gzip-magic check in `testResponse` first, and anything else that serves
+  /// a shapeless body is the peer's defect. Read from the accessor, not the suppressed list the
+  /// gate also attaches it to, since anything holding the exception can add a suppressed
+  /// throwable.
   private static Throwable unreadableBody(final Throwable cause) {
-    return cause instanceof HttpResponseException refused && refused.getSuppressed().length > 0
-        ? refused.getSuppressed()[0] : null;
+    return cause instanceof HttpResponseException refused ? refused.parseFailure().orElse(null) : null;
   }
 
   private static String describe(final Throwable cause) {
     if (cause instanceof JsonRpcException rpc) {
       return "JSON-RPC error " + rpc.code() + ": " + truncate(String.valueOf(rpc.getMessage()));
     }
-    if (cause instanceof HttpResponseException refused && refused.getSuppressed().length > 0) {
-      return "unreadable body under HTTP " + refused.statusCode() + ", " + describe(refused.getSuppressed()[0]);
+    if (cause instanceof HttpResponseException refused && refused.parseFailure().isPresent()) {
+      return "unreadable body under HTTP " + refused.statusCode() + ", " + describe(refused.parseFailure().get());
     }
     return cause.getClass().getSimpleName() + ": " + truncate(String.valueOf(cause.getMessage()));
   }

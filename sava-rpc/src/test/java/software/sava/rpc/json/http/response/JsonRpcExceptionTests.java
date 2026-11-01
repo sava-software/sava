@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.response;
 import org.junit.jupiter.api.Test;
 import systems.comodal.jsoniter.JsonIterator;
 
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -70,5 +71,32 @@ final class JsonRpcExceptionTests {
     assertTrue(exception.requestId().isEmpty());
     assertNotNull(exception.retryAfterSeconds());
     assertTrue(exception.retryAfterSeconds().isEmpty());
+  }
+
+  /// toString names the code and, for an error that arrived over HTTP, the status it arrived
+  /// under, in HttpResponseException's bracket form, so a log line or a stack trace carries
+  /// both; getMessage stays the server's text exactly, for the callers that display or cut it.
+  @Test
+  void toStringNamesTheCodeAndTheHttpStatusWhileTheMessageStaysTheServers() {
+    final var overHttp = JsonRpcException.parseException(
+        JsonIterator.parse(ERROR), OptionalLong.of(30), OptionalLong.of(42), OptionalInt.of(503));
+    assertEquals("software.sava.rpc.json.http.response.JsonRpcException: Invalid params [code:-32602] [httpStatus:503]",
+        overHttp.toString());
+    assertEquals("Invalid params", overHttp.getMessage());
+
+    final var overWebsocket = JsonRpcException.parseException(JsonIterator.parse(ERROR), OptionalLong.empty(), OptionalLong.of(42));
+    assertEquals("software.sava.rpc.json.http.response.JsonRpcException: Invalid params [code:-32602]",
+        overWebsocket.toString(), "no status, so no status bracket");
+    assertEquals("Invalid params", overWebsocket.getMessage());
+  }
+
+  /// A readable error object may carry a null message; toString then reads as Throwable's own
+  /// does, the class name alone, and the brackets follow it.
+  @Test
+  void toStringOfANullMessageIsTheClassNameAndTheBrackets() {
+    final var silent = JsonRpcException.parseException(JsonIterator.parse("{\"code\":-32005,\"message\":null}"),
+        OptionalLong.empty(), OptionalLong.empty(), OptionalInt.of(429));
+    assertNull(silent.getMessage());
+    assertEquals("software.sava.rpc.json.http.response.JsonRpcException [code:-32005] [httpStatus:429]", silent.toString());
   }
 }

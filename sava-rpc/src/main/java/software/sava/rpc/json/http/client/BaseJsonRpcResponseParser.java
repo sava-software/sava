@@ -35,11 +35,12 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
   /// parser is opened; a non-2xx without an error member, a body that does not start a JSON
   /// object and an object with neither member, from the classification; and every body the
   /// parser cannot read, an object the scan cannot get through or an `error` member that is
-  /// neither null nor a readable error object, with the parser's failure attached as suppressed
-  /// and the body logged at DEBUG. A readable error object whose `data` does not parse still
-  /// throws its [JsonRpcException], which carries the data's failure as suppressed. Only the
-  /// reads sit inside the try, so a failure of any kind out of the parser is typed and the
-  /// deliberate throws are not caught.
+  /// neither null nor a readable error object, with the parser's failure as its
+  /// [HttpResponseException#parseFailure()], attached as suppressed too, and the body logged at
+  /// DEBUG. A readable error object whose `data` does not parse still throws its
+  /// [JsonRpcException], which carries the data's failure as suppressed. Only the reads sit
+  /// inside the try, so a failure of any kind out of the parser is typed and the deliberate
+  /// throws are not caught.
   @Override
   protected final JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
     if (body == null || isBlank(body)) {
@@ -77,9 +78,9 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
       // failure, so whether the answer is worth an error line is the caller's call. The line is
       // built only when DEBUG is on; the body text is built for the exception either way.
       logger.log(DEBUG, () -> "Not a readable JSON-RPC response: " + bodyText, unreadable);
-      final var failure = responseFailure(httpResponse, bodyText);
-      failure.addSuppressed(unreadable);
-      throw failure;
+      // The factory records the failure as parseFailure() and attaches it as suppressed, the
+      // convention consumers read before that accessor existed.
+      throw HttpResponseException.of(responseCode, bodyText, httpResponse.headers(), unreadable);
     }
     if (rpcException != null) {
       throw rpcException;

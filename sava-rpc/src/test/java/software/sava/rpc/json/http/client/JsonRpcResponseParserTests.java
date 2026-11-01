@@ -20,6 +20,7 @@ import java.util.OptionalLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.logging.Level;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -398,6 +399,54 @@ final class JsonRpcResponseParserTests {
     );
   }
 
+  /// A body the gate refused because its parser failed names that failure as its parse failure,
+  /// a field, and the same object is still its one suppressed throwable, the signal consumers
+  /// read before the accessor existed: an object the scan cannot get through, under a 503, and
+  /// an error member that is a string, under a 200.
+  @Test
+  void anUnreadableBodyNamesTheParseFailureTheGateAttached() {
+    assertAll(
+        () -> {
+          final var truncated = assertThrows(HttpResponseException.class, () -> parseResult(503, "{\"message\":\"upstream"));
+          assertEquals(503, truncated.statusCode());
+          final var failure = truncated.parseFailure().orElseThrow();
+          assertInstanceOf(systems.comodal.jsoniter.JsonException.class, failure, "the parser's own failure");
+          assertEquals(1, truncated.getSuppressed().length);
+          assertSame(failure, truncated.getSuppressed()[0], "the same failure, still attached");
+        },
+        () -> {
+          final var stringError = assertThrows(HttpResponseException.class,
+              () -> parseResult(200, "{\"jsonrpc\":\"2.0\",\"error\":\"Too Many Requests\",\"id\":1}"));
+          assertEquals(200, stringError.statusCode());
+          final var failure = stringError.parseFailure().orElseThrow();
+          assertInstanceOf(systems.comodal.jsoniter.JsonException.class, failure, "the parser's own failure");
+          assertEquals(1, stringError.getSuppressed().length);
+          assertSame(failure, stringError.getSuppressed()[0], "the same failure, still attached");
+        }
+    );
+  }
+
+  /// A body refused for its status or its shape was never failed by a parser, so it names no
+  /// parse failure and carries no suppressed one: a missing, empty or blank body, a body that is
+  /// not a JSON object, under a 200 or as text under a 503, an object with neither member, and
+  /// a result under a non-2xx, which has no error member.
+  @Test
+  void aRefusalForItsStatusOrShapeNamesNoParseFailure() {
+    assertAll(Stream.of(
+        assertThrows(HttpResponseException.class,
+            () -> new JsonRpcResultResponseParser<>(JsonIterator::readString).apply(StubHttpResponse.of(502, (byte[]) null))),
+        assertThrows(HttpResponseException.class, () -> parseResult(429, "")),
+        assertThrows(HttpResponseException.class, () -> parseResult(503, " \n\t ")),
+        assertThrows(HttpResponseException.class, () -> parseResult(200, "<html>portal</html>")),
+        assertThrows(HttpResponseException.class, () -> parseResult(200, "{\"jsonrpc\":\"2.0\",\"id\":1}")),
+        assertThrows(HttpResponseException.class, () -> parseResult(503, "slow down")),
+        assertThrows(HttpResponseException.class, () -> parseResult(503, "{\"result\":\"ok\",\"id\":1}"))
+    ).map(refused -> () -> {
+      assertTrue(refused.parseFailure().isEmpty(), refused.getMessage());
+      assertEquals(0, refused.getSuppressed().length, refused.getMessage());
+    }));
+  }
+
   /// A readable error object whose `data` does not parse is still the error the server
   /// answered with. Its code and message are in hand before the data, which is parsed against
   /// the code, so data that does not fit its code, or return data a decoder refuses, costs the
@@ -533,26 +582,49 @@ final class JsonRpcResponseParserTests {
     }));
   }
 
+  private static HttpResponseException roundTrip(final HttpResponseException failure) throws Exception {
+    final var bytes = new java.io.ByteArrayOutputStream();
+    try (final var out = new java.io.ObjectOutputStream(bytes)) {
+      out.writeObject(failure);
+    }
+    try (final var in = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray()))) {
+      return (HttpResponseException) in.readObject();
+    }
+  }
+
   /// The typed failure is still serializable, as the pair it replaces was, and like that pair it
   /// declares its stream form rather than having one computed from its shape; an absent or
-  /// negative retry-after is no hint, and zero is one.
+  /// negative retry-after is no hint, and zero is one. A parse failure is carried through the
+  /// stream too, and reads back as one object in the field and the suppressed list, as it was
+  /// written.
   @Test
   void theTypedFailureSerializes() throws Exception {
     assertEquals(1L, java.io.ObjectStreamClass.lookup(HttpResponseException.class).getSerialVersionUID(),
         "the stream form is declared, not computed from the class's shape");
     final var ex = assertThrows(HttpResponseException.class,
         () -> parseResult(503, "down", "retry-after", "5"));
-    final var bytes = new java.io.ByteArrayOutputStream();
-    try (final var out = new java.io.ObjectOutputStream(bytes)) {
-      out.writeObject(ex);
-    }
-    try (final var in = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray()))) {
-      final var copy = (HttpResponseException) in.readObject();
-      assertEquals(503, copy.statusCode());
-      assertEquals("down", copy.body());
-      assertEquals(OptionalLong.of(5), copy.retryAfterSeconds());
-      assertEquals(ex.getMessage(), copy.getMessage());
-    }
+    final var copy = roundTrip(ex);
+    assertEquals(503, copy.statusCode());
+    assertEquals("down", copy.body());
+    assertEquals(OptionalLong.of(5), copy.retryAfterSeconds());
+    assertEquals(ex.getMessage(), copy.getMessage());
+    assertTrue(copy.parseFailure().isEmpty(), "none was written, so none reads back");
+    assertEquals(0, copy.getSuppressed().length);
+
+    final var unreadable = assertThrows(HttpResponseException.class,
+        () -> parseResult(429, "{\"message\":\"upstream", "retry-after", "9"));
+    final var written = unreadable.parseFailure().orElseThrow();
+    final var unreadableCopy = roundTrip(unreadable);
+    assertEquals(429, unreadableCopy.statusCode());
+    assertEquals("{\"message\":\"upstream", unreadableCopy.body());
+    assertEquals(OptionalLong.of(9), unreadableCopy.retryAfterSeconds());
+    assertEquals(unreadable.getMessage(), unreadableCopy.getMessage());
+    final var read = unreadableCopy.parseFailure().orElseThrow();
+    assertEquals(written.getClass(), read.getClass());
+    assertEquals(written.getMessage(), read.getMessage());
+    assertEquals(1, unreadableCopy.getSuppressed().length);
+    assertSame(read, unreadableCopy.getSuppressed()[0], "one failure, in the field and attached, as it was written");
+
     final var noHint = assertThrows(HttpResponseException.class, () -> parseResult(503, "down"));
     assertTrue(noHint.retryAfterSeconds().isEmpty());
     final var negative = assertThrows(HttpResponseException.class, () -> parseResult(503, "down", "retry-after", "-3"));
@@ -610,6 +682,54 @@ final class JsonRpcResponseParserTests {
         assertEquals(fromResponse.retryAfterSeconds(), fromParts.retryAfterSeconds(), input);
         assertEquals(fromResponse.getMessage(), fromParts.getMessage(), input);
       }
+    }
+  }
+
+  /// The status reads under the name JsonRpcException gives it too, so a caller that catches
+  /// either failure reads it one way. Every HttpResponseException has a status, so it is present
+  /// whichever factory built the failure, the gate's included, and it is the status it was built
+  /// with.
+  @Test
+  void theStatusReadsUnderTheNameJsonRpcExceptionGivesIt() {
+    final var fromResponse = HttpResponseException.of(StubHttpResponse.of(429, (byte[]) null, "retry-after", "7"), "slow down");
+    assertEquals(OptionalInt.of(429), fromResponse.httpStatus());
+    final var fromParts = HttpResponseException.of(503, "down", null);
+    assertEquals(OptionalInt.of(503), fromParts.httpStatus());
+    final var withParseFailure = HttpResponseException.of(502, "{", null, new IllegalStateException("unreadable"));
+    assertEquals(OptionalInt.of(502), withParseFailure.httpStatus());
+    final var fromTheGate = assertThrows(HttpResponseException.class, () -> parseResult(201, "<html>portal</html>"));
+    assertEquals(OptionalInt.of(201), fromTheGate.httpStatus());
+    assertEquals(201, fromTheGate.statusCode(), "the same value as an int");
+  }
+
+  /// The four-argument factory builds the failure the gate throws for an unreadable body: the
+  /// parse failure is a field, and it is still the one suppressed throwable, as the gate attached
+  /// it before the accessor existed. Everything else is what the three-argument factory builds
+  /// from the same parts, and with null for the parse failure it is that factory: nothing is
+  /// recorded and nothing is attached.
+  @Test
+  void theFourArgumentFactoryRecordsTheParseFailureAndStillAttachesIt() {
+    final var headers = HttpHeaders.of(Map.of("retry-after", List.of("7")), (_, _) -> true);
+    final var parseFailure = new IllegalStateException("not a body");
+    final var unreadable = HttpResponseException.of(429, "{\"error\":", headers, parseFailure);
+    assertSame(parseFailure, unreadable.parseFailure().orElseThrow());
+    assertEquals(1, unreadable.getSuppressed().length);
+    assertSame(parseFailure, unreadable.getSuppressed()[0], "the suppressed convention is kept");
+    assertEquals(429, unreadable.statusCode());
+    assertEquals("{\"error\":", unreadable.body());
+    assertEquals(OptionalLong.of(7), unreadable.retryAfterSeconds());
+    assertEquals("java.net.UnknownServiceException: HTTP request failed with [httpCode:429], [body={\"error\":]", unreadable.getMessage());
+    assertInstanceOf(UnknownServiceException.class, unreadable.getCause());
+
+    final var threeArguments = HttpResponseException.of(429, "{\"error\":", headers);
+    final var none = HttpResponseException.of(429, "{\"error\":", headers, null);
+    for (final var built : List.of(threeArguments, none)) {
+      assertTrue(built.parseFailure().isEmpty());
+      assertEquals(0, built.getSuppressed().length, "nothing is attached");
+      assertEquals(unreadable.statusCode(), built.statusCode());
+      assertEquals(unreadable.body(), built.body());
+      assertEquals(unreadable.retryAfterSeconds(), built.retryAfterSeconds());
+      assertEquals(unreadable.getMessage(), built.getMessage());
     }
   }
 

@@ -159,6 +159,19 @@ public final class JsonRpcException extends RuntimeException {
     return customError;
   }
 
+  /// [Throwable#toString()], the class name and the server's message, followed by the error's
+  /// `code` and, for an error that arrived over HTTP, the [#httpStatus()] it arrived under, in
+  /// the bracket form [HttpResponseException]'s message uses, as in
+  /// `...JsonRpcException: Node is behind [code:-32005] [httpStatus:503]`. A log line or a
+  /// stack trace names the code that way, while [#getMessage()] stays the server's text alone,
+  /// as a caller that displays or cuts it reads it. A null message reads as Throwable's own
+  /// toString reads one, the class name alone, and the brackets follow it.
+  @Override
+  public String toString() {
+    final var described = super.toString() + " [code:" + code + ']';
+    return httpStatus.isPresent() ? described + " [httpStatus:" + httpStatus.getAsInt() + ']' : described;
+  }
+
   private static final class Parser implements FieldBufferPredicate {
 
     private long code;

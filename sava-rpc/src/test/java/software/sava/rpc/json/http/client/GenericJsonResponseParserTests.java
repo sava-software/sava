@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.OptionalInt;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -123,6 +124,19 @@ final class GenericJsonResponseParserTests {
         () -> controller.apply(StubHttpResponse.of(503, (byte[]) null)));
     assertEquals("", bodiless.body());
     assertTrue(bodiless.retryAfterSeconds().isEmpty());
+  }
+
+  /// The generic controller refuses a status before it opens any parser, so its failure names no
+  /// parse failure, even over a body the JSON-RPC gate could not have read, and carries no
+  /// suppressed one; its status reads under the JSON-RPC exception's accessor name as well.
+  @Test
+  void theGenericRefusalNamesItsStatusAndNoParseFailure() {
+    final var controller = controller((_, _) -> fail("the parser must not see a failed response"));
+    final var ex = assertThrows(HttpResponseException.class,
+        () -> controller.apply(StubHttpResponse.of(503, json("{\"why\":\"trunc"))));
+    assertEquals(OptionalInt.of(503), ex.httpStatus());
+    assertTrue(ex.parseFailure().isEmpty(), "no parser was opened");
+    assertEquals(0, ex.getSuppressed().length);
   }
 
 }
