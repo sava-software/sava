@@ -138,6 +138,25 @@ final class ProgramAccountsRequestTests {
     assertFalse(body.contains("filters"), body);
   }
 
+  /// `tokenAccountState` is a bare JSON string among the filter objects, so the brace counting in
+  /// [#multipleFiltersAreCommaSeparated()] cannot see it: the bodies are asserted whole. The
+  /// unset encoding and commitment fall back to base64 and the client default.
+  @Test
+  void tokenAccountStateFilterIsABareStringMember() {
+    final var mint = PublicKey.fromBase58Encoded("BKi5XZBUL49pwNDhNgeR9gJcrxfuRH48F2nCzDq4rCsz");
+    assertEquals("""
+            {"jsonrpc":"2.0","id":7,"method":"getProgramAccounts","params":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",\
+            {"withContext":true,"encoding":"base64","commitment":"confirmed",\
+            "filters":[{"memcmp":{"offset":0,"bytes":"BKi5XZBUL49pwNDhNgeR9gJcrxfuRH48F2nCzDq4rCsz"}},"tokenAccountState"]}]}""",
+        json(builder().filters(List.of(Filter.createMemCompFilter(0, mint), Filter.tokenAccountState())).createRequest())
+    );
+    assertEquals("""
+            {"jsonrpc":"2.0","id":7,"method":"getProgramAccounts","params":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",\
+            {"withContext":true,"encoding":"base64","commitment":"confirmed","filters":["tokenAccountState"]}]}""",
+        json(builder().filters(List.of(Filter.tokenAccountState())).createRequest())
+    );
+  }
+
   /// Everything at once, to catch a separator or brace that only breaks when the
   /// optional sections are combined.
   @Test

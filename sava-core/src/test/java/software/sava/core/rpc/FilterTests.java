@@ -6,6 +6,8 @@ import software.sava.core.accounts.PublicKey;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class FilterTests {
@@ -48,5 +50,24 @@ final class FilterTests {
 
     final byte[] tooLong = new byte[Filter.MAX_MEM_COMP_LENGTH + 1];
     assertThrows(IllegalStateException.class, () -> Filter.createMemCompFilter(0, tooLong));
+  }
+
+  /// Agave's `RpcFilterType::TokenAccountState` is a unit variant under
+  /// `#[serde(rename_all = "camelCase")]`, which serde writes as a bare string, quotes included,
+  /// where the other filters are objects.
+  @Test
+  void tokenAccountStateFilterJson() {
+    assertEquals("\"tokenAccountState\"", Filter.tokenAccountState().toJson());
+  }
+
+  @Test
+  void tokenAccountStateFilterIsOneSharedValue() {
+    final var filter = Filter.tokenAccountState();
+    assertSame(filter, Filter.tokenAccountState());
+    assertEquals(filter, Filter.tokenAccountState());
+    assertEquals(filter, new TokenAccountStateFilter(), "a record without components equals any instance");
+    assertEquals(filter.hashCode(), new TokenAccountStateFilter().hashCode());
+    assertNotEquals(Filter.createDataSizeFilter(165), filter);
+    assertNotEquals(filter, Filter.createDataSizeFilter(165));
   }
 }
