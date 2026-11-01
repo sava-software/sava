@@ -79,7 +79,7 @@ final class TokenAccountStateFilterRpcRequestTests extends RpcRequestTests {
     final var mint = PublicKey.fromBase58Encoded("BKi5XZBUL49pwNDhNgeR9gJcrxfuRH48F2nCzDq4rCsz");
     final var request = ProgramAccountsRequest.build()
         .programId(TOKEN_PROGRAM)
-        .filters(List.of(TokenAccount.createMintFilter(mint), Filter.tokenAccountState()))
+        .filters(List.of(TokenAccount.createMintFilter(mint), Filter.createTokenAccountStateFilter()))
         .createRequest();
     final var accounts = rpcClient.getProgramAccounts(request).join();
 
@@ -125,7 +125,7 @@ final class TokenAccountStateFilterRpcRequestTests extends RpcRequestTests {
     final var mint = PublicKey.fromBase58Encoded("DbXcVKGeuhnmmi3BhkztB6zs2mEsNkwjnjH1tudQkws");
     final var request = ProgramAccountsRequest.build()
         .programId(TOKEN_2022_PROGRAM)
-        .filters(List.of(TokenAccount.createMintFilter(mint), Filter.tokenAccountState()))
+        .filters(List.of(TokenAccount.createMintFilter(mint), Filter.createTokenAccountStateFilter()))
         .createRequest();
     final var accounts = rpcClient.getProgramAccounts(request).join();
 

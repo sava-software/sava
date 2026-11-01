@@ -57,14 +57,14 @@ final class FilterTests {
   /// where the other filters are objects.
   @Test
   void tokenAccountStateFilterJson() {
-    assertEquals("\"tokenAccountState\"", Filter.tokenAccountState().toJson());
+    assertEquals("\"tokenAccountState\"", Filter.createTokenAccountStateFilter().toJson());
   }
 
   @Test
   void tokenAccountStateFilterIsOneSharedValue() {
-    final var filter = Filter.tokenAccountState();
-    assertSame(filter, Filter.tokenAccountState());
-    assertEquals(filter, Filter.tokenAccountState());
+    final var filter = Filter.createTokenAccountStateFilter();
+    assertSame(filter, Filter.createTokenAccountStateFilter());
+    assertEquals(filter, Filter.createTokenAccountStateFilter());
     assertEquals(filter, new TokenAccountStateFilter(), "a record without components equals any instance");
     assertEquals(filter.hashCode(), new TokenAccountStateFilter().hashCode());
     assertNotEquals(Filter.createDataSizeFilter(165), filter);

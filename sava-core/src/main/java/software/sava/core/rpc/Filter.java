@@ -50,7 +50,7 @@ public sealed interface Filter permits DataSizeFilter, MemCmpFilter, TokenAccoun
   /// enforce the limit.
   ///
   /// @return the shared instance: every call returns the same filter.
-  static Filter tokenAccountState() {
+  static Filter createTokenAccountStateFilter() {
     return TokenAccountStateFilter.INSTANCE;
   }
 

@@ -39,7 +39,7 @@ final class TokenAccountStateFilterSubscriptionTests {
   void programSubscribeSendsTheFilterAsABareString() {
     try (final var ws = websocket()) {
       assertTrue(ws.programSubscribe(TOKEN_2022_PROGRAM,
-          List.of(TokenAccount.createMintFilter(MINT), Filter.tokenAccountState()), _ -> {
+          List.of(TokenAccount.createMintFilter(MINT), Filter.createTokenAccountStateFilter()), _ -> {
           }));
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);
@@ -55,7 +55,7 @@ final class TokenAccountStateFilterSubscriptionTests {
   void keyedProgramSubscribeSendsTheFilterAsABareString() {
     try (final var ws = websocket()) {
       assertTrue(ws.keyedProgramSubscribe("token-2022", TOKEN_2022_PROGRAM,
-          List.of(Filter.tokenAccountState()), _ -> {
+          List.of(Filter.createTokenAccountStateFilter()), _ -> {
           }));
       final var socket = new RecordingWebSocket();
       ws.onOpen(socket);

@@ -140,11 +140,11 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
 - `ProgramAccountsRequest.Builder.dataSliceLength(offset, length)`, deprecated, takes the
   **offset first** despite the name, and calling it backwards returns the wrong window
   rather than failing; `dataSlice(DataSlice)` replaces it.
-- `Filter.tokenAccountState().toJson()` is a bare JSON string, `"tokenAccountState"`, not an
+- `Filter.createTokenAccountStateFilter().toJson()` is a bare JSON string, `"tokenAccountState"`, not an
   object, so a test that counts braces cannot see it: assert whole bodies.
   `TokenAccount.TOKEN_ACCOUNT_SIZE_FILTER` (`dataSize` 165) drops every Token-2022 account that
   carries an extension; live it matched none of the holders the state filter returned for a
-  Token-2022 mint. Use `Filter.tokenAccountState()` for Token-2022 holder queries.
+  Token-2022 mint. Use `Filter.createTokenAccountStateFilter()` for Token-2022 holder queries.
 - `Subscription.publicKey()` is `null` for every logs registration, mentions included: those
   are keyed by string, the base58 key or `all`, which `key()` returns.
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it

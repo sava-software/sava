@@ -224,7 +224,7 @@ the repo.
 | `getProgramAccounts` `sortResults` | `RpcProgramAccountsConfig.sort_results`, `unwrap_or(true)`. | `ProgramAccountsRequest.Builder.sortResults(boolean)`, rendered after the filters; unset omits it. `ProgramAccountsSortRpcRequestTests`, fixture `getProgramAccounts-nativeLoader-unsorted-devnet.json`. |
 | `getBlockProduction` `range.lastSlot` | `RpcBlockProductionConfigRange { first_slot, last_slot }`; `lastSlot < firstSlot`, a `firstSlot` before the slot history or a `lastSlot` beyond it are `-32602` with the limit in the message. | `getBlockProduction(Commitment, PublicKey, long, long)` and conveniences. `BlockProductionRangeRpcRequestTests`. |
 | `getBlock` `transactionDetails: accounts` | `TransactionDetails::Accounts`, `build_json_accounts`; see the paragraph under "Response records and JSON parsing conventions". | `BlockTxDetails.accounts`, `BlockTx.version()/signatures()/accountKeys()`, `TxAccountKey`, `AccountKeySource`. `BlockAccountsRpcRequestTests`, fixture `getBlock-accounts-devnet-4.4.0-beta.1.json`. |
-| `tokenAccountState` filter | `RpcFilterType::TokenAccountState` (`rpc-client-types/src/filter.rs`); see its own subsection below. | `Filter.tokenAccountState()`. `TokenAccountStateFilterRpcRequestTests`, `TokenAccountStateFilterSubscriptionTests`. |
+| `tokenAccountState` filter | `RpcFilterType::TokenAccountState` (`rpc-client-types/src/filter.rs`); see its own subsection below. | `Filter.createTokenAccountStateFilter()`. `TokenAccountStateFilterRpcRequestTests`, `TokenAccountStateFilterSubscriptionTests`. |
 | `logsSubscribe` with `all` | `RpcTransactionLogsFilter::All`; see the WebSocket section. | `SolanaRpcWebsocket.logsSubscribeAll`/`logsUnsubscribeAll`. `LogsSubscribeAllTests`, `LiveDevnetLogsAllShapeTests`. |
 
 Live, a satisfied minimum (zero, or a slot about a hundred below the node's) returned the ordinary
@@ -267,7 +267,7 @@ Agave's `RpcFilterType` (`agave:rpc-client-types/src/filter.rs`) has three varia
 `memcmp`, and the unit variant `TokenAccountState`. `#[serde(rename_all = "camelCase")]` writes
 the last as the bare string `"tokenAccountState"` in the `filters` array, and `verify` accepts it
 unconditionally. It dates from solana-labs #24541 (2022). sava's sealed `Filter` covers all three
-through `Filter.tokenAccountState()`.
+through `Filter.createTokenAccountStateFilter()`.
 
 The node applies `spl_generic_token::token_2022::Account::valid_account_data` to the data alone
 (`agave:rpc/src/filter.rs`; spl-generic-token 2.0.1 in agave's Cargo.lock). That accepts exactly

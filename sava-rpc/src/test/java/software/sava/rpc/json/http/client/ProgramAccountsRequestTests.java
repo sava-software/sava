@@ -148,12 +148,12 @@ final class ProgramAccountsRequestTests {
             {"jsonrpc":"2.0","id":7,"method":"getProgramAccounts","params":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",\
             {"withContext":true,"encoding":"base64","commitment":"confirmed",\
             "filters":[{"memcmp":{"offset":0,"bytes":"BKi5XZBUL49pwNDhNgeR9gJcrxfuRH48F2nCzDq4rCsz"}},"tokenAccountState"]}]}""",
-        json(builder().filters(List.of(Filter.createMemCompFilter(0, mint), Filter.tokenAccountState())).createRequest())
+        json(builder().filters(List.of(Filter.createMemCompFilter(0, mint), Filter.createTokenAccountStateFilter())).createRequest())
     );
     assertEquals("""
             {"jsonrpc":"2.0","id":7,"method":"getProgramAccounts","params":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",\
             {"withContext":true,"encoding":"base64","commitment":"confirmed","filters":["tokenAccountState"]}]}""",
-        json(builder().filters(List.of(Filter.tokenAccountState())).createRequest())
+        json(builder().filters(List.of(Filter.createTokenAccountStateFilter())).createRequest())
     );
   }
 
