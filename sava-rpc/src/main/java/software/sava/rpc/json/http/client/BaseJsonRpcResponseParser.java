@@ -32,10 +32,11 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
   /// the body: a null or blank body, before the parser is opened; a non-2xx without an error
   /// object, a body that does not start a JSON object and an object with neither member, from
   /// the classification; and every body the parser cannot read, an object the scan cannot get
-  /// through or an `error` member that is not a readable error object, its `data` included,
-  /// with the parser's or a decoder's failure attached as suppressed and the body logged at
-  /// DEBUG. Only the reads sit inside the try, so a failure of any kind out of the parser is
-  /// typed and the deliberate throws are not caught.
+  /// through or an `error` member that is not a readable error object, with the parser's
+  /// failure attached as suppressed and the body logged at DEBUG. A readable error object whose
+  /// `data` does not parse still throws its [JsonRpcException], which carries the data's failure
+  /// as suppressed. Only the reads sit inside the try, so a failure of any kind out of the parser
+  /// is typed and the deliberate throws are not caught.
   @Override
   protected final JsonIterator checkResponse(final HttpResponse<?> httpResponse, final byte[] body) {
     if (body == null || isBlank(body)) {
@@ -63,10 +64,11 @@ abstract class BaseJsonRpcResponseParser<R> extends BaseJsonResponseController<R
         rpcException = null;
       }
     } catch (final RuntimeException unreadable) {
-      // RuntimeException, not JsonException alone: an error object's data is decoded as it is
-      // parsed, and a decoder throws its own kind (an IllegalArgumentException for base64 that is
-      // not, an IllegalStateException for base64+zstd return data, which this parse reads with
-      // no decompressor).
+      // RuntimeException, not JsonException alone, so a failure of any kind out of the parser
+      // is typed. A decoder's own kind (an IllegalArgumentException for base64 that is not, an
+      // IllegalStateException for base64+zstd return data, which this parse reads with no
+      // decompressor) no longer arrives here: it can only come out of an error object's data,
+      // and parseException attaches that failure to the JsonRpcException instead.
       final var bodyText = new String(body);
       // DEBUG, not ERROR: the exception thrown below carries the status, the body and this
       // failure, so whether the answer is worth an error line is the caller's call.

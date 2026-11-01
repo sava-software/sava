@@ -49,7 +49,10 @@ public final class JsonRpcException extends RuntimeException {
   /// Parses the `error` object `ji` is positioned at. `requestId` is the response envelope's
   /// `id` when the caller read it and it was a number — the request this error answers — and
   /// empty otherwise; `retryAfterSeconds` is the HTTP `retry-after` hint, empty over a
-  /// websocket. The cursor is left at the end of the error object.
+  /// websocket. The cursor is left at the end of the error object. A `data` member is parsed
+  /// against the code once the object has been read, and data that does not parse costs only
+  /// its structured details, never the error: [#customError()] is then the one the code alone
+  /// names, as it is with no `data`, and the data's failure is attached as suppressed.
   public static JsonRpcException parseException(final JsonIterator ji,
                                                 final OptionalLong retryAfterSeconds,
                                                 final OptionalLong requestId) {
@@ -66,17 +69,31 @@ public final class JsonRpcException extends RuntimeException {
                                                 final OptionalInt httpStatus) {
     final var parser = new Parser();
     ji.testObject(parser);
+    RuntimeException unreadableData = null;
     if (parser.dataMark != null) {
       // Member order is free, and `data`'s interpretation depends on `code`: when data arrived
       // first it was parsed against code 0 and valid structured details were misclassified.
       // The mark defers it until the whole error object has been read — and the cursor is
       // restored afterwards, so a caller parsing past the error object continues where the
-      // object ended rather than where the deferred data did.
+      // object ended rather than where the deferred data did, whether the data parsed or not.
       final int endMark = ji.mark();
-      parser.customError = RpcCustomError.parseError(parser.code, ji.reset(parser.dataMark));
-      ji.reset(endMark);
+      try {
+        parser.customError = RpcCustomError.parseError(parser.code, ji.reset(parser.dataMark));
+      } catch (final RuntimeException e) {
+        // The code and the message are already read, so data that does not parse, a shape that
+        // does not fit the code or a value a decoder refuses with its own kind, costs only the
+        // structured details: the custom error stays null, for create to name from the code
+        // alone, as it does when there is no data.
+        unreadableData = e;
+      } finally {
+        ji.reset(endMark);
+      }
     }
-    return parser.create(retryAfterSeconds, requestId, httpStatus);
+    final var exception = parser.create(retryAfterSeconds, requestId, httpStatus);
+    if (unreadableData != null) {
+      exception.addSuppressed(unreadableData);
+    }
+    return exception;
   }
 
   /// The envelope's `id` — the request being answered — when it is a non-negative integer
@@ -135,6 +152,9 @@ public final class JsonRpcException extends RuntimeException {
     return requestId;
   }
 
+  /// The custom error the `code` names, with the structured details its `data` carried. With
+  /// no `data`, or with `data` that did not parse, it is the one the code alone names, and in
+  /// the second case the data's failure is in [#getSuppressed()].
   public RpcCustomError customError() {
     return customError;
   }

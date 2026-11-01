@@ -1,6 +1,7 @@
 package software.sava.rpc.json.http.response;
 
 import org.junit.jupiter.api.Test;
+import systems.comodal.jsoniter.JsonException;
 import systems.comodal.jsoniter.JsonIterator;
 
 import java.util.OptionalLong;
@@ -80,6 +81,29 @@ final class ParseCustomErrorCodeTests {
     assertTrue(ji.readArray());
     final var exception = JsonRpcException.parseException(ji, OptionalLong.empty());
     assertEquals(new RpcCustomError.NodeUnhealthy(OptionalLong.of(42)), exception.customError());
+    assertTrue(ji.readArray());
+    assertEquals(73, ji.readInt());
+    assertFalse(ji.readArray());
+  }
+
+  /// Data the code's parser cannot read costs the caller the structured details, not the
+  /// error: the code and the message stand, the custom error is the one the code alone names,
+  /// the data's failure is attached as suppressed, and the cursor is left where the error
+  /// object ended, as it is after readable data, so a caller parsing past the error object,
+  /// the websocket among them, continues from there.
+  @Test
+  void unreadableErrorDataKeepsTheErrorAndRestoresTheOuterCursor() {
+    final var ji = JsonIterator.parse(
+        """
+            [{"data":"unexpected","code":-32005,"message":"unhealthy"},73]""");
+
+    assertTrue(ji.readArray());
+    final var exception = JsonRpcException.parseException(ji, OptionalLong.empty());
+    assertEquals(-32005L, exception.code());
+    assertEquals("unhealthy", exception.getMessage());
+    assertSame(RpcCustomError.Unknown.INSTANCE, exception.customError(), "the custom error the code alone names");
+    assertEquals(1, exception.getSuppressed().length);
+    assertInstanceOf(JsonException.class, exception.getSuppressed()[0]);
     assertTrue(ji.readArray());
     assertEquals(73, ji.readInt());
     assertFalse(ji.readArray());

@@ -17,12 +17,14 @@ import java.util.OptionalLong;
 /// [JsonRpcException#httpStatus()]; under a 2xx an object's `result` member answers even when
 /// an `error` member sits beside it. A body the JSON-RPC gate's parser cannot read is typed
 /// here too: an empty, blank or missing body, before the parser is opened; and, with the
-/// parser's or a decoder's failure attached as suppressed, an object the scan cannot get
-/// through and, once the gate has taken the error path, an `error` member that is not a
-/// readable error object, that is one that is not an object, as some gateways answer a 401 or a
-/// 429, or an object whose `code` is not an integer a long holds, whose `message` is neither a
-/// string nor null, or whose `data` does not fit its code. An `"error": null` reads as a
-/// [JsonRpcException] with code 0.
+/// parser's failure attached as suppressed, an object the scan cannot get through and, once
+/// the gate has taken the error path, an `error` member that is not a readable error object,
+/// that is one that is not an object, as some gateways answer a 401 or a 429, or an object
+/// whose `code` is not an integer a long holds or whose `message` is neither a string nor null.
+/// A readable error object whose `data` does not parse, a shape that does not fit its code or a
+/// value a decoder refuses, is still the [JsonRpcException] the server answered with, its
+/// custom error the one the code alone names and the data's failure attached to it as
+/// suppressed. An `"error": null` reads as a [JsonRpcException] with code 0.
 ///
 /// Built as this failure was built before it had a type of its own: an `UncheckedIOException`
 /// over an `UnknownServiceException` carrying the message, so a catch of `UncheckedIOException`

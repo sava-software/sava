@@ -354,11 +354,11 @@ final class JsonRpcResponseParserTests {
   /// Every body the gate cannot read as a JSON-RPC answer is typed with its status, so that a
   /// rate limiter's or a gateway's answer, whatever its shape, reaches the caller as a 429 or a
   /// 503 and not as the JSON parser's complaint with no status: an empty, blank or missing body;
-  /// an object the scan cannot get through; an error member that is not a readable error
-  /// object, whether a string, an object whose code is not an integer a long holds, whose
-  /// message is neither a string nor null, or whose data does not fit its code; and an error
-  /// object whose data a decoder refuses, which throws its own kind rather than the parser's.
-  /// Every shape is checked, so a failure names each one still unreadable.
+  /// an object the scan cannot get through; and an error member that is not a readable error
+  /// object, whether a string, an object whose code is not an integer a long holds, or one
+  /// whose message is neither a string nor null. A readable error object whose data does not
+  /// parse is not among them: `aReadableErrorSurvivesUnreadableData` pins that. Every shape is
+  /// checked, so a failure names each one still unreadable.
   @Test
   void everyUnreadableBodyIsTypedWithItsStatus() {
     assertAll(
@@ -394,15 +394,39 @@ final class JsonRpcResponseParserTests {
         () -> assertEquals(429, assertThrows(HttpResponseException.class,
             () -> parseResult(429, "{\"error\":{\"code\":\"RATE_LIMITED\",\"message\":\"slow\"}}")).statusCode()),
         () -> assertEquals(401, assertThrows(HttpResponseException.class,
-            () -> parseResult(401, "{\"error\":{\"code\":401,\"message\":5}}")).statusCode()),
-        () -> assertEquals(200, assertThrows(HttpResponseException.class,
-            () -> parseResult(200, "{\"error\":{\"code\":-32002,\"message\":\"x\",\"data\":\"unexpected\"},\"id\":1}")).statusCode()),
+            () -> parseResult(401, "{\"error\":{\"code\":401,\"message\":5}}")).statusCode())
+    );
+  }
+
+  /// A readable error object whose `data` does not parse is still the error the server
+  /// answered with. Its code and message are in hand before the data, which is parsed against
+  /// the code, so data that does not fit its code, or return data a decoder refuses, costs the
+  /// caller only the structured details: the custom error is the one the code alone names, as
+  /// it is when there is no data, and the data's failure, the parser's or the decoder's own, is
+  /// attached as suppressed.
+  @Test
+  void aReadableErrorSurvivesUnreadableData() {
+    assertAll(
+        () -> {
+          final var unfit = assertThrows(JsonRpcException.class,
+              () -> parseResult(200, "{\"error\":{\"code\":-32002,\"message\":\"x\",\"data\":\"unexpected\"},\"id\":1}"));
+          assertEquals(-32002, unfit.code());
+          assertEquals("x", unfit.getMessage());
+          assertEquals(OptionalInt.of(200), unfit.httpStatus());
+          assertEquals(OptionalLong.of(1), unfit.requestId());
+          assertEquals(RpcCustomError.parseError(-32002), unfit.customError(), "the custom error the code alone names");
+          assertEquals(1, unfit.getSuppressed().length);
+          assertInstanceOf(systems.comodal.jsoniter.JsonException.class, unfit.getSuppressed()[0], "the parser's failure is the one attached");
+        },
         () -> {
           // -32002 carries a simulation whose returnData is decoded as it is parsed; base64 that
           // is not throws the decoder's IllegalArgumentException, not the parser's exception.
-          final var badReturnData = assertThrows(HttpResponseException.class, () -> parseResult(200, """
+          final var badReturnData = assertThrows(JsonRpcException.class, () -> parseResult(200, """
               {"jsonrpc":"2.0","error":{"code":-32002,"message":"Transaction simulation failed","data":{"err":"x","logs":[],"unitsConsumed":1,"returnData":{"programId":"11111111111111111111111111111111","data":["!","base64"]}}},"id":1}"""));
-          assertEquals(200, badReturnData.statusCode());
+          assertEquals(-32002, badReturnData.code());
+          assertEquals("Transaction simulation failed", badReturnData.getMessage());
+          assertEquals(OptionalInt.of(200), badReturnData.httpStatus());
+          assertEquals(RpcCustomError.parseError(-32002), badReturnData.customError(), "the custom error the code alone names");
           assertEquals(1, badReturnData.getSuppressed().length);
           assertInstanceOf(IllegalArgumentException.class, badReturnData.getSuppressed()[0], "the decoder's own failure is the one attached");
         }
