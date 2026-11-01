@@ -9,8 +9,11 @@ import software.sava.rpc.json.http.response.HttpResponseException;
 
 import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
+import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.BiFunction;
@@ -482,6 +485,49 @@ final class JsonRpcResponseParserTests {
     assertEquals("", ex.body());
     assertEquals(500, ex.statusCode());
     assertTrue(ex.getMessage().endsWith("[body=]"), ex.getMessage());
+  }
+
+  /// A caller that holds a status, a body and headers rather than an `HttpResponse` builds the
+  /// typed failure from the parts, and a 429's `retry-after` hint is read from those headers.
+  @Test
+  void thePartsFactoryReadsTheRetryAfterHintFromItsHeaders() {
+    final var headers = HttpHeaders.of(Map.of("retry-after", List.of("7")), (_, _) -> true);
+    final var ex = HttpResponseException.of(429, "slow down", headers);
+    assertEquals(429, ex.statusCode());
+    assertEquals("slow down", ex.body());
+    assertEquals(OptionalLong.of(7), ex.retryAfterSeconds());
+    assertEquals("java.net.UnknownServiceException: HTTP request failed with [httpCode:429], [body=slow down]", ex.getMessage());
+    assertInstanceOf(UnknownServiceException.class, ex.getCause());
+  }
+
+  /// Null headers read as no hint, not as a failure of the factory.
+  @Test
+  void thePartsFactoryReadsNullHeadersAsNoHint() {
+    final var ex = HttpResponseException.of(503, "down", null);
+    assertEquals(503, ex.statusCode());
+    assertEquals("down", ex.body());
+    assertTrue(ex.retryAfterSeconds().isEmpty());
+  }
+
+  /// The response factory is the parts factory over the response's own status and headers, so
+  /// the two build equal fields and an equal message from the same inputs: a hint in seconds, a
+  /// date-valued hint that reads as none, and a body that is text, empty or null.
+  @Test
+  void bothFactoriesBuildTheSameFailure() {
+    final var responses = List.of(
+        StubHttpResponse.of(429, (byte[]) null, "retry-after", "7"),
+        StubHttpResponse.of(503, (byte[]) null, "retry-after", "Wed, 21 Oct 2026 07:28:00 GMT"));
+    for (final var response : responses) {
+      for (final var body : Arrays.asList("slow down", "", null)) {
+        final var fromResponse = HttpResponseException.of(response, body);
+        final var fromParts = HttpResponseException.of(response.statusCode(), body, response.headers());
+        final var input = response.statusCode() + " " + response.headers().map() + " " + body;
+        assertEquals(fromResponse.statusCode(), fromParts.statusCode(), input);
+        assertEquals(fromResponse.body(), fromParts.body(), input);
+        assertEquals(fromResponse.retryAfterSeconds(), fromParts.retryAfterSeconds(), input);
+        assertEquals(fromResponse.getMessage(), fromParts.getMessage(), input);
+      }
+    }
   }
 
   /// A success status whose body is not a JSON object fails with that status, so the caller

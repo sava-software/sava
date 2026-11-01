@@ -50,13 +50,22 @@ public final class HttpResponseException extends UncheckedIOException {
 
   /// The failure of `httpResponse`, whose body text is `body`; a null body reads as empty.
   public static HttpResponseException of(final HttpResponse<?> httpResponse, final String body) {
-    final int statusCode = httpResponse.statusCode();
+    return of(httpResponse.statusCode(), body, httpResponse.headers());
+  }
+
+  /// The failure of a response that arrived with `statusCode` and the body text `body`, its
+  /// `retry-after` hint read from `headers` as [#retryAfterSeconds(HttpHeaders)] reads it; a
+  /// null body reads as empty and null headers as no hint. [#of(HttpResponse, String)] is this
+  /// over the response's own status and headers; this form is for a caller that holds the
+  /// parts rather than the response, such as a test that wants this type without faking an
+  /// `HttpResponse`.
+  public static HttpResponseException of(final int statusCode, final String body, final HttpHeaders headers) {
     final var bodyText = Objects.requireNonNullElse(body, "");
     return new HttpResponseException(
         String.format("HTTP request failed with [httpCode:%d], [body=%s]", statusCode, bodyText),
         statusCode,
         bodyText,
-        retryAfterSeconds(httpResponse.headers())
+        headers == null ? OptionalLong.empty() : retryAfterSeconds(headers)
     );
   }
 
