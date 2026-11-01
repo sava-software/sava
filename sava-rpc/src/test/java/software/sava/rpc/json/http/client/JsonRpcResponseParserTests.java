@@ -6,6 +6,7 @@ import systems.comodal.jsoniter.JsonIterator;
 import systems.comodal.jsoniter.ValueType;
 import software.sava.rpc.json.http.response.Context;
 import software.sava.rpc.json.http.response.HttpResponseException;
+import software.sava.rpc.json.http.response.RpcCustomError;
 
 import java.io.UncheckedIOException;
 import java.net.UnknownServiceException;
@@ -418,6 +419,21 @@ final class JsonRpcResponseParserTests {
         () -> parseResult(429, "{\"error\":{\"code\":429,\"message\":null},\"id\":1}"));
     assertEquals(429, nullMessage.code());
     assertEquals(OptionalInt.of(429), nullMessage.httpStatus());
+  }
+
+  /// Agave answers a health check it cannot decide, from getHealth or from sendTransaction's
+  /// preflight, with -32005 and `"numSlotsBehind":null`, since its `NodeUnhealthyErrorData`
+  /// holds an `Option<Slot>`. That is a readable error: it arrives as the JsonRpcException it
+  /// is, a NodeUnhealthy with no slot count, and not as a body the gate could not read.
+  @Test
+  void anUnhealthyNodeWithNoSlotCountIsAReadableError() {
+    final var ex = assertThrows(JsonRpcException.class, () -> parseResult(200, """
+        {"jsonrpc":"2.0","error":{"code":-32005,"message":"Node is unhealthy","data":{"numSlotsBehind":null}},"id":1}"""));
+    assertEquals(-32005, ex.code());
+    assertEquals("Node is unhealthy", ex.getMessage());
+    assertEquals(OptionalInt.of(200), ex.httpStatus());
+    final var unhealthy = assertInstanceOf(RpcCustomError.NodeUnhealthy.class, ex.customError());
+    assertTrue(unhealthy.numSlotsBehind().isEmpty());
   }
 
   /// A response that is not a usable answer is typed: its status, its body and the server's

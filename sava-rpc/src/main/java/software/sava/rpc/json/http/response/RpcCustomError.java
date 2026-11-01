@@ -128,7 +128,7 @@ public sealed interface RpcCustomError permits
       @Override
       public boolean test(final char[] buf, final int offset, final int len, final JsonIterator ji) {
         if (fieldEquals("numSlotsBehind", buf, offset, len)) {
-          numSlotsBehind = ji.readLong();
+          numSlotsBehind = ji.readLongOr(numSlotsBehind);
         } else {
           ji.skip();
         }

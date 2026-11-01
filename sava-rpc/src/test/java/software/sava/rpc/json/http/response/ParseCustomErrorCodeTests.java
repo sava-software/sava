@@ -33,6 +33,15 @@ final class ParseCustomErrorCodeTests {
     assertEquals(new RpcCustomError.NodeUnhealthy(OptionalLong.of(42)), error);
   }
 
+  /// Agave's `NodeUnhealthyErrorData` holds an `Option<Slot>` and serializes `None` as null,
+  /// which getHealth and sendTransaction's preflight health check answer whenever the node's
+  /// health is unknown: that is a NodeUnhealthy with no slot count, not unreadable data.
+  @Test
+  void aNullNumSlotsBehindReadsAsAbsent() {
+    final var ji = JsonIterator.parse("{\"numSlotsBehind\":null}");
+    assertEquals(new RpcCustomError.NodeUnhealthy(OptionalLong.empty()), RpcCustomError.parseError(-32005L, ji));
+  }
+
   @Test
   void outOfRangeCodesWithDataSkipTheirPayload() {
     final var ji = JsonIterator.parse("[{\"numSlotsBehind\":42},{\"numSlotsBehind\":42},7]");
