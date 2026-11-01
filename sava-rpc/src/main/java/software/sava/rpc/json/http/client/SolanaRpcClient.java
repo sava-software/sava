@@ -1620,431 +1620,242 @@ public interface SolanaRpcClient {
   CompletableFuture<TokenAmount> getTokenAccountBalance(final Commitment commitment, final PublicKey tokenAccount);
 
   /// Decodes each account with [TokenAccount#FACTORY], the base layout of either token program; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)]
-  /// for raw bytes, a custom decoder, a data window or a minimum context slot.
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)]
+  /// for the raw bytes, a data window or a minimum context slot.
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final PublicKey delegate,
                                                                                             final PublicKey tokenMint);
 
   /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
                                                                                             final PublicKey delegate,
                                                                                             final PublicKey tokenMint);
 
-  /// Decodes each account with [TokenAccount#FACTORY] at the client's default commitment; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final BigInteger minContextSlot,
-                                                                                                    final PublicKey delegate,
-                                                                                                    final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByDelegate(defaultCommitment(), minContextSlot, delegate, tokenMint);
+  /// Returns each account's bytes at the client's default commitment; see
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByDelegate(final BigInteger minContextSlot,
+                                                                                              final PublicKey delegate,
+                                                                                              final PublicKey tokenMint) {
+    return getTokenAccountsForTokenMintByDelegate(defaultCommitment(), minContextSlot, null, delegate, tokenMint);
   }
 
-  /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
-                                                                                                    final BigInteger minContextSlot,
-                                                                                                    final PublicKey delegate,
-                                                                                                    final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByDelegate(commitment, minContextSlot, null, delegate, tokenMint, TokenAccount.FACTORY);
+  /// Returns each account's bytes; see
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
+                                                                                              final BigInteger minContextSlot,
+                                                                                              final PublicKey delegate,
+                                                                                              final PublicKey tokenMint) {
+    return getTokenAccountsForTokenMintByDelegate(commitment, minContextSlot, null, delegate, tokenMint);
   }
 
-  /// Returns the raw bytes of each account's window at the client's default commitment; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window at the client's default commitment; see
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByDelegate(final DataSlice dataSlice,
                                                                                               final PublicKey delegate,
                                                                                               final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByDelegate(defaultCommitment(), dataSlice, delegate, tokenMint);
+    return getTokenAccountsForTokenMintByDelegate(defaultCommitment(), null, dataSlice, delegate, tokenMint);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window; see
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
                                                                                               final DataSlice dataSlice,
                                                                                               final PublicKey delegate,
                                                                                               final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByDelegate(commitment, null, dataSlice, delegate, tokenMint, BYTES_IDENTITY);
+    return getTokenAccountsForTokenMintByDelegate(commitment, null, dataSlice, delegate, tokenMint);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
-                                                                                              final BigInteger minContextSlot,
-                                                                                              final DataSlice dataSlice,
-                                                                                              final PublicKey delegate,
-                                                                                              final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByDelegate(commitment, minContextSlot, dataSlice, delegate, tokenMint, BYTES_IDENTITY);
-  }
-
-  /// Decodes each whole account with `factory` at the client's default commitment; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByDelegate(final PublicKey delegate,
-                                                                                           final PublicKey tokenMint,
-                                                                                           final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByDelegate(defaultCommitment(), delegate, tokenMint, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
-                                                                                           final PublicKey delegate,
-                                                                                           final PublicKey tokenMint,
-                                                                                           final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByDelegate(commitment, null, null, delegate, tokenMint, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
-                                                                                           final BigInteger minContextSlot,
-                                                                                           final PublicKey delegate,
-                                                                                           final PublicKey tokenMint,
-                                                                                           final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByDelegate(commitment, minContextSlot, null, delegate, tokenMint, factory);
-  }
-
-  /// Decodes each account's window with `factory`; see
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
-                                                                                           final DataSlice dataSlice,
-                                                                                           final PublicKey delegate,
-                                                                                           final PublicKey tokenMint,
-                                                                                           final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByDelegate(commitment, null, dataSlice, delegate, tokenMint, factory);
-  }
-
-  /// The token accounts of `tokenMint` whose delegate is `delegate`, each decoded by `factory` from
-  /// the bytes the node returns. Agave serves these with the same options as
-  /// [#getAccountInfo(Commitment,BigInteger,DataSlice,PublicKey,BiFunction)]: `minContextSlot`
-  /// requires the bank selected by `commitment` to have reached it, else the call fails with
-  /// [RpcCustomError.MinContextSlotNotReached]; `dataSlice` narrows the bytes handed to `factory`,
-  /// so pair it with [AccountInfo#BYTES_IDENTITY] or a decoder that expects the window rather than
-  /// [TokenAccount#FACTORY], which reads the whole base layout. Pass the whole account to
-  /// [software.sava.core.accounts.token.Token2022Account#FACTORY] to decode Token-2022 extensions
-  /// in one request.
+  /// The token accounts of `tokenMint` whose delegate is `delegate`, each as the bytes the node
+  /// returns, for the caller to decode as it prefers: [TokenAccount#read(PublicKey,byte\[\])] for
+  /// the base layout of either token program, `Token2022Account.read` for a Token-2022 account
+  /// with its extensions, or a window read straight off a slice. Agave serves these with the
+  /// same options as [#getAccountInfo(Commitment,BigInteger,DataSlice,PublicKey,BiFunction)]:
+  /// `minContextSlot` requires the bank selected by `commitment` to have reached it, else the
+  /// call fails with [RpcCustomError.MinContextSlotNotReached]; `dataSlice` narrows the returned
+  /// bytes to that window, so a decoder of the whole layout must not be applied to a sliced
+  /// result.
   ///
   /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
   /// @param dataSlice      `null` for the whole account; [DataSlice#EMPTY] for metadata only
-  <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
-                                                                                   final BigInteger minContextSlot,
-                                                                                   final DataSlice dataSlice,
-                                                                                   final PublicKey delegate,
-                                                                                   final PublicKey tokenMint,
-                                                                                   final BiFunction<PublicKey, byte[], T> factory);
+  CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
+                                                                                      final BigInteger minContextSlot,
+                                                                                      final DataSlice dataSlice,
+                                                                                      final PublicKey delegate,
+                                                                                      final PublicKey tokenMint);
 
-  /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Decodes each account with [TokenAccount#FACTORY], the base layout of either token program; see
+  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)]
+  /// for the raw bytes, a data window or a minimum context slot.
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final PublicKey delegate,
                                                                                           final PublicKey programId);
 
   /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
                                                                                           final PublicKey delegate,
                                                                                           final PublicKey programId);
 
-  /// Decodes each account with [TokenAccount#FACTORY] at the client's default commitment; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final BigInteger minContextSlot,
-                                                                                                  final PublicKey delegate,
-                                                                                                  final PublicKey programId) {
-    return getTokenAccountsForProgramByDelegate(defaultCommitment(), minContextSlot, delegate, programId);
+  /// Returns each account's bytes at the client's default commitment; see
+  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByDelegate(final BigInteger minContextSlot,
+                                                                                            final PublicKey delegate,
+                                                                                            final PublicKey programId) {
+    return getTokenAccountsForProgramByDelegate(defaultCommitment(), minContextSlot, null, delegate, programId);
   }
 
-  /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
-                                                                                                  final BigInteger minContextSlot,
-                                                                                                  final PublicKey delegate,
-                                                                                                  final PublicKey programId) {
-    return getTokenAccountsForProgramByDelegate(commitment, minContextSlot, null, delegate, programId, TokenAccount.FACTORY);
+  /// Returns each account's bytes; see
+  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
+                                                                                            final BigInteger minContextSlot,
+                                                                                            final PublicKey delegate,
+                                                                                            final PublicKey programId) {
+    return getTokenAccountsForProgramByDelegate(commitment, minContextSlot, null, delegate, programId);
   }
 
-  /// Returns the raw bytes of each account's window at the client's default commitment; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window at the client's default commitment; see
+  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByDelegate(final DataSlice dataSlice,
                                                                                             final PublicKey delegate,
                                                                                             final PublicKey programId) {
-    return getTokenAccountsForProgramByDelegate(defaultCommitment(), dataSlice, delegate, programId);
+    return getTokenAccountsForProgramByDelegate(defaultCommitment(), null, dataSlice, delegate, programId);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window; see
+  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
                                                                                             final DataSlice dataSlice,
                                                                                             final PublicKey delegate,
                                                                                             final PublicKey programId) {
-    return getTokenAccountsForProgramByDelegate(commitment, null, dataSlice, delegate, programId, BYTES_IDENTITY);
+    return getTokenAccountsForProgramByDelegate(commitment, null, dataSlice, delegate, programId);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
-                                                                                            final BigInteger minContextSlot,
-                                                                                            final DataSlice dataSlice,
-                                                                                            final PublicKey delegate,
-                                                                                            final PublicKey programId) {
-    return getTokenAccountsForProgramByDelegate(commitment, minContextSlot, dataSlice, delegate, programId, BYTES_IDENTITY);
-  }
-
-  /// Decodes each whole account with `factory` at the client's default commitment; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByDelegate(final PublicKey delegate,
-                                                                                         final PublicKey programId,
-                                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByDelegate(defaultCommitment(), delegate, programId, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
-                                                                                         final PublicKey delegate,
-                                                                                         final PublicKey programId,
-                                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByDelegate(commitment, null, null, delegate, programId, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
-                                                                                         final BigInteger minContextSlot,
-                                                                                         final PublicKey delegate,
-                                                                                         final PublicKey programId,
-                                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByDelegate(commitment, minContextSlot, null, delegate, programId, factory);
-  }
-
-  /// Decodes each account's window with `factory`; see
-  /// [#getTokenAccountsForProgramByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
-                                                                                         final DataSlice dataSlice,
-                                                                                         final PublicKey delegate,
-                                                                                         final PublicKey programId,
-                                                                                         final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByDelegate(commitment, null, dataSlice, delegate, programId, factory);
-  }
-
-  /// The token accounts owned by the token program `programId` whose delegate is `delegate`; the
-  /// options and `factory` behave as in
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// The token accounts owned by the token program `programId` whose delegate is `delegate`, each
+  /// as the bytes the node returns for the caller to decode; the options behave as in
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   ///
   /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
   /// @param dataSlice      `null` for the whole account; [DataSlice#EMPTY] for metadata only
-  <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
-                                                                                 final BigInteger minContextSlot,
-                                                                                 final DataSlice dataSlice,
-                                                                                 final PublicKey delegate,
-                                                                                 final PublicKey programId,
-                                                                                 final BiFunction<PublicKey, byte[], T> factory);
+  CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
+                                                                                    final BigInteger minContextSlot,
+                                                                                    final DataSlice dataSlice,
+                                                                                    final PublicKey delegate,
+                                                                                    final PublicKey programId);
 
   /// Decodes each account with [TokenAccount#FACTORY], the base layout of either token program; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)]
-  /// for raw bytes, a custom decoder, a data window or a minimum context slot.
+  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)]
+  /// for the raw bytes, a data window or a minimum context slot.
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final PublicKey owner,
                                                                                          final PublicKey tokenMint);
 
   /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
                                                                                          final PublicKey owner,
                                                                                          final PublicKey tokenMint);
 
-  /// Decodes each account with [TokenAccount#FACTORY] at the client's default commitment; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final BigInteger minContextSlot,
-                                                                                                 final PublicKey owner,
-                                                                                                 final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByOwner(defaultCommitment(), minContextSlot, owner, tokenMint);
+  /// Returns each account's bytes at the client's default commitment; see
+  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByOwner(final BigInteger minContextSlot,
+                                                                                           final PublicKey owner,
+                                                                                           final PublicKey tokenMint) {
+    return getTokenAccountsForTokenMintByOwner(defaultCommitment(), minContextSlot, null, owner, tokenMint);
   }
 
-  /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
-                                                                                                 final BigInteger minContextSlot,
-                                                                                                 final PublicKey owner,
-                                                                                                 final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByOwner(commitment, minContextSlot, null, owner, tokenMint, TokenAccount.FACTORY);
+  /// Returns each account's bytes; see
+  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
+                                                                                           final BigInteger minContextSlot,
+                                                                                           final PublicKey owner,
+                                                                                           final PublicKey tokenMint) {
+    return getTokenAccountsForTokenMintByOwner(commitment, minContextSlot, null, owner, tokenMint);
   }
 
-  /// Returns the raw bytes of each account's window at the client's default commitment; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window at the client's default commitment; see
+  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByOwner(final DataSlice dataSlice,
                                                                                            final PublicKey owner,
                                                                                            final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByOwner(defaultCommitment(), dataSlice, owner, tokenMint);
+    return getTokenAccountsForTokenMintByOwner(defaultCommitment(), null, dataSlice, owner, tokenMint);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window; see
+  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
                                                                                            final DataSlice dataSlice,
                                                                                            final PublicKey owner,
                                                                                            final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByOwner(commitment, null, dataSlice, owner, tokenMint, BYTES_IDENTITY);
+    return getTokenAccountsForTokenMintByOwner(commitment, null, dataSlice, owner, tokenMint);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
-                                                                                           final BigInteger minContextSlot,
-                                                                                           final DataSlice dataSlice,
-                                                                                           final PublicKey owner,
-                                                                                           final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByOwner(commitment, minContextSlot, dataSlice, owner, tokenMint, BYTES_IDENTITY);
-  }
-
-  /// Decodes each whole account with `factory` at the client's default commitment; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByOwner(final PublicKey owner,
-                                                                                        final PublicKey tokenMint,
-                                                                                        final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByOwner(defaultCommitment(), owner, tokenMint, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
-                                                                                        final PublicKey owner,
-                                                                                        final PublicKey tokenMint,
-                                                                                        final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByOwner(commitment, null, null, owner, tokenMint, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
-                                                                                        final BigInteger minContextSlot,
-                                                                                        final PublicKey owner,
-                                                                                        final PublicKey tokenMint,
-                                                                                        final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByOwner(commitment, minContextSlot, null, owner, tokenMint, factory);
-  }
-
-  /// Decodes each account's window with `factory`; see
-  /// [#getTokenAccountsForTokenMintByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
-                                                                                        final DataSlice dataSlice,
-                                                                                        final PublicKey owner,
-                                                                                        final PublicKey tokenMint,
-                                                                                        final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForTokenMintByOwner(commitment, null, dataSlice, owner, tokenMint, factory);
-  }
-
-  /// The token accounts of `tokenMint` owned by `owner`; the options and `factory` behave as in
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// The token accounts of `tokenMint` owned by `owner`, each as the bytes the node returns for the
+  /// caller to decode; the options behave as in
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   ///
   /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
   /// @param dataSlice      `null` for the whole account; [DataSlice#EMPTY] for metadata only
-  <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
-                                                                                final BigInteger minContextSlot,
-                                                                                final DataSlice dataSlice,
-                                                                                final PublicKey owner,
-                                                                                final PublicKey tokenMint,
-                                                                                final BiFunction<PublicKey, byte[], T> factory);
+  CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
+                                                                                   final BigInteger minContextSlot,
+                                                                                   final DataSlice dataSlice,
+                                                                                   final PublicKey owner,
+                                                                                   final PublicKey tokenMint);
 
-  /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Decodes each account with [TokenAccount#FACTORY], the base layout of either token program; see
+  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)] for
+  /// the raw bytes, a data window or a minimum context slot.
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final PublicKey owner,
                                                                                        final PublicKey programId);
 
   /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
                                                                                        final PublicKey owner,
                                                                                        final PublicKey programId);
 
-  /// Decodes each account with [TokenAccount#FACTORY] at the client's default commitment; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final BigInteger minContextSlot,
-                                                                                               final PublicKey owner,
-                                                                                               final PublicKey programId) {
-    return getTokenAccountsForProgramByOwner(defaultCommitment(), minContextSlot, owner, programId);
+  /// Returns each account's bytes at the client's default commitment; see
+  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByOwner(final BigInteger minContextSlot,
+                                                                                         final PublicKey owner,
+                                                                                         final PublicKey programId) {
+    return getTokenAccountsForProgramByOwner(defaultCommitment(), minContextSlot, null, owner, programId);
   }
 
-  /// Decodes each account with [TokenAccount#FACTORY]; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
-                                                                                               final BigInteger minContextSlot,
-                                                                                               final PublicKey owner,
-                                                                                               final PublicKey programId) {
-    return getTokenAccountsForProgramByOwner(commitment, minContextSlot, null, owner, programId, TokenAccount.FACTORY);
+  /// Returns each account's bytes; see
+  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
+  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
+                                                                                         final BigInteger minContextSlot,
+                                                                                         final PublicKey owner,
+                                                                                         final PublicKey programId) {
+    return getTokenAccountsForProgramByOwner(commitment, minContextSlot, null, owner, programId);
   }
 
-  /// Returns the raw bytes of each account's window at the client's default commitment; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window at the client's default commitment; see
+  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByOwner(final DataSlice dataSlice,
                                                                                          final PublicKey owner,
                                                                                          final PublicKey programId) {
-    return getTokenAccountsForProgramByOwner(defaultCommitment(), dataSlice, owner, programId);
+    return getTokenAccountsForProgramByOwner(defaultCommitment(), null, dataSlice, owner, programId);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// Returns the bytes of each account's window; see
+  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
                                                                                          final DataSlice dataSlice,
                                                                                          final PublicKey owner,
                                                                                          final PublicKey programId) {
-    return getTokenAccountsForProgramByOwner(commitment, null, dataSlice, owner, programId, BYTES_IDENTITY);
+    return getTokenAccountsForProgramByOwner(commitment, null, dataSlice, owner, programId);
   }
 
-  /// Returns the raw bytes of each account's window; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
-                                                                                         final BigInteger minContextSlot,
-                                                                                         final DataSlice dataSlice,
-                                                                                         final PublicKey owner,
-                                                                                         final PublicKey programId) {
-    return getTokenAccountsForProgramByOwner(commitment, minContextSlot, dataSlice, owner, programId, BYTES_IDENTITY);
-  }
-
-  /// Decodes each whole account with `factory` at the client's default commitment; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByOwner(final PublicKey owner,
-                                                                                      final PublicKey programId,
-                                                                                      final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByOwner(defaultCommitment(), owner, programId, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
-                                                                                      final PublicKey owner,
-                                                                                      final PublicKey programId,
-                                                                                      final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByOwner(commitment, null, null, owner, programId, factory);
-  }
-
-  /// Decodes each whole account with `factory`; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
-                                                                                      final BigInteger minContextSlot,
-                                                                                      final PublicKey owner,
-                                                                                      final PublicKey programId,
-                                                                                      final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByOwner(commitment, minContextSlot, null, owner, programId, factory);
-  }
-
-  /// Decodes each account's window with `factory`; see
-  /// [#getTokenAccountsForProgramByOwner(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
-  default <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
-                                                                                      final DataSlice dataSlice,
-                                                                                      final PublicKey owner,
-                                                                                      final PublicKey programId,
-                                                                                      final BiFunction<PublicKey, byte[], T> factory) {
-    return getTokenAccountsForProgramByOwner(commitment, null, dataSlice, owner, programId, factory);
-  }
-
-  /// The token accounts owned by `owner` under the token program `programId`; the options and
-  /// `factory` behave as in
-  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey,BiFunction)].
+  /// The token accounts owned by `owner` under the token program `programId`, each as the bytes the
+  /// node returns for the caller to decode; the options behave as in
+  /// [#getTokenAccountsForTokenMintByDelegate(Commitment,BigInteger,DataSlice,PublicKey,PublicKey)].
   ///
   /// @param minContextSlot `null` to omit the minimum; zero is sent literally; unsigned 64-bit slot
   /// @param dataSlice      `null` for the whole account; [DataSlice#EMPTY] for metadata only
-  <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
-                                                                              final BigInteger minContextSlot,
-                                                                              final DataSlice dataSlice,
-                                                                              final PublicKey owner,
-                                                                              final PublicKey programId,
-                                                                              final BiFunction<PublicKey, byte[], T> factory);
+  CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
+                                                                                 final BigInteger minContextSlot,
+                                                                                 final DataSlice dataSlice,
+                                                                                 final PublicKey owner,
+                                                                                 final PublicKey programId);
 
   CompletableFuture<List<AccountTokenAmount>> getTokenLargestAccounts(final PublicKey tokenMint);
 

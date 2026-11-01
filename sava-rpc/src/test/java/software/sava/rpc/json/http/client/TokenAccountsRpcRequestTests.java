@@ -3,6 +3,7 @@ package software.sava.rpc.json.http.client;
 import org.junit.jupiter.api.Test;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.token.TokenAccount;
+import software.sava.core.encoding.ByteUtil;
 import software.sava.core.rpc.DataSlice;
 import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.AccountInfo;
@@ -10,24 +11,21 @@ import software.sava.rpc.json.http.response.JsonRpcException;
 import software.sava.rpc.json.http.response.RpcCustomError;
 
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.concurrent.CompletionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/// The token-account queries with a custom decoder, a data window and a minimum context slot.
-/// The owner and mint come from a devnet block's token balances. The `getTokenAccountsByOwner`
-/// exchanges with the recent minimum, the literal zero, the unsigned maximum, the mint query's
-/// eight-byte slice and the program query's empty slice are verbatim captures from
-/// `https://api.devnet.solana.com` on 2026-11-01 (Agave 4.4.0-beta.1); every other owner
-/// registration sends its own body and replays one of those answers. The public nodes answered
-/// every `getTokenAccountsByDelegate` with their proxy's `429 Too many requests for a specific RPC
-/// call`, on all three clusters, so the delegate tests send the same options to the same owner and
-/// replay the owner answers, with a synthetic `-32016` slot: agave serves both methods from one
-/// `RpcAccountInfoConfig` and one `RpcKeyedAccount` list.
+/// The token-account queries with a data window and a minimum context slot, whose new overloads
+/// hand the caller the bytes to decode. The owner and mint come from a devnet block's token
+/// balances. The `getTokenAccountsByOwner` exchanges with the recent minimum, the literal zero, the
+/// unsigned maximum, the mint query's eight-byte slice and the program query's empty slice are
+/// verbatim captures from `https://api.devnet.solana.com` on 2026-11-01 (Agave 4.4.0-beta.1); every
+/// other owner registration sends its own body and replays one of those answers. The public nodes
+/// answered every `getTokenAccountsByDelegate` with their proxy's `429 Too many requests for a
+/// specific RPC call`, on all three clusters, so the delegate tests send the same options to the
+/// same owner and replay the owner answers, with a synthetic `-32016` slot: agave serves both
+/// methods from one `RpcAccountInfoConfig` and one `RpcKeyedAccount` list.
 final class TokenAccountsRpcRequestTests extends RpcRequestTests {
 
   private static final BigInteger U64_MAX = new BigInteger("18446744073709551615");
@@ -48,12 +46,12 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
     return "{\"account\":{\"data\":[\"" + data + ACCOUNT_TAIL + pubKey + "\"}";
   }
 
-  private static String response(final long slot, final String fundedData, final String... emptyData) {
+  private static String response(final long slot, final String fundedData, final String emptyData) {
     return "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"4.4.0-beta.1\",\"slot\":" + slot + "},\"value\":["
-        + account(emptyData[0], FIRST) + ','
+        + account(emptyData, FIRST) + ','
         + account(fundedData, FUNDED) + ','
-        + account(emptyData[0], PublicKey.fromBase58Encoded("AN4fGsemRAFtLLfZEZFMwS9gAiNBxCgDjV63EawejefY")) + ','
-        + account(emptyData[0], LAST)
+        + account(emptyData, PublicKey.fromBase58Encoded("AN4fGsemRAFtLLfZEZFMwS9gAiNBxCgDjV63EawejefY")) + ','
+        + account(emptyData, LAST)
         + "]},\"id\":1}";
   }
 
@@ -73,7 +71,6 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
   private static final String RECENT_MIN = "\"minContextSlot\":517570444";
   private static final String WINDOW_JSON = "\"dataSlice\":{\"offset\":64,\"length\":8}";
   private static final DataSlice WINDOW = new DataSlice(64, 8);
-  private static final BiFunction<PublicKey, byte[], Integer> LENGTH = (_, data) -> data.length;
 
   private static String body(final String method, final String filterKey, final PublicKey filterValue, final String options) {
     return "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"" + method + "\",\"params\":[\"" + OWNER + "\",{\"" + filterKey + "\":\"" + filterValue
@@ -93,12 +90,18 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
     return assertInstanceOf(JsonRpcException.class, exception.getCause());
   }
 
+  /// The caller's decoder for a whole account: the base layout.
+  private static TokenAccount decode(final AccountInfo<byte[]> account) {
+    return TokenAccount.read(account.pubKey(), account.data());
+  }
+
+  /// The caller's decoder for an eight-byte amount window.
   private static long amount(final byte[] window) {
-    return ByteBuffer.wrap(window).order(ByteOrder.LITTLE_ENDIAN).getLong(0);
+    return ByteUtil.getInt64LE(window, 0);
   }
 
   @Test
-  void ownerAccountsByMintWithAMinimumKeepTheTokenDecoder() {
+  void ownerAccountsByMintWithAMinimumReturnTheBytesTheCallerDecodes() {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"confirmed","encoding":"base64","minContextSlot":517570444}]}""",
         RECENT_RESPONSE);
@@ -109,11 +112,12 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
     assertEquals(517_570_691L, funded.context().slot());
     assertEquals(1_488_440L, funded.lamports());
     assertEquals(165, funded.space());
-    final TokenAccount tokenAccount = funded.data();
+    assertEquals(165, funded.data().length);
+    final var tokenAccount = decode(funded);
     assertEquals(MINT, tokenAccount.mint());
     assertEquals(OWNER, tokenAccount.owner());
     assertEquals(29_114_561_481L, tokenAccount.amount());
-    assertEquals(0L, accounts.getFirst().data().amount());
+    assertEquals(0L, decode(accounts.getFirst()).amount());
     assertEquals(LAST, accounts.getLast().pubKey());
   }
 
@@ -124,7 +128,7 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
         ZERO_RESPONSE);
     final var accounts = rpcClient.getTokenAccountsForTokenMintByOwner(BigInteger.ZERO, OWNER, MINT).join();
     assertEquals(517_570_684L, accounts.getFirst().context().slot());
-    assertEquals(28_897_828_394L, accounts.get(1).data().amount());
+    assertEquals(28_897_828_394L, decode(accounts.get(1)).amount());
   }
 
   @Test
@@ -133,17 +137,17 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"confirmed","encoding":"base64","minContextSlot":18446744073709551615}]}""", """
         {"jsonrpc":"2.0","error":{"code":-32016,"message":"Minimum context slot has not been reached","data":{"contextSlot":517570696}},"id":1}""");
     final var exception = joinExpectingRpcException(() ->
-        rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.CONFIRMED, U64_MAX, OWNER, MINT, AccountInfo.BYTES_IDENTITY).join());
+        rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.CONFIRMED, U64_MAX, OWNER, MINT).join());
     assertEquals(-32016, exception.code());
     assertEquals(517_570_696L, assertInstanceOf(RpcCustomError.MinContextSlotNotReached.class, exception.customError()).contextSlot());
   }
 
   @Test
-  void aDataSliceReturnsTheWindowAsRawBytesWithTheFullSpace() {
+  void aDataSliceReturnsTheWindowWithTheFullSpace() {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"confirmed","encoding":"base64","minContextSlot":517570444,"dataSlice":{"offset":64,"length":8}}]}""",
         SLICE_RESPONSE);
-    final var accounts = rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.CONFIRMED, RECENT, new DataSlice(64, 8), OWNER, MINT).join();
+    final var accounts = rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.CONFIRMED, RECENT, WINDOW, OWNER, MINT).join();
     assertEquals(4, accounts.size());
     for (final var account : accounts) {
       assertEquals(8, account.data().length);
@@ -170,36 +174,30 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
     assertEquals(517_570_709L, accounts.getFirst().context().slot());
   }
 
+  /// A null minimum and a null slice send the released body and still hand back the bytes.
   @Test
-  void aCustomDecoderSeesTheWholeAccount() {
-    registerRequest("""
-        {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"confirmed","encoding":"base64"}]}""",
-        ZERO_RESPONSE);
-    final var lengths = rpcClient.getTokenAccountsForTokenMintByOwner(OWNER, MINT, (_, data) -> data.length).join();
-    assertEquals(List.of(165, 165, 165, 165), lengths.stream().map(AccountInfo::data).toList());
-
+  void nullOptionsSendTheReleasedBodyAndReturnTheBytes() {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"programId":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{"commitment":"finalized","encoding":"base64"}]}""",
         RECENT_RESPONSE);
-    final var amounts = rpcClient.getTokenAccountsForProgramByOwner(Commitment.FINALIZED, OWNER, TOKEN_PROGRAM,
-        (_, data) -> ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).getLong(64)).join();
-    assertEquals(List.of(0L, 29_114_561_481L, 0L, 0L), amounts.stream().map(AccountInfo::data).toList());
+    final var accounts = rpcClient.getTokenAccountsForProgramByOwner(Commitment.FINALIZED, (BigInteger) null, OWNER, TOKEN_PROGRAM).join();
+    assertEquals(List.of(0L, 29_114_561_481L, 0L, 0L), accounts.stream().map(account -> decode(account).amount()).toList());
+
+    registerRequest("""
+        {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"processed","encoding":"base64"}]}""",
+        ZERO_RESPONSE);
+    final var whole = rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.PROCESSED, (DataSlice) null, OWNER, MINT).join();
+    assertEquals(List.of(165, 165, 165, 165), whole.stream().map(account -> account.data().length).toList());
+    assertEquals(28_897_828_394L, decode(whole.get(1)).amount());
   }
 
   @Test
-  void theMinimumPrecedesTheSliceAndTheDecoderStillGetsTheWindow() {
+  void theMinimumPrecedesTheSlice() {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"programId":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{"commitment":"processed","encoding":"base64","minContextSlot":517570444,"dataSlice":{"offset":64,"length":8}}]}""",
         SLICE_RESPONSE);
-    final var amounts = rpcClient.getTokenAccountsForProgramByOwner(Commitment.PROCESSED, RECENT, new DataSlice(64, 8), OWNER, TOKEN_PROGRAM,
-        (_, window) -> amount(window)).join();
-    assertEquals(List.of(0L, 29_557_476_512L, 0L, 0L), amounts.stream().map(AccountInfo::data).toList());
-
-    registerRequest("""
-        {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByOwner","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"confirmed","encoding":"base64","minContextSlot":517570444,"dataSlice":{"offset":64,"length":8}}]}""",
-        SLICE_RESPONSE);
-    final var windows = rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.CONFIRMED, RECENT, new DataSlice(64, 8), OWNER, MINT).join();
-    assertEquals(29_557_476_512L, amount(windows.get(1).data()));
+    final var windows = rpcClient.getTokenAccountsForProgramByOwner(Commitment.PROCESSED, RECENT, WINDOW, OWNER, TOKEN_PROGRAM).join();
+    assertEquals(List.of(0L, 29_557_476_512L, 0L, 0L), windows.stream().map(account -> amount(account.data())).toList());
   }
 
   @Test
@@ -207,7 +205,7 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByDelegate","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"finalized","encoding":"base64","minContextSlot":517570444,"dataSlice":{"offset":64,"length":8}}]}""",
         SLICE_RESPONSE);
-    final var windows = rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.FINALIZED, RECENT, new DataSlice(64, 8), OWNER, MINT).join();
+    final var windows = rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.FINALIZED, RECENT, WINDOW, OWNER, MINT).join();
     assertEquals(4, windows.size());
     assertEquals(29_557_476_512L, amount(windows.get(1).data()));
 
@@ -215,7 +213,7 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByDelegate","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"programId":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{"commitment":"confirmed","encoding":"base64","minContextSlot":0}]}""",
         ZERO_RESPONSE);
     final var accounts = rpcClient.getTokenAccountsForProgramByDelegate(BigInteger.ZERO, OWNER, TOKEN_PROGRAM).join();
-    assertEquals(28_897_828_394L, accounts.get(1).data().amount());
+    assertEquals(28_897_828_394L, decode(accounts.get(1)).amount());
 
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByDelegate","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"confirmed","encoding":"base64","dataSlice":{"offset":0,"length":0}}]}""",
@@ -226,14 +224,15 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByDelegate","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"programId":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{"commitment":"confirmed","encoding":"base64"}]}""",
         RECENT_RESPONSE);
-    final var lengths = rpcClient.getTokenAccountsForProgramByDelegate(OWNER, TOKEN_PROGRAM, (_, data) -> data.length).join();
-    assertEquals(List.of(165, 165, 165, 165), lengths.stream().map(AccountInfo::data).toList());
+    final var whole = rpcClient.getTokenAccountsForProgramByDelegate(Commitment.CONFIRMED, (DataSlice) null, OWNER, TOKEN_PROGRAM).join();
+    assertEquals(List.of(165, 165, 165, 165), whole.stream().map(account -> account.data().length).toList());
 
+    // synthetic slot: the public nodes never answered a delegate query
     registerRequest("""
         {"jsonrpc":"2.0","id":1,"method":"getTokenAccountsByDelegate","params":["H8jbMKuUf6A5HVNFL13Bf3FLVcW7HBxmzmy2sHanTfGA",{"mint":"73Wjd8N2ku7EhbgRT6oLvA5PXgZ79q1kTTapN9qxuUc3"},{"commitment":"processed","encoding":"base64","minContextSlot":18446744073709551615}]}""", """
         {"jsonrpc":"2.0","error":{"code":-32016,"message":"Minimum context slot has not been reached","data":{"contextSlot":517570697}},"id":1}""");
     final var exception = joinExpectingRpcException(() ->
-        rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.PROCESSED, U64_MAX, OWNER, MINT, AccountInfo.BYTES_IDENTITY).join());
+        rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.PROCESSED, U64_MAX, OWNER, MINT).join());
     assertEquals(517_570_697L, assertInstanceOf(RpcCustomError.MinContextSlotNotReached.class, exception.customError()).contextSlot());
   }
 
@@ -260,135 +259,83 @@ final class TokenAccountsRpcRequestTests extends RpcRequestTests {
         RECENT_RESPONSE);
     assertEquals(LAST, rpcClient.getTokenAccountsForTokenMintByDelegate(OWNER, MINT).join().getLast().pubKey());
   }
-  /// Every convenience overload of `getTokenAccountsForTokenMintByOwner` delegates to the six-argument one: each must render
-  /// exactly the options it names, the client's commitment where it takes none, and keep the
-  /// decoder its return type promises.
+
+  /// Every convenience overload of `getTokenAccountsForTokenMintByOwner` delegates to the
+  /// five-argument one: each must render exactly the options it names and the client's commitment
+  /// where it takes none, and hand back the bytes.
   @Test
   void everyOwnerByMintConvenienceRendersItsOptions() {
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.CONFIRMED, RECENT_MIN)), RECENT_RESPONSE);
-    assertEquals(29_114_561_481L, rpcClient.getTokenAccountsForTokenMintByOwner(RECENT, OWNER, MINT).join().get(1).data().amount());
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(28_897_828_394L, rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.FINALIZED, RECENT, OWNER, MINT).join().get(1).data().amount());
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(29_557_476_512L, amount(rpcClient.getTokenAccountsForTokenMintByOwner(WINDOW, OWNER, MINT).join().get(1).data()));
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.PROCESSED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.PROCESSED, WINDOW, OWNER, MINT).join().getFirst().data().length);
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.FINALIZED, RECENT_MIN, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(0L, amount(rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.FINALIZED, RECENT, WINDOW, OWNER, MINT).join().getLast().data()));
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.CONFIRMED)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForTokenMintByOwner(OWNER, MINT, LENGTH).join().getFirst().data().intValue());
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.PROCESSED)), RECENT_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.PROCESSED, OWNER, MINT, LENGTH).join().getLast().data().intValue());
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.FINALIZED, RECENT, OWNER, MINT, LENGTH).join().get(2).data().intValue());
-
-    registerRequest(body("getTokenAccountsByOwner", "mint", MINT, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForTokenMintByOwner(Commitment.CONFIRMED, WINDOW, OWNER, MINT, LENGTH).join().get(1).data().intValue());
+    everyConvenience("getTokenAccountsByOwner", "mint", MINT, new Family() {
+      public List<AccountInfo<byte[]>> minimum(final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByOwner(min, a, b).join(); }
+      public List<AccountInfo<byte[]>> minimum(final Commitment c, final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByOwner(c, min, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByOwner(s, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final Commitment c, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByOwner(c, s, a, b).join(); }
+      public List<AccountInfo<byte[]>> both(final Commitment c, final BigInteger min, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByOwner(c, min, s, a, b).join(); }
+    });
   }
 
-  /// Every convenience overload of `getTokenAccountsForProgramByOwner` delegates to the six-argument one: each must render
-  /// exactly the options it names, the client's commitment where it takes none, and keep the
-  /// decoder its return type promises.
   @Test
   void everyOwnerByProgramConvenienceRendersItsOptions() {
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED, RECENT_MIN)), RECENT_RESPONSE);
-    assertEquals(29_114_561_481L, rpcClient.getTokenAccountsForProgramByOwner(RECENT, OWNER, TOKEN_PROGRAM).join().get(1).data().amount());
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(28_897_828_394L, rpcClient.getTokenAccountsForProgramByOwner(Commitment.FINALIZED, RECENT, OWNER, TOKEN_PROGRAM).join().get(1).data().amount());
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(29_557_476_512L, amount(rpcClient.getTokenAccountsForProgramByOwner(WINDOW, OWNER, TOKEN_PROGRAM).join().get(1).data()));
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.PROCESSED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForProgramByOwner(Commitment.PROCESSED, WINDOW, OWNER, TOKEN_PROGRAM).join().getFirst().data().length);
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.FINALIZED, RECENT_MIN, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(0L, amount(rpcClient.getTokenAccountsForProgramByOwner(Commitment.FINALIZED, RECENT, WINDOW, OWNER, TOKEN_PROGRAM).join().getLast().data()));
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForProgramByOwner(OWNER, TOKEN_PROGRAM, LENGTH).join().getFirst().data().intValue());
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.PROCESSED)), RECENT_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForProgramByOwner(Commitment.PROCESSED, OWNER, TOKEN_PROGRAM, LENGTH).join().getLast().data().intValue());
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForProgramByOwner(Commitment.FINALIZED, RECENT, OWNER, TOKEN_PROGRAM, LENGTH).join().get(2).data().intValue());
-
-    registerRequest(body("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForProgramByOwner(Commitment.CONFIRMED, WINDOW, OWNER, TOKEN_PROGRAM, LENGTH).join().get(1).data().intValue());
+    everyConvenience("getTokenAccountsByOwner", "programId", TOKEN_PROGRAM, new Family() {
+      public List<AccountInfo<byte[]>> minimum(final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByOwner(min, a, b).join(); }
+      public List<AccountInfo<byte[]>> minimum(final Commitment c, final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByOwner(c, min, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByOwner(s, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final Commitment c, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByOwner(c, s, a, b).join(); }
+      public List<AccountInfo<byte[]>> both(final Commitment c, final BigInteger min, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByOwner(c, min, s, a, b).join(); }
+    });
   }
 
-  /// Every convenience overload of `getTokenAccountsForTokenMintByDelegate` delegates to the six-argument one: each must render
-  /// exactly the options it names, the client's commitment where it takes none, and keep the
-  /// decoder its return type promises.
   @Test
   void everyDelegateByMintConvenienceRendersItsOptions() {
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.CONFIRMED, RECENT_MIN)), RECENT_RESPONSE);
-    assertEquals(29_114_561_481L, rpcClient.getTokenAccountsForTokenMintByDelegate(RECENT, OWNER, MINT).join().get(1).data().amount());
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(28_897_828_394L, rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.FINALIZED, RECENT, OWNER, MINT).join().get(1).data().amount());
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(29_557_476_512L, amount(rpcClient.getTokenAccountsForTokenMintByDelegate(WINDOW, OWNER, MINT).join().get(1).data()));
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.PROCESSED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.PROCESSED, WINDOW, OWNER, MINT).join().getFirst().data().length);
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.FINALIZED, RECENT_MIN, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(0L, amount(rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.FINALIZED, RECENT, WINDOW, OWNER, MINT).join().getLast().data()));
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.CONFIRMED)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForTokenMintByDelegate(OWNER, MINT, LENGTH).join().getFirst().data().intValue());
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.PROCESSED)), RECENT_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.PROCESSED, OWNER, MINT, LENGTH).join().getLast().data().intValue());
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.FINALIZED, RECENT, OWNER, MINT, LENGTH).join().get(2).data().intValue());
-
-    registerRequest(body("getTokenAccountsByDelegate", "mint", MINT, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForTokenMintByDelegate(Commitment.CONFIRMED, WINDOW, OWNER, MINT, LENGTH).join().get(1).data().intValue());
+    everyConvenience("getTokenAccountsByDelegate", "mint", MINT, new Family() {
+      public List<AccountInfo<byte[]>> minimum(final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByDelegate(min, a, b).join(); }
+      public List<AccountInfo<byte[]>> minimum(final Commitment c, final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByDelegate(c, min, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByDelegate(s, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final Commitment c, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByDelegate(c, s, a, b).join(); }
+      public List<AccountInfo<byte[]>> both(final Commitment c, final BigInteger min, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForTokenMintByDelegate(c, min, s, a, b).join(); }
+    });
   }
 
-  /// Every convenience overload of `getTokenAccountsForProgramByDelegate` delegates to the six-argument one: each must render
-  /// exactly the options it names, the client's commitment where it takes none, and keep the
-  /// decoder its return type promises.
   @Test
   void everyDelegateByProgramConvenienceRendersItsOptions() {
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED, RECENT_MIN)), RECENT_RESPONSE);
-    assertEquals(29_114_561_481L, rpcClient.getTokenAccountsForProgramByDelegate(RECENT, OWNER, TOKEN_PROGRAM).join().get(1).data().amount());
+    everyConvenience("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, new Family() {
+      public List<AccountInfo<byte[]>> minimum(final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByDelegate(min, a, b).join(); }
+      public List<AccountInfo<byte[]>> minimum(final Commitment c, final BigInteger min, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByDelegate(c, min, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByDelegate(s, a, b).join(); }
+      public List<AccountInfo<byte[]>> slice(final Commitment c, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByDelegate(c, s, a, b).join(); }
+      public List<AccountInfo<byte[]>> both(final Commitment c, final BigInteger min, final DataSlice s, final PublicKey a, final PublicKey b) { return rpcClient.getTokenAccountsForProgramByDelegate(c, min, s, a, b).join(); }
+    });
+  }
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(28_897_828_394L, rpcClient.getTokenAccountsForProgramByDelegate(Commitment.FINALIZED, RECENT, OWNER, TOKEN_PROGRAM).join().get(1).data().amount());
+  /// One family's five overloads, as the test calls them.
+  private interface Family {
+    List<AccountInfo<byte[]>> minimum(BigInteger min, PublicKey a, PublicKey b);
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(29_557_476_512L, amount(rpcClient.getTokenAccountsForProgramByDelegate(WINDOW, OWNER, TOKEN_PROGRAM).join().get(1).data()));
+    List<AccountInfo<byte[]>> minimum(Commitment c, BigInteger min, PublicKey a, PublicKey b);
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.PROCESSED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForProgramByDelegate(Commitment.PROCESSED, WINDOW, OWNER, TOKEN_PROGRAM).join().getFirst().data().length);
+    List<AccountInfo<byte[]>> slice(DataSlice s, PublicKey a, PublicKey b);
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.FINALIZED, RECENT_MIN, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(0L, amount(rpcClient.getTokenAccountsForProgramByDelegate(Commitment.FINALIZED, RECENT, WINDOW, OWNER, TOKEN_PROGRAM).join().getLast().data()));
+    List<AccountInfo<byte[]>> slice(Commitment c, DataSlice s, PublicKey a, PublicKey b);
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForProgramByDelegate(OWNER, TOKEN_PROGRAM, LENGTH).join().getFirst().data().intValue());
+    List<AccountInfo<byte[]>> both(Commitment c, BigInteger min, DataSlice s, PublicKey a, PublicKey b);
+  }
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.PROCESSED)), RECENT_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForProgramByDelegate(Commitment.PROCESSED, OWNER, TOKEN_PROGRAM, LENGTH).join().getLast().data().intValue());
+  private void everyConvenience(final String method, final String key, final PublicKey value, final Family family) {
+    registerRequest(body(method, key, value, options(Commitment.CONFIRMED, RECENT_MIN)), RECENT_RESPONSE);
+    assertEquals(29_114_561_481L, decode(family.minimum(RECENT, OWNER, value).get(1)).amount());
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
-    assertEquals(165, rpcClient.getTokenAccountsForProgramByDelegate(Commitment.FINALIZED, RECENT, OWNER, TOKEN_PROGRAM, LENGTH).join().get(2).data().intValue());
+    registerRequest(body(method, key, value, options(Commitment.FINALIZED, RECENT_MIN)), ZERO_RESPONSE);
+    assertEquals(28_897_828_394L, decode(family.minimum(Commitment.FINALIZED, RECENT, OWNER, value).get(1)).amount());
 
-    registerRequest(body("getTokenAccountsByDelegate", "programId", TOKEN_PROGRAM, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
-    assertEquals(8, rpcClient.getTokenAccountsForProgramByDelegate(Commitment.CONFIRMED, WINDOW, OWNER, TOKEN_PROGRAM, LENGTH).join().get(1).data().intValue());
+    registerRequest(body(method, key, value, options(Commitment.CONFIRMED, WINDOW_JSON)), SLICE_RESPONSE);
+    assertEquals(29_557_476_512L, amount(family.slice(WINDOW, OWNER, value).get(1).data()));
+
+    registerRequest(body(method, key, value, options(Commitment.PROCESSED, WINDOW_JSON)), SLICE_RESPONSE);
+    assertEquals(8, family.slice(Commitment.PROCESSED, WINDOW, OWNER, value).getFirst().data().length);
+
+    registerRequest(body(method, key, value, options(Commitment.FINALIZED, RECENT_MIN, WINDOW_JSON)), SLICE_RESPONSE);
+    final var windows = family.both(Commitment.FINALIZED, RECENT, WINDOW, OWNER, value);
+    assertEquals(29_557_476_512L, amount(windows.get(1).data()));
+    assertEquals(0L, amount(windows.getLast().data()));
   }
 }

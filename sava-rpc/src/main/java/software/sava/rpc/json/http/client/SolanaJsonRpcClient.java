@@ -1432,23 +1432,23 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
                                                                                                    final PublicKey delegate,
                                                                                                    final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByDelegate(commitment, null, null, delegate, tokenMint, TokenAccount.FACTORY);
+    return tokenAccounts("getTokenAccountsByDelegate", delegate, "mint", tokenMint, commitment, null, null, TokenAccount.FACTORY);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
-                                                                                          final BigInteger minContextSlot,
-                                                                                          final DataSlice dataSlice,
-                                                                                          final PublicKey delegate,
-                                                                                          final PublicKey tokenMint,
-                                                                                          final BiFunction<PublicKey, byte[], T> factory) {
-    return tokenAccounts("getTokenAccountsByDelegate", delegate, "mint", tokenMint, commitment, minContextSlot, dataSlice, factory);
+  public CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByDelegate(final Commitment commitment,
+                                                                                            final BigInteger minContextSlot,
+                                                                                            final DataSlice dataSlice,
+                                                                                            final PublicKey delegate,
+                                                                                            final PublicKey tokenMint) {
+    return tokenAccounts("getTokenAccountsByDelegate", delegate, "mint", tokenMint, commitment, minContextSlot, dataSlice, BYTES_IDENTITY);
   }
 
   /// `getTokenAccountsByOwner` and `getTokenAccountsByDelegate` share agave's `RpcAccountInfoConfig`,
   /// so one body serves both: the first parameter is the owner or delegate, the second the mint or
   /// token program filter, and the config carries the commitment, the optional minimum context slot
-  /// and the optional data slice, each omitted when null.
+  /// and the optional data slice, each omitted when null. The released overloads decode with
+  /// [TokenAccount#FACTORY]; every other one hands the caller the bytes through [AccountInfo#BYTES_IDENTITY].
   private <T> CompletableFuture<List<AccountInfo<T>>> tokenAccounts(final String method,
                                                                     final PublicKey key,
                                                                     final String filterName,
@@ -1479,17 +1479,16 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
                                                                                                  final PublicKey delegate,
                                                                                                  final PublicKey programId) {
-    return getTokenAccountsForProgramByDelegate(commitment, null, null, delegate, programId, TokenAccount.FACTORY);
+    return tokenAccounts("getTokenAccountsByDelegate", delegate, "programId", programId, commitment, null, null, TokenAccount.FACTORY);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
-                                                                                        final BigInteger minContextSlot,
-                                                                                        final DataSlice dataSlice,
-                                                                                        final PublicKey delegate,
-                                                                                        final PublicKey programId,
-                                                                                        final BiFunction<PublicKey, byte[], T> factory) {
-    return tokenAccounts("getTokenAccountsByDelegate", delegate, "programId", programId, commitment, minContextSlot, dataSlice, factory);
+  public CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByDelegate(final Commitment commitment,
+                                                                                          final BigInteger minContextSlot,
+                                                                                          final DataSlice dataSlice,
+                                                                                          final PublicKey delegate,
+                                                                                          final PublicKey programId) {
+    return tokenAccounts("getTokenAccountsByDelegate", delegate, "programId", programId, commitment, minContextSlot, dataSlice, BYTES_IDENTITY);
   }
 
   @Override
@@ -1502,17 +1501,16 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
                                                                                                 final PublicKey owner,
                                                                                                 final PublicKey tokenMint) {
-    return getTokenAccountsForTokenMintByOwner(commitment, null, null, owner, tokenMint, TokenAccount.FACTORY);
+    return tokenAccounts("getTokenAccountsByOwner", owner, "mint", tokenMint, commitment, null, null, TokenAccount.FACTORY);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
-                                                                                       final BigInteger minContextSlot,
-                                                                                       final DataSlice dataSlice,
-                                                                                       final PublicKey owner,
-                                                                                       final PublicKey tokenMint,
-                                                                                       final BiFunction<PublicKey, byte[], T> factory) {
-    return tokenAccounts("getTokenAccountsByOwner", owner, "mint", tokenMint, commitment, minContextSlot, dataSlice, factory);
+  public CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForTokenMintByOwner(final Commitment commitment,
+                                                                                         final BigInteger minContextSlot,
+                                                                                         final DataSlice dataSlice,
+                                                                                         final PublicKey owner,
+                                                                                         final PublicKey tokenMint) {
+    return tokenAccounts("getTokenAccountsByOwner", owner, "mint", tokenMint, commitment, minContextSlot, dataSlice, BYTES_IDENTITY);
   }
 
   @Override
@@ -1525,17 +1523,16 @@ final class SolanaJsonRpcClient extends BaseSolanaJsonRpcClient implements Solan
   public CompletableFuture<List<AccountInfo<TokenAccount>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
                                                                                               final PublicKey owner,
                                                                                               final PublicKey programId) {
-    return getTokenAccountsForProgramByOwner(commitment, null, null, owner, programId, TokenAccount.FACTORY);
+    return tokenAccounts("getTokenAccountsByOwner", owner, "programId", programId, commitment, null, null, TokenAccount.FACTORY);
   }
 
   @Override
-  public <T> CompletableFuture<List<AccountInfo<T>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
-                                                                                     final BigInteger minContextSlot,
-                                                                                     final DataSlice dataSlice,
-                                                                                     final PublicKey owner,
-                                                                                     final PublicKey programId,
-                                                                                     final BiFunction<PublicKey, byte[], T> factory) {
-    return tokenAccounts("getTokenAccountsByOwner", owner, "programId", programId, commitment, minContextSlot, dataSlice, factory);
+  public CompletableFuture<List<AccountInfo<byte[]>>> getTokenAccountsForProgramByOwner(final Commitment commitment,
+                                                                                       final BigInteger minContextSlot,
+                                                                                       final DataSlice dataSlice,
+                                                                                       final PublicKey owner,
+                                                                                       final PublicKey programId) {
+    return tokenAccounts("getTokenAccountsByOwner", owner, "programId", programId, commitment, minContextSlot, dataSlice, BYTES_IDENTITY);
   }
 
   @Override
