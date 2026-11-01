@@ -4,12 +4,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
+import software.sava.rpc.json.http.client.TestLogs;
 import software.sava.rpc.json.http.request.Commitment;
+import software.sava.rpc.json.http.response.JsonRpcException;
+import systems.comodal.jsoniter.JsonException;
 
 import java.net.URI;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalLong;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,7 +25,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /// produce, 0 and 1, and the -1 sentinel name no request, so entering or skipping the
 /// correlation block for them changes nothing. Each test rejects those ids, and ids the
 /// reader cannot carry, around one live request, and asserts that the request is untouched
-/// until a rejection names its own id.
+/// until a rejection names its own id. A rejection that names its own id names it whether or
+/// not its `data` parses: the code and the id are read before the data, which can cost only
+/// its own details.
 @ExtendWith(QuietWsLogging.class)
 final class ResponseIdDomainTests {
 
@@ -120,6 +126,46 @@ final class ResponseIdDomainTests {
       feed(ws, socket, rejection(-32603, "Internal error", "2"));
       ws.checkCycle(0L);
       assertEquals(2, framesContaining(socket, "\"id\":2,"), "its own rejection re-arms the send");
+    }
+  }
+
+  /// A server-condition rejection of the request's own id whose `data` does not fit its code,
+  /// a string where -32005's parser reads an object, is correlated as any readable rejection
+  /// is: it reaches the consumer as the JsonRpcException it is, naming the request and carrying
+  /// the data's failure as suppressed, and it releases the send gate, so the request is re-sent
+  /// one resend window later. It is not thrown out of the frame handler, whose catch would log
+  /// "Unexpected json rpc error." and dispatch the parser's exception with the gate still held.
+  @Test
+  void aRejectionWhoseDataDoesNotParseStillNamesItsRequest() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = createWebsocket(clock)) {
+      final var dispatched = new ArrayList<RuntimeException>();
+      ws.exceptionSubscribe(dispatched::add);
+      assertTrue(ws.accountSubscribe(ACCOUNT, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket); // request 2, unanswered
+      final var records = TestLogs.capture(SolanaJsonRpcWebsocket.class, () -> feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32005,"message":"unhealthy","data":"unexpected"},"id":2}"""));
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay() + 1L);
+      ws.checkCycle(0L);
+      final long sends = framesContaining(socket, "\"id\":2,");
+
+      assertAll(
+          () -> {
+            assertEquals(1, dispatched.size(), dispatched::toString);
+            final var rejection = assertInstanceOf(JsonRpcException.class, dispatched.getFirst(),
+                "dispatched as the JsonRpcException it is");
+            assertEquals(-32005, rejection.code());
+            assertEquals(OptionalLong.of(2), rejection.requestId(), "naming the request it rejects");
+            assertEquals(1, rejection.getSuppressed().length);
+            assertInstanceOf(JsonException.class, rejection.getSuppressed()[0], "the data's failure is attached");
+          },
+          () -> assertTrue(records.stream().noneMatch(record -> "Unexpected json rpc error.".equals(record.getMessage())),
+              () -> "not thrown out of the frame handler: "
+                  + records.stream().map(record -> record.getLevel() + " " + record.getMessage()).toList()),
+          () -> assertEquals(2, sends, "the correlated rejection released the send gate, so the request is re-sent")
+      );
     }
   }
 }
