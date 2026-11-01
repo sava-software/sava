@@ -271,19 +271,72 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   boolean signatureUnsubscribe(final Commitment commitment, final String b58TxSig);
 
+  /// Follows SPL Token accounts only: it subscribes under the SPL Token program, so no Token-2022
+  /// account is seen, and its 165-byte size filter would drop any Token-2022 account carrying an
+  /// extension anyway; see
+  /// [#subscribeToTokenAccount(Commitment,PublicKey,PublicKey,PublicKey,Consumer)] for a named
+  /// token program.
   boolean subscribeToTokenAccount(final PublicKey tokenMint,
                                   final PublicKey ownerAddress,
                                   final Consumer<AccountInfo<byte[]>> consumer);
 
+  /// Follows SPL Token accounts only; see
+  /// [#subscribeToTokenAccount(Commitment,PublicKey,PublicKey,PublicKey,Consumer)].
   boolean subscribeToTokenAccount(final Commitment commitment,
                                   final PublicKey tokenMint,
                                   final PublicKey ownerAddress,
                                   final Consumer<AccountInfo<byte[]>> consumer);
 
+  /// Follows the token accounts of `tokenMint` owned by `ownerAddress` under `tokenProgram` at the
+  /// client's default commitment; see
+  /// [#subscribeToTokenAccount(Commitment,PublicKey,PublicKey,PublicKey,Consumer)].
+  default boolean subscribeToTokenAccount(final PublicKey tokenProgram,
+                                          final PublicKey tokenMint,
+                                          final PublicKey ownerAddress,
+                                          final Consumer<AccountInfo<byte[]>> consumer) {
+    return subscribeToTokenAccount(defaultCommitment(), tokenProgram, tokenMint, ownerAddress, consumer);
+  }
+
+  /// Follows the token accounts of `tokenMint` owned by `ownerAddress` under `tokenProgram`, the
+  /// SPL Token or the Token-2022 program, selecting initialized accounts with agave's
+  /// `tokenAccountState` filter rather than a 165-byte size, so Token-2022 accounts carrying
+  /// extensions are included and uninitialized accounts are not. Like
+  /// [#programSubscribe(Commitment,PublicKey,List,Consumer)] it is keyed by the program and the
+  /// commitment: one registration per program at a commitment, so a second subscription under
+  /// the same program returns `false`, while one under the other token program is its own.
+  boolean subscribeToTokenAccount(final Commitment commitment,
+                                  final PublicKey tokenProgram,
+                                  final PublicKey tokenMint,
+                                  final PublicKey ownerAddress,
+                                  final Consumer<AccountInfo<byte[]>> consumer);
+
+  /// Follows SPL Token accounts only: it subscribes under the SPL Token program, so no Token-2022
+  /// account is seen, and its 165-byte size filter would drop any Token-2022 account carrying an
+  /// extension anyway; see [#subscribeToTokenAccounts(Commitment,PublicKey,PublicKey,Consumer)]
+  /// for a named token program.
   boolean subscribeToTokenAccounts(final PublicKey ownerAddress,
                                    final Consumer<AccountInfo<byte[]>> consumer);
 
+  /// Follows SPL Token accounts only; see
+  /// [#subscribeToTokenAccounts(Commitment,PublicKey,PublicKey,Consumer)].
   boolean subscribeToTokenAccounts(final Commitment commitment,
+                                   final PublicKey ownerAddress,
+                                   final Consumer<AccountInfo<byte[]>> consumer);
+
+  /// Follows every token account owned by `ownerAddress` under `tokenProgram` at the client's
+  /// default commitment; see [#subscribeToTokenAccounts(Commitment,PublicKey,PublicKey,Consumer)].
+  default boolean subscribeToTokenAccounts(final PublicKey tokenProgram,
+                                           final PublicKey ownerAddress,
+                                           final Consumer<AccountInfo<byte[]>> consumer) {
+    return subscribeToTokenAccounts(defaultCommitment(), tokenProgram, ownerAddress, consumer);
+  }
+
+  /// Follows every token account owned by `ownerAddress` under `tokenProgram`, selected with
+  /// agave's `tokenAccountState` filter as
+  /// [#subscribeToTokenAccount(Commitment,PublicKey,PublicKey,PublicKey,Consumer)] describes, and
+  /// keyed by the program and the commitment the same way.
+  boolean subscribeToTokenAccounts(final Commitment commitment,
+                                   final PublicKey tokenProgram,
                                    final PublicKey ownerAddress,
                                    final Consumer<AccountInfo<byte[]>> consumer);
 

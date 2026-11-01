@@ -1540,8 +1540,42 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   @Override
+  public boolean subscribeToTokenAccount(final Commitment commitment,
+                                         final PublicKey tokenProgram,
+                                         final PublicKey tokenMint,
+                                         final PublicKey ownerAddress,
+                                         final Consumer<AccountInfo<byte[]>> consumer) {
+    return programSubscribe(
+        commitment,
+        tokenProgram,
+        List.of(
+            Filter.createTokenAccountStateFilter(),
+            TokenAccount.createMintFilter(tokenMint),
+            TokenAccount.createOwnerFilter(ownerAddress)
+        ),
+        consumer
+    );
+  }
+
+  @Override
   public boolean subscribeToTokenAccounts(final PublicKey ownerAddress, final Consumer<AccountInfo<byte[]>> consumer) {
     return subscribeToTokenAccounts(this.defaultCommitment, ownerAddress, consumer);
+  }
+
+  @Override
+  public boolean subscribeToTokenAccounts(final Commitment commitment,
+                                          final PublicKey tokenProgram,
+                                          final PublicKey ownerAddress,
+                                          final Consumer<AccountInfo<byte[]>> consumer) {
+    return programSubscribe(
+        commitment,
+        tokenProgram,
+        List.of(
+            Filter.createTokenAccountStateFilter(),
+            TokenAccount.createOwnerFilter(ownerAddress)
+        ),
+        consumer
+    );
   }
 
   @Override

@@ -127,7 +127,9 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   `BigInteger`; `getBalance`, `isBlockHashValid` and `getFeeForMessage` are ambiguous only when
   both arguments are bare nulls, between the released `(Commitment, …)` and the new
   `(…, BigInteger)`; on the WebSocket client `logsSubscribeAll(null, consumer)` sits between
-  `Commitment` and the `onSub` consumer. Cast
+  `Commitment` and the `onSub` consumer, and `subscribeToTokenAccount(null, mint, owner, consumer)`
+  and `subscribeToTokenAccounts(null, owner, consumer)` sit between `Commitment` and the token
+  program. Cast
   the null, `(BigInteger) null` or `(DataSlice) null`, or call the overload without that
   parameter. Slice options do not create a separate account/program registration
   at the same commitment; use distinct keyed program registrations for multiple program
@@ -144,9 +146,19 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   object, so a test that counts braces cannot see it: assert whole bodies.
   `TokenAccount.TOKEN_ACCOUNT_SIZE_FILTER` (`dataSize` 165) drops every Token-2022 account that
   carries an extension; live it matched none of the holders the state filter returned for a
-  Token-2022 mint. Use `Filter.createTokenAccountStateFilter()` for Token-2022 holder queries.
+  Token-2022 mint. Use `Filter.createTokenAccountStateFilter()` for Token-2022 holder queries,
+  and the `subscribeToTokenAccount(s)` overloads that name the token program for
+  subscriptions: the released ones keep the size filter on the SPL Token program.
 - `Subscription.publicKey()` is `null` for every logs registration, mentions included: those
   are keyed by string, the base58 key or `all`, which `key()` returns.
+- `subscribeToTokenAccounts(Commitment, PublicKey tokenProgram, PublicKey owner, consumer)` has
+  the parameter list of the released singular `subscribeToTokenAccount(Commitment, PublicKey mint,
+  PublicKey owner, consumer)`, one letter apart, and it names the program before the owner where
+  `getTokenAccountsForProgramByOwner` names the owner first; the default-commitment pair,
+  `subscribeToTokenAccounts(tokenProgram, owner, consumer)` against the released
+  `subscribeToTokenAccount(mint, owner, consumer)`, has the same trap. A slip between them
+  compiles into a subscription with a key in the wrong role, a mint or an owner as the program or
+  a program as the mint, which agave accepts and never notifies.
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it
   also changes the `maxRetries` default (0 when skipping, 1 otherwise) and the
   preflight commitment. Use the three-argument overload to pin retries.
