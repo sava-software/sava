@@ -1,5 +1,25 @@
 # Changelog
 
+## [25.13.3](https://github.com/sava-software/sava/compare/25.13.2...25.13.3) (2026-11-02)
+
+
+### Features
+
+* **core:** add the tokenAccountState program-account filter ([3a918b0](https://github.com/sava-software/sava/commit/3a918b039b71a971ffca0bb89306a16f173f2538))
+* **rpc:** bound getBlockProduction ranges with lastSlot ([84ed4ed](https://github.com/sava-software/sava/commit/84ed4ed15bd11d6a1355697b4be703add885a3bf))
+* **rpc:** name the status, the parse failure and the error code on the typed failures ([c2a7383](https://github.com/sava-software/sava/commit/c2a738362179dab8319bd551fc1ef788d1b06f9d))
+* **rpc:** parse getBlock transactionDetails accounts ([96dbe78](https://github.com/sava-software/sava/commit/96dbe78bdb8a555bf5704d6d720e729565d7a5a5))
+* **rpc:** query token accounts with a data slice and a minimum slot, returning the raw account bytes ([3a1a49f](https://github.com/sava-software/sava/commit/3a1a49f7e4cd170289d46815c78bc6a7e098c915), [9edeb2f](https://github.com/sava-software/sava/commit/9edeb2f9a965fe47e7ef4cfb137747373b2b7da7))
+* **rpc:** request unsorted program accounts with sortResults ([18b5f83](https://github.com/sava-software/sava/commit/18b5f83391a2fb962bf9c079118e2e821a7d4af6))
+* **rpc:** send minContextSlot on every method agave reads it from ([fb06ee1](https://github.com/sava-software/sava/commit/fb06ee1e2ce58ac2a98aa3f061b3cf337dfc9968))
+* **rpc:** subscribe to all transaction logs ([9c6ffcb](https://github.com/sava-software/sava/commit/9c6ffcb8c1a0d872d074cd07258d7e280c9d2fd2))
+* **rpc:** subscribe to token accounts under a named token program ([bf6201b](https://github.com/sava-software/sava/commit/bf6201b6d293c6633ec48b7d9460edf2b0e6b5fb))
+
+### Notes
+
+* **rpc:** `BlockTx` now carries five components, `meta`, `data`, `version`, `signatures` and `accountKeys`, so a record deconstruction pattern written against the two-component shape needs the new components at recompile; the two-argument constructor and the `meta()` and `data()` accessors are unchanged, and already compiled code runs as before.
+* **rpc:** `SolanaRpcClient` and `SolanaRpcWebsocket` declare the fullest overload of each new option abstract; only an implementation outside sava would notice, callers are unaffected.
+
 ## [25.13.2](https://github.com/sava-software/sava/compare/25.13.1...25.13.2) (2026-11-01)
 
 
