@@ -9,6 +9,50 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.8.2 — 2026-11-02
+
+All three plugin pins advance from 21.8.0 to the published
+`software.sava:sava-build:21.8.2`. `:sava-core:savaBuildIdentity` reported that coordinate,
+`local override: inactive`, and loaded JAR SHA-256
+`37345c1a91a9cfd12a5dfd11599a71c5ef4735e80b7d065c12cd5f211a596a94`. `gh attestation verify`
+verified its SLSA v1 provenance from `.github/workflows/gradle_plugin_publish.yml` at
+`refs/tags/21.8.2`, source commit `eaec28e26235676fd503702c2d4caf380c2c4ea8`. The plugin's
+`libs.versions.toml` and its published dependency set are unchanged between the two tags (PIT
+1.30.0, the PIT JUnit plugin 1.2.3 and ArcMutate base 1.7.2 remain), so no `BaselineRebase` is
+owed and no verification entry moves: the plugin's own artifacts resolve under the
+version-free trust of the sava release key. The installed `hardeningAgentTemplate` prints a
+block byte-identical to the one in `AGENTS.md`.
+
+What 21.8.1 and 21.8.2 change for this repository. The settings plugin registers
+`verificationKeyStatus` on the root project beside the guard and outside `check`, since it
+asks the network: it fetches every key the policy trusts from keys.openpgp.org and
+keyserver.ubuntu.com, reads revocation and expiry from the copies they hold, re-reads
+gradle/gradle's policy for the keys the version-scoped list's header trusts on corroboration
+alone, and writes `build/reports/verification/key-status.tsv`; a revoked key still trusted
+without a version, or a key a server left undecided, fails it. On the adopted tree it passed:
+45 trusted keys, 41 current, 3 expired and 1 revoked (Gradle Inc.'s superseded publishing key,
+`1BD97A6A…`), each of those four held at exact versions as the list already records, 0
+undecided, and all 7 corroboration-only keys still vouched for by gradle/gradle. The guard
+also gates a jlink `image` task now, which reaches `sava-vanity`'s Docker build stage: it
+runs `:sava-vanity:image` alone on a context that copied the policy and the keyring but not
+`gradle/verification/version-scoped-keys.txt`, which the guard requires beside them, so a
+`docker build` would have failed at the guard under 21.8.2; the Dockerfile now copies the
+list, and `gradle/verification/README.md` names the image task among the gated ones and
+carries the key-status step. A `docker build` of the image as `genKeys.sh` invokes it passed
+on the adopted tree, `:verificationPolicy` running in the build stage ahead of
+`:sava-vanity:image`. The guard's refusal of a relaxed committed `gradle.properties` now
+mentions the one lenient run an included sibling repository may need. The gcp-kms changes
+do not apply here.
+
+Root `check` with `resolveVerificationTools`, strict and without the configuration cache,
+passed on the adopted tree: 2,173 tests (sava-core 930, sava-rpc 1,182 with two
+environment-gated skips, sava-vanity 61), every test task executed rather than restored from
+the build cache; `:verificationPolicy` refused nothing, and each hardened project resolved
+its PIT, ArcMutate and Jazzer artifacts under the committed policy without a verification
+report. `-p jmh jmhJar` and `-p soak classes jar soakModulePath` passed under the same
+policy. No mutation suite is owed by this bump: it changes no PIT, ArcMutate or Jazzer
+version, no target, mutator or tool classpath, only the plugin binary.
+
 ## Released sava-build 21.8.0 — 2026-10-30
 
 All three plugin pins advance from 21.7.1 to the published

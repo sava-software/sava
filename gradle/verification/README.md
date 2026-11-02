@@ -3,7 +3,8 @@
 Gradle checks the signature or checksum of every artifact and metadata file it resolves
 before using it, settings plugins included, and stops the build when a check fails. The
 mode is strict by default. Never switch it off, or to lenient, to get past a failure; the
-one exception is the local sava-build flow below.
+exceptions are the local sava-build flow and the one run that resolves a refused sibling
+`includeBuild`, both below.
 
 ## One policy for every build
 
@@ -12,7 +13,8 @@ public keys it names) serve every build in this repository. Gradle reads only th
 build's own `gradle/` directory, so `jmh/gradle/` and `soak/gradle/` hold symlinks to these
 two files: `./gradlew`, `./gradlew -p jmh` and `./gradlew -p soak` enforce the same policy.
 Included builds such as `gradle/plugins` are covered by the build that includes them, and
-`sava-vanity`'s Docker image copies both files into its build stage.
+`sava-vanity`'s Docker image copies the policy, the keyring and the version-scoped list into
+its build stage, where the guard gates its jlink `image` task.
 
 Not covered: the wrapper distribution, which `distributionSha256Sum` in
 `gradle/wrapper/gradle-wrapper.properties` pins separately, JDK downloads, GitHub Actions and
@@ -42,10 +44,11 @@ provenance of sava's own artifacts.
   and there are no ignored keys or trusted-artifact exemptions.
 
 `verificationPolicy`, the task sava-build's settings plugin registers on the root project
-with every project's `check` and `qualityGate` depending on it, enforces these rules and the
-symlinks, so a regeneration cannot change them unseen. It also refuses a committed
-`gradle.properties` that relaxes the verification mode, in the root or in a standalone build,
-and a keyring, version-scoped list or standalone-build links left behind without the policy
+with every project's `check`, `qualityGate` and jlink `image` task depending on it, enforces
+these rules and the symlinks, so a regeneration cannot change them unseen. It also refuses a
+committed `gradle.properties` that relaxes the verification mode, in the root or in a
+standalone build, and a keyring, version-scoped list or standalone-build links left behind
+without the policy
 file. The root `gradle.properties` carries `org.gradle.dependency.verification=strict`, the
 policy's declaration: nothing for Gradle, which defaults to strict with the file and verifies
 nothing without it, and the line the guard requires, so that a deleted or uncommitted policy
@@ -121,6 +124,15 @@ the guard.
    plugin's unsigned sources jar, whose pin moves with the plugin. A refusal shows in the
    sync output.
 
+6. After a policy edit, run `./gradlew verificationKeyStatus` from the root. It asks the
+   network, so it sits outside `check`: it fetches every key the policy trusts from
+   keys.openpgp.org and keyserver.ubuntu.com, reads revocation and expiry from the copies
+   they hold, re-reads gradle/gradle's policy for the keys the version-scoped list's header
+   trusts on corroboration alone, and writes `build/reports/verification/key-status.tsv`.
+   A revoked key still trusted without a version, or a key a server left undecided, fails
+   it; an expired key, a revoked key already at exact versions and a withdrawn
+   corroboration warn. The release checklist runs it beside `hardeningCertify`.
+
 A **wrapper bump** also moves the unsigned `org.gradle.kotlin.kotlin-dsl.gradle.plugin`
 marker, whose version the wrapper decides: replace its pin in the same commit as
 `distributionSha256Sum`.
@@ -129,11 +141,13 @@ marker, whose version the wrapper decides: replace its pin in the same commit as
 
 The `0.0.0-test` artifacts that `-PsavaBuildLocalRepo` resolves are unsigned local build
 output, so the strict default refuses them. Pass `--dependency-verification lenient` with
-the property; it reports the refusals instead of failing. Use it for that flow only
-(sava-build's `tools/local-fuzz.sh` passes it for every consumer run and fails if anything
-else is refused), and never add trust for `0.0.0-test` to the policy (`verificationPolicy`
-rejects a `component` pin of it, which a regeneration run with the property writes). Keep the
-flag with the property: with the property in `~/.gradle/gradle.properties`, every command needs
+the property; it reports the refusals instead of failing. Use it for that flow, and for the
+one run that resolves an `includeBuild` of a sibling repository the policy refuses, and
+nowhere else (sava-build's `tools/local-fuzz.sh` passes it for every consumer run and fails
+if anything else is refused), and never add trust for `0.0.0-test` to the policy
+(`verificationPolicy` rejects a `component` pin of it, which a regeneration run with the
+property writes). Keep the flag with the property: with the property in
+`~/.gradle/gradle.properties`, every command needs
 the flag.
 Never put `org.gradle.dependency.verification` itself in `~/.gradle/gradle.properties`:
 it would relax every build on the machine, where `verificationPolicy` cannot see it.

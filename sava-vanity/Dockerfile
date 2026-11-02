@@ -29,8 +29,10 @@ COPY --chown=build:build gradlew .
 COPY --chown=build:build settings.gradle.kts .
 COPY --chown=build:build gradle.properties .
 COPY --chown=build:build gradle/modules.properties gradle/sava.properties ./gradle/
-# Without the policy beside the keyring, Gradle verifies no dependency of the image.
+# Without the policy beside the keyring, Gradle verifies no dependency of the image; the
+# guard that gates the image task requires the version-scoped list beside them.
 COPY --chown=build:build gradle/verification-metadata.xml gradle/verification-keyring.keys ./gradle/
+COPY --chown=build:build gradle/verification/version-scoped-keys.txt ./gradle/verification/
 COPY --chown=build:build gradle/wrapper ./gradle/wrapper
 COPY --chown=build:build gradle/plugins ./gradle/plugins
 
