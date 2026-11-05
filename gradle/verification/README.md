@@ -82,8 +82,23 @@ the guard.
      release manager's key): stop and find out why an old key signed a new release. Do not
      extend its version. An existing old release that a dependency change brings into the
      graph under one of these keys can be added as another exact version once checked. A
-     library signer the list holds as unauthenticated, should one ever join the two tool
-     signers, follows the tool bump above instead.
+     key that a trim dropped comes back from git history, its exact-version rule, its list
+     line and its keyring block together, never from a write run: step 3 consults key
+     servers while writing and drafts the key as an exact-version rule without its list line
+     or as per-artifact `<pgp>` entries, which `verificationPolicy` refuses, and the fixes
+     its notice offers first, drop the version or trust the publisher's group or module,
+     would hand an old release manager's or a weak key the whole module. A chain trimmed in
+     a commit of its own comes back alone:
+
+     ```sh
+     git show <trim commit> -- gradle/verification-metadata.xml gradle/verification-keyring.keys \
+       gradle/verification/version-scoped-keys.txt | git apply -R
+     ```
+
+     The JMH 1.36 chain (commons-math3 3.2, commons-parent 28, apache 13), which only a
+     `-PjmhVersion=1.36` run of the jmh build meets, left this way after sava-build 21.8.3
+     moved the harness to 1.37. A library signer the list holds as unauthenticated, should
+     one ever join the two tool signers, follows the tool bump above instead.
    - **A new signing key**: confirm the fingerprint from the publisher (its KEYS file, README
      or site, or a maintainer's GitHub-registered key), never from a key server alone, then
      add a `trusted-key` scoped to the publisher's group or module, by its 40-hex fingerprint
@@ -110,6 +125,11 @@ the guard.
    servers while writing, even with key servers disabled for verification (only `--offline`
    stops it), so authenticate any key it adds. Run it without `-PsavaBuildLocalRepo`: with the
    property it pins the unsigned `0.0.0-test` publication, which `verificationPolicy` rejects.
+   An entry no build resolves any more is trimmed by hand: its rule, its list line and the
+   keyring block no remaining rule names, cut with one adjacent blank line (the one before it
+   for the file's last block; the export drops a blank line left at the end), then proved by
+   write runs from the root, `-p jmh` and `-p soak` that change nothing, each standalone
+   build's keyring link re-created afterwards, and by step 4's cold run.
 
 4. A warm cache can hide parent-POM metadata that a cold one fetches. Validate a new parent
    or BOM, and every trim (an entry removed by hand because no build resolves what it

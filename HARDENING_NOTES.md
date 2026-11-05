@@ -76,6 +76,27 @@ alone with an unknown `-PjmhJvmArgsAppend` flag printed `<forked VM failed with 
 failed the task and archived nothing. The logs are under
 `~/hardening-evidence/sava/2026-11-05/adopt-21.8.3/`.
 
+The commit after the adoption drops the three policy entries only JMH 1.36's graph needed,
+which no build resolves since the harness moved: commons-math3 3.2 and its parents
+commons-parent 28 and apache 13, each trusted at its exact version under a key that must not
+vouch for anything newer, two old release managers' keys and a DSA-1024 key. Their rules,
+their lines in `gradle/verification/version-scoped-keys.txt` and their keyring blocks left
+together, 45 rules and blocks to 42 and 13 listed keys to 10. The cost is the override: a
+`-PjmhVersion=1.36` run of the jmh build is refused on `jmhCompileClasspath` for exactly four
+artifacts, `apache-13.pom`, `commons-math3-3.2.jar`, `commons-math3-3.2.pom` and
+`commons-parent-28.pom`, while jmh-core 1.36 itself still verifies under the jmh group key;
+the entries come back from git history, never from a write run, as
+`gradle/verification/README.md` now says. Proof of the trim: write runs from the root (`build
+resolveVerificationTools`), `-p jmh` and `-p soak` left the policy, the keyring and the list
+byte-identical, the two standalone runs replacing their keyring links with identical copies,
+re-created afterwards; the three step-1 builds then passed from an empty `GRADLE_USER_HOME`
+holding only the `org.gradle.java.*` lines, with `JAVA_HOME` kept and the package credentials
+in `ORG_GRADLE_PROJECT_*` variables, the root `check` with `resolveVerificationTools` in 2m 10s
+and the jmh and soak builds in 28 s and 17 s, which also pays the cold run that 787ba3e8's
+trim owed; and `verificationKeyStatus` reports 42 trusted keys, 38 current, 3 expired and 1
+revoked, each of those four at exact versions, 0 undecided, all 7 corroboration-only keys
+still vouched for by gradle/gradle.
+
 ## Released sava-build 21.8.2 — 2026-11-02
 
 All three plugin pins advance from 21.8.0 to the published

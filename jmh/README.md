@@ -24,7 +24,8 @@ convention plugin, pinned to a published sava-build release in `build.gradle.kts
 `../AGENTS.md`); every default is overridable per invocation (`-PjmhFork`, `-PjmhIncludes`,
 `-PjmhWarmupIterations`, `-PjmhWarmup`, `-PjmhIterations`,
 `-PjmhTimeOnIteration`, `-PjmhFailOnError`, `-PjmhJvmArgsAppend`, and
-`-PjmhVersion`, the JMH harness, 1.37 by default). The forked
+`-PjmhVersion`, the JMH harness: 1.37 by default, and the only version whose
+whole dependency graph the verification policy covers). The forked
 benchmark JVMs run the long-running-service flag set (generational ZGC,
 compact object headers, pinned pre-touched heap, `-XX:+PerfDisableSharedMem`).
 Each run that writes results has its raw output archived timestamped under
@@ -77,8 +78,10 @@ Measured 2026-07-14 on an Apple Silicon macOS box, JMH 1.36, `-PjmhFork=3`
 (24 samples per row), JDK 25, default service flag set. Treat the ratios as
 the signal, not the absolute numbers. Both tables in this file are JMH 1.36's,
 the default harness until sava-build 21.8.3 moved it to 1.37: a 1.37 row is a
-different harness, so re-measure both sides before comparing against them, or
-re-measure on the old one with `-PjmhVersion=1.36`.
+different harness, so re-measure both sides before comparing against them. A
+`-PjmhVersion=1.36` run is refused until the three policy entries only JMH
+1.36's graph needed come back from git history, as
+`../gradle/verification/README.md` describes.
 
 | Workload | old ns/op | new ns/op | into ns/op | Speedup |
 |---|---|---|---|---|
