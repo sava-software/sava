@@ -9,6 +9,73 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.8.3 — 2026-11-05
+
+All three plugin pins advance from 21.8.2 to the published
+`software.sava:sava-build:21.8.3`. `:sava-core:savaBuildIdentity` reported that coordinate,
+`local override: inactive`, and loaded JAR SHA-256
+`2499c3881d48b01ca9dc8e56f6eb63de8f6071dce6976886d08fceeb566e1247`. `gh attestation verify`
+verified its SLSA v1 provenance from `.github/workflows/gradle_plugin_publish.yml` at
+`refs/tags/21.8.3`, source commit `b1b199a2b438103f13ee5ffd5bfd6b009fbfb08c`, for the jar and
+its sources and javadoc jars. The installed `hardeningAgentTemplate` prints a block
+byte-identical to the one in `AGENTS.md`.
+
+No mutation suite is owed by this bump, and the record is the compare's file list, not the
+release notes, which are commit subjects and rule nothing out: between the two release
+commits (`gh api 'repos/sava-software/sava-build/compare/eaec28e...21.8.3' --jq
+'.files[].filename'`) only `.release-please-manifest.json`, `CHANGELOG.md`, `README.md`,
+`build.gradle.kts`, `gradle/verification-metadata.xml`,
+`software.sava.build.feature.jmh.gradle.kts` and its two tests changed, and the
+`build.gradle.kts` patch is one line, the `me.champeau.jmh:jmh-gradle-plugin` dependency from
+0.7.3 to 0.7.4. `gradle/libs.versions.toml` is untouched between the tags (PIT 1.30.0, the PIT
+JUnit plugin 1.2.3 and ArcMutate base 1.7.2 remain), so no `BaselineRebase` is owed either:
+nothing PIT is given changed. The next suite run prints state-reset notices for the plugin
+change; they are not drift.
+
+What 21.8.3 changes for this repository is the jmh build alone. Plugin 0.7.4 hands JMH the
+convention's `failOnError = true` as `-foe true`, where 0.7.3 passed `-foe 1`, which JMH read
+as false, so the hard failure `jmh/README.md` has promised holds for the first time: the first
+benchmark error ends the run and fails the `jmh` task, and the run archives nothing, the
+benchmarks that finished before the error included, since JMH writes its results file after
+the last benchmark. The archive step copies a results file only when the run wrote one, so a
+run JMH ends after listing or printing help archives nothing either. The default harness moves
+from JMH 1.36 to 1.37, with `-PjmhVersion` as the override; `jmh-results/` is empty here, so
+there is no mixed-harness scoreboard, and the two tables in `jmh/README.md` are 1.36's and now
+say so. The verification policy swaps the plugin's unsigned 0.7.3 component for 0.7.4's jar,
+module and sources jar, at the hashes sava-build's own policy pins. Nothing else in the graph
+moves: jmh-core 1.37's chain (commons-math3 3.6.1 with commons-parent 39 and apache 16, and
+jopt-simple 5.0.4) has reached the settings classpath through the plugin's own jmh-core
+dependency since sava-build 21.5.2 added the jmh feature, and the policy already trusts it,
+as it does the 1.37 generators and asm 9.0, which the jmh build alone resolves through
+jmh-generator-asm.
+
+Root `check` with `resolveVerificationTools`, strict and without the configuration cache,
+passed on the adopted tree: 2,173 tests (sava-core 930, sava-rpc 1,182 with two
+environment-gated skips, sava-vanity 61), every test task executed rather than restored from
+the build cache; `:verificationPolicy` refused nothing, and each hardened project resolved
+its PIT, ArcMutate and Jazzer artifacts under the committed policy without a verification
+report. `-p jmh jmhJar` and `-p soak classes jar soakModulePath` passed under the same policy,
+and `verificationKeyStatus` reported what it did for 21.8.2: 45 trusted keys, 41 current, 3
+expired and 1 revoked, each of those four at exact versions, 0 undecided, all 7
+corroboration-only keys still vouched for by gradle/gradle. Not run here: an IntelliJ sync
+with download sources on, the only path that resolves the plugin's sources jar, whose cached
+copy's SHA-256 matches the pin; and a Docker build of sava-vanity's image, whose guard reach
+this release does not change.
+
+The fix was exercised once, in a throwaway clone of this tree rather than the checkout, where a
+quick run would have become the empty `jmh-results/`'s first and only scoreboard row. Three
+probe benchmarks, which JMH runs in name order, were added to the clone: `ProbeA_Ok`,
+`ProbeB_Fail`, whose trial `@Setup` throws the way a cross-check does on a disagreement, and
+`ProbeC_Ok`, each run with one fork, no warmup and two 100 ms iterations. A clean run of A and
+C exited 0 and archived both rows with `Cnt` 2 under `# JMH version: 1.37`. The same run with
+B included failed the task after A had printed its `Result` block: B printed `<failure>`, JMH
+reported "Benchmark had encountered error, and fail on error was requested", C never ran,
+nothing was archived and `results.txt` kept its SHA-256. That run under
+`-PjmhFailOnError=false` passed, archived A and C only, and posted no row for B. A run of A
+alone with an unknown `-PjmhJvmArgsAppend` flag printed `<forked VM failed with exit code 1>`,
+failed the task and archived nothing. The logs are under
+`~/hardening-evidence/sava/2026-11-05/adopt-21.8.3/`.
+
 ## Released sava-build 21.8.2 — 2026-11-02
 
 All three plugin pins advance from 21.8.0 to the published

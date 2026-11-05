@@ -23,18 +23,33 @@ convention plugin, pinned to a published sava-build release in `build.gradle.kts
 (`-PsavaBuildLocalRepo` redirects it to a local test publication; see
 `../AGENTS.md`); every default is overridable per invocation (`-PjmhFork`, `-PjmhIncludes`,
 `-PjmhWarmupIterations`, `-PjmhWarmup`, `-PjmhIterations`,
-`-PjmhTimeOnIteration`, `-PjmhFailOnError`, `-PjmhJvmArgsAppend`). The forked
+`-PjmhTimeOnIteration`, `-PjmhFailOnError`, `-PjmhJvmArgsAppend`, and
+`-PjmhVersion`, the JMH harness, 1.37 by default). The forked
 benchmark JVMs run the long-running-service flag set (generational ZGC,
 compact object headers, pinned pre-touched heap, `-XX:+PerfDisableSharedMem`).
-Each run's raw output is archived timestamped under `jmh-results/` and
-`build/results/jmh/results.txt` is re-rendered as the merge of all archived
-runs (newest row wins per benchmark).
+Each run that writes results has its raw output archived timestamped under
+`jmh-results/`, and `build/results/jmh/results.txt` is then re-rendered as the
+merge of all archived runs (newest row wins per benchmark). A run that fails,
+or one JMH ends after listing or printing help, archives nothing; after
+`clean`, a failed run leaves an empty `results.txt` until a run writes results.
 
 **Compare with at least `-PjmhFork=3`, in isolation.** Single-fork scores
 swing 10–20% on JIT inlining luck alone; treat any row with an error above
 ~10% of its score as contaminated and re-run it alone. Every benchmark's
 `@Setup` cross-checks that all variants produce identical output, and the
-default `failOnError` turns any disagreement into a hard failure.
+default `failOnError` turns any disagreement into a hard failure. (It has
+reached JMH since sava-build 21.8.3, whose jmh-gradle-plugin 0.7.4 passes
+`-foe true`; 0.7.3 passed `-foe 1`, which JMH read as false, so no failure ever
+reached the task before.) What that costs: the first benchmark error, a fork that dies
+included, ends the run and fails the `jmh` task, and the run archives
+nothing, not even the benchmarks that finished before the error. JMH writes
+its results file after the last benchmark, so those scores survive only in
+the console output; send a long run's output to a file. Under
+`-PjmhFailOnError=false` the task passes and the run is archived: a late
+failure posts a short row (`Cnt` below forks × iterations) that replaces the
+full row in the merge, a dead fork or a trial `@Setup` failure posts no row,
+so the old row stays, and only the log's `<failure>` or
+`<forked VM failed with exit code N>` says so.
 
 ## Base58Bench
 
@@ -58,9 +73,12 @@ per length; scores are ns per decode.
 
 ### Results
 
-Measured 2026-07-14 on an Apple Silicon macOS box, `-PjmhFork=3` (24 samples
-per row), JDK 25, default service flag set. Treat the ratios as the signal,
-not the absolute numbers.
+Measured 2026-07-14 on an Apple Silicon macOS box, JMH 1.36, `-PjmhFork=3`
+(24 samples per row), JDK 25, default service flag set. Treat the ratios as
+the signal, not the absolute numbers. Both tables in this file are JMH 1.36's,
+the default harness until sava-build 21.8.3 moved it to 1.37: a 1.37 row is a
+different harness, so re-measure both sides before comparing against them, or
+re-measure on the old one with `-PjmhVersion=1.36`.
 
 | Workload | old ns/op | new ns/op | into ns/op | Speedup |
 |---|---|---|---|---|
@@ -78,7 +96,7 @@ are a wash within error at 64 bytes, where the conversion itself dominates.
 
 ### byte[] vs char[] input
 
-A dedicated same-session control run (`-PjmhFork=3`,
+A dedicated same-session control run on the same harness (`-PjmhFork=3`,
 `-PjmhIncludes=bytes_new,bytes_into,chars_new,chars_into`, 24 samples per
 row) prices the `byte[]` overloads against the char path:
 

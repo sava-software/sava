@@ -112,12 +112,19 @@ the guard.
    property it pins the unsigned `0.0.0-test` publication, which `verificationPolicy` rejects.
 
 4. A warm cache can hide parent-POM metadata that a cold one fetches. Validate a new parent
-   or BOM once with an empty `GRADLE_USER_HOME`: copy only the `org.gradle.java.*` lines of
-   your `gradle.properties`, and pass package credentials as `ORG_GRADLE_PROJECT_`
-   environment variables. Offline use needs an online run first; cached signature files
-   alone do not prove an offline run can resolve them. CI's fork pull requests build offline
-   from the cache that main's last build saved, so the first one after a policy change waits
-   for main's next build to warm that cache with the signature files.
+   or BOM, and every trim (an entry removed by hand because no build resolves what it
+   covered), with an empty `GRADLE_USER_HOME`, running all three builds with their step-1
+   commands: copy only the `org.gradle.java.*` lines of your `gradle.properties` into it,
+   keep the environment variables those lines name (`org.gradle.java.installations.fromEnv=JAVA_HOME`
+   needs `JAVA_HOME`, which `env -i` drops), and pass package credentials as
+   `ORG_GRADLE_PROJECT_` environment variables. A cold run resolves and verifies every
+   class path, and re-runs only the tasks whose inputs name files under the home, here the
+   dependency-analysis tasks: task history lives in each build's own `.gradle` directory,
+   so the tests stay up-to-date, and the run proves resolution, not a test run. Offline
+   use needs an online run first; cached signature files alone do not prove an offline run
+   can resolve them. CI's fork pull requests build offline from the cache that main's last
+   build saved, so the first one after a policy change waits for main's next build to warm
+   that cache with the signature files.
 
 5. Sync IntelliJ as well. It downloads sources through the same policy, including artifacts
    no command-line build resolves: the Gradle sources zip, Groovy's sources and the jmh

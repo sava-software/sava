@@ -350,7 +350,7 @@ copying a possibly newer block out of sava-build's moving `main`.
 
 **This repo pins a published sava-build release.** The three pins — both ids in
 the root `settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read
-`21.8.2`, adopted on 2026-11-02; `HARDENING_NOTES.md` records the resolved jar's
+`21.8.3`, adopted on 2026-11-05; `HARDENING_NOTES.md` records the resolved jar's
 SHA-256 and attestation. **The pins must move together**; a settings-only bump has
 silently missed the jmh pin more than once. This combination resolves from the
 ordinary published repository; `-PsavaBuildLocalRepo` is needed only while
