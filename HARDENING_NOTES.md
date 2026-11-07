@@ -724,6 +724,27 @@ classic-path body row (`lambda$connect$0`) accepted at the time; that mutation s
 has since been removed. Fakes are named `Recording*` and excluded alongside `*Test*`
 (which also matches `TestClock`).
 
+The websocket subscribe pipeline (ready set, deadline floor, `registerAll` scopes,
+opt-in batching with its loss fallback and single-subscribe budget; 2026-11-05 to
+2026-11-07) met the gate after the local reviewer's "clean", history-free, on the tree
+pushed: 1,527 mutants, 1,457 detected, 70 survived, every one an accepted row, 0
+no-coverage, 3 timed out, the audited `runLoop` liveness set. The gate's first run on
+the branch had reported 2 no-coverage mutants, the exception-path `unlock` copies of a
+lock block nested inside `registerAll`'s exit `finally`, which javac duplicates onto
+both exits of the `try`; the block moved into `wakeCheckLoop()`, where PIT folds the
+copies as it does for every other lock block, and no run since has reported one. One
+survivor was accepted while the branch was in review, a `MathMutator` on a
+received-message count that an earlier draft of the batching fallback compared for
+equality; the owner's fallback decision removed the count, and the row left through
+`pitestWsBaselinePrune` before the push, two matching fresh history-free previews and
+the writer's own run, so no row was added or removed on net. The writers refreshed the
+line tags of 69 of the 70 rows from their own fresh runs; the pairing reports named
+sibling keys with mixed labels, and the code text at every kept row's new line was
+compared with the text at its old line and found identical, so no label rotated and
+none was edited. One load flip is recorded in the README's ws history note, not
+audited. `mutationOwnershipAudit`: 291 classes owned, 0 declined, the new nested
+record `SentBatch` among them.
+
 ## sava-vanity
 
 Has a test source set (`EntrypointTests` — system-property parsing, key-path

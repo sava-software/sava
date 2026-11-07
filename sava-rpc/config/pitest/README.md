@@ -837,6 +837,18 @@ Kept apart from the arguments above; none of it is live evidence.
   tagged line with its family and flagged every label whose only mention is a History
   note.
 
+- The websocket subscribe pipeline (2026-11-05 to 2026-11-07) moved 69 of the 70
+  accepted rows' lines; the writers refreshed the tags from their own fresh runs, their
+  pairing reports named twelve keys with sibling rows, five with mixed labels, and the
+  code text at every kept row's new line was compared with the text at its old line:
+  identical for all 69, so no label rotated. One row accepted while the branch was in
+  review, `onText` `MathMutator` on a received-message count an earlier draft of the
+  batching fallback compared for equality, left through `pitestWsBaselinePrune` when
+  the fallback decision removed the count, before the push. One load flip was observed
+  in a preview and is recorded here, not audited: `onWholeMessage`
+  `VoidMethodCallMutator` at line 2873 timed out under a load average of 65 to 79 and
+  read KILLED in the fresh runs before and after it.
+
 ## encoding suite
 
 Targets `software.sava.rpc.json.*` and `software.sava.rpc.json.http.request.*`,
