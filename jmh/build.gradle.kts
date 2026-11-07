@@ -15,6 +15,9 @@ repositories {
     maven {
       name = "savaGithubPackages"
       url = uri("https://maven.pkg.github.com/sava-software/solana-version-catalog")
+      content {
+        includeModule("software.sava", "solana-version-catalog")
+      }
       credentials {
         username = gprUser
         password = gprToken
