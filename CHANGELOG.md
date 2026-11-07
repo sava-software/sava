@@ -1,5 +1,12 @@
 # Changelog
 
+## [25.13.4](https://github.com/sava-software/sava/compare/25.13.3...25.13.4) (2026-11-07)
+
+
+### Bug Fixes
+
+* **build:** upgrade to Gradle 9.9 and scope plugin repositories ([88ed3e4](https://github.com/sava-software/sava/commit/88ed3e45448b1bd7b94e2f156f51a9d7d6748fda))
+
 ## [25.13.3](https://github.com/sava-software/sava/compare/25.13.2...25.13.3) (2026-11-02)
 
 
