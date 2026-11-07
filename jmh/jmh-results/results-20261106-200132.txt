@@ -1,0 +1,16 @@
+Benchmark                     (batchBytes)  (pending)  (subscriptions)  Mode  Cnt   Score   Error  Units
+WsSubscribeBench.backlog               N/A          0              N/A  avgt   24  37.960 ± 0.939  us/op
+WsSubscribeBench.backlog               N/A       2000              N/A  avgt   24  37.750 ± 0.817  us/op
+WsSubscribeBench.backlog               N/A      10000              N/A  avgt   24  36.818 ± 1.701  us/op
+WsSubscribeBench.burst                   0        N/A             1000    ss   24   9.691 ± 0.697  ms/op
+WsSubscribeBench.burst                   0        N/A            10000    ss   24  48.524 ± 5.818  ms/op
+WsSubscribeBench.burst                4096        N/A             1000    ss   24   9.790 ± 0.814  ms/op
+WsSubscribeBench.burst                4096        N/A            10000    ss   24  50.181 ± 3.757  ms/op
+WsSubscribeBench.burstScoped             0        N/A             1000    ss   24   6.678 ± 0.438  ms/op
+WsSubscribeBench.burstScoped             0        N/A            10000    ss   24  40.837 ± 2.259  ms/op
+WsSubscribeBench.burstScoped          4096        N/A             1000    ss   24   5.746 ± 0.400  ms/op
+WsSubscribeBench.burstScoped          4096        N/A            10000    ss   24  37.431 ± 1.172  ms/op
+WsSubscribeBench.replay                  0        N/A             1000    ss   24   9.200 ± 1.079  ms/op
+WsSubscribeBench.replay                  0        N/A            10000    ss   24  38.657 ± 3.299  ms/op
+WsSubscribeBench.replay               4096        N/A             1000    ss   24   9.129 ± 1.103  ms/op
+WsSubscribeBench.replay               4096        N/A            10000    ss   24  36.823 ± 2.356  ms/op

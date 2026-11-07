@@ -1,0 +1,4 @@
+Benchmark                 (pending)  Mode  Cnt    Score   Error  Units
+WsSubscribeBench.backlog          0  avgt    2   36.307          us/op
+WsSubscribeBench.backlog       2000  avgt    2   40.737          us/op
+WsSubscribeBench.backlog      10000  avgt    2  150.143          us/op

@@ -1,0 +1,13 @@
+Benchmark                     (batchBytes)  (subscriptions)  Mode  Cnt   Score   Error  Units
+WsSubscribeBench.burst                   0             1000    ss   24   8.890 ± 0.880  ms/op
+WsSubscribeBench.burst                   0            10000    ss   24  48.358 ± 3.811  ms/op
+WsSubscribeBench.burst                4096             1000    ss   24   9.055 ± 0.863  ms/op
+WsSubscribeBench.burst                4096            10000    ss   24  51.965 ± 3.757  ms/op
+WsSubscribeBench.burstScoped             0             1000    ss   24   6.801 ± 0.477  ms/op
+WsSubscribeBench.burstScoped             0            10000    ss   24  39.615 ± 1.756  ms/op
+WsSubscribeBench.burstScoped          4096             1000    ss   24   5.875 ± 0.386  ms/op
+WsSubscribeBench.burstScoped          4096            10000    ss   24  37.275 ± 1.081  ms/op
+WsSubscribeBench.replay                  0             1000    ss   24   9.107 ± 1.509  ms/op
+WsSubscribeBench.replay                  0            10000    ss   24  39.157 ± 2.509  ms/op
+WsSubscribeBench.replay               4096             1000    ss   24   8.629 ± 1.041  ms/op
+WsSubscribeBench.replay               4096            10000    ss   24  35.389 ± 3.681  ms/op
