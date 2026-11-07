@@ -15,7 +15,7 @@ extraJavaModuleInfo {
 }
 
 dependencies {
-  testImplementation("io.airlift:aircompressor-v3:3.7")
+  testImplementation("io.airlift:aircompressor-v3:3.14")
 }
 
 testModuleInfo {
@@ -50,6 +50,8 @@ dependencyAnalysis {
 
 hardening {
   mutation.register("encoding") {
+    // PIT runs the FFM-backed Zstd fixture decoder on the classpath.
+    minionJvmArgs.add("--enable-native-access=ALL-UNNAMED")
     // key encodings crossing the JSON boundary, plus the request-shaping enums.
     // RpcEncoding is deliberately missing a jsonParsed constant (AGENTS.md), which
     // is the kind of API invariant a mutant should have to argue with.
@@ -68,6 +70,7 @@ hardening {
     mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("client") {
+    minionJvmArgs.add("--enable-native-access=ALL-UNNAMED")
     // body decoding, the JSON-RPC envelope gate, and request construction — all of
     // it reading or answering an untrusted node
     targetClasses = listOf("software.sava.rpc.json.http.client.*")
@@ -99,6 +102,7 @@ hardening {
     mutators = "STRONGER,EXPERIMENTAL_NAKED_RECEIVER"
   }
   mutation.register("responses") {
+    minionJvmArgs.add("--enable-native-access=ALL-UNNAMED")
     // the hand-rolled json_iterator field predicates parse whatever an RPC node returns;
     // a compromised or buggy provider is the threat model
     targetClasses = listOf("software.sava.rpc.json.http.response.*")
@@ -171,6 +175,8 @@ hardening {
 // fails the whole task, and 145MB that is not an input to anything. It is git-ignored
 // locally; excluded here so a developer who has run the live check still gets a build.
 tasks.test {
+  // Aircompressor's streaming factory uses FFM where supported, avoiding its Unsafe Java fallback.
+  jvmArgs("--enable-native-access=aircompressor.v3")
   inputs.files(fileTree("src/test/solana") {
     exclude("**/node_modules/**", "**/target/**", "**/test-ledger/**", "**/*.log")
   })

@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /// silently drops or defaults a field must fail a test here.
 final class ParseResponseFieldTests {
 
-  private static final ZstdDecompressor ZSTD = ZstdInputStream::new;
+  private static final ZstdDecompressor ZSTD = ZstdInputStream::create;
   private static final Context CONTEXT = new Context(1234, "2.3.4");
   private static final String KEY_1 = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
   private static final String KEY_2 = "So11111111111111111111111111111111111111112";

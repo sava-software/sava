@@ -2,6 +2,8 @@ package software.sava.core.accounts;
 
 import software.sava.core.accounts.meta.AccountMeta;
 
+// Generated accessors intentionally implement the deprecated RecentBlockhashes compatibility API.
+@SuppressWarnings("deprecation")
 record SolanaAccountsRecord(
     // Native
     PublicKey systemProgram,

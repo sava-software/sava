@@ -168,7 +168,7 @@ final class ProgramAccountsRpcRequestTests extends RpcRequestTests {
         .encoding(RpcEncoding.base64_zstd)
         .zstdDecompressor(in -> {
           decompressions.incrementAndGet();
-          return new ZstdInputStream(in);
+          return ZstdInputStream.create(in);
         })
         .filters(List.of(Filter.createDataSizeFilter(40)))
         .createRequest();

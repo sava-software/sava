@@ -59,6 +59,11 @@ the guard.
 
 ## Updating after a dependency, plugin or tool change
 
+Aircompressor 3.14's parent imports Jetty 12.1.14 BOMs signed by Olivier Lamy's
+`716EE302674CDBB2E660E1B44DB5EA09F2E3C800` key. Its fingerprint is authenticated by
+[Jetty's release-specific key list](https://github.com/jetty/jetty.project/blob/jetty-12.1.14/KEYS.txt);
+the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
+
 1. Run the change through all three builds; CI runs only the root one.
 
    ```sh

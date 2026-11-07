@@ -21,6 +21,7 @@ final class SolanaAccountsTests {
   }
 
   @Test
+  @SuppressWarnings("deprecation") // Pin the retained RecentBlockhashes address alongside the current ones.
   void mainNetAddressConstants() {
     final var accounts = SolanaAccounts.MAIN_NET;
 
@@ -83,6 +84,7 @@ final class SolanaAccountsTests {
                         Function<SolanaAccounts, PublicKey> accessor) {
   }
 
+  @SuppressWarnings("deprecation") // The compatibility accessor remains part of the complete builder contract.
   private static final List<Setter> SETTERS = List.of(
       new Setter("systemProgram", SolanaAccountsBuilder::systemProgram, SolanaAccountsBuilder::systemProgram, SolanaAccounts::systemProgram),
       new Setter("configProgram", SolanaAccountsBuilder::configProgram, SolanaAccountsBuilder::configProgram, SolanaAccounts::configProgram),
