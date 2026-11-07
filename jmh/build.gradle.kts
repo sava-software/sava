@@ -44,4 +44,5 @@ val solanaBOMVersion: String = savaProperties.getProperty("solanaBOMVersion")
 dependencies {
   jmhImplementation(platform("software.sava:solana-version-catalog:$solanaBOMVersion"))
   jmhImplementation("software.sava:sava-core")
+  jmhImplementation("software.sava:sava-rpc")
 }

@@ -9,9 +9,11 @@ import java.net.URI;
 import java.nio.CharBuffer;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 /// The builder is the whole public entry point to the websocket client, and its
@@ -402,6 +404,158 @@ final class SolanaRpcWebsocketBuilderTests {
           () -> builder().keepAliveDelay(bad), "keepAliveDelay " + bad + " must be rejected");
       assertTrue(String.valueOf(failure.getMessage()).contains("keepAliveDelay"), failure.getMessage());
     }
+  }
+
+  /// Batching is opt-in: no mainstream client batches websocket subscribes, so whether a server
+  /// or a proxy in front of it reads batch messages is unproven, and a caller who says nothing
+  /// gets one request per message. A literal, for the reason the timing defaults give.
+  @Test
+  void subscribeBatchingIsOffUnlessSet() {
+    assertEquals(0, builder().subscribeBatchBytes());
+  }
+
+  /// The cap is bounded by Agave's inbound message limit, which counts the whole message and is
+  /// inclusive: above it Agave resets the connection without answering, so a larger cap could
+  /// only trade a burst for a lost connection. The refusal names the value it refused, and leaves
+  /// the setting as it was.
+  @Test
+  void aSubscribeBatchCapOutsideZeroToAgavesLimitIsRejected() {
+    for (final int bad : new int[]{-1, Integer.MIN_VALUE, 4_097, Integer.MAX_VALUE}) {
+      final var builder = builder().subscribeBatchBytes(1_024);
+      final var failure = assertThrows(IllegalArgumentException.class, () -> builder.subscribeBatchBytes(bad),
+          "subscribeBatchBytes " + bad + " must be rejected");
+      final var message = String.valueOf(failure.getMessage());
+      assertTrue(message.contains("subscribeBatchBytes") && message.contains(String.valueOf(bad)), message);
+      assertEquals(1_024, builder.subscribeBatchBytes(), "a refused cap leaves the setting as it was");
+    }
+  }
+
+  /// Both ends of the range are settings, not sentinels: 4,096 is the largest message Agave still
+  /// answers, and 0 turns batching back off, which a reused builder needs, since everything set on
+  /// it carries over to each websocket it creates.
+  @Test
+  void aSubscribeBatchCapFromZeroToAgavesLimitIsAccepted() {
+    for (final int cap : new int[]{0, 1, 4_096}) {
+      assertEquals(cap, builder().subscribeBatchBytes(cap).subscribeBatchBytes());
+    }
+    assertEquals(0, builder().subscribeBatchBytes(4_096).subscribeBatchBytes(0).subscribeBatchBytes(),
+        "0 turns batching back off");
+  }
+
+  /// No budget of single subscribe messages is declared unless set: a replay of any size after a
+  /// loss with a batch unanswered then goes one per message.
+  @Test
+  void noSingleSubscribeBudgetIsDeclaredUnlessSet() {
+    assertEquals(0, builder().singleSubscribeBudget());
+  }
+
+  /// A negative budget means nothing; the refusal names the value and leaves the setting as it was.
+  @Test
+  void aNegativeSingleSubscribeBudgetIsRejected() {
+    for (final int bad : new int[]{-1, Integer.MIN_VALUE}) {
+      final var builder = builder().singleSubscribeBudget(100);
+      final var failure = assertThrows(IllegalArgumentException.class, () -> builder.singleSubscribeBudget(bad),
+          "singleSubscribeBudget " + bad + " must be rejected");
+      final var message = String.valueOf(failure.getMessage());
+      assertTrue(message.contains("singleSubscribeBudget") && message.contains(String.valueOf(bad)), message);
+      assertEquals(100, builder.singleSubscribeBudget(), "a refused budget leaves the setting as it was");
+    }
+  }
+
+  /// Zero and every positive value are settings: 100 is what the public mainnet-beta endpoint
+  /// allowed on 2026-11-07, and 0 withdraws a budget on a reused builder.
+  @Test
+  void aSingleSubscribeBudgetFromZeroUpIsAccepted() {
+    for (final int budget : new int[]{0, 1, 100, Integer.MAX_VALUE}) {
+      assertEquals(budget, builder().singleSubscribeBudget(budget).singleSubscribeBudget());
+    }
+    assertEquals(0, builder().singleSubscribeBudget(100).singleSubscribeBudget(0).singleSubscribeBudget(),
+        "0 withdraws the budget");
+  }
+
+  /// The budget set on the builder reaches the websocket it creates: with a budget the replay of
+  /// two typed requests would exceed, the connection opened after a loss with their batch
+  /// unanswered batches, and with a budget they fit it sends them one per message. The replay
+  /// waits out one resend window, so the clock steps past it before the pass.
+  @Test
+  void theSingleSubscribeBudgetReachesTheWebsocket() throws InterruptedException {
+    for (final int budget : new int[]{1, 2}) {
+      final var clock = new TestClock();
+      final var first = new RecordingWebSocket();
+      final var replacement = new RecordingWebSocket();
+      final var builder = builder()
+          .uri(URI.create("wss://example.invalid"))
+          .webSocketBuilder(new RecordingWebSocketBuilder(new AtomicReference<>()))
+          .executorService(new RecordingExecutor())
+          .clock(clock)
+          .onClose((_, _, _) -> {
+          }) // the default policy closes the instance on a peer close; this one keeps it open
+          .subscribeBatchBytes(4_096)
+          .singleSubscribeBudget(budget);
+      try (final var websocket = (SolanaJsonRpcWebsocket) builder.create()) {
+        assertTrue(websocket.slotSubscribe(null, _ -> {
+        }));
+        assertTrue(websocket.rootSubscribe(null, _ -> {
+        }));
+        websocket.onOpen(first);
+        assertEquals(1, first.sentText.size(), first.sentText::toString);
+        assertTrue(first.sentText.getFirst().startsWith("["), "the two typed requests share one array");
+        websocket.onClose(first, java.net.http.WebSocket.NORMAL_CLOSURE, "peer close");
+        websocket.onOpen(replacement);
+        clock.advanceMillis(builder.subscriptionResendDelay() + 1L);
+        websocket.checkCycle(0L);
+        if (budget == 1) {
+          assertEquals(1, replacement.sentText.size(), "a replay of two exceeds a budget of one, so it batches");
+          assertTrue(replacement.sentText.getFirst().startsWith("["), replacement.sentText::toString);
+        } else {
+          assertEquals(2, replacement.sentText.size(), "a replay of two fits a budget of two, so it goes one per message");
+          assertTrue(replacement.sentText.stream().noneMatch(frame -> frame.startsWith("[")), replacement.sentText::toString);
+        }
+      }
+    }
+  }
+
+  /// The frames a websocket created by `builder` sends, in order, when it adopts its first
+  /// connection with a slot and a root subscription queued: two typed requests, each small enough
+  /// to share a message with the other. A recording executor keeps the check loop from running,
+  /// so the adoption pass on the test thread is the only send.
+  private static List<String> sentOnAdoption(final SolanaRpcWebsocketBuilder builder) {
+    final var socket = new RecordingWebSocket();
+    try (final var websocket = (SolanaJsonRpcWebsocket) builder
+        .uri(URI.create("wss://example.invalid"))
+        .webSocketBuilder(new RecordingWebSocketBuilder(new AtomicReference<>()))
+        .clock(new TestClock())
+        .executorService(new RecordingExecutor())
+        .create()) {
+      assertTrue(websocket.slotSubscribe(_ -> {
+      }));
+      assertTrue(websocket.rootSubscribe(_ -> {
+      }));
+      websocket.onOpen(socket);
+      return List.copyOf(socket.sentText);
+    }
+  }
+
+  /// create() hands the cap to the websocket it creates. The oracle is what a websocket the
+  /// default builder creates sends for the same two requests, since a fresh websocket mints the
+  /// same request ids, and the JSON-RPC batch those frames make, an array of them in order,
+  /// sized in UTF-8 bytes. A cap the batch fills exactly sends it as one message, and a cap one
+  /// byte short sends each request alone, so only the value set, not merely a positive one, gives
+  /// both.
+  @Test
+  void createCarriesTheSubscribeBatchCap() {
+    final var plain = sentOnAdoption(builder());
+    assertEquals(2, plain.size(), plain::toString);
+    for (final var frame : plain) {
+      assertFalse(frame.startsWith("["), () -> "the default builder creates batching off: " + frame);
+    }
+    final var batch = "[" + plain.getFirst() + "," + plain.getLast() + "]";
+    final int batchBytes = batch.getBytes(UTF_8).length;
+
+    assertEquals(List.of(batch), sentOnAdoption(builder().subscribeBatchBytes(batchBytes)),
+        "a cap the batch fills exactly sends it as one message");
+    assertEquals(plain, sentOnAdoption(builder().subscribeBatchBytes(batchBytes - 1)),
+        "one byte short of the batch, each request goes alone, as with batching off");
   }
 
   /// connect() with no prior write attempts immediately; the builder's clock and

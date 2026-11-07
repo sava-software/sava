@@ -10,6 +10,7 @@ import software.sava.rpc.json.http.response.*;
 import systems.comodal.jsoniter.CharBufferFunction;
 import systems.comodal.jsoniter.FieldMatcher;
 import systems.comodal.jsoniter.JsonIterator;
+import systems.comodal.jsoniter.ValueType;
 
 import java.math.BigInteger;
 import java.net.URI;
@@ -55,6 +56,26 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private final Commitment defaultCommitment;
   private final Timings timings;
   private final int maxMessageLength;
+  /// The subscribe batch cap, in UTF-8 bytes; 0, the default, turns batching off, and so does any
+  /// negative value. While it is positive the maintenance pass joins due subscribes into JSON-RPC
+  /// batch messages of at most this many bytes
+  /// ([#sendDueSubscribesInBatches(Connection, long, int)]), and since a server answers a batch
+  /// with an array, [#onMessage] reads an inbound array element by element. At 0 or below every
+  /// request travels alone, chained at its own admission, and every message takes the
+  /// whole-message path, an array included, which reads it as one unparseable message. Both reads
+  /// ask only whether it is positive, so the two directions never disagree on the configured
+  /// mode; the outbound side alone also honours [#batchingRefused], since the batches a
+  /// connection transmitted before the refusal are still answered with arrays, and
+  /// [Connection#singleRequests], whose connection sends no batch to be answered while its
+  /// predecessor's arrays arrive on the retired socket, which [#connectionFor(WebSocket)] drops.
+  private final int subscribeBatchBytes;
+  /// The endpoint's budget of single subscribe messages per connection as the caller declared it
+  /// ([SolanaRpcWebsocket.Builder#singleSubscribeBudget(int)]); 0 or below declares none. Read
+  /// where a suspension is consumed ([#adopt]): a connection that would replay more registrations
+  /// one per message than the budget allows batches instead, since the single-request replay
+  /// would be cut off before it completed. Nothing else reads it: the budget is the endpoint's to
+  /// enforce, and a lone registration still goes out as one plain message.
+  private final int singleSubscribeBudget;
   private final NanoClock clock;
   /// Construction-time origin for [#pacingMillis()]; `nanoTime` is meaningful only as a
   /// difference.
@@ -86,8 +107,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   final Condition newSubscription;
   /// The adopted connection; null before adoption, from [#connect()] until the next adoption,
   /// after retirement, and after [#close()]. Volatile: written under [#lock], read without it at
-  /// every callback entry.
-  private volatile Connection connection;
+  /// every callback entry. Visible for tests, like [#lock]: [#readySetMatchesPendingWork()] is
+  /// shown to read false on registries a test has put out of step, which no transition of a
+  /// correct engine does.
+  volatile Connection connection;
   /// When a connection was last attempted or adopted, in [#pacingMillis()] time: the base of the
   /// [Timings#reConnectDelay()] throttle in [#connect()]. Not advanced by traffic, so a
   /// long-lived connection's reconnect is not deferred as if just retried. Plain, not atomic:
@@ -125,8 +148,45 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// check cycle. A Condition forgets a signal sent while the loop is mid-cycle, which would
   /// park it a full check delay, or after [#close()] with a huge delay, forever.
   private boolean checkSignalled;
+  /// Latched once this instance has learned that batch messages do not work against its server:
+  /// the server rejected a batch as a whole ([#releaseRejectedBatch(Connection)]), the one
+  /// answer that names batching as the cause. From then on the maintenance pass sends one
+  /// request per message whatever [#subscribeBatchBytes] says, for the instance's life: a server
+  /// that refuses one batch may refuse every one, and a request whose raw params poisoned a
+  /// batch must not poison the next. Never cleared. Guarded by [#lock].
+  private boolean batchingRefused;
+  /// Set when a connection is retired with a batch message of its own still wholly unanswered
+  /// while batching is not refused ([#suspendBatchingAfterLoss(Connection)]) and consumed by the
+  /// next [#adopt], whose connection then sends one request per message for its life
+  /// ([Connection#singleRequests]), unless its replay would not fit the declared
+  /// [#singleSubscribeBudget], while the one after it batches again. A connection a server reset
+  /// or closed on an array looks exactly like one lost to the network, to a server restart or to
+  /// this instance's own retirement of it at the unanswered-request deadline with the same batch
+  /// in flight, so the loss suspends batching for one connection and never latches it: the replay
+  /// a refusing server would reset again goes out in the form such a server answers, unless a
+  /// declared budget it would not fit gives that form up for the chance that the replay completes,
+  /// and a connection merely dropped costs the next connection its batching, the replay and every
+  /// burst after it, and nothing beyond that connection. Guarded by [#lock].
+  private boolean singleRequestsNext;
+  /// Set on a thread while it runs a [#registerAll(Consumer)] scope of this websocket, so the
+  /// registration paths' [#wakeForQueuedWork()] leaves their wake to the scope's exit. Per
+  /// instance and per thread: a scope defers neither another websocket's wakes nor another
+  /// thread's, the threads the scope itself starts included, while a task this thread runs on
+  /// another's behalf inside the scope, a `ForkJoinTask` it joins or a caller-runs rejection,
+  /// is this thread's call and waits for the exit. A plain thread-local for that reason, and not
+  /// a `ScopedValue`, which fails a caller of `StructuredTaskScope` twice: the children a task
+  /// scope forks inherit a binding, so their registrations would wait for the scope's exit like
+  /// the scope's own, and binding around the callback changes the calling thread's scoped-value
+  /// bindings, so a fork from inside the callback into a task scope opened outside it throws
+  /// `StructureViolationException`. A thread-local is neither inherited nor a binding. Its cost
+  /// is its read: a thread that registers on this websocket outside a scope is left one
+  /// valueless entry in its thread-local map, and the map itself if it had none. A later scope
+  /// on that thread removes the entry; otherwise it stays until the thread ends or, once this
+  /// instance is collectable, until the map's own lazy cleanup drops it.
+  private final ThreadLocal<Boolean> wakeDeferred = new ThreadLocal<>();
 
 
+  /// The engine with subscribe batching off: a [#subscribeBatchBytes] of 0.
   SolanaJsonRpcWebsocket(final URI endpoint,
                          final SolanaAccounts solanaAccounts,
                          final Commitment defaultCommitment,
@@ -141,11 +201,58 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                          final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
                          final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError,
                          final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError) {
+    this(endpoint, solanaAccounts, defaultCommitment, webSocketBuilder, timings, maxMessageLength, clock,
+        executorService, scheduler, onOpen, onClose, onError, onSendTextError, onPingError, 0
+    );
+  }
+
+  /// The engine with a subscribe batch cap: `subscribeBatchBytes` becomes [#subscribeBatchBytes],
+  /// so a positive value has the engine send due subscribes in JSON-RPC batch messages of at most
+  /// that many UTF-8 bytes and read an inbound batch array element by element, while 0 or any
+  /// negative value is batching off and behaves exactly as the other constructor's engine does.
+  SolanaJsonRpcWebsocket(final URI endpoint,
+                         final SolanaAccounts solanaAccounts,
+                         final Commitment defaultCommitment,
+                         final WebSocket.Builder webSocketBuilder,
+                         final Timings timings,
+                         final int maxMessageLength,
+                         final NanoClock clock,
+                         final ExecutorService executorService,
+                         final ScheduledExecutorService scheduler,
+                         final Consumer<SolanaRpcWebsocket> onOpen,
+                         final OnClose onClose,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError,
+                         final int subscribeBatchBytes) {
+    this(endpoint, solanaAccounts, defaultCommitment, webSocketBuilder, timings, maxMessageLength, clock,
+        executorService, scheduler, onOpen, onClose, onError, onSendTextError, onPingError, subscribeBatchBytes, 0
+    );
+  }
+
+  SolanaJsonRpcWebsocket(final URI endpoint,
+                         final SolanaAccounts solanaAccounts,
+                         final Commitment defaultCommitment,
+                         final WebSocket.Builder webSocketBuilder,
+                         final Timings timings,
+                         final int maxMessageLength,
+                         final NanoClock clock,
+                         final ExecutorService executorService,
+                         final ScheduledExecutorService scheduler,
+                         final Consumer<SolanaRpcWebsocket> onOpen,
+                         final OnClose onClose,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onError,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onSendTextError,
+                         final BiConsumer<SolanaRpcWebsocket, Throwable> onPingError,
+                         final int subscribeBatchBytes,
+                         final int singleSubscribeBudget) {
     this.endpoint = endpoint;
     this.solanaAccounts = solanaAccounts;
     this.defaultCommitment = defaultCommitment;
     this.timings = timings;
     this.maxMessageLength = maxMessageLength;
+    this.subscribeBatchBytes = subscribeBatchBytes;
+    this.singleSubscribeBudget = singleSubscribeBudget;
     this.clock = clock;
     this.pacingOrigin = clock.nanoTime();
     this.webSocketBuilder = webSocketBuilder;
@@ -267,6 +374,59 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return conn == null ? 0 : conn.attemptSeqs.size() + conn.killedSubIds.size();
   }
 
+  /// Test seam: pending requests not yet admitted to a send on the current connection.
+  int retainedReadySubscriptions() {
+    final var conn = this.connection;
+    return conn == null ? 0 : conn.readySubscriptions.size();
+  }
+
+  /// Test seam: whether the current connection's ready set is exactly its pending work not
+  /// admitted to a send: every ready entry is the pending registration of its id, and every
+  /// pending request is ready or in flight, never both and never neither. True without a
+  /// connection. Read without the lock, like the seams above: the caller is a quiescent test
+  /// thread or a callback already inside a pass.
+  boolean readySetMatchesPendingWork() {
+    final var conn = this.connection;
+    if (conn == null) {
+      return true;
+    }
+    for (final var ready : conn.readySubscriptions.entrySet()) {
+      if (conn.pendingSubscriptions.get(ready.getKey()) != ready.getValue()) {
+        return false;
+      }
+    }
+    for (final var msgId : conn.pendingSubscriptions.keySet()) {
+      if (conn.readySubscriptions.containsKey(msgId) == conn.inFlightSends.containsKey(msgId)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Test seam: the in-flight map's size summed over the unanswered-deadline scans that
+  /// [Connection#unansweredFloor] let through on the current connection, 0 without one. That
+  /// is the entries a scan reads when nothing is overdue, and an upper bound on them when it
+  /// escalates, since it stops at the first overdue entry. A pass the floor answers decides
+  /// exactly what the scan would have, so this count is the only place the saving shows.
+  long unansweredScanVisits() {
+    final var conn = this.connection;
+    return conn == null ? 0 : conn.unansweredScanVisits;
+  }
+
+  /// Test seam: batch messages the current connection's ledger still holds, answered entries
+  /// not yet pruned included; 0 without a connection. Read without the lock, like the seams
+  /// above.
+  int retainedOutstandingBatches() {
+    final var conn = this.connection;
+    return conn == null ? 0 : conn.outstandingBatches.size();
+  }
+
+  /// Test seam: whether this instance has stopped batching for its life. Read without the lock,
+  /// like the seams above.
+  boolean batchingRefused() {
+    return this.batchingRefused;
+  }
+
   /// Test seam: whether the executor is shut down. [#close()] shuts down only an executor this
   /// instance created, never an injected one.
   boolean executorServiceShutdown() {
@@ -315,7 +475,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// thread writes unlocked, atomics where completion threads stamp or CAS off-lock, concurrent
   /// maps where dispatch reads race locked mutation, and skip-lists where sorted iteration is
   /// the wire order.
-  private static final class Connection {
+  ///
+  /// Visible for tests, with [#connection].
+  static final class Connection {
 
     final WebSocket socket;
 
@@ -330,9 +492,43 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     // msgId -> pacing time the send was queued, restarted at transmission, which is what the
     // unanswered-request deadline measures.
     final Map<Long, Subscription<?>> pendingSubscriptions = new ConcurrentSkipListMap<>();
+    /// The pending requests not admitted to a send, in request-id order: what the maintenance
+    /// pass visits. A request leaves it when admitted and comes back when its attempt concludes
+    /// without a grant while the registration stays pending (a failed send, a correlated
+    /// refusal), or when a replay re-queues it; every other pending request is in
+    /// [#inFlightSends]. Leaving it is the in-flight gate: a send pending past the resend delay
+    /// is queued behind a slow chain, not lost, and admitting it again would drain as a
+    /// duplicate subscribe the server answers with a second, orphaned subscription. Admission is
+    /// this map's own removal, never the iterator's, so a request an `onSub` cancelled earlier
+    /// in the same pass is not sent even though the iterator already holds it. A skip-list for
+    /// that order, which is the wire order of a burst and of a replay, and for iteration that
+    /// tolerates the registrations and cancellations an `onSub` callback makes while the pass
+    /// sends synchronously. Every mutator holds the lock, as for the pending map.
+    final Map<Long, Subscription<?>> readySubscriptions = new ConcurrentSkipListMap<>();
     final Map<BigInteger, QueuedUnsub> pendingUnSubscriptions = new ConcurrentSkipListMap<>();
     final Map<BigInteger, Subscription<?>> subscriptionsBySubId = new ConcurrentSkipListMap<>();
     final Map<Long, Long> inFlightSends = new HashMap<>();
+    /// A lower bound on every [#inFlightSends] stamp, so a pass skips the unanswered-deadline
+    /// scan while even the oldest request in flight cannot be overdue. Kept at insertion, the
+    /// only way a stamp below it can appear: the request that fills an empty map sets it to its
+    /// own stamp, and every other insertion takes the minimum, because stamps do not arrive in
+    /// order (a pass stamps the cancellations it flushes with a fresh reading, then the
+    /// subscribes it admits with the earlier reading it started from). A restamp only raises a
+    /// stamp and a removal never lowers one, so neither touches it and it may fall behind the
+    /// oldest stamp; a scan that finds nothing overdue sets it back to the oldest stamp it saw.
+    /// Nothing reads it while the map is empty, so its value then is never consulted: a pass
+    /// that got past the `isEmpty()` return would scan nothing and store the scan's identity,
+    /// `Long.MAX_VALUE`, which the next insertion into the empty map overwrites exactly as it
+    /// overwrites the stale value kept otherwise (`# empty-scan fast path` in
+    /// `config/pitest/README.md`). Starts at [Subscription#NEVER], below every stamp, because
+    /// a wrong floor must be wrong low: one too low costs a scan, one too high would hide an
+    /// overdue request. Lock-guarded like the map.
+    long unansweredFloor = Subscription.NEVER;
+    /// Test seam counter: the in-flight map's size, added at each unanswered-deadline scan the
+    /// floor lets through on this connection; for a scan that escalates, which stops at its
+    /// first overdue entry, an upper bound on the entries it read. Lock-guarded like
+    /// [#unansweredFloor].
+    long unansweredScanVisits;
     final Map<Long, CancelledRequest> cancelledRequests = new HashMap<>();
     /// Next wire ordinal, assigned under the lock at chain admission, which is transmission
     /// order since the chain is FIFO. Request ids cannot serve: a retry reuses its id at a new
@@ -378,9 +574,40 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final AtomicLong lastOutboundFrame = new AtomicLong(0);
     volatile long lastPeerContact;
     volatile long lastMessageReceived;
+    /// Whether the maintenance pass sends this connection's subscribes one per message whatever
+    /// the cap: true for the connection adopted right after one was lost with a batch wholly
+    /// unanswered ([#singleRequestsNext]), unless its replay exceeded the declared
+    /// [#singleSubscribeBudget] ([#adopt]), false for every other. The mode is this connection's
+    /// own, fixed at adoption, so the connection after it decides afresh from its own
+    /// predecessor's ledger. Read under the lock by the pass that composes the sends.
+    final boolean singleRequests;
+    /// Batch messages transmitted on this connection, oldest first, kept until one of their
+    /// requests is answered: [#pruneAnsweredBatches(Connection)] drops answered entries from the
+    /// head when a batch is pushed, a rejection is attributed, or the connection is retired, and
+    /// a push drops them from behind an unanswered batch too once the ledger outgrows the
+    /// requests in flight ([#sweepAnsweredBatches(Connection)]). The one answer this ledger
+    /// exists to attribute is a server's whole-message parse error, which
+    /// carries no id: a server that could not read a message at all answers it so, as one object
+    /// with "id":null, and a batch holding one unparseable element is such a message. The
+    /// attribution rests on two premises, stated here because nothing enforces them. First, the
+    /// server is in order: it answers its oldest unanswered message first, so an id-less parse
+    /// error answers the oldest message it still owes. Second, every such error is the server's
+    /// answer to one message this connection sent: Agave reads one message to completion,
+    /// handles it and writes its answer before reading the next, and it writes a parse error
+    /// only to answer a message jsonrpc-core's `read_request` could not parse. Other answers can
+    /// carry "id":null too, such as the -32600 jsonrpc-core gives an object that is neither a
+    /// call nor a notification and names no id, but none of them releases a batch: the release is
+    /// gated on -32700. The residue is documented, not handled: a hostile peer answering ids
+    /// before their link ran leaves a pruned batch whose error then releases the next one, and
+    /// a wrapping socket that fails a frame the peer received re-arms requests the server will
+    /// still grant; both already defeat the single-frame in-flight gate today, and the release
+    /// turns the paced duplicate they produce into an immediate one. Every mutator holds the
+    /// lock.
+    final ArrayDeque<SentBatch> outstandingBatches = new ArrayDeque<>();
 
-    Connection(final WebSocket socket) {
+    Connection(final WebSocket socket, final boolean singleRequests) {
       this.socket = socket;
+      this.singleRequests = singleRequests;
     }
   }
 
@@ -451,6 +678,39 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   private record QueuedUnsub(String unSubscribeMethod, long notBefore, String fingerprint) {
   }
 
+  /// A transmitted batch message's requests and the attempt ordinal its link minted for each,
+  /// ledgered before the send so a rejection arriving before the send future settles still
+  /// finds it. The ordinals are the link's own, never read back when the link runs: a peer that
+  /// answers an id before its link ran concludes that attempt, and the request can be admitted
+  /// and chained again behind the link still waiting, so by the time the first link runs its
+  /// requests hold no ordinal or a later link's. Recorded under its own, that link's entry reads
+  /// answered at once, as soon as one of its attempts was concluded early, and no two entries
+  /// read unanswered for the same request. The message still goes out with every request of the
+  /// link, so this is the residue [Connection#outstandingBatches] names: should the server then
+  /// reject that message whole, the rejection finds no entry of its own, and the requests the
+  /// early answers left alone wait for their own answers or the unanswered deadline.
+  private record SentBatch(long[] msgIds, long[] seqs) {
+
+    /// The entry for `sending`, the requests of one message about to be sent, in array order:
+    /// `link` without the requests recalled while it waited, in `link`'s order. The link minted
+    /// its ordinals consecutively from `firstSeq`, so each request's is its position in `link`
+    /// past that. Callers hold [#lock].
+    static SentBatch of(final List<? extends Subscription<?>> link,
+                        final List<? extends Subscription<?>> sending,
+                        final long firstSeq) {
+      final long[] msgIds = new long[sending.size()];
+      final long[] seqs = new long[msgIds.length];
+      for (int position = 0, sent = 0; sent < msgIds.length; ++position) {
+        final var sub = link.get(position);
+        if (sub == sending.get(sent)) {
+          msgIds[sent] = sub.msgId();
+          seqs[sent++] = firstSeq + position;
+        }
+      }
+      return new SentBatch(msgIds, seqs);
+    }
+  }
+
   private record PendingBuildStart(long generation, CompletableFuture<WebSocket> connected) {
   }
 
@@ -462,9 +722,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   }
 
   /// Retires the current connection if `webSocket` is its socket, before any lifecycle policy
-  /// runs: clears it and its in-flight attempt, advances the generation, aborts the socket, and
-  /// returns it; null when `webSocket` is not current. The wrapper and durable registries stay
-  /// live so a handler may [#connect()] again, and callbacks the abort causes are ignored.
+  /// runs: clears it and its in-flight attempt, advances the generation, decides from its ledger
+  /// whether the next connection batches ([#suspendBatchingAfterLoss(Connection)]), aborts the
+  /// socket, and returns it; null when `webSocket` is not current. The wrapper and durable registries stay live so a handler
+  /// may [#connect()] again, and callbacks the abort causes are ignored.
   private Connection retireConnection(final WebSocket webSocket) {
     final Connection retired;
     final CompletableFuture<WebSocket> inFlight;
@@ -495,6 +756,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // listener two attempts old after that reconnect, re-authorizing a transport which was
       // already superseded.
       this.connectGeneration += 2;
+      suspendBatchingAfterLoss(retired);
     } finally {
       lock.unlock();
     }
@@ -805,6 +1067,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       final var replaced = this.connection;
       this.connection = null;
       if (replaced != null) {
+        // A caller ending a connection that still owes an answer to a batch is the same
+        // evidence a peer close is: the connection the caller opens next decides from this
+        // ledger like any replacement ([#suspendBatchingAfterLoss(Connection)]).
+        suspendBatchingAfterLoss(replaced);
         replaced.socket.abort();
       }
       // The predecessor ATTEMPT is released with the connection it never became: a handshake
@@ -968,6 +1234,104 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
   }
 
+  /// The scope marks the calling thread in [#wakeDeferred], which makes the registration paths'
+  /// [#wakeForQueuedWork()] skip their signal there, and the exit clears the mark and signals,
+  /// both in `finally`: work queued before a throw is still owed its wake, and a lost wake leaves
+  /// that work to whichever pass runs next, at worst a whole check delay later, while a mark left
+  /// behind would defer every later registration of that thread to an exit that never comes. A
+  /// nested call finds the mark and runs inside the outer scope, whose exit clears it and wakes
+  /// for both. The lock is taken for the exit signal only ([#wakeCheckLoop()]), never across
+  /// caller code: a scope that waited on a [#connect()] future under it would deadlock, since
+  /// adopting the connection takes this lock.
+  @Override
+  public void registerAll(final Consumer<? super SolanaRpcWebsocket> registrations) {
+    if (this.wakeDeferred.get() != null) {
+      registrations.accept(this);
+      return;
+    }
+    this.wakeDeferred.set(Boolean.TRUE);
+    try {
+      registrations.accept(this);
+    } finally {
+      this.wakeDeferred.remove();
+      wakeCheckLoop();
+    }
+  }
+
+  /// Wakes the check loop from off the lock, for a scope's exit: takes the lock for the signal
+  /// only, and remembers the signal for a loop that is not parked. A method of its own rather
+  /// than a lock block inside the exit's `finally`: a `finally` body is compiled onto both exits
+  /// of its `try`, and a lock block copied there carries its own exception-path `unlock` twice
+  /// over, where no test can reach it since nothing under this lock can throw.
+  private void wakeCheckLoop() {
+    lock.lock();
+    try {
+      checkSignalled = true;
+      newSubscription.signal();
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /// Wakes the check loop for work a registration path just queued, unless the calling thread is
+  /// inside a [#registerAll(Consumer)] scope of this websocket, whose exit wakes it once for
+  /// everything the scope queued. Callers hold [#lock].
+  private void wakeForQueuedWork() {
+    if (this.wakeDeferred.get() == null) {
+      checkSignalled = true;
+      newSubscription.signal();
+    }
+  }
+
+  /// Queues `sub` as pending and ready: a registration, an adoption replay, or a re-queued
+  /// grant. Callers hold [#lock].
+  private static void queuePending(final Connection conn, final Subscription<?> sub) {
+    conn.pendingSubscriptions.put(sub.msgId(), sub);
+    conn.readySubscriptions.put(sub.msgId(), sub);
+  }
+
+  /// Takes request `msgId` out of the pending and ready sets; the registration, or null.
+  /// Callers hold [#lock].
+  private static Subscription<?> takePending(final Connection conn, final long msgId) {
+    conn.readySubscriptions.remove(msgId);
+    return conn.pendingSubscriptions.remove(msgId);
+  }
+
+  /// Returns request `msgId` to the ready set if it is still pending: its attempt concluded
+  /// without a grant, and its pacing stamp decides when it is due. A cancellation that removed it
+  /// meanwhile wins. Callers hold [#lock].
+  private static void rearm(final Connection conn, final long msgId) {
+    final var sub = conn.pendingSubscriptions.get(msgId);
+    if (sub != null) {
+      conn.readySubscriptions.put(msgId, sub);
+    }
+  }
+
+  /// How many registrations an adoption replays: every entry of the registries
+  /// [#queuePendingSubsOnOpen(Connection, Map)] and [#adopt] walk, the slot, root and generic
+  /// subscriptions included, so the count and the queueing below are maintained together. Sent one
+  /// per message, it is how many single subscribe messages the replay costs the endpoint. Callers
+  /// hold [#lock].
+  private int replaySize() {
+    int size = this.slotSub != null ? 1 : 0;
+    if (this.rootSub != null) {
+      ++size;
+    }
+    for (final var subscriptions : this.genericSubs.values()) {
+      size += subscriptions.size();
+    }
+    return size + registered(this.accountSubs) + registered(this.txLogSubs) + registered(this.signatureSubs)
+        + registered(this.programSubs) + registered(this.keyedProgramSubs);
+  }
+
+  private static int registered(final Map<String, ? extends Map<Commitment, ? extends Subscription<?>>> subs) {
+    int size = 0;
+    for (final var subscriptions : subs.values()) {
+      size += subscriptions.size();
+    }
+    return size;
+  }
+
   private void queuePendingSubsOnOpen(final Connection conn,
                                       final Map<String, ? extends Map<Commitment, ? extends Subscription<?>>> subs) {
     for (final var subscriptions : subs.values()) {
@@ -976,7 +1340,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         // unsubscribe issued before this connection confirms would carry it onto the new
         // connection — a frame the server reads as cancelling somebody else's subscription.
         sub.setSubId(null);
-        conn.pendingSubscriptions.put(sub.msgId(), sub);
+        queuePending(conn, sub);
       }
     }
   }
@@ -1022,7 +1386,33 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       if (displaced != null && displaced.socket != webSocket) {
         displaced.socket.abort();
       }
-      conn = new Connection(webSocket);
+      // The one thing a predecessor hands on: a loss with a batch unanswered makes this
+      // connection send one request per message, and the flag is spent here so the next
+      // connection decides from its own predecessor's ledger. Reported here, where the mode
+      // takes effect, and not at the loss: a lifecycle policy that closes the instance on a
+      // loss never opens this connection, so nothing would be left to report. A declared budget
+      // of single subscribe messages overrides the suspension when the replay would not fit it:
+      // the single-request replay would be cut off before it completed, so batching, whatever
+      // the loss suggested about it, is the only form with a chance.
+      final boolean singleRequests;
+      if (this.singleRequestsNext) {
+        this.singleRequestsNext = false;
+        final int replay = replaySize();
+        if (this.singleSubscribeBudget > 0 && replay > this.singleSubscribeBudget) {
+          singleRequests = false;
+          log.log(WARNING, "Connection to {0} batches although its predecessor was lost with a batch unanswered: a replay of {1} subscriptions one per message would exceed the {2} the endpoint allows.",
+              endpoint.getHost(), replay, this.singleSubscribeBudget
+          );
+        } else {
+          singleRequests = true;
+          log.log(WARNING, "Connection to {0} sends one request per message: its predecessor was lost with a batch unanswered.",
+              endpoint.getHost()
+          );
+        }
+      } else {
+        singleRequests = false;
+      }
+      conn = new Connection(webSocket, singleRequests);
       queuePendingSubsOnOpen(conn, this.accountSubs);
       queuePendingSubsOnOpen(conn, this.txLogSubs);
       queuePendingSubsOnOpen(conn, this.signatureSubs);
@@ -1031,17 +1421,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       final var slotSub = this.slotSub;
       if (slotSub != null) {
         slotSub.setSubId(null);
-        conn.pendingSubscriptions.put(slotSub.msgId(), slotSub);
+        queuePending(conn, slotSub);
       }
       final var rootSub = this.rootSub;
       if (rootSub != null) {
         rootSub.setSubId(null);
-        conn.pendingSubscriptions.put(rootSub.msgId(), rootSub);
+        queuePending(conn, rootSub);
       }
       for (final var subscriptions : this.genericSubs.values()) {
         for (final var sub : subscriptions.values()) {
           sub.setSubId(null);
-          conn.pendingSubscriptions.put(sub.msgId(), sub);
+          queuePending(conn, sub);
         }
       }
       final long opened = pacingMillis();
@@ -1129,10 +1519,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // gap, adoption re-derives the pending set from the registries, so intent is never lost.
       final var conn = this.connection;
       if (conn != null) {
-        conn.pendingSubscriptions.put(msgId, sub);
+        queuePending(conn, sub);
       }
-      checkSignalled = true;
-      newSubscription.signal();
+      wakeForQueuedWork();
       return true;
     } finally {
       lock.unlock();
@@ -1196,10 +1585,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // gap, adoption re-derives the pending set from the registries, so intent is never lost.
       final var conn = this.connection;
       if (conn != null) {
-        conn.pendingSubscriptions.put(msgId, sub);
+        queuePending(conn, sub);
       }
-      checkSignalled = true;
-      newSubscription.signal();
+      wakeForQueuedWork();
       return true;
     } finally {
       lock.unlock();
@@ -1308,7 +1696,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       // subId died with it — removing the registration above was the whole job.
       return;
     }
-    conn.pendingSubscriptions.remove(sub.msgId());
+    takePending(conn, sub.msgId());
     final var subId = sub.subId();
     if (subId != null) {
       // Value-conditional: the wire cancellation belongs to whichever registration OWNS the
@@ -1323,8 +1711,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         conn.pendingUnSubscriptions.put(subId, new QueuedUnsub(sub.unSubscribeMethod(), 0L, requestFingerprint(sub.msg())));
         // The un-subscription is transmitted by the next write cycle; on a quiet connection
         // that used to mean waiting out the whole check delay.
-        checkSignalled = true;
-        newSubscription.signal();
+        wakeForQueuedWork();
       }
     } else if (conn.inFlightSends.containsKey(sub.msgId())) {
       // Admitted to a send: on the wire, or queued in the chain where dispatch will recall it.
@@ -1740,10 +2127,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       this.slotSub = slotSub;
       final var conn = this.connection;
       if (conn != null) {
-        conn.pendingSubscriptions.put(msgId, slotSub);
+        queuePending(conn, slotSub);
       }
-      checkSignalled = true;
-      newSubscription.signal();
+      wakeForQueuedWork();
       return true;
     } finally {
       lock.unlock();
@@ -1782,10 +2168,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       this.rootSub = rootSub;
       final var conn = this.connection;
       if (conn != null) {
-        conn.pendingSubscriptions.put(msgId, rootSub);
+        queuePending(conn, rootSub);
       }
-      checkSignalled = true;
-      newSubscription.signal();
+      wakeForQueuedWork();
       return true;
     } finally {
       lock.unlock();
@@ -1881,10 +2266,9 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
       subs.put(key, sub);
       final var conn = this.connection;
       if (conn != null) {
-        conn.pendingSubscriptions.put(msgId, sub);
+        queuePending(conn, sub);
       }
-      checkSignalled = true;
-      newSubscription.signal();
+      wakeForQueuedWork();
       return true;
     } finally {
       lock.unlock();
@@ -2054,7 +2438,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     // This cancellation's wire ordinal: what the acknowledgement handler compares against a
     // grant's attempt ordinal when a shared id must be adjudicated.
     conn.pendingUnsubAcks.put(msgId, new UnsubRequest(subId, unSubscribeMethod, ++conn.nextWireSeq, fingerprint));
-    conn.inFlightSends.put(msgId, pacingMillis());
+    trackInFlight(conn, msgId, pacingMillis());
     queueText(conn, createUnSubMsg(msgId, unSubscribeMethod, subId)).whenComplete((_, ex) -> {
       lock.lock();
       try {
@@ -2180,12 +2564,74 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     }
   }
 
+  /// Routes one reassembled message. With batching configured ([#subscribeBatchBytes] positive), a
+  /// JSON array is a batch response and goes element by element to [#onBatchResponse]; anything
+  /// else, and every message while batching is off, goes whole to [#onWholeMessage]. Off, the gate
+  /// never peeks, so the parse is exactly the whole-message one.
+  private void onMessage(final char[] msg,
+                         final int offset,
+                         final int tail,
+                         final JsonIterator ji,
+                         final Connection conn) {
+    if (this.subscribeBatchBytes > 0 && opensArray(ji)) {
+      onBatchResponse(msg, tail, ji, conn);
+    } else {
+      onWholeMessage(msg, offset, tail, ji, conn, false);
+    }
+  }
+
+  /// Whether the message opens a JSON array: a peek, which moves the cursor past leading
+  /// whitespace and no further, as the first read of either route would. A blank message is not
+  /// one: the peek throws on it, and it takes the whole-message path, which reports it as it
+  /// always has.
+  private static boolean opensArray(final JsonIterator ji) {
+    try {
+      return ji.whatIsNext() == ValueType.ARRAY;
+    } catch (final RuntimeException blank) {
+      return false;
+    }
+  }
+
+  /// Dispatches a batch response element by element, each through [#onWholeMessage] with
+  /// `inBatch` set, which handles it as that response arriving alone with two exceptions: a
+  /// notification element is dropped, and an id-less parse error releases no batch. A malformed
+  /// element is therefore contained alone by that method's own catch and the rest still
+  /// correlate. Responses correlate by id, never by position: a server may omit, reorder or add
+  /// elements. Every element this reads is handled inside the call, since `msg` may be the JDK's
+  /// buffer, lent only for the callback; the rest of an array is dropped unread once an element
+  /// retires the connection or a takeover displaces it, and once the array's own structure
+  /// proves unreadable.
+  private void onBatchResponse(final char[] msg, final int tail, final JsonIterator ji, final Connection conn) {
+    try {
+      while (ji.readArray()) {
+        if (conn != this.connection) {
+          // An element retired this connection, or a takeover displaced it while the array was
+          // read: the rest are as stale as a displaced socket's frames, which are dropped.
+          return;
+        }
+        final int element = ji.mark();
+        onWholeMessage(msg, element, tail, ji, conn, true);
+        // Each branch leaves the cursor somewhere inside the element: restart at its start on the
+        // message's own buffer and step over it whole, to the separator readArray expects.
+        ji.reset(msg, element, tail).skip();
+      }
+    } catch (final RuntimeException ex) {
+      // The array's own structure is unreadable from here. The elements already dispatched keep
+      // their effects; the rest stay as unanswered as an unreadable message leaves its request.
+      log.log(WARNING, "Unreadable batch response.", ex);
+      dispatchException(ex);
+    }
+  }
+
+  /// Handles one JSON-RPC envelope starting at `offset`: a whole message, or with `inBatch` one
+  /// element of a batch response array ([#onBatchResponse]), which holds responses only.
   @SuppressWarnings("unused")
   private void onWholeMessage(final char[] msg,
                               final int offset,
                               final int tail,
                               final JsonIterator ji,
-                              final Connection conn) {
+                              final Connection conn,
+                              final boolean inBatch) {
     // System.out.format("<- %s%n", new String(msg, offset, tail - offset));
     try {
       if (ji.skipUntil("method") == null) {
@@ -2209,6 +2655,17 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
           // so a consumer handed a subscribe rejection can tell which registration it released;
           // an "id":null answer leaves it empty.
           final var exception = JsonRpcException.parseException(ji, OptionalLong.empty(), envelopeId);
+          if (envelopeId.isEmpty() && !inBatch && exception.code() == JsonRpcException.PARSE_ERROR) {
+            // No request id names this error, and its code is the one a server answers a
+            // message it could not read at all with: a batch message holding one unparseable
+            // element draws exactly that, one object with "id":null, and only the ledger can say
+            // which batch. Inside a batch response the error answers one element of a message
+            // the server did read, and an id-less error of any other code is not the answer to
+            // a batch, so neither releases anything. Before the correlated block below, never
+            // in place of it, and the dispatch after it is untouched: the rejection still
+            // reaches the exception subscribers.
+            releaseRejectedBatch(conn);
+          }
           // A rejection the server blames on the request itself is that request's terminal
           // state: re-sending the same frame can only collect the same answer, so the entry is
           // retired and its registry slot freed for a corrected subscribe. Any other error —
@@ -2307,8 +2764,11 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                 conn.attemptSeqs.remove(requestId);
                 correlated = conn.inFlightSends.remove(requestId) != null | rejectedUnsub != null;
                 correlated |= conn.cancelledRequests.remove(requestId) != null;
+                // The attempt is concluded: a request still pending is ready for its paced
+                // retry. A request defect takes it out again just below.
+                rearm(conn, requestId);
                 if (isRequestDefect(exception.code())) {
-                  final var rejected = conn.pendingSubscriptions.remove(requestId);
+                  final var rejected = takePending(conn, requestId);
                   if (rejected != null) {
                     releaseChannelSlot(rejected);
                     log.log(WARNING, "Subscription request {0} rejected by {1}: released {2} {3}.",
@@ -2372,7 +2832,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                         casualty.setSubId(null);
                         casualty.setLastAttempt(Subscription.NEVER);
                         conn.retiredSubIds.add(acked.subId());
-                        conn.pendingSubscriptions.put(casualty.msgId(), casualty);
+                        queuePending(conn, casualty);
                         conn.inFlightSends.remove(casualty.msgId());
                         checkSignalled = true;
                         newSubscription.signal();
@@ -2479,7 +2939,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                       sendUnSubscription(conn, cancelled.unSubscribeMethod(), sub.subId(), cancelled.fingerprint());
                     }
                   } else {
-                    final var pendingSub = conn.pendingSubscriptions.remove(sub.msgId());
+                    final var pendingSub = takePending(conn, sub.msgId());
                     if (pendingSub != null) {
                       final var kill = conn.killedSubIds.get(sub.subId());
                       final long attemptSeq = conn.attemptSeqs.getOrDefault(sub.msgId(), Long.MAX_VALUE);
@@ -2494,7 +2954,7 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
                         // cancellation carries a higher attempt ordinal and installs below.
                         conn.retiredSubIds.add(sub.subId());
                         pendingSub.setLastAttempt(Subscription.NEVER);
-                        conn.pendingSubscriptions.put(sub.msgId(), pendingSub);
+                        queuePending(conn, pendingSub);
                         checkSignalled = true;
                         newSubscription.signal();
                         log.log(WARNING, "Grant {0} for request {1} was already cancelled; re-subscribing {2}.",
@@ -2566,6 +3026,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
             }
           }
         }
+      } else if (inBatch) {
+        // A batch response holds responses only (JSON-RPC 2.0, section 6), and Agave writes its
+        // notifications as messages of their own. One inside an array is malformed or hostile,
+        // and dispatching it would lend a generic subscription's parser the cursor of an array
+        // still being read.
+        log.log(WARNING, "Dropping a notification inside a batch response from {0}.", endpoint.getHost());
       } else {
         final int methodMark = ji.mark();
         final var channel = ji.applyChars(METHOD_PARSER);
@@ -2793,18 +3259,18 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         } else {
           buf.get(conn.buffer, conn.offset, len);
         }
-        onWholeMessage(conn.buffer, 0, to, conn.ji.reset(conn.buffer, 0, to), conn);
+        onMessage(conn.buffer, 0, to, conn.ji.reset(conn.buffer, 0, to), conn);
         conn.offset = 0;
       } else {
         if (buf.hasArray()) {
           final int offset = buf.position() + buf.arrayOffset();
           final int to = offset + len;
           final char[] bufArray = buf.array();
-          onWholeMessage(bufArray, offset, to, conn.ji.reset(bufArray, offset, to), conn);
+          onMessage(bufArray, offset, to, conn.ji.reset(bufArray, offset, to), conn);
         } else {
           ensureCapacity(conn, len);
           buf.get(conn.buffer, 0, len);
-          onWholeMessage(conn.buffer, 0, len, conn.ji.reset(conn.buffer, 0, len), conn);
+          onMessage(conn.buffer, 0, len, conn.ji.reset(conn.buffer, 0, len), conn);
         }
       }
     } else {
@@ -2938,18 +3404,35 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     // the wire the server cancels the predecessor before the subscribe arrives, and grants the
     // successor an id with no cancellation in flight.
     flushPendingUnSubscriptions(conn, now);
-    for (final var sub : conn.pendingSubscriptions.values()) {
-      // The NEVER branch mirrors the connect throttle's: a maximal resend delay must not
-      // suppress the INITIAL send, only the retries.
-      final long lastAttempt = sub.lastAttempt();
-      final boolean due = lastAttempt == Subscription.NEVER
-          || now - lastAttempt > this.timings.subscriptionResendDelay();
-      if (due && conn.inFlightSends.putIfAbsent(sub.msgId(), now) == null) {
-        // The in-flight set is the second gate: a send pending past the resend delay is queued
-        // behind a slow chain, not lost, and re-queuing it would drain as a duplicate subscribe
-        // the server answers with a second, orphaned subscription.
-        sub.setLastAttempt(now);
-        sendSubscription(conn, sub);
+    // Refused batching, and a connection adopted after a loss with a batch unanswered whose replay
+    // fit the declared budget, are cap 0 on the way out only. The sign test is onMessage's, so a
+    // cap of 0 or below is batching off
+    // on the way out exactly as on the way in, while the inbound side stays on the configured
+    // sign: after a refusal the batches this connection transmitted before it are still answered
+    // with arrays, and a single-request connection sends no batch to be answered at all.
+    final int cap = this.batchingRefused || conn.singleRequests ? 0 : this.subscribeBatchBytes;
+    if (cap > 0) {
+      sendDueSubscribesInBatches(conn, now, cap);
+    } else {
+      // Batching off: each due request is chained alone at its own admission, so its send, and
+      // the onSub a synchronous send runs, complete before the next request is admitted. The
+      // composer chains a link only once the next due request shows it cannot join, an order an
+      // onSub that cancels that next request can tell apart, so batching off keeps this loop.
+      for (final var sub : conn.readySubscriptions.values()) {
+        // The NEVER branch mirrors the connect throttle's: a maximal resend delay must not
+        // suppress the INITIAL send, only the retries.
+        final long lastAttempt = sub.lastAttempt();
+        final boolean due = lastAttempt == Subscription.NEVER
+            || now - lastAttempt > this.timings.subscriptionResendDelay();
+        // Admission is the map's own removal, never the iterator's: the iterator holds the next
+        // entry before this one's send runs, so a request an onSub cancelled meanwhile is still
+        // handed out, and only the map knows it is gone. Leaving the ready set is the in-flight
+        // gate (see readySubscriptions).
+        if (due && conn.readySubscriptions.remove(sub.msgId()) != null) {
+          trackInFlight(conn, sub.msgId(), now);
+          sub.setLastAttempt(now);
+          sendSubscription(conn, List.of(sub));
+        }
       }
     }
     Throwable escalation = escalateUnanswered(conn, now);
@@ -2971,67 +3454,380 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     return escalation;
   }
 
-  /// Chains a subscribe like [#queueText(Connection, String)], but recallable: a cancellation
-  /// made while the frame waits in the chain consumes its tombstone here and nothing is sent.
-  /// On transmission the [Connection#inFlightSends] stamp restarts, so the unanswered deadline
-  /// measures the server's silence; until then the admission stamp guards a chain that never
-  /// drains.
-  private void sendSubscription(final Connection conn, final Subscription<?> sub) {
-    // This attempt's wire ordinal: admission order is transmission order (the chain is FIFO),
-    // and a RETRY is a new position on the wire under the same request id, so the latest
-    // attempt's ordinal — never the id — is what same-id adjudication compares.
-    conn.attemptSeqs.put(sub.msgId(), ++conn.nextWireSeq);
+  /// The admitting half of a maintenance pass while batching is on, `cap` being positive. Each
+  /// due ready request is admitted exactly as the batching-off loop of
+  /// [#handleActivePendingSubscriptions(Connection)] admits it, in request-id order and through
+  /// the same gate, but the admitted requests are chained as links of several, each sent as one
+  /// JSON-RPC batch message of at most `cap` UTF-8 bytes ([#sendSubscription(Connection, List)]).
+  /// A server handles a message as one unit of work, so a burst or a reconnect replay costs it
+  /// one message per array instead of one per request.
+  ///
+  /// The accounting is in bytes of the whole message, the unit a server's inbound limit counts:
+  /// Agave's is inclusive, and it resets the connection above it, unanswered. An array of n
+  /// requests is `[`, their frames, n - 1 commas and `]`, which is 1 + Σ (frame bytes + 1): the
+  /// open batch starts at 1 for the `[`, each request adds its own bytes and one more for the
+  /// comma after it, and the last comma stands for the `]`. A request joins the open batch only
+  /// if the whole message stays within the cap; otherwise the open batch is chained and the
+  /// request opens the next. A link of one request goes out as its plain object
+  /// ([#frameOf(List)]), two bytes smaller than counted. A request bigger than the cap therefore
+  /// needs no test of its own: nothing fits beside it, so it goes out alone and unchanged, as it
+  /// does with batching off.
+  ///
+  /// [#shareableBytes(Subscription)] sizes a request that must never share a message as
+  /// [Integer#MAX_VALUE], which the same fit test isolates like any oversize request; the sums
+  /// are `long`, so the sentinel plus a separator cannot wrap into a fit. Such a request is a
+  /// generic one, whose frame carries the caller's raw params, which inside an array can run as
+  /// calls of their own, and any text the JDK refuses to encode, which would fail every
+  /// request of the message it rides in.
+  ///
+  /// Cancellations were flushed before this runs, so they stay single frames ahead of every
+  /// array. A link is chained once the next due request shows it cannot join, or at the end of
+  /// the pass, and [#sendSubscription(Connection, List)] mints each element's wire ordinal in
+  /// array order in the hold that extends the chain, never when the link's stage runs: a
+  /// cancellation minted on the direct path while the link waits in the chain must hold an
+  /// ordinal above every element of it. A request admitted but not yet chained holds no ordinal
+  /// for this attempt, a retry still carrying its previous attempt's until the chaining replaces
+  /// it, and is seen only by this pass; a cancellation that reaches it from an `onSub` the
+  /// previous link's synchronous send ran finds it in flight, so it leaves a tombstone its own
+  /// link's stage consumes, and the request is never sent. Callers hold [#lock].
+  private void sendDueSubscribesInBatches(final Connection conn, final long now, final int cap) {
+    List<Subscription<?>> batch = null;
+    long batchBytes = 0;
+    for (final var sub : conn.readySubscriptions.values()) {
+      // Admission as in the batching-off loop, which says why each part is there.
+      final long lastAttempt = sub.lastAttempt();
+      final boolean due = lastAttempt == Subscription.NEVER
+          || now - lastAttempt > this.timings.subscriptionResendDelay();
+      if (due && conn.readySubscriptions.remove(sub.msgId()) != null) {
+        trackInFlight(conn, sub.msgId(), now);
+        sub.setLastAttempt(now);
+        final long bytes = shareableBytes(sub);
+        if (batch != null && batchBytes + bytes + 1 > cap) {
+          sendSubscription(conn, batch);
+          batch = null;
+        }
+        if (batch == null) {
+          batch = new ArrayList<>();
+          batchBytes = 1;
+        }
+        batch.add(sub);
+        batchBytes += bytes + 1;
+      }
+    }
+    if (batch != null) {
+      sendSubscription(conn, batch);
+    }
+  }
+
+  /// Chains one link of subscribes like [#queueText(Connection, String)], sent as one message
+  /// ([#frameOf(List)]), but recallable request by request: a cancellation made while the link
+  /// waits in the chain consumes that request's tombstone here and leaves it out of the
+  /// message, and a link whose every request was cancelled sends nothing. On transmission each
+  /// request's [Connection#inFlightSends] stamp restarts, so the unanswered deadline measures
+  /// the server's silence; until then the admission stamp guards a chain that never drains.
+  /// Each request's `onSub` runs, in list order, once the message is sent, and never for a
+  /// failed send. A link that goes out as a batch message is ledgered first
+  /// ([Connection#outstandingBatches]), so a server that cannot read it at all can be answered
+  /// by [#releaseRejectedBatch(Connection)]. Callers hold [#lock], which guards the tail and
+  /// the ordinal counter.
+  private void sendSubscription(final Connection conn, final List<? extends Subscription<?>> requests) {
+    // Each attempt's wire ordinal, in list order: admission order is transmission order (the
+    // chain is FIFO, and a server runs the calls of one message in array order), and a RETRY is
+    // a new position on the wire under the same request id, so the latest attempt's ordinal —
+    // never the id — is what same-id adjudication compares. The link's first ordinal is kept for
+    // its ledger entry, which records the ordinals this link minted and not whatever its
+    // requests hold by the time its stage runs.
+    final long firstSeq = conn.nextWireSeq + 1;
+    for (final var sub : requests) {
+      conn.attemptSeqs.put(sub.msgId(), ++conn.nextWireSeq);
+    }
     conn.outboundTail = conn.outboundTail
         .exceptionally(_ -> null)
         .thenCompose(_ -> {
+          final var sending = new ArrayList<Subscription<?>>(requests.size());
           lock.lock();
           try {
-            if (conn.cancelledRequests.remove(sub.msgId()) != null) {
-              conn.inFlightSends.remove(sub.msgId());
-              conn.attemptSeqs.remove(sub.msgId());
+            for (final var sub : requests) {
+              if (conn.cancelledRequests.remove(sub.msgId()) != null) {
+                conn.inFlightSends.remove(sub.msgId());
+                conn.attemptSeqs.remove(sub.msgId());
+              } else {
+                sending.add(sub);
+              }
+            }
+            if (sending.isEmpty()) {
               return CompletableFuture.completedFuture(null);
+            }
+            if (sending.size() > 1) {
+              // Ledgered before the send: its answer is not ordered against the send future,
+              // so a rejection may arrive first. A lone survivor goes out as its plain object,
+              // which no whole-batch rejection can answer.
+              pruneAnsweredBatches(conn);
+              sweepAnsweredBatches(conn);
+              conn.outstandingBatches.addLast(SentBatch.of(requests, sending, firstSeq));
             }
           } finally {
             lock.unlock();
           }
-          return sendText(conn, sub.msg()).whenComplete((_, ex) -> {
-            if (ex != null) {
-              // Only a FAILED send re-arms the retry: the frame never left, so re-sending is
-              // safe. A successful send stays gated until the server answers — its response
-              // is what removes the gate — because a duplicate of a merely slow request
-              // creates a second, orphaned server subscription. The LAST-ATTEMPT pacing
-              // stamp is kept, so a failing socket retries once per resend window rather
-              // than hot-looping a growing chain of doomed frames on every cycle and inbound
-              // frame; the wire ordinal is NOT — the frame never transmitted, so the ordinal
-              // is dead evidence a stale entry would let pin obsolete kills, and the retry
-              // takes a fresh one. A cancellation tombstone releases with the gate: no
-              // confirmation can ever exist to consume it.
-              lock.lock();
-              try {
-                conn.inFlightSends.remove(sub.msgId());
-                conn.attemptSeqs.remove(sub.msgId());
-                conn.cancelledRequests.remove(sub.msgId());
-              } finally {
-                lock.unlock();
-              }
-            } else {
-              lock.lock();
-              try {
+          return sendText(conn, frameOf(sending)).whenComplete((_, ex) -> {
+            lock.lock();
+            try {
+              if (ex != null) {
+                // Only a FAILED send re-arms the retries: the frame never left, so re-sending
+                // is safe. A successful send stays gated until the server answers — its
+                // response is what removes the gate — because a duplicate of a merely slow
+                // request creates a second, orphaned server subscription. The LAST-ATTEMPT
+                // pacing stamp is kept, so a failing socket retries once per resend window
+                // rather than hot-looping a growing chain of doomed frames on every cycle and
+                // inbound frame; the wire ordinal is NOT — the frame never transmitted, so the
+                // ordinal is dead evidence a stale entry would let pin obsolete kills, and the
+                // retry takes a fresh one. A cancellation tombstone releases with the gate: no
+                // confirmation can ever exist to consume it.
+                for (final var sub : sending) {
+                  conn.inFlightSends.remove(sub.msgId());
+                  conn.attemptSeqs.remove(sub.msgId());
+                  conn.cancelledRequests.remove(sub.msgId());
+                  // Ready again on its kept stamp if still pending; a cancellation made while
+                  // the frame was out has already taken it, and wins.
+                  rearm(conn, sub.msgId());
+                }
+              } else {
                 // replace, not put: the server may already have answered — completion
                 // callbacks are not ordered against inbound frames — and the answer's removal
                 // must not be resurrected into a stamp nothing will ever clear.
-                conn.inFlightSends.replace(sub.msgId(), pacingMillis());
-              } finally {
-                lock.unlock();
+                final long transmitted = pacingMillis();
+                for (final var sub : sending) {
+                  conn.inFlightSends.replace(sub.msgId(), transmitted);
+                }
               }
-              try {
-                sub.run();
-              } catch (final RuntimeException onSubEx) {
-                consumerThrew("onSub callback", onSubEx);
+            } finally {
+              lock.unlock();
+            }
+            if (ex == null) {
+              for (final var sub : sending) {
+                try {
+                  sub.run();
+                } catch (final RuntimeException onSubEx) {
+                  consumerThrew("onSub callback", onSubEx);
+                }
               }
             }
           });
         });
+  }
+
+  /// One link's message text: a lone request as its own frame, several as a JSON-RPC batch
+  /// array of their frames in list order. Each element is the request's `msg()` unchanged,
+  /// which is also the text request fingerprints are taken from, so composing a message never
+  /// changes a fingerprint. Never called with an empty list:
+  /// [#sendSubscription(Connection, List)] returns before composing when every request of a
+  /// link was cancelled, and an empty array would draw no answer.
+  private static String frameOf(final List<? extends Subscription<?>> requests) {
+    if (requests.size() == 1) {
+      return requests.getFirst().msg();
+    }
+    final var text = new StringJoiner(",", "[", "]");
+    for (final var sub : requests) {
+      text.add(sub.msg());
+    }
+    return text.toString();
+  }
+
+  /// The UTF-8 bytes `sub`'s frame adds to a batch array, or [Integer#MAX_VALUE] for a request
+  /// that must travel alone, which no cap admits beside another
+  /// ([#sendDueSubscribesInBatches(Connection, long, int)]).
+  ///
+  /// A generic request never shares a message. Its frame is spliced from the caller's raw
+  /// `paramsJson`, which the engine passes through unparsed. Alone, params that close their own
+  /// array and open another object make one unparseable message that runs nothing; inside an
+  /// array the same text is further valid calls, which the server runs: a cancellation of a
+  /// subscription id another registration owns, or a second request under a batch-mate's request
+  /// id. Params that are merely malformed would make the whole array unparseable, refusing its
+  /// batch-mates with it. The test is the type, not the null channel a generic request also
+  /// carries: the rule follows from where the frame's text came from, and [GenericSubscription]
+  /// is the one registration built from caller JSON, while a null channel only happens to come
+  /// with it. A typed request's frame is rendered by sava, and the one caller text it can carry,
+  /// a signature, is refused any character that could splice it, so it may share;
+  /// [#utf8Length(String)] sizes it, isolating the one case left, text the JDK cannot encode,
+  /// which a signature can still hold.
+  private static int shareableBytes(final Subscription<?> sub) {
+    return sub instanceof GenericSubscription<?> ? Integer.MAX_VALUE : utf8Length(sub.msg());
+  }
+
+  /// The UTF-8 length of `text` as a websocket text frame carries it, or [Integer#MAX_VALUE] if
+  /// it holds an unpaired surrogate: the JDK refuses to encode the whole message then (its
+  /// websocket `MessageEncoder` encodes with a UTF-8 encoder that reports malformed input and
+  /// fails the send with `IOException("Malformed text message")`, as `WebSocket.sendText`
+  /// documents for malformed UTF-16), so such a request must never share one. The walk is by
+  /// code point: [String#codePointAt(int)] joins a well-formed pair into one supplementary code
+  /// point and returns an unpaired half as itself, a surrogate code point, so each case is one
+  /// comparison, and the index only ever moves forward by the code point's own width.
+  static int utf8Length(final String text) {
+    int bytes = 0;
+    for (int i = 0, n = text.length(); i < n; ) {
+      final int codePoint = text.codePointAt(i);
+      if (codePoint < 0x80) {
+        ++bytes;
+      } else if (codePoint < 0x800) {
+        bytes += 2;
+      } else if (codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT) {
+        bytes += 4;
+      } else if (Character.isSurrogate((char) codePoint)) {
+        return Integer.MAX_VALUE;
+      } else {
+        bytes += 3;
+      }
+      i += Character.charCount(codePoint);
+    }
+    return bytes;
+  }
+
+  /// Records request `msgId` as in flight since `stamp`: the one insertion into
+  /// [Connection#inFlightSends], so [Connection#unansweredFloor] stays a lower bound on every
+  /// stamp there. Emptiness is read before the put, because the request that fills an empty
+  /// map is then the only stamp to bound, and the floor becomes exactly its stamp whatever it
+  /// kept from requests answered since. Callers insert keys the map cannot hold, a freshly
+  /// minted cancellation id or a subscribe that has just left the ready set, so the floor is
+  /// moved unconditionally; were a put ever to replace a stamp, the minimum would still keep
+  /// the floor at or below it. Callers hold [#lock].
+  private static void trackInFlight(final Connection conn, final long msgId, final long stamp) {
+    final var inFlight = conn.inFlightSends;
+    final boolean wasEmpty = inFlight.isEmpty();
+    inFlight.put(msgId, stamp);
+    conn.unansweredFloor = wasEmpty ? stamp : Math.min(conn.unansweredFloor, stamp);
+  }
+
+  /// Whether the batch's message drew an answer, or any of its requests a newer attempt: a
+  /// request no longer in flight was answered (or its send failed), and one in flight under
+  /// another ordinal is a retry; either way the message was not rejected whole. Callers hold
+  /// [#lock].
+  private static boolean answered(final Connection conn, final SentBatch batch) {
+    final long[] msgIds = batch.msgIds();
+    final long[] seqs = batch.seqs();
+    for (int i = 0; i < msgIds.length; ++i) {
+      final long msgId = msgIds[i];
+      if (!conn.inFlightSends.containsKey(msgId)
+          || conn.attemptSeqs.getOrDefault(msgId, Long.MIN_VALUE) != seqs[i]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Drops answered batches from the head of `conn`'s ledger, stopping at the first unanswered
+  /// batch, the oldest message the server still owes an answer. Callers hold [#lock].
+  private static void pruneAnsweredBatches(final Connection conn) {
+    final var batches = conn.outstandingBatches;
+    while (!batches.isEmpty() && answered(conn, batches.peekFirst())) {
+      batches.removeFirst();
+    }
+  }
+
+  /// Bounds the ledger behind a batch the server never answers.
+  /// [#pruneAnsweredBatches(Connection)] stops at the first unanswered batch, so one left
+  /// unanswered would keep every later batch ledgered behind it, answered or not, until the
+  /// unanswered deadline replaces the connection, and for the connection's life under a resend
+  /// delay that puts that deadline out of reach. An unanswered batch holds at least two requests
+  /// in flight under the ordinals its link minted, which no other entry records, so a ledger
+  /// with more entries than there are requests in flight holds answered ones: they are dropped
+  /// wherever they sit, and the rest keep their order, which the release reads the oldest from.
+  /// An answered entry behind an unanswered one decides nothing: the release reads the oldest
+  /// unanswered entry, and a retirement asks only whether one is left unanswered at all once
+  /// the answered ones in front of it are pruned. Run before a push, the only way the ledger
+  /// grows, so a push leaves at most one entry more than there are requests in flight; the
+  /// requests of the batch being pushed are in flight already. Callers hold [#lock].
+  private static void sweepAnsweredBatches(final Connection conn) {
+    final var batches = conn.outstandingBatches;
+    if (batches.size() > conn.inFlightSends.size()) {
+      batches.removeIf(batch -> answered(conn, batch));
+    }
+  }
+
+  /// Whether a request transmitted before `batch` is still unanswered: an in-order server
+  /// answers that one first, so an uncorrelatable error cannot be the batch's. A cancellation
+  /// in flight carries its ordinal in its acknowledgement record, a subscribe in
+  /// [Connection#attemptSeqs]. Callers hold [#lock].
+  private static boolean olderRequestUnanswered(final Connection conn, final SentBatch batch) {
+    final long first = batch.seqs()[0];
+    for (final long msgId : conn.inFlightSends.keySet()) {
+      final var unsub = conn.pendingUnsubAcks.get(msgId);
+      final long seq = unsub != null ? unsub.wireSeq() : conn.attemptSeqs.getOrDefault(msgId, Long.MAX_VALUE);
+      if (seq < first) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Releases the batch a whole-message parse error answers: the oldest outstanding batch, and
+  /// only while no request transmitted before it is unanswered, since an in-order server answers
+  /// that one first ([Connection#outstandingBatches] states the premise). The rejection
+  /// concludes every attempt in the batch as a correlated error concludes one: the in-flight
+  /// gate, the ordinal and any tombstone go, since no grant can arrive for an attempt the server
+  /// never ran, and each request still pending is ready again at once, to be sent alone; a
+  /// request cancelled while the batch was out is simply gone. Batching stops for the instance.
+  /// Called off the lock from the error branch; a displaced connection's error releases nothing.
+  private void releaseRejectedBatch(final Connection conn) {
+    lock.lock();
+    try {
+      if (conn != this.connection) {
+        return;
+      }
+      pruneAnsweredBatches(conn);
+      final var batch = conn.outstandingBatches.peekFirst();
+      if (batch == null || olderRequestUnanswered(conn, batch)) {
+        return;
+      }
+      conn.outstandingBatches.removeFirst();
+      for (final long msgId : batch.msgIds()) {
+        conn.inFlightSends.remove(msgId);
+        conn.attemptSeqs.remove(msgId);
+        conn.cancelledRequests.remove(msgId);
+        final var rejected = conn.pendingSubscriptions.get(msgId);
+        if (rejected != null) {
+          rejected.setLastAttempt(Subscription.NEVER);
+          conn.readySubscriptions.put(msgId, rejected);
+        }
+      }
+      this.batchingRefused = true;
+      log.log(WARNING, "{0} rejected a batch of {1} requests as a whole; re-sending them one per message, and batching no more.",
+          endpoint.getHost(), batch.msgIds().length
+      );
+      checkSignalled = true;
+      newSubscription.signal();
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /// Decides the next connection's send mode from a retired connection's ledger: lost with a
+  /// batch message of its own still wholly unanswered, the connection is what a server that
+  /// resets or closes on arrays leaves, so the one adopted next sends every request alone for
+  /// its life ([#singleRequestsNext]; [#adopt] reports it where it takes effect, and overrides it
+  /// for a replay the declared [#singleSubscribeBudget] could not carry). Answered
+  /// batches are pruned first, so a batch the server answered in part decides nothing: a server
+  /// that answered any of it reads arrays. The loss says nothing more than that, since a
+  /// connection lost for any reason with a batch in flight looks the same, which is why its
+  /// reach is one connection and not the instance's life: a server that really refuses arrays
+  /// gets the replay in the form it answers, unless a declared [#singleSubscribeBudget] the
+  /// replay would not fit gives that form up (against such a server the replay is then lost on
+  /// every connection, the caller's trade), and a connection merely dropped costs the next
+  /// connection its batching, the replay and every burst after it, and nothing beyond that
+  /// connection. Once batching is refused there is nothing left to decide. A retirement this
+  /// instance causes itself, at the unanswered-request or the Ping deadline or on an answer it
+  /// treats as fatal, counts like any loss, so a batch the server never answers is not escalated
+  /// twice on the same silence, and so does a caller's [#connect()] over an open connection: a
+  /// caller's own silence watch that reconnects before this instance's deadline would otherwise
+  /// replay batched against a server that ignores arrays, and never learn. Only the displacement
+  /// of a live connection by a newer socket's adoption leaves a ledger unread, a path a
+  /// generation-checked attempt never reaches. A batch whose send future has not settled counts:
+  /// the ledger cannot tell a frame still in the socket's buffer from one the peer received.
+  /// Callers hold [#lock], with the connection already claimed or dropped.
+  private void suspendBatchingAfterLoss(final Connection retired) {
+    pruneAnsweredBatches(retired);
+    if (!this.batchingRefused && !retired.outstandingBatches.isEmpty()) {
+      this.singleRequestsNext = true;
+    }
   }
 
   /// The unanswered-request deadline. Once any in-flight send has waited more than
@@ -3041,7 +3837,14 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
   /// own connection, so a server that never answers would leave that subscription missing while
   /// other traffic kept the connection looking healthy; replacing the connection hands it to
   /// the consumer's reconnect policy. Ages run from transmission for frames that reached the
-  /// wire and from admission for frames the chain never delivered.
+  /// wire and from admission for frames the chain never delivered. The in-flight entries are
+  /// scanned only once [Connection#unansweredFloor], which no stamp is below, is itself past
+  /// the deadline; a scan that finds nothing overdue raises the floor to the oldest stamp, so
+  /// a backlog of requests awaiting their answers costs a pass nothing until one could be late.
+  /// Batching is not weighed here: the retirement the escalation causes reads the ledger the
+  /// connection leaves ([#suspendBatchingAfterLoss(Connection)]), and a batch none of whose
+  /// requests was answered makes the replacement connection send one request per message, unless
+  /// a declared [#singleSubscribeBudget] its replay would not fit overrides that.
   private RuntimeException escalateUnanswered(final Connection conn, final long now) {
     if (conn.lifecycle == ConnectionLifecycle.ESCALATED || conn.inFlightSends.isEmpty()) {
       return null;
@@ -3050,6 +3853,12 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
     final long deadline = window > Long.MAX_VALUE / UNANSWERED_ESCALATION_FACTOR
         ? Long.MAX_VALUE
         : window * UNANSWERED_ESCALATION_FACTOR;
+    if (now - conn.unansweredFloor <= deadline) {
+      // No stamp is below the floor, so no request is older than the floor's own age.
+      return null;
+    }
+    conn.unansweredScanVisits += conn.inFlightSends.size();
+    long floor = Long.MAX_VALUE;
     for (final var entry : conn.inFlightSends.entrySet()) {
       if (now - entry.getValue() > deadline) {
         conn.lifecycle = ConnectionLifecycle.ESCALATED;
@@ -3059,7 +3868,10 @@ final class SolanaJsonRpcWebsocket implements WebSocket.Listener, SolanaRpcWebso
         log.log(WARNING, unanswered.getMessage());
         return unanswered;
       }
+      floor = Math.min(floor, entry.getValue());
     }
+    // Nothing was overdue, so the scan saw every stamp: the floor is exact again.
+    conn.unansweredFloor = floor;
     return null;
   }
 

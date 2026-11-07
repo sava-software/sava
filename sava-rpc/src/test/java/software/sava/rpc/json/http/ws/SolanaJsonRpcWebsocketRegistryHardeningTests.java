@@ -141,7 +141,10 @@ final class SolanaJsonRpcWebsocketRegistryHardeningTests {
   /// performs one transition which promises to wake that loop. Holding the lifecycle lock while
   /// checking `hasWaiters` makes both sides deterministic: acquiring it proves awaitNanos has
   /// enqueued and released, and a successful signal transfers the waiter off the condition queue
-  /// before the triggering transition unlocks. Bounded joins are cleanup only.
+  /// before the triggering transition unlocks. A transferred waiter needs only the lifecycle
+  /// lock, which the calling thread has released by then, so its thread is joined with no
+  /// deadline; the bounded joins, and the interrupt between them, clean up after a signal that
+  /// never came, so a broken transition fails instead of hanging.
   private static void assertSignalsAlreadyParkedCycle(final SolanaJsonRpcWebsocket ws,
                                                       final Runnable transition)
       throws InterruptedException {
@@ -195,14 +198,19 @@ final class SolanaJsonRpcWebsocketRegistryHardeningTests {
         }
       }
     } finally {
-      if (!signalTransferred) {
-        // Independent cleanup for a missing transition signal.
+      if (signalTransferred) {
+        // Off the condition queue, the waiter needs only the lock this thread has released, so
+        // the join ends however late the cycle thread is scheduled.
+        cycle.join();
+      } else {
+        // Independent cleanup for a missing transition signal, bounded so that a broken
+        // transition fails the assertions below instead of hanging here.
         ws.close();
-      }
-      cycle.join(1_000L);
-      if (cycle.isAlive()) {
-        cycle.interrupt();
         cycle.join(1_000L);
+        if (cycle.isAlive()) {
+          cycle.interrupt();
+          cycle.join(1_000L);
+        }
       }
     }
 

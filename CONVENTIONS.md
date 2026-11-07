@@ -163,6 +163,14 @@ Slots, lamports and token amounts are `u64` on the wire and `long` in Java, so:
   `subscribeToTokenAccount(mint, owner, consumer)`, has the same trap. A slip between them
   compiles into a subscription with a key in the wrong role, a mint or an owner as the program or
   a program as the mint, which agave accepts and never notifies.
+- The websocket Builder's message sizes count different units, in opposite directions:
+  `subscribeBatchBytes` counts the UTF-8 bytes of a message sent, the batch array's brackets and
+  separators included, which is what Agave's inbound limit counts (so the cap stops at Agave's
+  limit), and `maxMessageLength` counts the chars of a message received. A non-ASCII char is
+  two or three bytes against the first and one char against the second, and a surrogate pair
+  four bytes against two chars. Their zeros differ too: `subscribeBatchBytes(0)`, the default,
+  turns batching off, while `maxMessageLength(0)` throws, as `keepAliveDelay(0)` and
+  `subscriptionResendDelay(0)` do.
 - `sendTransaction(tx, skipPreFlight)` selects a whole *family*, not a flag: it
   also changes the `maxRetries` default (0 when skipping, 1 otherwise) and the
   preflight commitment. Use the three-argument overload to pin retries.
@@ -249,7 +257,9 @@ one synchronous cycle, or runs the captured task, which loops until the websocke
 closed or the thread interrupted and then closes it. A null executor is the
 production default, a dedicated thread started in the constructor. Subscribe
 *before* the `onOpen` you assert on: `queueSubscription` only queues and signals,
-and `onOpen` flushes the queue on the test's own thread. The dedicated
+and `onOpen` flushes the queue on the test's own thread. A `registerAll` scope
+changes none of this: its calls queue as they do alone, only their signal waits for
+the scope's return, and `onOpen` or `checkCycle` still sends them. The dedicated
 `subscriptionResendDelay` controls retry and unanswered-request deadlines; with a
 real loop thread, set it large when a test needs to keep that thread away from
 pending subscription work.
@@ -265,6 +275,12 @@ pending subscription work.
   `advanceMillis` moves it, and `sleep` advances it instead of blocking.
 - `RecordingExecutor` (`json.http.ws`) — captures submitted tasks without running them,
   so a websocket given one has no check-loop thread (above).
+- `RecordingWebSocket` (`json.http.ws`) — records every text frame the engine writes.
+  `failText`, `throwText` and `deferTexts` fail, throw or hold open its text sends (the
+  ping knobs mirror them), and `strictUtf8` refuses what the JDK transport refuses: a
+  `sendText` whose text holds an unpaired surrogate fails with
+  `IOException("Malformed text message")`, judged by the fake's own `REPORT` encoder.
+  Unset, the fake accepts any `CharSequence`, which no JDK socket does.
 
 **Seeded entropy and JCA providers** (sava-core test sources):
 

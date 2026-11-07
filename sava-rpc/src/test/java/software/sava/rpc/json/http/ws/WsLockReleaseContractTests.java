@@ -32,6 +32,8 @@ final class WsLockReleaseContractTests {
   private static final Timings TIMINGS = new Timings(60_000, 60_000, 60_000);
   private static final PublicKey ACCOUNT_A =
       PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112");
+  private static final PublicKey ACCOUNT_B =
+      PublicKey.fromBase58Encoded("7ubS3GccjhQY99AYNKXjNJqnXjaokEdfdV915xnCb96r");
 
   private static SolanaJsonRpcWebsocket websocket() {
     return new SolanaJsonRpcWebsocket(
@@ -39,6 +41,17 @@ final class WsLockReleaseContractTests {
         TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
         new RecordingExecutor(), null, null, (_, _, _) -> {
         }, null, null, null
+    );
+  }
+
+  /// The engine with a subscribe batch cap, which sends due subscribes in batch messages and reads
+  /// an inbound array element by element.
+  private static SolanaJsonRpcWebsocket batchingWebsocket() {
+    return new SolanaJsonRpcWebsocket(
+        ENDPOINT, SolanaAccounts.MAIN_NET, Commitment.CONFIRMED, null,
+        TIMINGS, SolanaRpcWebsocketBuilder.DEFAULT_MAX_MESSAGE_LENGTH, new TestClock(),
+        new RecordingExecutor(), null, null, (_, _, _) -> {
+        }, null, null, null, 4_096
     );
   }
 
@@ -153,6 +166,35 @@ final class WsLockReleaseContractTests {
     }
   }
 
+  /// A batch response hands each element of an array to the whole-message handler, whose branches
+  /// lock, and the array's own structural failure has a catch of its own: every path through an
+  /// array returns with the lock released, a refused notification and a malformed element
+  /// included.
+  @Test
+  void batchResponsePathsReleaseTheLock() throws InterruptedException {
+    try (final var ws = batchingWebsocket()) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      })); // request 2
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      })); // request 3
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          [{"jsonrpc":"2.0","result":700,"id":2},{"jsonrpc":"2.0","error":{"code":-32603,"message":"Subscription refused"},"id":3}]"""), true);
+      assertReleased(ws, "a batch response confirming one request and refusing another");
+
+      assertTrue(ws.accountUnsubscribe(ACCOUNT_A));
+      ws.checkCycle(0L); // flush mints and transmits the cancellation, request 4
+      ws.onText(socket, CharBuffer.wrap("""
+          [{"jsonrpc":"2.0","result":true,"id":4},{"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":0,"slot":2},"subscription":700}},5]"""), true);
+      assertReleased(ws, "a batch response acknowledging a cancellation beside a notification and a malformed element");
+
+      ws.onText(socket, CharBuffer.wrap("""
+          [{"jsonrpc":"2.0","result":701,"id":3}"""), true);
+      assertReleased(ws, "an unreadable batch response");
+    }
+  }
+
   @Test
   void connectPathsReleaseTheLock() {
     final var socket = new RecordingWebSocket();
@@ -176,6 +218,37 @@ final class WsLockReleaseContractTests {
       assertFalse(scheduler.deferred.isEmpty(), "the second connect defers under the throttle");
       scheduler.deferred.getFirst().task().run();
       assertReleased(ws, "startBuild");
+    }
+  }
+
+  /// The fallback from batch messages to single requests locks on two paths of its own: the release
+  /// a null-id parse error drives from the error branch, off the lock, and the suspension decided
+  /// from the retired ledger inside retirement's claim.
+  @Test
+  void batchRejectionFallbackPathsReleaseTheLock() throws InterruptedException {
+    try (final var ws = batchingWebsocket()) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      })); // request 2
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      })); // request 3
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onText(socket, CharBuffer.wrap("""
+          {"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}"""), true);
+      assertReleased(ws, "a whole-batch rejection releasing the batch");
+      assertTrue(ws.batchingRefused(), "the rejection was attributed");
+      ws.checkCycle(0L); // the released requests go out one per message
+      assertReleased(ws, "the pass re-sending the released requests");
+    }
+    try (final var ws = batchingWebsocket()) {
+      assertTrue(ws.accountSubscribe(ACCOUNT_A, _ -> {
+      }));
+      assertTrue(ws.accountSubscribe(ACCOUNT_B, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      ws.onOpen(socket);
+      ws.onClose(socket, java.net.http.WebSocket.NORMAL_CLOSURE, "peer close");
+      assertReleased(ws, "retirement suspending batching for the next connection");
     }
   }
 

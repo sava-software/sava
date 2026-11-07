@@ -98,6 +98,33 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   /// every consumer.
   void exceptionSubscribe(final Consumer<RuntimeException> consumer);
 
+  /// Runs `registrations` on this websocket and wakes the internal check loop once, when it
+  /// returns, rather than once per call. The subscribes and unsubscribes made inside it on the
+  /// calling thread are ordinary calls: each decides, answers, throws and later calls back
+  /// exactly as it does outside a scope, and each queues its request, so the pass after the
+  /// scope can send them together, cancellations first as in every pass. Only this thread's
+  /// calls on this websocket are deferred: other threads' registrations, those of threads the
+  /// scope starts included, a `StructuredTaskScope`'s subtasks among them, and the websocket's
+  /// own wakes (connection, acknowledgements, pings and close) are not, so a pass may still run,
+  /// and send part of the scope's work, while the scope is open. Deferral follows the thread,
+  /// not the task: work this thread runs on another's behalf inside the scope, such as a
+  /// `ForkJoinTask` it forks and then joins, a task a caller-runs policy hands back to it, or its
+  /// share of a parallel stream, is this thread's call and waits for the exit, so such work must
+  /// not wait inside the scope for its own `onSub`. Nested calls wake once, at the outermost
+  /// return. If `registrations` throws, the loop is woken for what it had queued and the
+  /// exception then propagates; those registrations stay registered. `registerAll` takes no lock
+  /// around `registrations`, which run with whatever locks the calling thread holds: a scope
+  /// opened from an `onSub` callback runs under the lifecycle lock whenever that callback does,
+  /// as it does when a pass sends its request and the send completes at once. There, every
+  /// other thread's registration waits for that lock until the callback and the pass around it
+  /// return, and no pass runs meanwhile, so a scope there must not wait for another thread's
+  /// registration: joining a thread it started, a task scope's join included, would never
+  /// return, and would hold the lock against `close()`.
+  ///
+  /// @param registrations subscribe and unsubscribe calls on the websocket it is given
+  /// @throws NullPointerException if `registrations` is null
+  void registerAll(final Consumer<? super SolanaRpcWebsocket> registrations);
+
   boolean accountSubscribe(final PublicKey key,
                            final Consumer<AccountInfo<byte[]>> consumer);
 
@@ -342,6 +369,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
 
   boolean programSubscribe(final PublicKey program, final Consumer<AccountInfo<byte[]>> consumer);
 
+  /// Agave rejects any inbound message over 4,096 UTF-8 bytes by resetting the connection
+  /// without an answer, so a filter-heavy request above that size is connection-fatal there; it
+  /// is sent unchanged.
   boolean programSubscribe(final PublicKey program,
                            final List<Filter> filters,
                            final Consumer<AccountInfo<byte[]>> consumer);
@@ -383,6 +413,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     );
   }
 
+  /// Agave rejects any inbound message over 4,096 UTF-8 bytes by resetting the connection
+  /// without an answer, so a filter-heavy request above that size is connection-fatal there; it
+  /// is sent unchanged.
   boolean programSubscribe(final Commitment commitment,
                            final PublicKey program,
                            final List<Filter> filters,
@@ -419,6 +452,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return programSubscribe(commitment, dataSlice, program, filters, null, consumer);
   }
 
+  /// Agave rejects any inbound message over 4,096 UTF-8 bytes by resetting the connection
+  /// without an answer, so a filter-heavy request above that size is connection-fatal there; it
+  /// is sent unchanged.
   boolean programSubscribe(final Commitment commitment,
                            final DataSlice dataSlice,
                            final PublicKey program,
@@ -461,6 +497,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return keyedProgramSubscribe(defaultCommitment(), subscriptionKey, program, filters, onSub, consumer);
   }
 
+  /// Agave rejects any inbound message over 4,096 UTF-8 bytes by resetting the connection
+  /// without an answer, so a filter-heavy request above that size is connection-fatal there; it
+  /// is sent unchanged.
   boolean keyedProgramSubscribe(final Commitment commitment,
                                  final String subscriptionKey,
                                  final PublicKey program,
@@ -501,6 +540,9 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     return keyedProgramSubscribe(commitment, dataSlice, subscriptionKey, program, filters, null, consumer);
   }
 
+  /// Agave rejects any inbound message over 4,096 UTF-8 bytes by resetting the connection
+  /// without an answer, so a filter-heavy request above that size is connection-fatal there; it
+  /// is sent unchanged.
   boolean keyedProgramSubscribe(final Commitment commitment,
                                 final DataSlice dataSlice,
                                 final String subscriptionKey,
@@ -551,7 +593,7 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
   ///                                  backslash or character below U+0020, names a built-in
   ///                                  channel's notification, subscribe, or unsubscribe method,
   ///                                  or disagrees with the un-subscription method already bound
-  ///                                  to this notification method.
+  ///                                  to this notification method; or if `key` is null.
   default <T> boolean subscribe(final String subscribeMethod,
                                 final String unSubscribeMethod,
                                 final String notificationMethod,
@@ -610,6 +652,84 @@ public interface SolanaRpcWebsocket extends AutoCloseable {
     Builder maxMessageLength(final int maxMessageLength);
 
     int maxMessageLength();
+
+    /// Sends the subscribe requests waiting to go out as JSON-RPC batch messages of at most
+    /// `subscribeBatchBytes` UTF-8 bytes each, brackets and separators included, so a burst of
+    /// registrations or a reconnect replay costs the server one message per batch instead of one
+    /// per request; made inside [SolanaRpcWebsocket#registerAll(Consumer)], a burst wakes the
+    /// sender once, so its requests can share batches. 0, the default, turns batching off. Unlike
+    /// [#maxMessageLength(int)], which counts the chars of a message received, this counts the
+    /// bytes of a message sent. The cap is at most 4,096, Agave's inbound message limit, which
+    /// counts the whole message and is inclusive: Agave resets the connection, without an answer,
+    /// on any message above it, batched or not.
+    ///
+    /// Only typed subscribes share a message. A [generic subscribe][SolanaRpcWebsocket#subscribe]
+    /// always travels alone, since its raw params could add calls of their own to an array or make
+    /// the whole array unreadable, and an un-subscription travels alone, ahead of the subscribes
+    /// queued after it. A request too big to share a message within the cap goes alone and
+    /// unchanged, as it would with batching off, and so does one whose text the JDK cannot encode,
+    /// so that its failed send takes no other request with it. A lone request goes as its plain
+    /// object, never as an array of one, including the last of a batch whose others were cancelled
+    /// before it was sent; a batch left with none sends nothing. Each request's `onSub` runs once
+    /// its message is sent.
+    ///
+    /// The server must answer a batch with an array of responses, matched to the requests by id,
+    /// never by position, and answer messages in the order it receives them, as Agave does. A
+    /// server that cannot read a batch at all answers it with one parse error (-32700) carrying no
+    /// readable id. That error is taken to answer the oldest batch still unanswered, provided no
+    /// request sent before that batch still awaits an answer; the batch's requests are then re-sent
+    /// at once, one per message, and batching stops for the life of this instance. An id-less
+    /// error of any other code releases nothing, and nothing else stops batching for good. A
+    /// connection lost while a batch it sent is still wholly unanswered, whatever ended it (a
+    /// peer close, a transport failure, the unanswered-request deadline
+    /// [#subscriptionResendDelay(long)] describes, the Ping deadline, an answer this client
+    /// treats as fatal, or the caller's own [SolanaRpcWebsocket#connect()] over the open
+    /// connection), is the trace a server that resets or closes on arrays leaves, so the one
+    /// connection opened next sends its requests one per message for its life, with a WARNING
+    /// when it opens, and the connection after that batches again; a declared
+    /// [#singleSubscribeBudget(int)] that connection's replay would exceed makes it batch instead,
+    /// with a WARNING saying so. A loss looks the same whatever
+    /// caused it, a network reset or a server restart included, which is why it costs one
+    /// connection's batching and no more. Within this bound
+    /// Agave answers every batch, so none loses the connection by its size.
+    ///
+    /// @throws IllegalArgumentException if subscribeBatchBytes is negative or above 4,096.
+    Builder subscribeBatchBytes(final int subscribeBatchBytes);
+
+    /// The cap set by [#subscribeBatchBytes(int)], in UTF-8 bytes; 0 while batching is off.
+    int subscribeBatchBytes();
+
+    /// How many subscribe requests sent one per message the endpoint accepts on one connection
+    /// before it closes the connection, when the endpoint is known to count them; 0, the default,
+    /// declares no such budget. It matters only with batching on ([#subscribeBatchBytes(int)]):
+    /// when a lost connection's batch left wholly unanswered would make the next connection send
+    /// its requests one per message, a replay of more registrations than this budget would be cut
+    /// off before it completed, so that connection batches instead, with a WARNING naming the
+    /// replay size and the budget, and the connection after it decides afresh. While the replay
+    /// stays above the budget every connection lost with its batch unanswered batches again, so
+    /// declaring a budget gives up the one-connection fallback for such replays: against an
+    /// endpoint that resets or closes on arrays without answering, a replay larger than the budget
+    /// is lost on every connection, where without a budget every second connection would carry
+    /// it one request per message. A replay that fits the budget is sent one per message as it
+    /// would be without one. The whole-batch rejection that stops batching for the instance's life
+    /// is not affected: a server that cannot read an array leaves single requests as the only
+    /// form, budget or not.
+    ///
+    /// The budget is a statement about the endpoint, not a limit this client enforces: a
+    /// registration made on its own still goes out as one plain message and counts against the
+    /// endpoint's budget, batching or not, and so does every generic subscription
+    /// ([SolanaRpcWebsocket#subscribe]) in a batching replay, since a generic request never shares
+    /// a message; and a connection sending one request per message whose later registrations cross
+    /// the budget is closed by the endpoint once, after which the connection that replaces it
+    /// batches. Measured 2026-11-07 on the public mainnet-beta
+    /// websocket: 100 single subscribe messages per connection for its life, however slowly they
+    /// are sent, while batch messages were not counted.
+    ///
+    /// @throws IllegalArgumentException if singleSubscribeBudget is negative.
+    Builder singleSubscribeBudget(final int singleSubscribeBudget);
+
+    /// The budget set by [#singleSubscribeBudget(int)]; 0 while none is declared.
+    int singleSubscribeBudget();
 
     /// How long the whole handshake (DNS, TCP, TLS and the HTTP upgrade) may take, in
     /// milliseconds; independent of [#reConnectDelay(long)].

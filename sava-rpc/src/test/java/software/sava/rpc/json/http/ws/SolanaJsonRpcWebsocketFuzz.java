@@ -6,6 +6,7 @@ import software.sava.rpc.json.http.request.Commitment;
 import software.sava.rpc.json.http.response.JsonUtil;
 
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,16 +18,28 @@ import java.util.logging.Logger;
 /// array-backed, array-less, positioned, and sliced [CharBuffer]s) and the
 /// notification dispatch of `onWholeMessage` behind it, which parses whatever a
 /// server sends — subscription confirmations, error envelopes, and every
-/// notification channel's response parser.
+/// notification channel's response parser — and, with batching on (header byte
+/// 11), the element-by-element dispatch of a batch response array and the release
+/// of a batch message the server could not read.
 ///
 /// `onWholeMessage` swallows [RuntimeException] into a log plus the exception
-/// subscribers, so the malformed-input contract here is "no hang, no [Error],
+/// subscribers, and the batch response reader does the same with an array's own
+/// structural failure, so the malformed-input contract here is "no hang, no [Error],
 /// nothing non-RuntimeException": Jazzer flags OOM/stack exhaustion and any
 /// [Throwable] escaping `onText` on its own. On top of that, every input must
-/// leave the reassembly state machine recoverable — after the carved frames (and a
-/// flush of any dangling fragment), a canonical account notification fed whole
-/// must either dispatch to the still-registered subscription or trigger exactly
-/// the unknown-subscription auto-unsubscribe, and never both or neither.
+/// leave the engine consistent. After the carved frames (and a flush of any dangling
+/// fragment) the ready set must still index exactly the pending requests not
+/// admitted to a send; with batching off no batch may be ledgered and batching may
+/// not be refused, and with batching on the in-flight batch leaves the ledger only
+/// by the release that refuses batching. One more maintenance pass then sends what
+/// the frames made due, none of it as a batch message while batching is off or
+/// refused, and the ready set must still hold. And the canonical account
+/// registration must have survived: a canonical account notification fed whole must
+/// dispatch to it exactly once. The one connection replacement an input can
+/// legitimately cause comes from a grant naming a subscription id that another
+/// registration owns for a different request; the canonical notification then has
+/// no connection to arrive on, so the harness requires that replacement's error to
+/// be the one delivered and the registration to be still held.
 ///
 /// A fresh websocket is built per input ([RecordingWebSocket]/[TestClock]/
 /// [RecordingExecutor], no network, no background thread): the reassembly buffer,
@@ -36,6 +49,10 @@ import java.util.logging.Logger;
 /// block subscription) are registered and confirmed in a fixed preamble so the
 /// fuzzed message can reach each channel's parse-and-dispatch arm; the fixed
 /// subscription ids (11/22/33/44/66/77/55) are what the seed corpus targets.
+/// Account subscriptions for [#IN_FLIGHT_KEYS] are then registered and sent by
+/// one maintenance pass, and left unanswered, so the fuzzed message finds
+/// requests in flight to grant, refuse, reject or release; their fixed request ids
+/// ([#IN_FLIGHT_IDS], 9 and 10) are what the seeds that answer them target.
 ///
 /// Input layout — a 12-byte header, then the message text (one byte per char,
 /// ISO-8859-1):
@@ -45,7 +62,12 @@ import java.util.logging.Logger;
 /// - byte 3 bit 0: whether the final fragment carries last=true; if not, the
 ///   input ends dangling and the harness flushes with an empty terminal frame
 /// - bytes 4-10: split-point fractions for up to 7 splits
-/// - byte 11: reserved
+/// - byte 11 bit 0: batching on — the engine is built with a subscribe batch cap
+///   of [#BATCH_BYTES], so the preamble's typed subscribes go out as one batch
+///   message, the generic one alone, the in-flight requests as one more batch
+///   message, and an inbound JSON array is read element by element as a batch
+///   response; clear, batching is off, every request goes out alone and an array
+///   is one unparseable message. The other bits are reserved.
 ///
 /// Deliberately free of Jazzer imports so it compiles with the regular test sources.
 ///
@@ -68,6 +90,9 @@ public final class SolanaJsonRpcWebsocketFuzz {
   }
 
   private static final int HEADER_LENGTH = 12;
+  /// The subscribe batch cap that header byte 11 switches on: Agave's inbound message limit,
+  /// which counts the whole message and is inclusive.
+  private static final int BATCH_BYTES = 4_096;
 
   private static final URI ENDPOINT = URI.create("wss://api.mainnet-beta.solana.com");
   // Large delays keep any timing seam inert; there is no background thread regardless.
@@ -85,6 +110,23 @@ public final class SolanaJsonRpcWebsocketFuzz {
   // The subscription ids the preamble confirms, in registration order; seeds aim at these.
   private static final long[] SUB_IDS = {11, 22, 33, 44, 66, 77, 55};
 
+  /// The accounts of the subscriptions left in flight for the fuzzed message, distinct from
+  /// [#ACCOUNT_KEY] and from each other. More than one, so that with batching on they share a
+  /// batch message: a message of one request goes out as its plain object, which is never
+  /// ledgered and which no release can answer.
+  private static final List<PublicKey> IN_FLIGHT_KEYS = List.of(
+      PublicKey.fromBase58Encoded("So11111111111111111111111111111111111111112"),
+      PublicKey.fromBase58Encoded("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+  );
+  /// The request ids the in-flight subscriptions are minted with, in [#IN_FLIGHT_KEYS] order.
+  /// Seeds aim at these, so every input checks that they are what the engine minted.
+  private static final List<Long> IN_FLIGHT_IDS = List.of(9L, 10L);
+
+  /// A fragment of the diagnostic the engine delivers for the one connection replacement an
+  /// input can cause here: a grant naming a subscription id that another registration owns for
+  /// a different request.
+  private static final String NON_EQUIVALENT_COLLISION = "was assigned to non-equivalent requests";
+
   private static final String LIVENESS_NOTIFICATION = """
       {"jsonrpc":"2.0","method":"accountNotification","params":{"result":{"context":{"slot":5199307},"value":{"data":["dGVzdA==","base64"],"executable":false,"lamports":33594,"owner":"11111111111111111111111111111111","rentEpoch":0,"space":4}},"subscription":11}}""";
 
@@ -92,6 +134,11 @@ public final class SolanaJsonRpcWebsocketFuzz {
     if (data.length < HEADER_LENGTH) {
       return;
     }
+    final boolean batching = (data[11] & 1) == 1;
+    // Recorded, not null: the default error policy closes the instance and drops every
+    // registration with it, and a hostile grant may legitimately replace the connection here
+    // (see the replacement check below).
+    final var errors = new ArrayList<Throwable>();
     try (final var ws = new SolanaJsonRpcWebsocket(
         ENDPOINT,
         SolanaAccounts.MAIN_NET,
@@ -108,7 +155,9 @@ public final class SolanaJsonRpcWebsocketFuzz {
         },
         (_, _, _) -> {
         },
-        null, null, null
+        (_, error) -> errors.add(error),
+        null, null,
+        batching ? BATCH_BYTES : 0
     )) {
       final var socket = new RecordingWebSocket();
       final var received = new ArrayList<Object>();
@@ -143,6 +192,28 @@ public final class SolanaJsonRpcWebsocketFuzz {
         throw new AssertionError("confirmations dispatched a notification");
       }
 
+      // Requests for the fuzzed message to act on: registered once the preamble is confirmed,
+      // sent by one pass and never answered here. Their consumers are not `received`, whose
+      // count the liveness check reads.
+      final var inFlightMsgIds = new ArrayList<Long>();
+      for (final var key : IN_FLIGHT_KEYS) {
+        ws.accountSubscribe(key, sub -> inFlightMsgIds.add(sub.msgId()), _ -> {
+        });
+      }
+      final int sentBeforeInFlight = socket.sentText.size();
+      pass(ws, socket);
+      final var inFlightFrames = List.copyOf(socket.sentText.subList(sentBeforeInFlight, socket.sentText.size()));
+      final boolean sentAsConfigured = batching
+          ? inFlightFrames.size() == 1 && inFlightFrames.getFirst().startsWith("[")
+          : inFlightFrames.size() == IN_FLIGHT_IDS.size() && noBatchMessage(inFlightFrames);
+      // With batching on, pushing the in-flight batch pruned the preamble's answered one, so the
+      // ledger holds exactly the in-flight batch.
+      if (!inFlightMsgIds.equals(IN_FLIGHT_IDS) || !sentAsConfigured
+          || ws.retainedOutstandingBatches() != (batching ? 1 : 0)) {
+        throw new AssertionError("requests " + inFlightMsgIds + " went out as " + inFlightFrames + " with "
+            + ws.retainedOutstandingBatches() + " batch messages ledgered");
+      }
+
       // carve the message text into fragments and feed them
       final int fragments = 1 + (data[0] & 7);
       final int flavorBits = ((data[2] & 0xFF) << 8) | (data[1] & 0xFF);
@@ -168,13 +239,72 @@ public final class SolanaJsonRpcWebsocketFuzz {
         ws.onText(socket, CharBuffer.wrap(""), true);
       }
 
-      // whatever the frames did, the state machine must have recovered — and the canonical
-      // registration must have SURVIVED: no inbound frame sequence is a legitimate removal of
-      // subscription 11. Confirmation collisions no longer displace, dispatch is
-      // channel-correlated, cancellation acknowledgements adjudicate by wire order, and no
-      // un-subscription for id 11 is ever minted here — so a liveness notification that fails
-      // to dispatch is registry corruption, which the old either-or postcondition (tolerating
-      // an auto-unsubscribe answer as "legitimately unsubscribed") was masking.
+      // Batching off never ledgers a message or latches the refusal: at a cap of 0 every request
+      // travels alone, a lone request is never ledgered, and the refusal reads the ledger.
+      if (!batching && (ws.retainedOutstandingBatches() != 0 || ws.batchingRefused())) {
+        throw new AssertionError("batching off left " + ws.retainedOutstandingBatches()
+            + " batch messages ledgered, refused: " + ws.batchingRefused());
+      }
+
+      if (!errors.isEmpty()) {
+        // A grant naming a subscription id that another registration owns, for a different
+        // request, replaces the connection by design: the id no longer names one stream. It is
+        // the one replacement the frames can cause here. The engine's other connection-fatal
+        // answers need a cancellation the caller made, and this harness makes none: the
+        // cancellation the engine itself sends for an unknown id carries no request fingerprint,
+        // so a rejection of it is never fatal. Its deadlines need the clock to move, and its
+        // message cap is far above the target's longest input. The recording policy receives
+        // the error once and keeps the instance open. The liveness notification has no
+        // connection left to arrive on, so the registry answers for the canonical registration
+        // instead: a duplicate of it is refused while it is still held.
+        if (!isNonEquivalentCollision(errors)) {
+          throw new AssertionError("the frames replaced the connection for " + errors);
+        }
+        if (!socket.aborted || ws.closed()) {
+          throw new AssertionError("a replaced connection must be aborted and leave the instance open");
+        }
+        if (ws.accountSubscribe(ACCOUNT_KEY, _ -> {
+        })) {
+          throw new AssertionError("the connection replacement released the canonical registration");
+        }
+        return;
+      }
+
+      // With batching on the ledger holds the in-flight batch until its release, which also
+      // stops batching. Nothing else inside one message prunes it: a prune runs only beside a
+      // push, a release or a retirement, and the release needs a whole message, so no answer to
+      // the batch can precede it. Nothing else stops batching: a connection lost with its batch
+      // unanswered suspends it for the next connection only, and the one replacement the frames
+      // can cause returned above.
+      if (batching && ws.retainedOutstandingBatches() != (ws.batchingRefused() ? 0 : 1)) {
+        throw new AssertionError(ws.retainedOutstandingBatches() + " batch messages ledgered, refused: "
+            + ws.batchingRefused());
+      }
+      // The ready set is a subset index of the pending map: whatever grants, refusals,
+      // rejections and releases the frames produced, every pending request must be ready or in
+      // flight, never both and never neither, and every ready entry must be pending. Asked
+      // before the pass below too, which would admit a ready entry left without its pending
+      // registration and hide it.
+      if (!ws.readySetMatchesPendingWork()) {
+        throw new AssertionError("the frames left the ready set diverged from the pending and in-flight maps");
+      }
+
+      // One more pass sends what the frames made due: the requests of a released batch, at
+      // once. A request a refusal re-armed keeps the stamp it went out with, which the unmoved
+      // clock holds inside the resend window. While batching is off or refused the cap is 0, so
+      // nothing the pass sends may be a batch message.
+      final int sentBeforePass = socket.sentText.size();
+      pass(ws, socket);
+      final var sentByPass = List.copyOf(socket.sentText.subList(sentBeforePass, socket.sentText.size()));
+      if ((!batching || ws.batchingRefused()) && !noBatchMessage(sentByPass)) {
+        throw new AssertionError("a batch message went out while batching is off or refused: " + sentByPass);
+      }
+
+      // Whatever the frames did, the canonical registration must have survived: no inbound frame
+      // sequence is a legitimate removal of subscription 11. A confirmation collision never
+      // displaces the owner, dispatch is channel-correlated, cancellation acknowledgements
+      // adjudicate by wire order, and no un-subscription for id 11 is ever minted here, so a
+      // liveness notification that fails to dispatch is registry corruption.
       final int before = received.size();
       final int sentBefore = socket.sentText.size();
       ws.onText(socket, CharBuffer.wrap(LIVENESS_NOTIFICATION), true);
@@ -189,11 +319,35 @@ public final class SolanaJsonRpcWebsocketFuzz {
       if (received.size() > before + 1) {
         throw new AssertionError("one notification dispatched more than once");
       }
+      // And the pass's admissions kept the ready set exact.
+      if (!ws.readySetMatchesPendingWork()) {
+        throw new AssertionError("the ready set diverged from the pending and in-flight maps");
+      }
     }
   }
 
   private static void feedWhole(final SolanaJsonRpcWebsocket ws, final RecordingWebSocket socket, final String json) {
     ws.onText(socket, CharBuffer.wrap(json), true);
+  }
+
+  /// One maintenance pass on the calling thread: a pong runs it, and it admits every due ready
+  /// request.
+  private static void pass(final SolanaJsonRpcWebsocket ws, final RecordingWebSocket socket) {
+    ws.onPong(socket, ByteBuffer.wrap(new byte[0]));
+  }
+
+  private static boolean noBatchMessage(final List<String> frames) {
+    return frames.stream().noneMatch(frame -> frame.startsWith("["));
+  }
+
+  /// Whether `errors` is the one diagnostic of a grant naming a subscription id that another
+  /// registration owns for a different request.
+  private static boolean isNonEquivalentCollision(final List<Throwable> errors) {
+    if (errors.size() != 1 || !(errors.getFirst() instanceof IllegalStateException collision)) {
+      return false;
+    }
+    final var message = collision.getMessage();
+    return message != null && message.contains(NON_EQUIVALENT_COLLISION);
   }
 
   private static CharBuffer wrap(final char[] text, final int from, final int len, final int flavor) {

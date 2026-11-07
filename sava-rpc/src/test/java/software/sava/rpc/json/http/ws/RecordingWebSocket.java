@@ -1,7 +1,12 @@
 package software.sava.rpc.json.http.ws;
 
+import java.io.IOException;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -44,12 +49,26 @@ final class RecordingWebSocket implements WebSocket {
   /// deliberately: the next queued frame goes out only when the test settles its predecessor.
   boolean deferTexts;
   final List<CompletableFuture<WebSocket>> deferredTexts = new ArrayList<>();
+  /// Refuses what the JDK transport refuses: a text that is not well-formed UTF-16, such as one
+  /// holding an unpaired surrogate, fails its future with
+  /// `IOException("Malformed text message")`, the shape of the JDK's `MessageEncoder`, whose
+  /// UTF-8 encoder reports malformed input. Unset, the fake accepts any `CharSequence`, which no
+  /// JDK socket does. The fake detects it with its own encoder, so the verdict owes nothing to
+  /// the engine under test, and a refused text fails at once even while `deferTexts` holds the
+  /// others open.
+  boolean strictUtf8;
 
   @Override
   public CompletableFuture<WebSocket> sendText(final CharSequence data, final boolean last) {
     sentText.add(data.toString());
     if (throwText != null) {
       throw throwText;
+    }
+    if (strictUtf8) {
+      final var malformed = malformedText(data);
+      if (malformed != null) {
+        return CompletableFuture.failedFuture(malformed);
+      }
     }
     if (deferTexts) {
       final var deferred = new CompletableFuture<WebSocket>();
@@ -59,6 +78,21 @@ final class RecordingWebSocket implements WebSocket {
     return failText == null
         ? CompletableFuture.completedFuture(this)
         : CompletableFuture.failedFuture(failText);
+  }
+
+  /// The JDK's refusal of `data`, carrying the encoder's `CharacterCodingException` as its cause
+  /// as the JDK does, or null when `data` encodes. A fresh encoder per call: an encoder is
+  /// stateful, and a send can run on whichever thread settles its predecessor.
+  private static IOException malformedText(final CharSequence data) {
+    try {
+      StandardCharsets.UTF_8.newEncoder()
+          .onMalformedInput(CodingErrorAction.REPORT)
+          .onUnmappableCharacter(CodingErrorAction.REPORT)
+          .encode(CharBuffer.wrap(data));
+      return null;
+    } catch (final CharacterCodingException ex) {
+      return new IOException("Malformed text message", ex);
+    }
   }
 
   @Override

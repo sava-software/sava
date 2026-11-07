@@ -18,9 +18,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /// section of `config/pitest/README.md`):
 ///
 /// - `# empty-scan fast path`: with nothing in flight and no recorded kill, the pass skips
-///   two loops whose bodies are the only place work happens. Entering them iterates an
-///   empty `HashMap` entry set, which yields no element (`Collection.removeIf` traverses
-///   `iterator()` and `HashMap.EntrySet` does not override it).
+///   the loops that do their work in their per-entry bodies. Entering them iterates an empty
+///   `HashMap` entry set, which yields no element (`Collection.removeIf` traverses
+///   `iterator()` and `HashMap.EntrySet` does not override it); entering the deadline scan
+///   may also store a floor over the empty map, which nothing reads before the next
+///   insertion overwrites it (`UnansweredFloorTests`).
 /// - `# saturated deadline fringe`: the unanswered deadline saturates to `Long.MAX_VALUE`
 ///   for resend windows above `Long.MAX_VALUE / UNANSWERED_ESCALATION_FACTOR`; at that
 ///   window exactly, the two sides compute `Long.MAX_VALUE - 3` and `Long.MAX_VALUE`. Ages

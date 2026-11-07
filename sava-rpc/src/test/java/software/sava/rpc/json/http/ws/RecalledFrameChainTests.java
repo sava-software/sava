@@ -16,15 +16,18 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /// A subscribe cancelled while it waits in the outbound chain is recalled at dispatch: its
-/// link returns without sending, and the stage it leaves becomes the connection's chain
+/// link leaves it out and sends the requests left, and a link whose every request was
+/// cancelled returns without sending, so the stage it leaves becomes the connection's chain
 /// tail. Nothing outside the chain observes that stage. The only readers are the next
 /// link's, in `sendSubscription` and in `queueText`, and both start with
 /// `exceptionally(_ -> null)`, the same tolerance that keeps a failed send from blocking
-/// the chain. A recalled link's stage must therefore never change what is sent after it,
+/// the chain. An emptied link's stage must therefore never change what is sent after it,
 /// or what is reported.
 ///
-/// Each test recalls a frame, chains a successor behind it through one of the two readers,
-/// and requires the successor on the wire in order with no error report from any seam.
+/// Each test builds the engine with batching off, where every link holds one request, so a
+/// recall empties its link. The test then chains a successor behind that link through one of
+/// those readers, and requires the successor on the wire in order with no error report from
+/// any seam.
 @ExtendWith(QuietWsLogging.class)
 final class RecalledFrameChainTests {
 

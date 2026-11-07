@@ -383,11 +383,70 @@ tests, and behind the slice canonicalization in the `dataSlice` row of the 4.4 t
 `LiveDevnetLogsAllShapeTests` replays the first exchange verbatim with the second probe's late
 notifications and refusal spliced in; `LogsSubscribeAllTests` covers overloads, routing and replay.
 
+Batch messages and the message cap, measured against a local `solana-test-validator` from
+solana-cli 3.1.10 on 2026-11-05. The pubsub server caps an inbound message, and each of its
+frames, at 4,096 UTF-8 bytes, inclusive and hard-coded (`agave:rpc/src/rpc_pubsub_service.rs`,
+`set_max_message_size(4_096)` and `set_max_frame_size(4_096)`): batches of 4,000 and 4,096 bytes
+were answered and the connection stayed usable, while 4,097 and 4,200 bytes reset the TCP
+connection with no close frame and nothing answered, as the same cap does to a single request
+over it. The connection loop in that file reads one message to completion and writes its answer
+before reading the next, so messages are handled and answered one at a time, in the order they
+arrive; per the same loop (read, not measured), a message that is not UTF-8 closes the
+connection. jsonrpc-core 18.0.0, which agave's root `Cargo.toml` pins
+(`https://github.com/paritytech/jsonrpc`, tag `v18.0.0`, `core/src/io.rs`), runs a batch's calls
+in array order, so subscription ids are granted in that order, answers them as one array in the
+same order, and drops the outputs of notifications (`outputs_as_batch`). `[]` drew no answer at
+all; `[1]` drew the single object
+`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`, the answer to any
+message `read_request` cannot parse; and a batch of a request the server refuses (id 8) and a
+`slotSubscribe` (id 9) drew `[{"error":…,"id":8},{"result":0,"id":9}]`, the refused element
+answered in its place under its own id. The public endpoints behave the same way at the array
+level: on 2026-11-06, `wss://api.mainnet-beta.solana.com`, `wss://api.devnet.solana.com` and
+`wss://api.testnet.solana.com` each answered one array of a `slotSubscribe` and a
+`rootSubscribe` with one array of both grants in request order, and a single request on the same
+connection afterwards as usual; the message cap was not probed there, and a proxy in front of a
+public endpoint may impose its own. What that proxy does impose, measured the same day against
+`api.mainnet-beta.solana.com` from one connection at a time, counts messages, not requests: 200
+`accountSubscribe` requests sent one per message drew close code 1013, "Rate limit reached: Too
+many subscriptions attempted. Please open a new connection.", while 1,000 of them packed into 40
+batch messages of at most 4,096 bytes were all granted in about 0.8 s, and 100 took 1.9 to 3.9 s
+one per message against 0.1 to 0.4 s in four batches. Measured again on 2026-11-07 (probes and
+results under the day's hardening evidence): that limit is a budget of 100 plain-object subscribe
+messages per connection for the connection's life, not a rate, since five per second still drew
+the close at the 101st, and 90 followed by two minutes kept alive with pings and 30 more drew it
+at the 101st overall; array messages were not counted at all, 600 batches of two (1,200
+subscriptions) and 150 arrays of one leaving the connection open; and the subscriptions made in
+batches were served, not only granted: of 160 hot accounts subscribed in 7 batch messages, 113
+delivered an `accountNotification` within 25 s, 50 of them among the 60 granted beyond the 100th,
+and of 400 in 16 messages, 298 delivered, 240 of them beyond the 100th (the rest did not change in
+the window). The same proxy drops a connection silent for 90 s or less with close code 1006 and no
+close frame, while a Ping every 10 s kept one alive for two minutes; sava's default Ping interval
+is 15 s and was not itself measured there.
+`SolanaRpcWebsocket.Builder#singleSubscribeBudget(int)` lets a caller declare that budget: while
+batching is on and not refused, a replay larger than the budget keeps batching where a lost
+connection's unanswered batch would otherwise have made the next connection send one request per
+message. It declares what the endpoint counts today and enforces nothing itself: a generic
+request still travels alone, and so does any registration made on its own. sava's opt-in
+`SolanaRpcWebsocket.Builder#subscribeBatchBytes(int)` rests on these: the setter refuses a cap
+above 4,096; only typed subscribes share an array, never a generic request's caller-supplied
+params; array elements are matched to requests by id, never by position; and an id-less -32700
+outside an array is attributed to the oldest batch still unanswered: batching stops on the
+instance at once, and the next pass re-sends that batch's requests one per message. That
+attribution holds only because answers come back in the order the messages arrived and because
+a -32700 answers a message the server could not read at all: jsonrpc-core writes it only where
+`read_request` fails, always with a null id, and agave's pubsub methods fail with other codes.
+Other answers can carry `"id":null` too (read, not measured), among them -32600 for an object
+that is neither a call nor a notification and names no id (`Call::Invalid`, whose `default_id`
+is null, in `core/src/types/request.rs`) and whatever answers a call sent with `"id":null`; none
+of them releases a batch, since the release is gated on -32700.
+
 Tests: `sava-rpc/src/test/java/software/sava/rpc/json/http/ws/SolanaJsonRpcWebsocketTests.java`
 and `SolanaRpcWebsocketTests.java` (subscription lifecycle and framing); `LogsSubscribeAllTests.java`
 and `LiveDevnetLogsAllShapeTests.java` (the `all` logs filter);
 `TokenAccountStateFilterSubscriptionTests.java` (the `tokenAccountState` filter on program
-subscriptions).
+subscriptions); `SubscribeBatchingTests.java`, `SubscribeBatchCapTests.java`,
+`BatchResponseDispatchTests.java` and `BatchRejectionFallbackTests.java` (subscribe batching:
+composition, the cap, array dispatch and the fallback).
 
 ## Errors: TransactionError, InstructionError, RPC custom errors
 
@@ -1241,6 +1300,7 @@ completes.**
 | agave | `e9a538e726` | 2026-07-14 | Token-2022 extensions (`account-decoder/src/parse_token_extension.rs`, `account-decoder-client-types/src/token.rs`), HTTP RPC method set (`rpc/src/rpc.rs`), pubsub methods (`rpc/src/rpc_pubsub.rs`), request/response shapes (`rpc-client-types/src/{config,response}.rs`), custom error codes (`rpc-client-api/src/custom_error.rs`), reserved accounts (`reserved-account-keys/src/lib.rs`), sysvar layouts (`account-decoder/src/parse_sysvar.rs`), `transaction-status-client-types/src/lib.rs` enums |
 | agave, 4.4 RPC delta only | `b6149a719f` (`v4.4.0-rc.1`) | 2026-10-28 | `v4.3.2..v4.4.0-beta.1..v4.4.0-rc.1`: `rpc/src/{rpc,rpc_pubsub,rpc_subscriptions}.rs`, `rpc-client-types/src/{config,response,request}.rs`, `rpc-client-api/src/custom_error.rs`, account/transaction decoder response schemas and pinned error enum versions. New status/transaction context options, vote-key schedules, missing-identity error and WebSocket slices implemented; live observations and separate 4.5 alpha boundary above. Other surfaces retain their earlier sync rows. |
 | agave, request options only | `2e935dae83` | 2026-11-01 | `rpc-client-types/src/{config,filter,request}.rs` (every `min_context_slot`, `sort_results`, `RpcBlockProductionConfigRange`, `RpcFilterType::TokenAccountState`, `RpcTransactionLogsFilter`), `rpc/src/{rpc,rpc_pubsub,filter}.rs` (the checks named under "Request options closed on 2026-11-01"), `transaction-status/src/{lib,parse_accounts}.rs` and `transaction-status-client-types/src/lib.rs` (`TransactionDetails::Accounts`, `UiAccountsList`, `ParsedAccount`). Other surfaces keep their rows. |
+| agave, pubsub message cap only | `b488d5d709` | 2026-11-06 | `rpc/src/rpc_pubsub_service.rs` (`handle_connection`): every pubsub connection's `soketto` builder gets `set_max_message_size(4_096)` and `set_max_frame_size(4_096)`, hard-coded, the bound behind `SolanaRpcWebsocketBuilder.MAX_SUBSCRIBE_BATCH_BYTES` and the batch paragraph under WebSocket API; its loop reads one message to completion and sends that message's answer before reading the next, and ends the connection on a message that is not UTF-8. The root `Cargo.toml` pins `soketto = "0.8"`, whose enforcement of those limits was not read: the bound being inclusive, and the reset above it, are that paragraph's measurements against solana-cli 3.1.10. Other surfaces keep their rows. |
 | solana-sdk | `4fb3a9a3` | 2026-07-14 | `transaction-error/`, `instruction-error/` (all variants), `sdk-ids/` (address constants) |
 | solana-sdk, error enums only | `983858e1` | 2026-09-20 | `transaction-error/` and `instruction-error/` variant sets, via the committed error-variants fixture (crates 4.0.0 and 3.0.0, published from `9d02e6dc` and `5bcc7778`, source unchanged since). `sdk-ids/` and every other solana-sdk surface were not rechecked and keep the row above. |
 | solana-sdk, address ordering only | `3da2b8b9` | 2026-10-06 | `address/src/lib.rs`: `Address` (re-exported as `Pubkey`) derives `Ord`/`PartialOrd` over `[u8; 32]`, with no manual impl in `address/` or `pubkey/`; `PublicKey.compareTo` mirrors that order. Nothing else in solana-sdk was checked in this pass, PDA derivation in the same crate included. |

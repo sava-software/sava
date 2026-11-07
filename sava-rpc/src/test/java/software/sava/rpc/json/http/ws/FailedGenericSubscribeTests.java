@@ -14,12 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /// Defensive tests for what a generic `subscribe` that fails leaves in this library's
-/// notification-method registry. `SolanaJsonRpcWebsocket.subscribe` creates the namespace
-/// map with `computeIfAbsent` before it stores the registration, and storing a null key
-/// throws from `ConcurrentHashMap.put`, so the failed call leaves an empty namespace
-/// behind. The interface documents no exception for a null key; the outcome under test is
-/// the state the failure leaves, not how it fails, so the call is made through
-/// `subscribeWithNullKey`.
+/// notification-method registry. `SolanaJsonRpcWebsocket.subscribe` refuses a null key with
+/// `IllegalArgumentException`, as the interface documents, before it creates the
+/// notification namespace or mints a request id: the registry put would reject the key only
+/// after both exist, leaving an empty namespace resident for the instance's life. These tests
+/// pin that the refusal leaves no namespace or registration behind, and that a notification
+/// under the refused method is then ignored: no exception subscriber hears of it and no frame
+/// answers it. The outcome under test is the state the failure leaves, not how it fails, so
+/// the call is made through `subscribeWithNullKey`.
 @ExtendWith(QuietWsLogging.class)
 final class FailedGenericSubscribeTests {
 
@@ -60,8 +62,10 @@ final class FailedGenericSubscribeTests {
   }
 
   /// A notification under a method with no live registration is ignored: it is not consumer
-  /// news and it mints no cancellation, since no un-subscription method was ever bound. The
-  /// failed subscribe's empty namespace must not change that, whatever else it costs.
+  /// news and it mints no cancellation, since no un-subscription method was ever bound. A
+  /// subscribe refused under that method must not change that. The router reads an empty
+  /// namespace as no registration too, so a leaked one would still pass here:
+  /// `aFailedSubscribeRetainsNoNotificationNamespace` is the test that catches the leak.
   @Test
   void aNotificationUnderAFailedSubscribesNamespaceIsIgnored() {
     try (final var ws = websocket()) {
@@ -82,8 +86,7 @@ final class FailedGenericSubscribeTests {
 
   /// Failure atomicity: a subscribe that registered nothing retains nothing. The prune in
   /// `unsubscribe` and in the terminal release exists because an empty namespace left
-  /// resident is a per-method leak for the instance's life; `retainedRegistrations` counts
-  /// it. Fails today: the empty `fooNotification` map stays until `close()`.
+  /// resident is a per-method leak for the instance's life; `retainedRegistrations` counts it.
   @Test
   void aFailedSubscribeRetainsNoNotificationNamespace() {
     try (final var ws = websocket()) {

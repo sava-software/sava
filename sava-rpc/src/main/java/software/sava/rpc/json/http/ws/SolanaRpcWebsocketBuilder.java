@@ -26,8 +26,22 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   /// TLS handshake to a rate-limited public endpoint can exceed that, turning a latency spike
   /// into a reconnect storm. A node slower than this is worth giving up on.
   static final long DEFAULT_CONNECT_TIMEOUT = 8_000;
+  /// The largest [#subscribeBatchBytes(int)]: Agave's inbound message limit, in UTF-8 bytes of
+  /// the whole message and inclusive. Its pubsub server is built with a hard-coded
+  /// `set_max_message_size(4_096)` and resets the connection, unanswered, on a message above it,
+  /// so a larger cap could only trade a burst for a lost connection. A bound can be relaxed
+  /// later; one added later would break callers that had set more.
+  static final int MAX_SUBSCRIBE_BATCH_BYTES = 4_096;
 
   private int maxMessageLength = DEFAULT_MAX_MESSAGE_LENGTH;
+  /// 0, batching off, until set. Unlike the zero of the keep-alive and resend delays, which
+  /// records "not given" and which [#keepAliveDelay(long)] and [#subscriptionResendDelay(long)]
+  /// refuse, this zero is a setting a caller makes: it turns batching back off on a reused
+  /// builder.
+  private int subscribeBatchBytes = 0;
+  /// 0, no budget declared, until set; like the batch cap, a zero set later withdraws the budget
+  /// on a reused builder.
+  private int singleSubscribeBudget = 0;
   private long connectTimeout = DEFAULT_CONNECT_TIMEOUT;
   private long reConnectDelay = 3_000;
   private long pingDelay = 15_000;
@@ -72,7 +86,9 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
         onClose,
         onError,
         onSendTextError,
-        onPingError
+        onPingError,
+        subscribeBatchBytes,
+        singleSubscribeBudget
     );
   }
 
@@ -187,6 +203,35 @@ final class SolanaRpcWebsocketBuilder implements SolanaRpcWebsocket.Builder {
   @Override
   public int maxMessageLength() {
     return maxMessageLength;
+  }
+
+  @Override
+  public SolanaRpcWebsocketBuilder subscribeBatchBytes(final int subscribeBatchBytes) {
+    if (subscribeBatchBytes < 0 || subscribeBatchBytes > MAX_SUBSCRIBE_BATCH_BYTES) {
+      throw new IllegalArgumentException("subscribeBatchBytes must be 0 (off) to " + MAX_SUBSCRIBE_BATCH_BYTES
+          + " (Agave's inbound message limit): " + subscribeBatchBytes);
+    }
+    this.subscribeBatchBytes = subscribeBatchBytes;
+    return this;
+  }
+
+  @Override
+  public int subscribeBatchBytes() {
+    return subscribeBatchBytes;
+  }
+
+  @Override
+  public SolanaRpcWebsocketBuilder singleSubscribeBudget(final int singleSubscribeBudget) {
+    if (singleSubscribeBudget < 0) {
+      throw new IllegalArgumentException("singleSubscribeBudget must be 0 (none) or positive: " + singleSubscribeBudget);
+    }
+    this.singleSubscribeBudget = singleSubscribeBudget;
+    return this;
+  }
+
+  @Override
+  public int singleSubscribeBudget() {
+    return singleSubscribeBudget;
   }
 
   @Override

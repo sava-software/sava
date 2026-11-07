@@ -2119,6 +2119,29 @@ final class SolanaJsonRpcWebsocketLifecycleTests {
     }
   }
 
+  /// The generic subscribe documents an `IllegalArgumentException` for a null key beside the
+  /// method-name clauses above, whether or not the notification method already holds a
+  /// registration. `FailedGenericSubscribeTests` pins the state the refusal leaves and accepts
+  /// any exception on purpose, so a refusal that changed type would leave it green and the
+  /// published clause false: the type is pinned here. The same call with a key is accepted, so
+  /// the refusal is the key's alone.
+  @Test
+  void genericNullKeyIsAnIllegalArgument() {
+    try (final var ws = websocket(new TestClock(), null, null, null)) {
+      assertThrows(IllegalArgumentException.class, () -> ws.subscribe("voteSubscribe", "voteUnsubscribe",
+          "voteNotification", null, "", JsonIterator::readString, _ -> {
+          }), "a null key under a fresh notification method");
+      assertEquals(0, ws.retainedRegistrations(), "refused before the notification namespace exists");
+
+      assertTrue(ws.subscribe("voteSubscribe", "voteUnsubscribe", "voteNotification", "vote", "",
+          JsonIterator::readString, _ -> {
+          }), "the same call with a key is accepted");
+      assertThrows(IllegalArgumentException.class, () -> ws.subscribe("voteSubscribe", "voteUnsubscribe",
+          "voteNotification", null, "", JsonIterator::readString, _ -> {
+          }), "a null key under a notification method that holds a registration");
+    }
+  }
+
   /// F6: the attempt is reserved before the builder runs, so an onOpen handler delivered
   /// synchronously by a wrapping builder can re-enter connect() and JOIN the in-flight attempt
   /// — unreserved, the reentry found nothing in flight, aborted the socket it was being told

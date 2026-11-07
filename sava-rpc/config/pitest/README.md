@@ -439,15 +439,27 @@ Targets `software.sava.rpc.json.http.ws.*`. Every member below is a
 - **`# empty-scan fast path`** — `escalateUnanswered`
   `RemoveConditionalMutator_EQUAL_ELSE` (the `inFlightSends.isEmpty()` operand) and
   `handleActivePendingSubscriptions` `RemoveConditionalMutator_EQUAL_IF` (the
-  `killedSubIds` emptiness check). Reason: the mutant enters a loop over an empty
-  `HashMap` entry set, whose iterator yields no element, so the per-entry body, the only
-  place either loop does work, never runs; the deadline computed before it reads only a
-  record accessor. Oracle: the `Iterator` contract and `Collection.removeIf`'s default
-  traversal, which JDK 25's `HashMap.EntrySet` does not override;
+  `killedSubIds` emptiness check). Reason: each mutant enters a loop over an empty
+  `HashMap` entry set, whose iterator yields no element, so the per-entry body never
+  runs, and the kill sweep does nothing else. The deadline scan's mutant also computes
+  the deadline, which reads only a record accessor, and tests the unanswered-deadline
+  floor; where the floor does not answer, it adds the empty map's size, zero, to the
+  visit counter and stores the scan's identity, `Long.MAX_VALUE`, as the floor, and it
+  returns null either way. The floor is read only past the emptiness check, so its value
+  over an empty map is never consulted, and `trackInFlight`, the only insertion, sets it
+  to the inserted stamp whenever the map was empty: the next insertion overwrites the
+  mutant's `Long.MAX_VALUE` exactly as it overwrites the stale floor the original keeps.
+  Oracle: the `Iterator` contract and `Collection.removeIf`'s default traversal, which
+  JDK 25's `HashMap.EntrySet` does not override;
   `MaintenancePassBoundaryTests.aPassWithNothingInFlightAndNoKillFindsNoWorkAtAnyAge`
   runs passes with nothing in flight from age zero to the largest clock step and asserts
-  no escalation, frame, ping or ordinal entry. Invalidated if (derived): either loop
-  gains work outside its per-entry body.
+  no escalation, frame, ping or ordinal entry;
+  `UnansweredFloorTests.theFloorFollowsADirectPathCancellation` runs a pass with nothing
+  in flight past the deadline of the floor an answered request left, refills the map
+  with a cancellation, and finds no scan until the cancellation's own deadline has
+  passed, then one that escalates it. Invalidated if: the floor is read while nothing is
+  in flight, an insertion into an empty in-flight map stops setting the floor to its own
+  stamp, or either loop gains work outside its per-entry body other than the floor's.
 - **`# saturated deadline fringe`** — `escalateUnanswered`
   `ConditionalsBoundaryMutator`. Reason: it differs only at a resend window of exactly
   `Long.MAX_VALUE / UNANSWERED_ESCALATION_FACTOR`, where the deadline becomes
@@ -615,7 +627,6 @@ Targets `software.sava.rpc.json.http.ws.*`. Every member below is a
   when no matching work remains; no registry state changes. Oracle: condition wakeups
   are explicitly allowed to be spurious (`Condition` contract). Invalidated if
   (derived): a waiter treats a wakeup as proof of work.
-
 ### Parser rescans
 
 - **`# unique-member rescan`** — `RemoveConditionalMutator_EQUAL_IF` on `skipToParams`
@@ -667,12 +678,14 @@ Targets `software.sava.rpc.json.http.ws.*`. Every member below is a
   `pingFailure` gains a writer outside that transition, or a connection can return to
   `ACTIVE`.
 - **`# private-tail normalization`** — `lambda$sendSubscription$1`
-  `NullReturnValsMutator`, on the `return` of the recall branch, which drops a
-  subscribe cancelled while it waited in the chain. Reason: the null return makes the
-  link's `thenCompose` stage complete exceptionally, and that stage is read only as
-  the next link's predecessor. `queueText` and `sendSubscription` both begin with
-  `outboundTail.exceptionally(_ -> null)`, the tolerance that keeps a failed send from
-  blocking the chain, and nothing else reads the tail. Oracle:
+  `NullReturnValsMutator`, on the `return` that follows the recall loop when the link
+  has nothing left to send, which drops a link of subscribes when every request in it
+  was cancelled while it waited in the chain (a link with any request left sends what
+  is left). Reason: the null return makes the link's `thenCompose` stage complete
+  exceptionally, and that stage is read only as the next link's predecessor. `queueText`
+  and `sendSubscription` both begin with `outboundTail.exceptionally(_ -> null)`, the
+  tolerance that keeps a failed send from blocking the chain, and nothing else reads the
+  tail. Oracle:
   `RecalledFrameChainTests` recalls a frame and chains a successor behind it through
   each reader, requiring the successor on the wire in order and no report from the
   error, send-error, ping-error or exception seams. Invalidated if (derived): anything
