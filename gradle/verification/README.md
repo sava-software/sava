@@ -146,7 +146,7 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
    `-PjmhVersion=<v>` added; a chain trimmed in its own commit, such as JMH 1.36's, comes
    back from git history as step 2 says), after which `jmh/gradle/verification-keyring.keys`
    is re-created as a link. No write run drafts the plugin's sources jar: an IntelliJ sync
-   of `jmh/` (step 5) is the only thing that resolves it.
+   of `jmh/` is the only thing that resolves it.
 
 4. A warm cache can hide parent-POM metadata that a cold one fetches. Validate a new parent
    or BOM, and every trim (an entry removed by hand because no build resolves what it
@@ -163,13 +163,7 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
    build saved, so the first one after a policy change waits for main's next build to warm
    that cache with the signature files.
 
-5. Sync IntelliJ as well. It downloads sources through the same policy, including artifacts
-   no command-line build resolves: the Gradle sources zip, Groovy's sources and, in a sync
-   of `jmh/` opened as its own Gradle project, the jmh plugin's unsigned sources jar, whose
-   pin moves with the plugin (the root build has not resolved the plugin since sava-build
-   21.8.5). A refusal shows in the sync output.
-
-6. After a policy edit, run `./gradlew verificationKeyStatus` from the root. It asks the
+5. After a policy edit, run `./gradlew verificationKeyStatus` from the root. It asks the
    network, so it sits outside `check`: it fetches every key the policy trusts from
    keys.openpgp.org and keyserver.ubuntu.com, reads revocation and expiry from the copies
    they hold, re-reads gradle/gradle's policy for the keys the version-scoped list's header
@@ -177,6 +171,17 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
    A revoked key still trusted without a version, or a key a server left undecided, fails
    it; an expired key, a revoked key already at exact versions and a withdrawn
    corroboration warn. The release checklist runs it beside `hardeningCertify`.
+
+No step needs the IDE: no IntelliJ sync is owed after a policy change, and a session does
+not ask for one. A sync resolves through the same policy, so it can refuse an artifact and
+never admit one to a build. The known artifacts only a sync resolves are the Gradle sources
+zip, under the `gradle:gradle` rule, Groovy's sources, under the `org.apache.groovy` key,
+and, in a sync of `jmh/` opened as its own Gradle project, the jmh plugin's unsigned
+sources jar, whose pin moves with the plugin (the root build has not resolved the plugin
+since sava-build 21.8.5). A trim keeps those entries. A session that removes or narrows one
+of them, moves the plugin's pins without the sources jar's, or bumps the wrapper says so in
+its report; a refusal shows in the next sync's output. sava-build's README (the closing
+paragraph of "Adopting and updating") says the same for every consumer.
 
 A **wrapper bump** also moves the unsigned `org.gradle.kotlin.kotlin-dsl.gradle.plugin`
 marker, whose version the wrapper decides: replace its pin in the same commit as
