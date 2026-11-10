@@ -331,6 +331,38 @@ final class ReadySetTests {
     }
   }
 
+  /// A transient refusal that reaches the listener before the request's own send future has
+  /// settled, an order the JDK allows because it does not order a send's completion against
+  /// inbound frames. The refusal concludes the attempt, so the request is ready again, and the
+  /// completion that follows must not stamp it in flight as well: ready and in flight at once is
+  /// a state no transition may leave. From there it is any refused request, retried once the
+  /// window is exceeded and gated again by that retry.
+  @Test
+  void aTransientRefusalAheadOfItsSendCompletionIsReadyOnly() throws InterruptedException {
+    final var clock = new TestClock();
+    try (final var ws = websocket(clock)) {
+      assertTrue(ws.accountSubscribe(KEY_A, _ -> {
+      }));
+      final var socket = new RecordingWebSocket();
+      socket.deferTexts = true;
+      ws.onOpen(socket); // handed to the socket, its send future held open
+      assertEquals(1, socket.sentText.size(), socket.sentText::toString);
+      assertReady(ws, 0, "admitted, its send not yet settled");
+
+      feed(ws, socket, """
+          {"jsonrpc":"2.0","error":{"code":-32603,"message":"Subscription refused"},"id":2}""");
+      assertReady(ws, 1, "refused transiently before its send settled: ready on its kept stamp");
+
+      socket.deferredTexts.getFirst().complete(socket);
+      assertReady(ws, 1, "the late completion stamps nothing: still ready, and not in flight as well");
+
+      clock.advanceMillis(TIMINGS.subscriptionResendDelay() + 1L);
+      ws.checkCycle(0L);
+      assertEquals(2, socket.sentText.size(), () -> "one retry, past the window: " + socket.sentText);
+      assertReady(ws, 0, "re-admitted");
+    }
+  }
+
   /// A frame the transport reported as failed may still have reached the peer. Its grant takes
   /// the re-armed request out of the ready set and installs it, and the window elapsing sends
   /// nothing more. The failed attempt never ran `onSub`, so delivery under the granted id is

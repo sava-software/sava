@@ -5,6 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import software.sava.core.accounts.PublicKey;
 import software.sava.core.accounts.SolanaAccounts;
 import software.sava.rpc.json.http.request.Commitment;
+import software.sava.rpc.json.http.response.AccountInfo;
 
 import java.net.URI;
 import java.nio.CharBuffer;
@@ -25,7 +26,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /// refilled), that a scan let through by a stale floor still judges each request by its own
 /// age, and that the floor never ends above a live stamp, neither after a scan nor after an
 /// insertion older than the floor. A floor too high hides an overdue request, so those last
-/// tests assert the escalation it would hide rather than a count.
+/// tests assert the escalation it would hide rather than a count. One test is the converse: a
+/// request granted before its own send completed leaves no stamp behind, so no pass can report
+/// an answered request as overdue.
 ///
 /// A count is read while its connection is current: an escalation's delivery retires the
 /// connection, after which the seam reads 0, so escalating passes are split at
@@ -427,6 +430,49 @@ final class UnansweredFloorTests {
               errors.getFirst()::getMessage),
           () -> assertTrue(socket.aborted, "the escalation replaced the connection")
       );
+    }
+  }
+
+  /// A grant that reaches the listener before its request's own send future has settled, an
+  /// order the JDK allows because it does not order a send's completion against inbound frames.
+  /// The grant concludes the attempt and takes its stamp, and the completion that follows must
+  /// leave it gone: a stamp put back then belongs to no request the server still owes an answer,
+  /// so nothing would ever clear it, and one deadline later a pass would report an answered
+  /// request as unanswered and replace a healthy connection. Oracle: the deadline, counted from
+  /// the completion, the latest reading such a stamp could carry. A pass past the deadline of the
+  /// floor the request left, and not yet past the completion's, scans nothing, since nothing is
+  /// in flight; a millisecond later, past the completion's too, nothing is reported, the socket
+  /// is kept, and the subscription the grant installed delivers.
+  @Test
+  void aGrantAheadOfItsSendCompletionLeavesNoStamp() throws InterruptedException {
+    final var clock = new TestClock();
+    final var errors = new ArrayList<Throwable>();
+    try (final var ws = websocket(clock, errors)) {
+      final var received = new ArrayList<AccountInfo<byte[]>>();
+      assertTrue(ws.accountSubscribe(key(1), received::add));
+      final var socket = new RecordingWebSocket();
+      socket.deferTexts = true;
+      ws.onOpen(socket); // request 2 handed to the socket at t0, its send future held open
+      assertEquals(1, socket.sentText.size(), socket.sentText::toString);
+
+      feed(ws, socket, grant(2, 700)); // the answer first
+      clock.advanceMillis(1L);
+      socket.deferredTexts.getFirst().complete(socket); // then the send's own completion, at t0 + 1
+
+      assertTrue(ws.readySetMatchesPendingWork(), "granted: no longer pending, and not ready");
+      clock.advanceMillis(DEADLINE); // t0 + 1 + DEADLINE: past the deadline of the floor request 2 left at t0
+      ws.checkCycle(0L);
+      assertEquals(0, ws.unansweredScanVisits(), "nothing in flight, nothing scanned");
+
+      clock.advanceMillis(1L); // past the deadline of a stamp taken at the completion
+      ws.checkCycle(0L);
+      assertAll(
+          () -> assertTrue(errors.isEmpty(), () -> "an answered request is not reported unanswered: " + errors),
+          () -> assertFalse(socket.aborted, "the connection is kept"),
+          () -> assertEquals(1, socket.sentText.size(), () -> "a granted request is never re-sent: " + socket.sentText)
+      );
+      feed(ws, socket, accountNotification(700));
+      assertEquals(1, received.size(), "and its subscription delivers");
     }
   }
 }
