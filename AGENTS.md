@@ -216,9 +216,11 @@ population: measured 2026-08-04 on the source of that date, `pitestWs` generated
 mutants unlicensed and 573 licensed**. Freshness controls do not change that — ordinary,
 `-PnoMutationHistory` and `hardeningCertify` runs all report the licensed count, because
 they disable reuse only and keep `com.arcmutate:base` on the tool classpath. The absolute
-numbers move with the source: after the 2026-08-08 websocket liveness work the licensed
-`pitestWs` population is **580**. The unlicensed count has not been re-measured since, so
-treat the 605/573 pair as a ratio observed once rather than a current figure.
+numbers move with the source (the licensed `pitestWs` population measured 580 after the
+2026-08-08 websocket liveness work and 1,527 at the 2026-11-10 sava-build 21.8.7 adoption),
+so read the current count from the suite's own output, not from this file. The unlicensed
+count has not been re-measured since 2026-08-04, so treat the 605/573 pair as a ratio
+observed once rather than a current figure.
 Consequences recorded in `HARDENING_NOTES.md`: sava's baselines were all first written
 unlicensed, so a handful of accepted rows had no licensed counterpart and were reported
 unmatched on every run until 2026-10-07, when the owner settled that **the licensed
