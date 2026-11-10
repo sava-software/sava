@@ -348,19 +348,27 @@ something other than the block above, replace the block with what it prints and
 just new prose. Print the template the *installed* plugin carries rather than
 copying a possibly newer block out of sava-build's moving `main`.
 
-**This repo pins a published sava-build release.** The three pins — both ids in
-the root `settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read
-`21.8.3`, adopted on 2026-11-05; `HARDENING_NOTES.md` records the resolved jar's
-SHA-256 and attestation. **The pins must move together**; a settings-only bump has
-silently missed the jmh pin more than once. This combination resolves from the
-ordinary published repository; `-PsavaBuildLocalRepo` is needed only while
-evaluating an unpublished candidate. The sequence for the next bump is: move all
-three pins, run `:sava-core:savaBuildIdentity` and confirm the resolved coordinates
-and SHA-256, run `:sava-core:hardeningAgentTemplate`, and replace the block above if
-it changed. A bump that changes the plugin's dependencies or its tool versions (PIT,
-ArcMutate, Jazzer) also needs the dependency verification policy updated: re-run the root
-build with `resolveVerificationTools`, and the `-p jmh` and `-p soak` builds, as
-`gradle/verification/README.md` shows. CI runs only the root `check`.
+**This repo pins a published sava-build release.** The three pins — both ids in the root
+`settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read `21.8.7`, adopted on
+2026-11-10; `HARDENING_NOTES.md` records the resolved jar's SHA-256 and attestation. **The
+pins must move together**; a settings-only bump has silently missed the jmh pin more than
+once. `jmh/build.gradle.kts` also declares the JMH Gradle plugin,
+`id("me.champeau.jmh") ... apply false`, which is not a sava-build pin: it is held at
+`jmh-gradle-plugin`'s version in sava-build's `gradle/libs.versions.toml` at the adopted
+tag, and when that version moves, the declaration and the plugin's policy pins (jar,
+module metadata, marker POM, sources jar) move with it. This combination resolves from the
+ordinary published repository; `-PsavaBuildLocalRepo` is needed only while evaluating an
+unpublished candidate. The sequence for the next bump is: move all three pins, run
+`:sava-core:savaBuildIdentity` and confirm the resolved coordinates and SHA-256, run
+`:sava-core:hardeningAgentTemplate`, and replace the block above if it changed. A bump
+that changes the plugin's dependencies or its tool versions (PIT, ArcMutate, Jazzer) also
+needs the dependency verification policy updated: re-run the root build with
+`resolveVerificationTools`, and the `-p jmh` and `-p soak` builds, as
+`gradle/verification/README.md` shows; a bump that changes anything a suite's
+`<suite>-pitest-toolchain.tsv` binds (PIT, its JUnit plugin, the ordered tool artifacts,
+ArcMutate base, the selected certificate's identity and expiry) also owes each suite with
+a committed record a history-free review run and its `pitest<Suite>BaselineRebase`, as
+"Record provenance" above says. CI runs only the root `check`.
 
 Machine-specific context (local clone paths, environment notes) belongs in
 `AGENTS.local.md`, which is git-ignored. Keep this file portable.

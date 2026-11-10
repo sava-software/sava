@@ -38,8 +38,11 @@ provenance of sava's own artifacts.
   the exact versions in the policy. These are the PIT and ArcMutate signers, for whose
   publisher no source was found, and keys that signed old releases and must not vouch for new
   ones: expired keys, DSA-1024 keys and retired release managers' keys.
-- **SHA-256 checksums** for artifacts that are not signed, such as the jmh plugin and the
-  kotlin-dsl marker from the Gradle Plugin Portal and the antlr libraries PIT depends on.
+- **SHA-256 checksums** for artifacts that are not signed, such as the jmh plugin's jar,
+  module metadata, marker POM and sources jar and the kotlin-dsl marker from the Gradle
+  Plugin Portal, and the antlr libraries PIT depends on. Since sava-build 21.8.5 the root
+  build resolves neither the jmh plugin nor jmh-core's chain; only `-p jmh` does, so a trim
+  judged from the root build alone would drop entries the jmh build still needs.
 - **Nothing else.** Key servers are disabled, so keys come only from the committed keyring,
   and there are no ignored keys or trusted-artifact exemptions.
 
@@ -90,9 +93,11 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
      key that a trim dropped comes back from git history, its exact-version rule, its list
      line and its keyring block together, never from a write run: step 3 consults key
      servers while writing and drafts the key as an exact-version rule without its list line
-     or as per-artifact `<pgp>` entries, which `verificationPolicy` refuses, and the fixes
-     its notice offers first, drop the version or trust the publisher's group or module,
-     would hand an old release manager's or a weak key the whole module. A chain trimmed in
+     or as per-artifact `<pgp>` entries, which `verificationPolicy` refuses. Its notice puts
+     this restore first since sava-build 21.8.4; the widening fixes it offers after it, drop
+     the version or trust the publisher's group or module, are for a current key the
+     publisher confirms or gradle/gradle corroborates, and taken for an old release
+     manager's or a weak key they would hand it the whole module. A chain trimmed in
      a commit of its own comes back alone:
 
      ```sh
@@ -128,13 +133,20 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
    names the fix, as it does for ignored-key fallbacks, exemptions and a replaced symlink.
    Gradle never removes a stale entry, and it downloads missing keys from the default key
    servers while writing, even with key servers disabled for verification (only `--offline`
-   stops it), so authenticate any key it adds. Run it without `-PsavaBuildLocalRepo`: with the
-   property it pins the unsigned `0.0.0-test` publication, which `verificationPolicy` rejects.
-   An entry no build resolves any more is trimmed by hand: its rule, its list line and the
-   keyring block no remaining rule names, cut with one adjacent blank line (the one before it
-   for the file's last block; the export drops a blank line left at the end), then proved by
-   write runs from the root, `-p jmh` and `-p soak` that change nothing, each standalone
-   build's keyring link re-created afterwards, and by step 4's cold run.
+   stops it), so authenticate any key it adds. Run it without `-PsavaBuildLocalRepo`: with
+   the property it pins the unsigned `0.0.0-test` publication, which `verificationPolicy`
+   rejects. An entry no build resolves any more is trimmed by hand: its rule, its list line
+   and the keyring block no remaining rule names, cut with one adjacent blank line (the one
+   before it for the file's last block; the export drops a blank line left at the end), then
+   proved by write runs from the root, `-p jmh` and `-p soak` that change nothing, each
+   standalone build's keyring link re-created afterwards, and by step 4's cold run. The root
+   build has not resolved the JMH Gradle plugin since sava-build 21.8.5, so the plugin's
+   jar, module metadata and marker POM are drafted only by the same write run from `-p jmh`
+   with its step-1 task, `jmhJar` (a new harness version's chain by that run with
+   `-PjmhVersion=<v>` added; a chain trimmed in its own commit, such as JMH 1.36's, comes
+   back from git history as step 2 says), after which `jmh/gradle/verification-keyring.keys`
+   is re-created as a link. No write run drafts the plugin's sources jar: an IntelliJ sync
+   of `jmh/` (step 5) is the only thing that resolves it.
 
 4. A warm cache can hide parent-POM metadata that a cold one fetches. Validate a new parent
    or BOM, and every trim (an entry removed by hand because no build resolves what it
@@ -152,9 +164,10 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
    that cache with the signature files.
 
 5. Sync IntelliJ as well. It downloads sources through the same policy, including artifacts
-   no command-line build resolves: the Gradle sources zip, Groovy's sources and the jmh
-   plugin's unsigned sources jar, whose pin moves with the plugin. A refusal shows in the
-   sync output.
+   no command-line build resolves: the Gradle sources zip, Groovy's sources and, in a sync
+   of `jmh/` opened as its own Gradle project, the jmh plugin's unsigned sources jar, whose
+   pin moves with the plugin (the root build has not resolved the plugin since sava-build
+   21.8.5). A refusal shows in the sync output.
 
 6. After a policy edit, run `./gradlew verificationKeyStatus` from the root. It asks the
    network, so it sits outside `check`: it fetches every key the policy trusts from

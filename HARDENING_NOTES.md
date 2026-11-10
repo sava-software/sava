@@ -9,6 +9,108 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.8.7 — 2026-11-10
+
+All three plugin pins advance from 21.8.3 to the published `software.sava:sava-build:21.8.7`,
+crossing 21.8.4 through 21.8.6. `:sava-core:savaBuildIdentity` reported that coordinate,
+`local override: inactive`, and loaded JAR SHA-256
+`2c096c84dc7750388f27187cf00f2f233c41a57f175addbcd3a737f24137c1ea`. `gh attestation verify`
+verified its SLSA v1 provenance from `.github/workflows/gradle_plugin_publish.yml` at
+`refs/tags/21.8.7`, source commit `0b49910992a67837284df2eb129c4f593307dd37`, for the jar and
+its sources and javadoc jars. That jar is byte-identical to the `0.0.0-test` publication of
+sava-build `868ae66` that a throwaway clone of this tree exercised on 2026-11-09 against a
+21.8.3 control at the same commit: the two toolchains generated the same 9,742 mutants with
+the same statuses in all 17 suites. The installed `hardeningAgentTemplate` prints a block
+byte-identical to the one in `AGENTS.md`.
+
+Unlike the 21.8.x adoptions before it, this one owes every suite with a committed record a
+`BaselineRebase`: between the tags `gradle/libs.versions.toml` moves PIT from 1.30.0 to 1.30.2
+and ArcMutate base from 1.7.2 to 1.7.3 (`868ae66`), which changes what PIT is given. The
+policy moves the two signers' exact-version rules with them (`org.pitest` 1.30.2,
+`com.arcmutate` 1.7.3), and ASM 9.11, which PIT 1.30.2 brings, falls under the group-wide
+`org.ow2.asm` key. The review run, a root `qualityGate -PnoMutationHistory` over all 17
+suites, generated the same 9,742 mutants as the 2026-11-09 control, population and statuses
+identical in every suite, with no invalid outcome; each of the 12 recorded suites printed the
+two transition notices ("baseline record written by PIT 1.30.0, this run used PIT 1.30.2" and
+"mutation toolchain changed since the committed record"), its survivors matched its record,
+and the only unmatched rows were decimal's two `ORDER_IF` prune candidates, unmatched under
+21.8.3 too. Two suites also reported growth against their last local `.pitest-history`
+(primitives 64 to 73 mutants since 2026-10-28, ws 1,305 to 1,527 since 2026-11-07 09:03 UTC);
+the classes named (`DataSlice`, `TokenAccountStateFilter` and `Filter` in primitives, the
+websocket subscribe pipeline in ws) moved with this tree's own changes since those runs. Each
+of the twelve then ran its own `pitest<Suite>BaselineRebase`, which always takes a fresh,
+full, history-free observation before it writes: every one retained all its rows, 211 in all,
+with its `-accepted.csv` unchanged, and rewrote only its `-pitest-version` stamp (1.30.0 to
+1.30.2) and the `pitest`, `toolClasspathSha256` (now `37d20009…`) and `arcMutateBase` rows of
+its toolchain sidecar, the licence's hash and expiry unchanged; the 24 files match, hunk for
+hunk, what the 2026-11-09 clone's Rebases wrote. Two needed a second attempt, both refused in
+the first invocation. pbkdf's verify refused three `TIMED_OUT` results no audited set covers:
+two accepted survivors flipped to `TIMED_OUT` (`PBKDF2WithHmacSHA512.derive`
+`VoidMethodCallMutator` line 46, `# unobservable wipe`, and `PBKDFEncryption.decrypt`
+`ConditionalsBoundaryMutator` line 129, `# empty AAD update is a no-op`) and one normally
+killed mutant did too (`EncryptionEnvelope.decrypt` `NullReturnValsMutator` line 15). The host
+was asleep for most of that run: `pmset -g log` records a clamshell sleep at 09:28:54 UTC,
+seven seconds after `pitestPbkdf` started, then brief dark wakes from 09:31:18 to 09:34:03,
+two of them (09:31:18, 09:32:19) seconds before the timeouts (09:31:26, 09:31:27, 09:32:28),
+and a full wake only at 09:36:52; PIT's monotonic clock reported 46 s for a task that spanned
+322 s of wall time. A watchdog that fires across a host sleep says nothing about the suite's
+budget, so the "Timeout budgets" remedy for `SURVIVED` to `TIMED_OUT` drift (raising the
+constant) is not applied; the retake alone, awake, at a load under 6, scored the three as
+before (the verify reports them "no longer TIMED_OUT"), kept every accepted row and added no
+timeout member. Long PIT runs on this machine need it kept awake. responses, awake, ran at a
+load of about 19 to 34 and refused one `RUN_ERROR` (`RpcCustomError$NodeUnhealthy.parseRecord`
+`NullReturnValsMutator` line 111, 21.3 measured at the refusal); its retake in its own
+invocation started at about 7, rose to about 37, above the refused attempt's, and ran clean,
+which is closure for a non-recurring invalid execution. The failed attempts wrote nothing. The
+pre-adoption clone met the responses shape, a `RUN_ERROR` at a moving coordinate, in token2022
+and responses under another session's compile waves, as the 2026-10-07 entry records for
+1.30.0. The five suites without a record (`borsh`, `crypto`, `sysvar` and `primitives` in
+sava-core, `encoding` in sava-rpc) have nothing to rebase and printed no transition notice;
+like every suite, they owe one run at this range's gate. ArcMutate base 1.7.3's
+`DescriptionImprover` numbers nested lambdas post-order, so mutation descriptions such as "in
+2nd lambda in sendSubscription" can renumber (23 ws mutants in the two nested lambdas of
+`SolanaJsonRpcWebsocket.sendSubscription` swapped "2nd" and "3rd"); records key on synthetic
+method names and are unaffected.
+
+What the range changes for the jmh build is the plugin it drives. From 21.8.5 sava-build no
+longer ships the JMH Gradle plugin, and `software.sava.build.feature.jmh` refuses to configure
+until the benchmark build declares it; `jmh/build.gradle.kts` now carries
+`id("me.champeau.jmh") version "0.7.4" apply false` beside the feature, held at
+`jmh-gradle-plugin` in sava-build's `gradle/libs.versions.toml`. The Plugin Portal serves the
+plugin's marker POM unsigned, so the policy pins `me.champeau.jmh.gradle.plugin-0.7.4.pom` at
+SHA-256 `a329bf191ea58081cb21f88eb61a2f9175865ea1c066bb3d8fa300dbc12d3334`, the hash the
+Portal serves today and the one json-iterator's `8b23e89` pins, beside the jar, module and
+sources-jar pins already there. Those stay, as do jmh-core 1.37's chain rules: the jmh build
+still resolves them, while the root build's settings classpath carries neither since 21.8.5.
+The jmh task itself changed in 21.8.4 and 21.8.5: a benchmark error fails the task at the end
+of the run, with the passing rows archived and merged, `-PjmhFailFast=true` restoring the stop
+at the first error; the merge keys rows by benchmark, mode and parameter values under JMH's
+parameter columns; archives are stamped in UTC. `jmh/README.md` describes that, and
+`gradle/verification/README.md` says which pins only the jmh build meets, that only a sync of
+`jmh/` reaches the sources-jar pin, and that the guard's notice puts the restore-from-history
+path first since 21.8.4. Nothing else in the range asks anything of this repository: Gradle
+9.9 and the 768 MiB metaspace are sava-build's own build, as is its keyring trim; the settings
+plugins' narrower GitHub Packages lookups (`d319045`) fit a build that resolves only
+`software.sava` there, and the README's consumer settings blocks carry the repository content
+filters both pluginManagement blocks here already have; the guard's conditions are unchanged,
+only two of its notices reworded; the remaining commits are test fixtures, CI actions and
+release bookkeeping.
+
+Proofs, strict throughout, with no lenient flag and no local repo. Root `check` with
+`resolveVerificationTools`, without the configuration or build cache: 2,346 tests passed with
+two environment-gated skips, and each hardened project resolved PIT 1.30.2, ArcMutate base
+1.7.3 and Jazzer under the committed policy. `-p jmh help check jmhJar` and
+`-p soak classes jar soakModulePath` passed. The three step-1 builds passed again from an
+empty `GRADLE_USER_HOME` holding only the `org.gradle.java.*` lines, credentials in
+`ORG_GRADLE_PROJECT_*` variables, in 2m 41s, 22 s and 13 s (702 MiB home, Gradle distribution
+fetched), with the new parents `pitest-parent` 1.30.2 and `arcmutate-base-parent` 1.7.3 and
+the marker POM fetched fresh. `verificationKeyStatus` reports 43 trusted keys, 39 current, 3
+expired and 1 revoked, each of those four at exact versions, 0 undecided, all 7
+corroboration-only keys still vouched for by gradle/gradle; the one key more than the 21.8.3
+record is Jetty's `716EE302…`, which `b128573c` added. Not run here: an IntelliJ sync of
+`jmh/`, the only path that resolves the plugin's sources jar, whose pin is unchanged; a JMH
+benchmark run; certification and fuzzing, which stay on the release checklist.
+
 ## Released sava-build 21.8.3 — 2026-11-05
 
 All three plugin pins advance from 21.8.2 to the published

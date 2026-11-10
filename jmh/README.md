@@ -25,39 +25,50 @@ cd jmh
 Configuration comes from the shared `software.sava.build.feature.jmh`
 convention plugin, pinned to a published sava-build release in `build.gradle.kts`
 (`-PsavaBuildLocalRepo` redirects it to a local test publication; see
-`../AGENTS.md`); every default is overridable per invocation (`-PjmhFork`, `-PjmhIncludes`,
+`../AGENTS.md`). The JMH Gradle plugin it configures is this build's to declare
+since sava-build 21.8.5: `build.gradle.kts` carries
+`id("me.champeau.jmh") version "0.7.4" apply false` beside the feature, at
+`jmh-gradle-plugin`'s version in sava-build's `gradle/libs.versions.toml`, and the
+feature applies it, refuses an older plugin and warns of a newer one. Every
+default is overridable per invocation (`-PjmhFork`, `-PjmhIncludes`,
 `-PjmhWarmupIterations`, `-PjmhWarmup`, `-PjmhIterations`,
-`-PjmhTimeOnIteration`, `-PjmhFailOnError`, `-PjmhJvmArgsAppend`, and
+`-PjmhTimeOnIteration`, `-PjmhFailOnError`, `-PjmhFailFast`, `-PjmhJvmArgsAppend`, and
 `-PjmhVersion`, the JMH harness: 1.37 by default, and the only version whose
 whole dependency graph the verification policy covers). The forked
 benchmark JVMs run the long-running-service flag set (generational ZGC,
 compact object headers, pinned pre-touched heap, `-XX:+PerfDisableSharedMem`).
-Each run that writes results has its raw output archived timestamped under
-`jmh-results/`, and `build/results/jmh/results.txt` is then re-rendered as the
-merge of all archived runs (rows are keyed by benchmark name plus parameter
-values, and the newest archived row wins per key). A run that fails,
-or one JMH ends after listing or printing help, archives nothing; after
-`clean`, a failed run leaves an empty `results.txt` until a run writes results.
+Each run that writes a row has its table archived under `jmh-results/` as
+`results-<stamp>.txt`, stamped in UTC since sava-build 21.8.5 (the archives
+through `results-20261106-200901.txt` carry local-time stamps), and
+`build/results/jmh/results.txt` is then re-rendered as the newest-wins merge of
+all archived runs: one row per benchmark, mode and parameter values, under a
+header that keeps JMH's parameter columns, `N/A` where a row lacks one. Rows key on
+the name JMH prints, which drops the package only when every benchmark in the run
+shares it: `Base58Bench` and `WsSubscribeBench` sit in different packages, so a run of
+both (the plain `../gradlew jmh` above) posts them under partly qualified names
+(`s.s.rpc.jmh.WsSubscribeBench.*`), beside the bare `WsSubscribeBench.*` rows the
+archives carry, and the scoreboard shows the same benchmark twice. Select one class
+per run (`-PjmhIncludes=Base58Bench` or `-PjmhIncludes=WsSubscribeBench`). A run
+whose every benchmark failed archives nothing and leaves that scoreboard in
+`results.txt` (its header alone while no archive holds a row); a run JMH ends
+after listing or printing help archives nothing.
 
 **Compare with at least `-PjmhFork=3`, in isolation.** Single-fork scores
 swing 10–20% on JIT inlining luck alone; treat any row with an error above
 ~10% of its score as contaminated and re-run it alone. `Base58Bench`'s
 `@Setup` cross-checks that all its variants produce identical output;
 `WsSubscribeBench` compares no variants, and its fixture throws instead on an
-engine error, a refused registration or a missed deadline. The default
-`failOnError` turns a disagreement or any such throw into a hard failure. (It has
-reached JMH since sava-build 21.8.3, whose jmh-gradle-plugin 0.7.4 passes
-`-foe true`; 0.7.3 passed `-foe 1`, which JMH read as false, so no failure ever
-reached the task before.) What that costs: the first benchmark error, a fork that dies
-included, ends the run and fails the `jmh` task, and the run archives
-nothing, not even the benchmarks that finished before the error. JMH writes
-its results file after the last benchmark, so those scores survive only in
-the console output; send a long run's output to a file. Under
-`-PjmhFailOnError=false` the task passes and the run is archived: a late
-failure posts a short row (`Cnt` below forks × iterations) that replaces the
-full row in the merge, a dead fork or a trial `@Setup` failure posts no row,
-so the old row stays, and only the log's `<failure>` or
-`<forked VM failed with exit code N>` says so.
+engine error, a refused registration or a missed deadline. By default every
+benchmark runs, and a disagreement, any such throw or a fork that dies fails the
+`jmh` task once the run is over, naming the failed benchmark with its parameters:
+its rows, a late failure's short row (`Cnt` below forks × iterations) included,
+are left out of the archive while the passing benchmarks' rows are archived and
+merged, and the run's console output is saved as `build/results/jmh/output.txt`.
+`-PjmhFailOnError=false` turns that failure into a warning. `-PjmhFailFast=true`
+has JMH stop at the first error instead, as sava-build 21.8.3 did by default,
+which archives nothing and saves no output, so the scores measured before the
+error survive only in the console. A results file or report sent under
+`jmh-results/` is refused before JMH runs.
 
 ## Base58Bench
 
@@ -83,7 +94,7 @@ per length; scores are ns per decode.
 
 Measured 2026-07-14 on an Apple Silicon macOS box, JMH 1.36, `-PjmhFork=3`
 (24 samples per row), JDK 25, default service flag set. Treat the ratios as
-the signal, not the absolute numbers. Both tables in this file are JMH 1.36's,
+the signal, not the absolute numbers. Both Base58Bench tables are JMH 1.36's,
 the default harness until sava-build 21.8.3 moved it to 1.37: a 1.37 row is a
 different harness, so re-measure both sides before comparing against them. A
 `-PjmhVersion=1.36` run is refused until the three policy entries only JMH
