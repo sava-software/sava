@@ -1,3 +1,0 @@
-Benchmark                (subscriptions)  Mode  Cnt   Score   Error  Units
-WsSubscribeBench.replay             1000    ss   24  12.780 ± 3.076  ms/op
-WsSubscribeBench.replay            10000    ss   24  45.831 ± 5.833  ms/op

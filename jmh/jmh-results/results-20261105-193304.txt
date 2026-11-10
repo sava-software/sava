@@ -1,8 +1,0 @@
-Benchmark                 (pending)  (subscriptions)  Mode  Cnt    Score   Error  Units
-WsSubscribeBench.backlog          0              N/A  avgt   24   37.285 ± 0.919  us/op
-WsSubscribeBench.backlog       2000              N/A  avgt   24   39.875 ± 1.343  us/op
-WsSubscribeBench.backlog      10000              N/A  avgt   24  123.209 ± 6.405  us/op
-WsSubscribeBench.burst          N/A             1000    ss   24    9.472 ± 0.757  ms/op
-WsSubscribeBench.burst          N/A            10000    ss   24   48.040 ± 3.392  ms/op
-WsSubscribeBench.replay         N/A             1000    ss   24   13.513 ± 3.334  ms/op
-WsSubscribeBench.replay         N/A            10000    ss   24   48.423 ± 6.629  ms/op

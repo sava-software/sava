@@ -250,6 +250,11 @@ microseconds per registration.
 | `backlog` | 2,000 pending | 38.3 ± 0.8 | 37.8 ± 0.8 | |
 | `backlog` | 10,000 pending | 106.6 ± 7.2 | 36.8 ± 1.7 | |
 
+The "after" columns are the three `results-20261106-*` archives in `jmh-results/`: the
+mean of the three runs for `burst`, `burstScoped` and `replay`, and the single
+`results-20261106-200132.txt` run for `backlog`. The "before" runs ran in the second
+worktree and their raw outputs were not kept; this table is their only record.
+
 A registration made while 10,000 requests await an answer now costs what one
 made with nothing pending costs; before, it cost 2.8× as much, because every
 maintenance pass visited every pending request, the awaiting ones included, and
@@ -271,8 +276,8 @@ Single-shot rows are noisy. Most of the intervals above exceed the 10% this
 README's rule allows, in every run, so the comparison rests on the alternating
 runs agreeing and not on any one interval. Replay scores also move between
 sessions: the previous day's session measured the same before engine at 2.1 and
-18.4 ms and, later that day, at 12.8 and 45.8 ms, so only scores taken in one
-session compare.
+18.4 ms and, later that day, at 12.8 and 45.8 ms (`results-20261105-165241.txt` and
+`results-20261105-193702.txt`, at 34435aba), so only scores taken in one session compare.
 
 For scale, a loopback run of the raw JDK `WebSocket` against a local Agave test
 validator (2026-11-05) confirmed 10,000 individually pipelined
