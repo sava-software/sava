@@ -9,6 +9,136 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.8.8 — 2026-11-14
+
+All three plugin pins advance from 21.8.7 to the published `software.sava:sava-build:21.8.8`.
+`:sava-core:savaBuildIdentity` reported that coordinate, `local override: inactive`, and loaded
+JAR SHA-256 `7873e5fcde56051c8cb028b92a663c4f2442fddebb15407e927fee64d8b6d3d6`. `gh attestation
+verify` verified its SLSA v1 provenance from `.github/workflows/gradle_plugin_publish.yml` at
+`refs/tags/21.8.8`, source commit `775bdab7625448dad621afa6bc8d0f4a5275a88b`, for the jar and
+its sources jar, the two the build resolved. The installed `hardeningAgentTemplate` prints a
+block byte-identical to the one in `AGENTS.md`.
+
+What 21.8.8 changes for this repository is the dependency analysis. sava-build no longer
+ships or applies the dependency-analysis plugin (`a67fc97`): a build that declares nothing
+has no `checkModuleDirectivesScope`, so `check` no longer fails on a `requires` that should
+be `requires transitive` or that nothing uses, it has none of the plugin's tasks
+(`buildHealth`, `projectHealth`, `fixDependencies`), and a typed `dependencyAnalysis { }`
+block no longer compiles. This repository takes the "on demand" form of sava-build's README
+("Dependency analysis"), the owner's decision of 2026-11-12 for the repositories that
+publish libraries: `settings.gradle.kts` puts
+`com.autonomousapps:dependency-analysis-gradle-plugin:3.19.2` on the settings classpath and
+applies `com.autonomousapps.build-health` only when the invocation passes
+`-PdependencyAudit`, so an ordinary build, a release build holding signing and publishing
+credentials among them, neither resolves nor loads the plugin. 3.19.2 is
+`dependency-analysis-gradle-plugin` in sava-build's `gradle/libs.versions.toml` at the tag,
+and the version 21.8.7 shipped. `sava-rpc/build.gradle.kts` still keeps the scratch source
+set out of the analysis, now by name inside `pluginManager.withPlugin`, since the typed
+accessor exists only where the plugin does. The scope check therefore leaves `check`, and
+with it CI, whose workflows take no extra Gradle arguments; `AGENTS.md` ("Where the gate
+runs") puts `./gradlew -PdependencyAudit checkModuleDirectivesScope` on the release
+checklist, before a release pull request is merged, which is the only place it runs.
+
+The policy is unchanged, and now holds rules no ordinary build meets. The on-demand form
+resolves the plugin's module directly, with no marker POM, and the policy, written while
+sava-build shipped the plugin, already trusts its chain. From an empty `GRADLE_USER_HOME` the
+audit run resolved 32 module versions that the three step-1 builds had not, the plugin's
+six `com.autonomousapps` modules, okio, moshi, moshix, caffeine, guava and its parents,
+j2objc, `oss-parent` 9, newer errorprone and jspecify versions, and Kotlin modules the
+ordinary builds hold at another version or not at all, and nine rules are met by that run
+alone: `com.autonomousapps`, `com.squareup.okio`, `com.squareup.moshi`,
+`dev.zacsweers.moshix`, `com.github.ben-manes.caffeine:caffeine`, `com.google.guava`,
+`com.google.j2objc:j2objc-annotations`, and the exact-version rules for
+`guava-parent` 26.0-android (an old release manager's key) and `oss-parent` 9 (a DSA-1024
+key), both on the version-scoped list. The ordinary builds still meet the
+`com.google.errorprone`, `org.jspecify:jspecify`, `org.jetbrains.kotlin` and
+`org.jetbrains:annotations` 13.0 rules through their own graphs. sava-build trimmed the
+same nine keys' rules from its own policy in this release (`b6a30ef`); here they stay, for
+the release checklist's run, and `gradle/verification/README.md` now names the audit run
+wherever a judgment rests on what the builds resolve: step 1's commands, the write run, the
+proof of a trim and the cold run. A trim judged without `-PdependencyAudit` would drop
+them, and a write run without it sees none of that chain.
+
+No `BaselineRebase` is owed, and whether the bump owes the mutation suites turns on one
+reading of HARDENING.md's upgrade rule: an upgrade owes them once, at the range's gate,
+unless the files changed between the pins touch neither the PIT task nor what PIT is given,
+and the record it names is the compare's file list
+(`gh api 'repos/sava-software/sava-build/compare/21.8.7...21.8.8' --jq '.files[].filename'`)
+with the patch of any build file in it, never the release notes. The list is 56 files, 39
+of them under `src/test`. Outside the tests it holds `build.gradle.kts`,
+`gradle/libs.versions.toml`, the wrapper properties, the three policy files, `README.md`,
+`HARDENING.md`, `CHANGELOG.md`, the release manifest, the dependency-submission workflow,
+and six files under `src/main`: the base repositories, dependency-check, test-feature,
+settings and hardening script plugins and `MutationToolchainRecord.kt`. The build files
+clear the rule.
+`gradle/libs.versions.toml` gains the `dependency-analysis-gradle-plugin` version and its
+library alias, which sava-build's test fixtures read, and nothing else: PIT 1.30.2, the PIT
+JUnit plugin 1.2.3, ArcMutate base 1.7.3 and Jazzer 0.30.0 stand. `build.gradle.kts` drops
+the plugin's `implementation` line and otherwise changes what sava-build's own tests are
+given. Unlike the 21.8.3 list, though, this one holds the script that registers the PIT
+tasks, `software.sava.build.feature.hardening.gradle.kts`, and `MutationToolchainRecord.kt`
+(both `443883d`), so nothing here rests on their absence. Read hunk by hunk:
+certification's refusal, the verify's refusal and warning and the Debt task's caution over
+a toolchain difference gain a clause naming the sidecar rows that moved; the verify gains
+one lifecycle line for a fresh run
+across a tool change that has no status stash to compare against, with the boolean that
+guards it, built from the two predicates the existing notices already use; and the record
+class gains the display helpers behind those messages. Its `render()` and `identitySha256`,
+which every decision compares, are untouched, and no hunk reaches a PIT argument, class
+path or target, or what a verify compares. Read that way, nothing PIT is given moved. The
+rule as written speaks of files, though, and this is the file that registers the PIT task,
+so whether message-only hunks in it clear the rule is the owner's reading to give. No
+suite of this repository has run under 21.8.8.
+
+The two script edits here owe nothing by themselves. `settings.gradle.kts` and
+`sava-rpc/build.gradle.kts` are recorded inputs of the suites, so a direct
+`pitest<Suite>Verify` refuses a report written before them, exactly as it does over the pin
+lines at every bump, and that refusal proves nothing by itself; neither edit changes what
+PIT is given, the plugin they concern being a settings-classpath plugin that an ordinary
+build no longer loads. Completed reports bind the plugin binary that wrote them, so the
+next certification observes every suite fresh under 21.8.8, as the release checklist
+already requires.
+
+Nothing else in the range asks anything of this repository. The settings plugin no longer
+declares GitHub Packages repositories for `solana-programs` and `solana-web2` (`32462cb`):
+the root build resolved every class path from an empty home without them, and the jmh and
+soak builds declare their own repositories. The reworded hardening messages show only at a
+toolchain transition. Gradle 9.9.1 is sava-build's own wrapper, which this repository
+adopted in `48b361b8`; the policy trim and the fixtures' verification policy are sava-build's
+own build; the test feature gains a comment; the remaining commits are tests, fixtures and
+documentation, and HARDENING.md's additions among them (a transition's review run and its
+controls, ruling out a host sleep before a timeout budget is retuned, a `@NullMarked`
+module never reaching PIT's JSpecify filter) leave the agent template as it was.
+
+Proofs, strict throughout, with no lenient flag and no local repo, and with
+`dependencyAudit` set nowhere but on the audit runs' command lines. Root `check` with
+`resolveVerificationTools`, without the configuration or build cache and with every task
+re-executed: 2,350 tests, 2,348 passed and two environment-gated ones skipped (sava-core
+930, sava-rpc 1,359 with the two skips, sava-vanity 61), `:verificationPolicy` and both
+`docsInSync` tasks passed, and each hardened project resolved its PIT and Jazzer artifacts
+under the committed policy. That build has no `checkModuleDirectivesScope`, `buildHealth`,
+`projectHealth` or `fixDependencies` task, and its `check --dry-run` graph lists 41 tasks
+against 173 under the property. `-PdependencyAudit checkModuleDirectivesScope` ran and
+passed in sava-core, sava-rpc, sava-vanity and sava-examples with no scratch task in its
+graph, and under the property each module's `check` depends on it. Two controls, each
+restored afterwards: `requires transitive software.sava.core` in sava-rpc's
+`module-info.java`, weakened to `requires`, failed `:sava-rpc:checkModuleDirectivesScope`,
+which named the directive to add and the one to remove; and with sava-rpc's `withPlugin`
+block removed, the audit's dry-run graph gained `compileScratchJava` and the scratch
+analysis tasks. The release checklist's command as written, with the configuration cache the
+root `gradle.properties` turns on, stored an entry and reused it on the next run; `check`,
+alternated without and with the property, recalculated its entry at each switch ("Gradle
+property 'dependencyAudit' has changed") and had the scope check in its graph only under the
+property. Then, from an empty `GRADLE_USER_HOME` holding only the `org.gradle.java.*` lines,
+credentials in `ORG_GRADLE_PROJECT_*` variables: root `check resolveVerificationTools` in 4m
+42s (Gradle distribution fetched; PIT 1.30.2, ArcMutate base 1.7.3 and Jazzer 0.30.0
+resolved), `-p jmh check jmhJar` in 40 s, `-p soak classes jar soakModulePath` in 24 s and
+the audit run in 54 s, a 748 MiB home, with no verification report in any of the four. Not
+run here: `verificationKeyStatus` and a write run, the policy being unedited; any mutation
+suite; an IntelliJ sync; a JMH benchmark run; a Docker build of sava-vanity's image, whose
+build stage runs without the property; certification and fuzzing, which stay on the release
+checklist. The logs are under `~/hardening-evidence/sava/2026-11-14/adopt-21.8.8/`.
+
 ## Released sava-build 21.8.7 — 2026-11-10
 
 All three plugin pins advance from 21.8.3 to the published `software.sava:sava-build:21.8.7`,

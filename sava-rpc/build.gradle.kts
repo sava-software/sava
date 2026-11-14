@@ -42,9 +42,14 @@ testing {
   }
 }
 
-dependencyAnalysis {
-  issues {
-    ignoreSourceSet("scratch")
+// An audit run ('-PdependencyAudit', settings.gradle.kts) leaves the scratch source set alone,
+// so it never compiles it. Configured by name when the plugin is applied: an ordinary build
+// has neither the plugin nor its typed 'dependencyAnalysis' accessor.
+pluginManager.withPlugin("com.autonomousapps.dependency-analysis") {
+  extensions.getByName("dependencyAnalysis").withGroovyBuilder {
+    "issues" {
+      "ignoreSourceSet"("scratch")
+    }
   }
 }
 

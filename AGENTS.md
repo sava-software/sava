@@ -192,9 +192,22 @@ class sits in some suite's target universe.
 
 **Where the gate runs.** CI runs only `check` — serialized PIT is too slow for hosted
 runners — so `hardeningCertify`, `verificationKeyStatus` from the root (it asks the key
-servers and gradle/gradle's policy, so it sits outside `check`) and an explicit local
-`fuzzAll` campaign are owned by the local release checklist, not by CI. Give that campaign
-**both** bounds, and record them with the result:
+servers and gradle/gradle's policy, so it sits outside `check`), the module-directive scope
+check and an explicit local `fuzzAll` campaign are owned by the local release checklist,
+not by CI.
+
+The scope check fails on a `requires` that should be `requires transitive` and on one
+nothing uses. It left `check` with sava-build 21.8.8, which stopped shipping the
+dependency-analysis plugin: `settings.gradle.kts` declares the plugin on demand, under
+`-PdependencyAudit`, so that a release build never loads it, and no CI job passes the
+property. Run it before a release pull request is merged; nothing else in this repository
+runs it:
+
+```sh
+./gradlew -PdependencyAudit checkModuleDirectivesScope
+```
+
+Give the fuzz campaign **both** bounds, and record them with the result:
 
 ```sh
 ./gradlew :sava-core:fuzzAll :sava-rpc:fuzzAll -PmaxFuzzTime=<seconds> -PmaxParallelFuzzTargets=<count>
@@ -351,21 +364,26 @@ just new prose. Print the template the *installed* plugin carries rather than
 copying a possibly newer block out of sava-build's moving `main`.
 
 **This repo pins a published sava-build release.** The three pins — both ids in the root
-`settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read `21.8.7`, adopted on
-2026-11-10; `HARDENING_NOTES.md` records the resolved jar's SHA-256 and attestation. **The
+`settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read `21.8.8`, adopted on
+2026-11-14; `HARDENING_NOTES.md` records the resolved jar's SHA-256 and attestation. **The
 pins must move together**; a settings-only bump has silently missed the jmh pin more than
 once. `jmh/build.gradle.kts` also declares the JMH Gradle plugin,
 `id("me.champeau.jmh") ... apply false`, which is not a sava-build pin: it is held at
 `jmh-gradle-plugin`'s version in sava-build's `gradle/libs.versions.toml` at the adopted
 tag, and when that version moves, the declaration and the plugin's policy pins (jar,
-module metadata, marker POM, sources jar) move with it. This combination resolves from the
-ordinary published repository; `-PsavaBuildLocalRepo` is needed only while evaluating an
-unpublished candidate. The sequence for the next bump is: move all three pins, run
+module metadata, marker POM, sources jar) move with it. The root `settings.gradle.kts`
+holds a second declaration that is not a sava-build pin, the dependency-analysis plugin,
+loaded only under `-PdependencyAudit` and held at `dependency-analysis-gradle-plugin` in
+the same catalog: when that version moves, the declaration moves with it, and the policy
+takes the newer chain in the same commit, from a run with the property set, the only kind
+that resolves it. This combination resolves from the ordinary published repository;
+`-PsavaBuildLocalRepo` is needed only while evaluating an unpublished candidate. The
+sequence for the next bump is: move all three pins, run
 `:sava-core:savaBuildIdentity` and confirm the resolved coordinates and SHA-256, run
 `:sava-core:hardeningAgentTemplate`, and replace the block above if it changed. A bump
 that changes the plugin's dependencies or its tool versions (PIT, ArcMutate, Jazzer) also
 needs the dependency verification policy updated: re-run the root build with
-`resolveVerificationTools`, and the `-p jmh` and `-p soak` builds, as
+`resolveVerificationTools`, the root audit run, and the `-p jmh` and `-p soak` builds, as
 `gradle/verification/README.md` shows; a bump that changes anything a suite's
 `<suite>-pitest-toolchain.tsv` binds (PIT, its JUnit plugin, the ordered tool artifacts,
 ArcMutate base, the selected certificate's identity and expiry) also owes each suite with

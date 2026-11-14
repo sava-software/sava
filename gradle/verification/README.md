@@ -46,6 +46,22 @@ provenance of sava's own artifacts.
 - **Nothing else.** Key servers are disabled, so keys come only from the committed keyring,
   and there are no ignored keys or trusted-artifact exemptions.
 
+No ordinary build resolves the dependency-analysis plugin either. Since sava-build 21.8.8,
+which stopped shipping it, the root `settings.gradle.kts` puts the plugin on the settings
+classpath only under `-PdependencyAudit`, for the release checklist's
+`checkModuleDirectivesScope` (`AGENTS.md`, "Where the gate runs"). The policy keeps the
+plugin's chain for that run. Measured at the 21.8.8 adoption from an empty Gradle home, the
+audit run alone meets the rules for `com.autonomousapps`, `com.squareup.okio`,
+`com.squareup.moshi`, `dev.zacsweers.moshix`, `com.github.ben-manes.caffeine:caffeine`,
+`com.google.guava` and `com.google.j2objc:j2objc-annotations`, and the exact-version rules
+for `com.google.guava:guava-parent:26.0-android` and `org.sonatype.oss:oss-parent:9`, whose
+keys are on the version-scoped list; the chain's errorprone, jspecify and Kotlin modules
+fall under rules the ordinary builds still meet through other versions or modules. A trim
+judged without
+an audit run would drop the audit's rules, and the release checklist would be the first to
+meet the refusal; a write run without the property keeps them, since Gradle never removes
+an entry, but neither drafts nor proves anything of that chain.
+
 `verificationPolicy`, the task sava-build's settings plugin registers on the root project
 with every project's `check`, `qualityGate` and jlink `image` task depending on it, enforces
 these rules and the symlinks, so a regeneration cannot change them unseen. It also refuses a
@@ -67,10 +83,12 @@ Aircompressor 3.14's parent imports Jetty 12.1.14 BOMs signed by Olivier Lamy's
 [Jetty's release-specific key list](https://github.com/jetty/jetty.project/blob/jetty-12.1.14/KEYS.txt);
 the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
 
-1. Run the change through all three builds; CI runs only the root one.
+1. Run the change through all three builds, and through the root build's audit run, the only
+   one that resolves the dependency-analysis plugin; CI runs only the root build's `check`.
 
    ```sh
    ./gradlew --no-configuration-cache check resolveVerificationTools
+   ./gradlew --no-configuration-cache -PdependencyAudit checkModuleDirectivesScope
    ./gradlew -p jmh jmhJar
    ./gradlew -p soak classes jar soakModulePath
    ```
@@ -135,11 +153,15 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
    servers while writing, even with key servers disabled for verification (only `--offline`
    stops it), so authenticate any key it adds. Run it without `-PsavaBuildLocalRepo`: with
    the property it pins the unsigned `0.0.0-test` publication, which `verificationPolicy`
-   rejects. An entry no build resolves any more is trimmed by hand: its rule, its list line
-   and the keyring block no remaining rule names, cut with one adjacent blank line (the one
-   before it for the file's last block; the export drops a blank line left at the end), then
-   proved by write runs from the root, `-p jmh` and `-p soak` that change nothing, each
-   standalone build's keyring link re-created afterwards, and by step 4's cold run. The root
+   rejects. A write run sees the dependency-analysis plugin's chain only with
+   `-PdependencyAudit` added (`build` then includes the scope check), so a draft that has to
+   cover that chain, a new plugin version's above all, is a second run with the property.
+   An entry no build resolves any more, the audit run counted among the builds, is trimmed
+   by hand: its rule, its list line and the keyring block no remaining rule names, cut with
+   one adjacent blank line (the one before it for the file's last block; the export drops a
+   blank line left at the end), then proved by write runs from the root, without and with
+   `-PdependencyAudit`, `-p jmh` and `-p soak` that change nothing, each standalone
+   build's keyring link re-created afterwards, and by step 4's cold run. The root
    build has not resolved the JMH Gradle plugin since sava-build 21.8.5, so the plugin's
    jar, module metadata and marker POM are drafted only by the same write run from `-p jmh`
    with its step-1 task, `jmhJar` (a new harness version's chain by that run with
@@ -150,18 +172,18 @@ the policy scopes it to `jetty-bom` and `jetty-ee11-bom` only.
 
 4. A warm cache can hide parent-POM metadata that a cold one fetches. Validate a new parent
    or BOM, and every trim (an entry removed by hand because no build resolves what it
-   covered), with an empty `GRADLE_USER_HOME`, running all three builds with their step-1
-   commands: copy only the `org.gradle.java.*` lines of your `gradle.properties` into it,
+   covered), with an empty `GRADLE_USER_HOME`, running every step-1 command, the audit run
+   among them: copy only the `org.gradle.java.*` lines of your `gradle.properties` into it,
    keep the environment variables those lines name (`org.gradle.java.installations.fromEnv=JAVA_HOME`
    needs `JAVA_HOME`, which `env -i` drops), and pass package credentials as
    `ORG_GRADLE_PROJECT_` environment variables. A cold run resolves and verifies every
-   class path, and re-runs only the tasks whose inputs name files under the home, here the
-   dependency-analysis tasks: task history lives in each build's own `.gradle` directory,
-   so the tests stay up-to-date, and the run proves resolution, not a test run. Offline
-   use needs an online run first; cached signature files alone do not prove an offline run
-   can resolve them. CI's fork pull requests build offline from the cache that main's last
-   build saved, so the first one after a policy change waits for main's next build to warm
-   that cache with the signature files.
+   class path and re-runs some compile and generator tasks and, in the audit run,
+   dependency-analysis tasks, but task history lives in each build's own `.gradle`
+   directory, so the tests stay up-to-date, and the run proves resolution, not a test run.
+   Offline use needs an online run first; cached signature files alone do not
+   prove an offline run can resolve them. CI's fork pull requests build offline from the
+   cache that main's last build saved, so the first one after a policy change waits for
+   main's next build to warm that cache with the signature files.
 
 5. After a policy edit, run `./gradlew verificationKeyStatus` from the root. It asks the
    network, so it sits outside `check`: it fetches every key the policy trusts from
