@@ -59,8 +59,8 @@ wherever a judgment rests on what the builds resolve: step 1's commands, the wri
 proof of a trim and the cold run. A trim judged without `-PdependencyAudit` would drop
 them, and a write run without it sees none of that chain.
 
-No `BaselineRebase` is owed, and whether the bump owes the mutation suites turns on one
-reading of HARDENING.md's upgrade rule: an upgrade owes them once, at the range's gate,
+No `BaselineRebase` is owed, and no mutation suite either, though the second turned on one
+reading of HARDENING.md's upgrade rule: an upgrade owes the suites once, at the range's gate,
 unless the files changed between the pins touch neither the PIT task nor what PIT is given,
 and the record it names is the compare's file list
 (`gh api 'repos/sava-software/sava-build/compare/21.8.7...21.8.8' --jq '.files[].filename'`)
@@ -87,8 +87,9 @@ class gains the display helpers behind those messages. Its `render()` and `ident
 which every decision compares, are untouched, and no hunk reaches a PIT argument, class
 path or target, or what a verify compares. Read that way, nothing PIT is given moved. The
 rule as written speaks of files, though, and this is the file that registers the PIT task,
-so whether message-only hunks in it clear the rule is the owner's reading to give. No
-suite of this repository has run under 21.8.8.
+so the reading was put to the owner, who gave it on 2026-11-14: message-only hunks in that
+script clear the rule, and the bump owes no suite. None of this repository's suites has run
+under 21.8.8.
 
 The two script edits here owe nothing by themselves. `settings.gradle.kts` and
 `sava-rpc/build.gradle.kts` are recorded inputs of the suites, so a direct
