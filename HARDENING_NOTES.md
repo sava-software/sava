@@ -9,6 +9,120 @@ Suites target by package wildcard with explicit exclusions, never an allowlist,
 so a new class in a covered package is mutated by default. Packages without a
 suite are deliberate scope decisions rather than omissions.
 
+## Released sava-build 21.8.9 — 2026-11-20
+
+All three plugin pins advance from 21.8.8 to the published `software.sava:sava-build:21.8.9`.
+`:sava-core:savaBuildIdentity` reported that coordinate, `local override: inactive`, and loaded
+JAR SHA-256 `073351e73103a46bcfddf3247efdb53681c880b325271d64c6a64fd73e6d6095`, the hash
+json-iterator's adoption of the same release recorded. `gh attestation verify`, with
+`--signer-workflow` and `--source-ref refs/tags/21.8.9`, verified SLSA v1 provenance from
+`.github/workflows/gradle_plugin_publish.yml` at source commit
+`66ab9d1b033b9c6b9e58370fb1c6ab264fd648ac` for the jar and its sources jar, the two the build
+resolved.
+
+What 21.8.9 changes for this repository is how a PIT attempt that lost its minion ends, and
+one version in the dependency analysis's chain.
+
+- **The PIT task.** On macOS the same task can now run a full-scope `pitest<Suite>` attempt
+  once more when PIT's log shows nothing but minions that ended before PIT heard from them
+  (`851c042`). The shape it repeats is narrow, read from exact lines of PIT's log in each
+  phase, and some runs are never repeated, those at PIT's quiet verbosities and scoped runs
+  among them. So a full-scope run with a `RUN_ERROR` can still end after its first attempt,
+  and is then re-run by hand as `AGENTS.md` says. The exact criteria are HARDENING.md's "On
+  macOS the plugin repeats one shape, once" and `EarlyMinionDeath.kt`, both at the tag, and
+  this entry does not restate them. When the task does repeat, the first attempt's logs and
+  report move to `build/reports/pitest-rerun/<suite>/` as diagnostics, and a refusal of the
+  repeat says that it was the repeat. A `RUN_ERROR` refusal no longer
+  asks for a quiet machine, and names the attempt's `pitest.stderr.log`, whose `Minion did
+  not start or died during analysis` line marks a row that may name a mutant whose tests
+  never ran (`91ec659`). The installed `hardeningAgentTemplate` changed one bullet accordingly
+  ("re-run once, unless the plugin says it did"). `AGENTS.md` takes the printed block and
+  brings its own guidance in line with the casebook entry behind these commits ("The minion
+  PIT never heard from": load explained nothing, read PIT's log before the coordinate, a
+  quiet machine was never the condition). Under "Verifying your own work" the `RUN_ERROR`
+  bullet copies `pitest.stderr.log` with the coordinates and reads it first, re-runs once
+  without a quiet machine unless the refusal says the run was the plugin's repeat, and then
+  reads both attempts' logs; the `MINION_DIED` bullet points at HARDENING.md for the macOS
+  repeat instead of restating it. The fuzz-bounds paragraph no longer calls `RUN_ERROR` the
+  load-sensitive failure. The 2026-08-04 worked example keeps its quiet re-run, which is
+  what happened then.
+- **The dependency analysis.** sava-build's catalog moves
+  `dependency-analysis-gradle-plugin` from 3.19.2 to 3.20.4, and the on-demand declaration in
+  `settings.gradle.kts` follows it. 3.20.4 brings `com.squareup:kotlinpoet` and
+  `kotlinpoet-jvm` 2.1.0 into the chain. A strict audit run before the policy edit refused
+  exactly three artifacts, `kotlinpoet-2.1.0.module`, `kotlinpoet-jvm-2.1.0.jar` and
+  `kotlinpoet-jvm-2.1.0.module`, each "signed with key
+  DBD744ACE7ADE6AA50DD591F66B50994442D2D40 but this key is not in your trusted key list":
+  the Square key the policy already trusts for `com.squareup.moshi`, whose block the keyring
+  already holds, current on both key servers. Its rule widens to those two modules, the
+  narrowest rule that admits what the audit resolves and the shape of sava-build's own
+  fixture policy at the tag; no key, list line or pin was added. The `org.apache.groovy`
+  rule stays group-wide: sava-build's README narrows it to `groovy-bom` only where no build
+  compiles against the Gradle API, and `gradle/plugins` does. The controls of 21.8.8 hold
+  under 3.20.4: `requires transitive software.sava.core` in sava-rpc weakened to `requires`
+  failed `:sava-rpc:checkModuleDirectivesScope`, naming both directives, and with sava-rpc's
+  `withPlugin` block removed the audit's dry-run graph gained `compileScratchJava` and the
+  scratch analysis tasks, none of which it lists with the block in place.
+
+The mutation suites are owed once, at this range's gate, and no `BaselineRebase` is.
+HARDENING.md's upgrade rule, which 21.8.9 restates by hunk (`3aaf152`), reads the compare's
+file list with the patch of every build file and of every file under `src/main/`
+(`gh api 'repos/sava-software/sava-build/compare/21.8.8...21.8.9' --jq '.files[].filename'`).
+The list is 21 files, 6 of them under `src/test`. Outside the tests: two workflows, the
+release manifest, `CHANGELOG.md`, `HARDENING.md`, `HARDENING_CASEBOOK.md`, `README.md`,
+`build.gradle.kts` (Bouncy Castle 1.86 to 1.87 for sava-build's own tests),
+`gradle/libs.versions.toml` (the dependency-analysis version and nothing else: PIT 1.30.2,
+the PIT JUnit plugin 1.2.3, ArcMutate base 1.7.3 and Jazzer 0.30.0 stand),
+`settings.gradle.kts` (sava-build's own repositories, Central first), and five files under
+`src/main`: the hardening script, `Mutant.kt`, `PitestExecTask.kt`, and the new
+`AutomaticRerun.kt` and `EarlyMinionDeath.kt`. Many of the script's and `Mutant.kt`'s hunks
+reach only messages, but `PitestExecTask.kt` now classifies a finished attempt and can start
+a second PIT process, with the history file as the first attempt found it, and the script
+turns that on for every ratcheted suite on macOS (`rerunEarlyMinionDeath`,
+`firstAttemptDirectory`). That is the PIT task itself, which the exemption for message text
+does not reach. No tool version moved, so no suite's toolchain record changes and no rebase
+follows. The gate is the root `qualityGate`, run after review and before the push; its logs
+are in the evidence directory below.
+
+Proofs, strict throughout, with no lenient flag and no local repo, and with
+`dependencyAudit` set nowhere but on the audit runs' command lines. Root `check` with
+`resolveVerificationTools`, without the configuration or build cache and with every task
+re-executed: 2,350 tests, 2,348 passed and two environment-gated ones skipped (sava-core 930,
+sava-rpc 1,359 with the two skips, sava-vanity 61), `:verificationPolicy` and both
+`docsInSync` tasks passed, and both hardened projects resolved their PIT and Jazzer
+artifacts. The audit run passed in sava-core, sava-rpc, sava-vanity and sava-examples with
+no scratch task in its graph; `-p jmh check jmhJar` and `-p soak classes jar soakModulePath`
+passed. Write runs from the root without and with `-PdependencyAudit`, from `-p jmh` and from
+`-p soak` changed neither the policy nor the keyring (each standalone build's keyring link
+re-created afterwards). One earlier root write run, the first in the worktree after the
+controls had recompiled sava-rpc, drafted SHA-256 entries without a reason for ten
+metadata files of signed modules (eight BOMs, the `ow2` 1.5.1 parent and json-iterator
+25.3.2's module), each under a key rule the policy already has. Nine of them the cold root
+run below resolved and verified without a pin; the tenth, `jetty-bom` 12.1.15, is in no cold
+run's inventory (they resolve 12.1.14), and an entry no strict run reaches would be stale
+anyway. The same write run drafted
+nothing in six later runs: again here, here with `--rerun-tasks`, at `origin/main` with and
+without `--rerun-tasks`, and at `origin/main` with only the pins moved and with the pins and
+the policy edit. The entries were dropped; the diff and a record of each write run's tree
+(`write-runs.txt`) are kept with the evidence. From an empty `GRADLE_USER_HOME` holding
+only the `org.gradle.java.*` lines, credentials in `ORG_GRADLE_PROJECT_*` variables: root
+`check resolveVerificationTools` (Gradle distribution fetched), `-p jmh check jmhJar`, `-p soak
+classes jar soakModulePath` and the audit run all passed, a 728 MiB home. The audit run
+resolved 33 module versions the three others had not; mapped against the policy, the rules
+it alone meets are the nine of 21.8.8 (the exact-version `guava-parent` 26.0-android and
+`oss-parent` 9 among them, still met) and the Square key's two new modules, and the only rule
+whose modules no run resolved is the IDE-only `gradle:gradle` one.
+`gradle/verification/README.md` now names the audit-only rules as measured here.
+`verificationKeyStatus` checked 43 keys: none failed, and its five warnings (three expired
+keys and a revoked one, each trusted at exact versions only, and an expired subkey of the
+Groovy key) concern rules this change does not touch. The installed `hardeningAgentTemplate`
+prints a block byte-identical to the one now in `AGENTS.md`, and `:sava-core:hardeningHelp`
+lists no task or option the compare added (the repeat takes its switch from the host's
+`os.name` alone). Not run here: an IntelliJ sync,
+a JMH benchmark run, a Docker build of sava-vanity's image, certification and fuzzing, which
+stay on the release checklist. The logs are under
+`~/hardening-evidence/sava/2026-11-20/adopt-21.8.9/`.
+
 ## Released sava-build 21.8.8 — 2026-11-14
 
 All three plugin pins advance from 21.8.7 to the published `software.sava:sava-build:21.8.8`.
@@ -1195,6 +1309,18 @@ operational rule that follows: take previews, prunes and gates when `vm.loadavg`
 under about ten, and when a `RUN_ERROR` lands, record the coordinate and the load and
 retake the observation quiet instead of retrying under the same load. Every record
 written that day came from a clean run.
+
+**Superseded 2026-11-20, for a `RUN_ERROR`.** Do not wait for the load to fall before
+retrying one. Since sava-build 21.8.9 (`91ec659`, `851c042`) the instruction is the one
+in `AGENTS.md` ("Verifying your own work"): copy the attempt's `pitest.stderr.log` and
+write the coordinate down, read the log before the coordinate, and re-run once,
+history-free, without waiting for a quiet machine, unless the refusal says the run was
+already the plugin's own repeat, in which case read both attempts' logs first. The deaths
+above have the shape that sava-build's casebook ("The minion PIT never heard from") later
+showed, on macOS, to come from a port collision rather than from load: there, load
+explained nothing, and such a row names the mutant PIT marked as it launched the minion,
+not one whose tests ran. Whether these October deaths had that cause was not checked. The
+reading above stands as the record of that day, not as guidance.
 
 ### Open items after the campaign
 

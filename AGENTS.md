@@ -155,9 +155,9 @@ template, and in the documents that section points to.
   the test body. Exclusions must cover the test source set, not a naming convention.
 - Git-ignored scratch sources (`Integ.java` drivers) never sit in a hardened project's
   `main` or `test` source set; keep them in a git-ignored `scratch` source set instead.
-- Verify by the absence of failures: trust the exit code and the `.running`
-  sentinel, not a summary. `MINION_DIED` and `RUN_ERROR` are not results; re-run once
-  on a quiet machine. A suite that got faster without getting narrower is a bug report.
+- Verify by the absence of failures: trust the exit code and the `.running` sentinel,
+  not a summary. `MINION_DIED` and `RUN_ERROR` are not results: re-run once, unless the
+  plugin says it did. A suite that got faster without getting narrower is a bug report.
 - Fuzz findings become a committed seed input and a named regression test. Run
   `fuzzAll` locally with an explicit `-PmaxFuzzTime` and `-PmaxParallelFuzzTargets`
   before a release. Where one thing has two representations, fuzz the differential.
@@ -214,12 +214,11 @@ Give the fuzz campaign **both** bounds, and record them with the result:
 ```
 
 `-PmaxFuzzTime` bounds each target's depth; `-PmaxParallelFuzzTargets` bounds how many run
-at once, which matters here because every registered target at full width is what turns this machine
-over — and the load-sensitive failure this repo keeps meeting is a PIT `RUN_ERROR`, whose
-whole diagnosis is whether a coordinate repeats on a *quiet* re-run. An unbounded width
-makes that diagnosis harder to trust. Pick a width deliberately rather than inheriting the
-default. The `fuzz.yml` workflow is manual-dispatch only; its scheduled trigger was removed
-deliberately, and it is exploration, never release evidence.
+at once, which matters here because every registered target at full width is what turns
+this machine over, and anything else running on it then runs under that load. Pick a width
+deliberately rather than inheriting the default. The `fuzz.yml` workflow is manual-dispatch
+only; its scheduled trigger was removed deliberately, and it is exploration, never release
+evidence.
 
 **ArcMutate licence.** The repo-root `arcmutate-licence.txt` is a signed `OSSS`
 certificate scoped to `software.sava.*`, expiring 15/08/2027; it is committed on purpose
@@ -330,14 +329,23 @@ The failure modes here are ones that look like success:
 - **No failure is "unexplained" until the daemon log says so.** `~/.gradle/daemon/
   <version>/daemon-<pid>.out.log` keeps a failed build's full output even when the
   shell discarded it. One-shot `MINION_DIED` / worker-`EOFException` failures are
-  transient — re-run; both diagnoses are in the shared casebook.
+  transient — re-run once, unless the plugin says it already did; both diagnoses are in
+  the shared casebook. On macOS the plugin repeats one shape of minion death itself, once,
+  and says so; sava-build's `HARDENING.md` ("On macOS the plugin repeats one shape, once")
+  says which, and that a repeat that failed too means reading both attempts' logs first.
 - **A per-mutant `RUN_ERROR` is the same shape, and the plugin refuses the whole
-  report rather than certify around it.** Worked example, 2026-08-04: certification
-  failed on `pitestWsVerify` with `RUN_ERROR x2` at
+  report rather than certify around it.** **Before re-running, copy the attempt's
+  `pitest.stderr.log` (it sits beside the report) and write the coordinates down** — a
+  re-run replaces both. Read the log before the coordinate: where it says `Minion did not
+  start or died during analysis`, the row may name a mutant whose tests never ran, so the
+  coordinate says where PIT stood, not what failed. The comparison you need later is
+  whether the *same* coordinate errors again. Re-run once, history-free, without waiting
+  for a quiet machine, unless the refusal says the run was already the plugin's own
+  repeat; then read both attempts' logs (the first under
+  `build/reports/pitest-rerun/<suite>/`) before any retry. Worked example,
+  2026-08-04: certification failed on `pitestWsVerify` with `RUN_ERROR x2` at
   `SubConfirmation$Builder.create` and `SubConfirmation.parse`, both
-  `NullReturnValsMutator`. **Write the coordinates down before re-running** — a quiet
-  re-run replaces the report, and the comparison you need later is whether the *same*
-  coordinate errors again. Here the quiet re-run scored both `KILLED` with zero
+  `NullReturnValsMutator`. Here the quiet re-run scored both `KILLED` with zero
   `RUN_ERROR`s — an observation consistent with transient aggregate contention, not
   proof that load was the cause. Recurrence at a coordinate localizes a repeatable
   observation without naming its cause either: were they to repeat, the next step is
@@ -364,8 +372,8 @@ just new prose. Print the template the *installed* plugin carries rather than
 copying a possibly newer block out of sava-build's moving `main`.
 
 **This repo pins a published sava-build release.** The three pins — both ids in the root
-`settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read `21.8.8`, adopted on
-2026-11-14; `HARDENING_NOTES.md` records the resolved jar's SHA-256 and attestation. **The
+`settings.gradle.kts` and the one in `jmh/build.gradle.kts` — read `21.8.9`, adopted on
+2026-11-20; `HARDENING_NOTES.md` records the resolved jar's SHA-256 and attestation. **The
 pins must move together**; a settings-only bump has silently missed the jmh pin more than
 once. `jmh/build.gradle.kts` also declares the JMH Gradle plugin,
 `id("me.champeau.jmh") ... apply false`, which is not a sava-build pin: it is held at

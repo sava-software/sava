@@ -50,9 +50,10 @@ No ordinary build resolves the dependency-analysis plugin either. Since sava-bui
 which stopped shipping it, the root `settings.gradle.kts` puts the plugin on the settings
 classpath only under `-PdependencyAudit`, for the release checklist's
 `checkModuleDirectivesScope` (`AGENTS.md`, "Where the gate runs"). The policy keeps the
-plugin's chain for that run. Measured at the 21.8.8 adoption from an empty Gradle home, the
-audit run alone meets the rules for `com.autonomousapps`, `com.squareup.okio`,
-`com.squareup.moshi`, `dev.zacsweers.moshix`, `com.github.ben-manes.caffeine:caffeine`,
+plugin's chain for that run. Measured at the 21.8.9 adoption (plugin 3.20.4) from an
+empty Gradle home, the audit run alone meets the rules for `com.autonomousapps`,
+`com.squareup.okio`, `com.squareup.moshi` and `com.squareup:kotlinpoet`/`kotlinpoet-jvm`
+(one Square key), `dev.zacsweers.moshix`, `com.github.ben-manes.caffeine:caffeine`,
 `com.google.guava` and `com.google.j2objc:j2objc-annotations`, and the exact-version rules
 for `com.google.guava:guava-parent:26.0-android` and `org.sonatype.oss:oss-parent:9`, whose
 keys are on the version-scoped list; the chain's errorprone, jspecify and Kotlin modules
