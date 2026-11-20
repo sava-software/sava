@@ -89,9 +89,6 @@ live families; the `JsonUtil.parseEncodedData` pending-prune rows are debt (see
     and reverted.
   - Invalidated if (derived): the two branches stop producing equal values, or
     allocation becomes a contract.
-  - The `ORDER_IF` row is absent from the licensed population and has not been
-    observed killed; its argument remains valid and the row stays in this family,
-    since absence under the licensed toolchain is not a kill.
 - **`# best-effort guard`** — `JsonRpcException.envelopeRequestId`
   `RemoveConditionalMutator_EQUAL_ELSE` and `RemoveConditionalMutator_ORDER_ELSE`,
   on guards that sit inside the reader's best-effort `catch (RuntimeException)`,
