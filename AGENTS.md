@@ -235,11 +235,12 @@ count has not been re-measured since 2026-08-04, so treat the 605/573 pair as a 
 observed once rather than a current figure.
 Consequences recorded in `HARDENING_NOTES.md`: sava's baselines were all first written
 unlicensed, so a handful of accepted rows had no licensed counterpart and were reported
-unmatched on every run until 2026-10-07, when the owner settled that **the licensed
-toolchain is the population of record**: a row the licensed engine never generates is an
-unmatched row like any other and leaves through the prune writer, and the stock engine's
-population is not consulted. The rows retired that day are listed under History in
-`sava-rpc/config/pitest/README.md`.
+unmatched on every run. On 2026-10-07 the owner settled that **the licensed toolchain is
+the population of record**: a row the licensed engine never generates is an unmatched row
+like any other and leaves through the prune writer, and the stock engine's population is
+not consulted. The rows retired under that rule are listed under History in
+`sava-rpc/config/pitest/README.md` (2026-10-07) and `sava-core/config/pitest/README.md`
+(decimal's pair, 2026-11-20).
 
 **Baseline schema.** Accepted records carry the schema-1 marker, stamped by
 `migrateMutationBaselines` once all three pins had moved together; `downgradeMutationBaselines`
@@ -277,8 +278,8 @@ suites whose trial saw it fire, and on no other. Both trial tables are in
 `HARDENING_NOTES.md`, which is also
 where the JUnit-6 `@Execution`/`@TestInstance` inheritance question and the
 `module-info`-services question are settled — no sava module declares or consumes a
-service today. `decimal`'s 91% is four documented equivalents whose "fix" was tried and
-reverted, not a gap.
+service today. What keeps `decimal` short of 100% is its documented allocation-routing
+equivalents, whose "fix" was tried and reverted, not a gap.
 
 **Published-API rule beats the ratchet — and "shrink the API" is the owner's call, not
 the ratchet's.** "Refactor it out of existence" is a legal outcome for a *new* mutant,
