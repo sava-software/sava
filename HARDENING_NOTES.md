@@ -94,17 +94,41 @@ artifacts. The audit run passed in sava-core, sava-rpc, sava-vanity and sava-exa
 no scratch task in its graph; `-p jmh check jmhJar` and `-p soak classes jar soakModulePath`
 passed. Write runs from the root without and with `-PdependencyAudit`, from `-p jmh` and from
 `-p soak` changed neither the policy nor the keyring (each standalone build's keyring link
-re-created afterwards). One earlier root write run, the first in the worktree after the
-controls had recompiled sava-rpc, drafted SHA-256 entries without a reason for ten
-metadata files of signed modules (eight BOMs, the `ow2` 1.5.1 parent and json-iterator
-25.3.2's module), each under a key rule the policy already has. Nine of them the cold root
-run below resolved and verified without a pin; the tenth, `jetty-bom` 12.1.15, is in no cold
-run's inventory (they resolve 12.1.14), and an entry no strict run reaches would be stale
-anyway. The same write run drafted
-nothing in six later runs: again here, here with `--rerun-tasks`, at `origin/main` with and
-without `--rerun-tasks`, and at `origin/main` with only the pins moved and with the pins and
-the policy edit. The entries were dropped; the diff and a record of each write run's tree
-(`write-runs.txt`) are kept with the evidence. From an empty `GRADLE_USER_HOME` holding
+re-created afterwards). One earlier root write run drafted SHA-256 entries without a reason
+for ten metadata files of signed modules (eight BOMs, the `ow2` 1.5.1 parent and
+json-iterator 25.3.2's module), each under a key rule the policy already has. Nine of them
+the cold root run below resolved and verified without a pin; the tenth, `jetty-bom` 12.1.15,
+is in no cold run's inventory (they resolve 12.1.14), and an entry no strict run reaches
+would be stale anyway. A direct check then verified all ten, `jetty-bom` 12.1.15 among them:
+for each, the cached file whose SHA-256 equals the drafted value, its `.asc` and the
+committed keyring, read by the Bouncy Castle that Gradle 9.9.1 ships, with a policy rule
+covering the signing key (`kotlin-bom`'s is a subkey the policy names); the same verifier
+refuses the file with one byte appended
+(`~/hardening-evidence/sava/2026-11-20/loose-ends/verify-drafted/`). The same write run
+drafted nothing in six later runs: again here, here with `--rerun-tasks`, at `origin/main`
+with and without `--rerun-tasks`, and at `origin/main` with only the pins moved and with the
+pins and the policy edit. The entries
+were dropped; the diff and a record of each write run's tree (`write-runs.txt`) are kept
+with the evidence. The cause was traced the same day (evidence in
+`~/hardening-evidence/sava/2026-11-20/loose-ends/`). `check` at 21.8.8 and 21.8.9 realizes
+`recommendModuleVersions`, whose classpath asks for every module's newest release, and only
+a write run resolves it. That run was therefore the first to parse `aircompressor-v3` 3.16
+and its parent `airbase` 424, which import BOMs already in the metadata cache. By Gradle
+9.9.1's source, the writer then receives each such BOM file under two artifact-id types that
+never compare equal, loses its signature entry and writes the checksum with no reason;
+json-iterator's module most likely took the same path through the GitHub Packages
+repositories, which parsed it fresh. A replay of the day's run sequence at `origin/main`
+from an empty Gradle home drafted nine of the ten at its first write run, all but
+`jetty-bom`, and none at a second; `aircompressor-v3` 3.16 and `airbase` 424 entered that
+home only during the first write run. The same replay in the warm home drafted nothing, the
+newest releases being cached by then. The module-directive controls run before it (the
+weakened `requires` and the removed `withPlugin` block, which recompiled sava-rpc) have no
+part in that mechanism. A standalone reproducer with nothing of sava in it (a loopback
+repository, a signed BOM imported by two modules: a strict build of the first, then a write
+run of both) drafts the same reason-less line for the BOM's POM, once; an upstream issue is
+drafted with it (`gradle-issue-repro/` in the same evidence directory).
+`gradle/verification/README.md` (step 3) now says how to recognise such a line. From an
+empty `GRADLE_USER_HOME` holding
 only the `org.gradle.java.*` lines, credentials in `ORG_GRADLE_PROJECT_*` variables: root
 `check resolveVerificationTools` (Gradle distribution fetched), `-p jmh check jmhJar`, `-p soak
 classes jar soakModulePath` and the audit run all passed, a 728 MiB home. The audit run
