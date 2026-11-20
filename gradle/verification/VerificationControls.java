@@ -61,6 +61,8 @@ public final class VerificationControls {
   private volatile Process activeProcess;
   private String repositoryUrl;
   private List<String> keys;
+  private String subkeyedPrimary;
+  private String signingSubkey;
   private int gpgCommand;
   private int controlsPassed;
   private boolean closed;
@@ -192,6 +194,17 @@ public final class VerificationControls {
     if (keys.size() != 2) {
       throw new IOException("Expected exactly two disposable signing keys");
     }
+    // A third key whose primary only certifies and whose separate subkey signs, created after the
+    // two above so that their fingerprint list stays exactly two.
+    final var subkeyed = "subkeyed@invalid.example";
+    gpg("--quick-generate-key", "Subkeyed Fixture <" + subkeyed + ">", "ed25519", "cert", "1d");
+    subkeyedPrimary = fingerprints(subkeyed).getFirst();
+    gpg("--quick-add-key", subkeyedPrimary, "ed25519", "sign", "1d");
+    final var subkeyedFingerprints = fingerprints(subkeyed);
+    if (subkeyedFingerprints.size() != 2) {
+      throw new IOException("Expected a certifying primary and one signing subkey: " + subkeyedFingerprints);
+    }
+    signingSubkey = subkeyedFingerprints.get(1);
     final var repository = Files.createDirectory(work.resolve("maven"));
     server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     httpExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -211,9 +224,18 @@ public final class VerificationControls {
         }
       }
     }
+    final var subkeySigned = fixtureJar("subkey-signed", "1");
+    artifacts.put("subkey-signed", subkeySigned);
+    // The trailing "!" makes GnuPG sign with exactly this subkey.
+    gpg("--armor", "--detach-sign", "--local-user", signingSubkey + "!", subkeySigned.toString());
     for (final var jar : List.of(fixtureJar("signed", "2"), fixtureJar("other-module", "1"))) {
       gpg("--armor", "--detach-sign", "--local-user", keys.getFirst(), jar.toString());
     }
+  }
+
+  private List<String> fingerprints(final String user) throws Exception {
+    return new String(gpg("--with-colons", "--list-keys", user), StandardCharsets.UTF_8).lines()
+        .filter(line -> line.startsWith("fpr:")).map(line -> line.split(":", -1)[9]).toList();
   }
 
   private Path fixtureJar(final String name, final String version) throws IOException {
@@ -270,6 +292,19 @@ public final class VerificationControls {
     final var otherModule = project("module-scope-other-module", "other-module");
     policy(otherModule, "", moduleTrust, true);
     run("module-scoped-trust-refuses-other-module", otherModule, "other-module", "not in your trusted key list");
+
+    // A signature by a subkey is trusted only through a rule that names that subkey: a rule naming
+    // the primary refuses it. So a policy rule that names a publisher's primary key does not vouch
+    // for what one of its subkeys signed. The subkey here is current; by Gradle's source a subkey's
+    // expiry or revocation does not enter that check.
+    for (final var trusted : List.of(subkeyedPrimary, signingSubkey)) {
+      final var primary = trusted.equals(subkeyedPrimary);
+      final var name = primary ? "subkey-signature-primary-trust-refused" : "subkey-signature-subkey-trust-accepted";
+      final var path = project(name, "subkey-signed");
+      policy(path, "", "<trusted-keys><trusted-key id=\"" + trusted + "\" group=\"fixture\"/></trusted-keys>", true);
+      Files.write(path.resolve("gradle/verification-keyring.keys"), gpg("--armor", "--export", subkeyedPrimary));
+      run(name, path, "subkey-signed", primary ? "not in your trusted key list" : null);
+    }
 
     final var signed = project("signed-wrong-checksum-build", "signed");
     final var pgp = "<pgp value=\"" + keys.getFirst() + "\"/>";
